@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Map, { Layer, Source } from "react-map-gl/maplibre";
 import type {
   PublicationAsset,
@@ -13,6 +13,7 @@ interface MapChapterProps {
 }
 
 export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
+  const [ready, setReady] = useState(false);
   const initialViewState = useMemo(
     () => ({
       longitude: chapter.camera.center[0],
@@ -25,8 +26,17 @@ export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
   );
 
   return (
-    <div className="story-map" aria-label={`Map for ${chapter.title}`}>
-      <Map initialViewState={initialViewState} mapStyle={basemapStyle}>
+    <div
+      className="story-map"
+      aria-label={`Map for ${chapter.title}`}
+      data-map-ready={ready ? "true" : "false"}
+    >
+      <Map
+        initialViewState={initialViewState}
+        mapStyle={basemapStyle}
+        preserveDrawingBuffer
+        onIdle={() => setReady(true)}
+      >
         {asset.kind === "geojson" ? (
           <Source id={asset.id} type="geojson" data={asset.href}>
             <Layer

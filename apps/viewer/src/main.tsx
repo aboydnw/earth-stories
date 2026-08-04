@@ -13,7 +13,13 @@ async function start() {
   if (!root) throw new Error("Missing application root");
   createRoot(root).render(
     <StrictMode>
-      <StoryViewer manifest={manifest} />
+      <StoryViewer
+        manifest={manifest}
+        embed={
+          window.location.pathname.endsWith("/embed.html") ||
+          window.location.pathname.endsWith("embed.html")
+        }
+      />
     </StrictMode>,
   );
 }

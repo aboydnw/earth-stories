@@ -20,7 +20,11 @@ must be rejected explicitly rather than silently changed during export.
 | Trajectory             | Deferred     | Explicit compatibility error                |
 | Flyover / terrain      | Deferred     | Explicit compatibility error                |
 | Offline guarantee      | Deferred     | No offline claim                            |
-| Direct publishing      | Deferred     | Downloadable static ZIP only                |
+| Direct publishing      | Deferred     | User deploys latest folder or ZIP           |
+| Latest folder build    | Included     | Recoverable replacement in project folder   |
+| Archival HTML          | Included     | One self-contained preservation document    |
+| Iframe embed           | Included     | Fixed-height scrollport via `embed.html`    |
+| Publication history    | Deferred     | Latest successful release only              |
 
 “Pass-through” means the publication preserves the browser-ready source and its
 delivery requirements without converting it. Generic styling of arbitrary

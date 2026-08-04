@@ -13,6 +13,7 @@
     "build": "yarn workspace @earth-stories/editor build && yarn workspace @earth-stories/viewer-app build",
     "build:publication": "yarn workspace @earth-stories/publisher build:fixture",
     "check:independence": "node scripts/check-independence.mjs",
+    "clean:types": "tsc --build --clean",
     "test": "vitest run",
     "typecheck": "tsc --build",
     "format": "prettier --write .",

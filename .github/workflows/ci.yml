@@ -20,6 +20,8 @@ jobs:
       - run: yarn install --immutable
       - run: yarn check:independence
       - run: yarn format:check
+      - name: Verify clean-checkout viewer bootstrap
+        run: yarn clean:types && yarn workspace @earth-stories/viewer-app build
       - run: yarn typecheck
       - run: yarn test
       - run: yarn build

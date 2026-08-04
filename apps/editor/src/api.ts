@@ -16,6 +16,23 @@ export interface ImportedAsset {
   filename: string;
   sizeBytes: number;
 }
+export interface PreflightIssue {
+  id: string;
+  severity: "error" | "warning" | "info";
+  message: string;
+  resolution?: string;
+  resourceId?: string;
+}
+export interface PublicationPreflight {
+  ready: boolean;
+  projectId: string;
+  buildId: string | null;
+  estimatedIncludedBytes: number;
+  includedAssets: number;
+  connectedAssets: number;
+  issues: PreflightIssue[];
+}
+export type ExportFormat = "zip" | "folder" | "archive" | "embed";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
@@ -84,21 +101,52 @@ export async function importAsset(
   return value as ImportedAsset;
 }
 
+export async function getPublicationPreflight(
+  projectId: string,
+): Promise<PublicationPreflight> {
+  return request(
+    `/api/projects/${encodeURIComponent(projectId)}/export/preflight`,
+  );
+}
+
 export async function exportProject(
   projectId: string,
-): Promise<{ blob: Blob; filename: string }> {
+  format: ExportFormat,
+  options: {
+    mapSnapshots?: Record<string, string>;
+    publicationUrl?: string;
+  } = {},
+): Promise<{
+  blob?: Blob;
+  filename?: string;
+  directory?: string;
+  snippet?: string;
+  buildId?: string;
+}> {
   const response = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/export`,
-    { method: "POST" },
+    `/api/projects/${encodeURIComponent(projectId)}/export?format=${format}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(options),
+    },
   );
   if (!response.ok) {
     const value = (await response.json()) as { error?: string };
     throw new Error(value.error ?? "Could not export publication");
   }
-  const disposition = response.headers.get("content-disposition") ?? "";
-  return {
-    blob: await response.blob(),
-    filename:
-      disposition.match(/filename="([^"]+)"/)?.[1] ?? `${projectId}.zip`,
+  if (format === "zip" || format === "archive") {
+    const disposition = response.headers.get("content-disposition") ?? "";
+    return {
+      blob: await response.blob(),
+      filename:
+        disposition.match(/filename="([^"]+)"/)?.[1] ??
+        `${projectId}.${format === "zip" ? "zip" : "html"}`,
+    };
+  }
+  return (await response.json()) as {
+    directory?: string;
+    snippet?: string;
+    buildId?: string;
   };
 }

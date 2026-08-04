@@ -22,7 +22,9 @@ The repository now implements the complete first MVP workflow:
 - local GeoJSON, PMTiles, GeoParquet, image, and CSV imports;
 - connected COG, PMTiles, GeoParquet, and XYZ source records;
 - per-source included/connected publication policies;
-- downloadable static ZIP publications with a dependency report.
+- publication preflight with blocking errors, portability warnings, and size estimates;
+- latest-release folder and ZIP outputs with a dependency report;
+- self-contained archival HTML and fixed-scrollport iframe/embed outputs.
 
 This is still a pilot release rather than a supported end-user product. Direct publishing, offline
 guarantees, collaboration, AI features, and full CNG feature parity are outside
@@ -41,13 +43,20 @@ yarn dev
 The editor opens at `http://localhost:5173`. `yarn dev` also starts a small
 local service at `127.0.0.1:4317`; it is not exposed to the network.
 
+Application builds use TypeScript build mode, so a fresh checkout creates the
+referenced package declarations automatically. Running `yarn typecheck` first
+is not required.
+
 From the editor:
 
 1. Create or open a local story.
 2. Add text, import a supported local file, or connect a public data URL.
 3. Edit chapter copy and presentation settings while checking the live preview.
-4. Review the included and connected asset counts, then select **Export ZIP**.
-5. Unzip the download and upload the whole folder to any static web host.
+4. Open **Publish**, review preflight findings, and choose a release output.
+5. Deploy the latest folder or ZIP, preserve the archival HTML, or copy the iframe after supplying the deployed URL.
+
+Every successful build replaces `<project>/publication/`; the MVP intentionally
+keeps only the latest release. See [Publishing](docs/publication.md).
 
 Projects are ordinary folders under `earth-stories-projects/` by default. Set
 `EARTH_STORIES_PROJECTS_DIR` before starting the app to choose another parent
@@ -79,7 +88,8 @@ fixtures/field-notes/    Representative MVP project
 docs/                    Architecture and compatibility decisions
 ```
 
-Implementation notes are recorded in the [MVP completion devlog](docs/devlog/2026-08-04-complete-mvp.md).
+Implementation notes are recorded in the [MVP completion devlog](docs/devlog/2026-08-04-complete-mvp.md)
+and [publication-hardening devlog](docs/devlog/2026-08-04-publication-hardening.md).
 
 ## Support posture
 
