@@ -65,6 +65,7 @@ export function App() {
   const [activeChapter, setActiveChapter] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [connectedUrl, setConnectedUrl] = useState("");
+  const [basemapStyleDraft, setBasemapStyleDraft] = useState("");
   const [connectedKind, setConnectedKind] = useState<
     "cog" | "pmtiles" | "geoparquet" | "xyz"
   >("cog");
@@ -92,6 +93,7 @@ export function App() {
   }
   function activate(next: StoryProject) {
     setProject(next);
+    setBasemapStyleDraft(next.basemap.styleUrl);
     setActiveChapter(next.chapters[0]?.id ?? "");
     setSaveState("saved");
   }
@@ -103,7 +105,12 @@ export function App() {
 
   const publication = useMemo(() => {
     if (!project || !project.metadata.title.trim()) return null;
-    const compiled = compileProject(project);
+    let compiled;
+    try {
+      compiled = compileProject(project);
+    } catch {
+      return null;
+    }
     const sources = new Map(
       project.sources.map((source) => [source.id, source]),
     );
@@ -235,12 +242,26 @@ export function App() {
       (chapter) => chapter.id === selectedChapter.id,
     );
     const next = project.chapters[index + 1] ?? project.chapters[index - 1];
-    changeProject((current) => ({
-      ...current,
-      chapters: current.chapters.filter(
+    changeProject((current) => {
+      const chapters = current.chapters.filter(
         (chapter) => chapter.id !== selectedChapter.id,
-      ),
-    }));
+      );
+      const sourceId =
+        "sourceId" in selectedChapter ? selectedChapter.sourceId : undefined;
+      const sourceStillUsed =
+        sourceId !== undefined &&
+        chapters.some(
+          (chapter) => "sourceId" in chapter && chapter.sourceId === sourceId,
+        );
+      return {
+        ...current,
+        chapters,
+        sources:
+          sourceId !== undefined && !sourceStillUsed
+            ? current.sources.filter((source) => source.id !== sourceId)
+            : current.sources,
+      };
+    });
     setActiveChapter(next?.id ?? "");
   }
   async function handleFile(file: File) {
@@ -633,16 +654,30 @@ export function App() {
                 Map style URL
                 <input
                   type="url"
-                  value={project.basemap.styleUrl}
-                  onChange={(event) =>
-                    changeProject((current) => ({
-                      ...current,
-                      basemap: {
-                        ...current.basemap,
-                        styleUrl: event.target.value,
-                      },
-                    }))
-                  }
+                  value={basemapStyleDraft}
+                  onChange={(event) => setBasemapStyleDraft(event.target.value)}
+                  onBlur={() => {
+                    try {
+                      const parsed = new URL(basemapStyleDraft);
+                      if (
+                        parsed.protocol !== "http:" &&
+                        parsed.protocol !== "https:"
+                      )
+                        throw new Error();
+                      changeProject((current) => ({
+                        ...current,
+                        basemap: {
+                          ...current.basemap,
+                          styleUrl: basemapStyleDraft,
+                        },
+                      }));
+                    } catch {
+                      setBasemapStyleDraft(project.basemap.styleUrl);
+                      setError(
+                        "Map style URL must be a valid HTTP or HTTPS URL.",
+                      );
+                    }
+                  }}
                 />
               </label>
               <label>

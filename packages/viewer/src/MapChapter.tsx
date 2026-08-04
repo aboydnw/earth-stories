@@ -52,10 +52,8 @@ const hexOpacity = (hex: string, opacity: number) => {
 export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pmtilesLayers, setPmtilesLayers] = useState<string[]>(() => {
-    if (asset.kind === "pmtiles") ensurePmtilesProtocol();
-    return [];
-  });
+  const [pmtilesLayers, setPmtilesLayers] = useState<string[]>([]);
+  const [pmtilesReady, setPmtilesReady] = useState(asset.kind !== "pmtiles");
   const reportError = useCallback((message: string) => setError(message), []);
   const presentation = asset.presentation;
   const initialViewState = useMemo(
@@ -74,9 +72,15 @@ export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
     [asset, assetUrl],
   );
   useEffect(() => {
-    if (asset.kind !== "pmtiles") return;
+    let active = true;
+    setError(null);
+    setPmtilesLayers([]);
+    setPmtilesReady(asset.kind !== "pmtiles");
+    if (asset.kind !== "pmtiles") return () => void (active = false);
     ensurePmtilesProtocol();
     const archive = new PMTiles(assetUrl);
+    protocol?.add(archive);
+    setPmtilesReady(true);
     archive
       .getMetadata()
       .then((rawMetadata) => {
@@ -95,15 +99,19 @@ export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
               )
               .filter((id: string | null): id is string => Boolean(id))
           : [];
-        setPmtilesLayers(layers);
+        if (active) setPmtilesLayers(layers);
       })
-      .catch((cause: unknown) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "The PMTiles archive could not be opened.",
-        ),
-      );
+      .catch((cause: unknown) => {
+        if (active)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "The PMTiles archive could not be opened.",
+          );
+      });
+    return () => {
+      active = false;
+    };
   }, [asset.kind, assetUrl]);
 
   const vectorSourceLayers = presentation.sourceLayer
@@ -179,7 +187,9 @@ export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
             />
           </Source>
         ) : null}
-        {asset.kind === "pmtiles" && asset.tileType === "raster" ? (
+        {asset.kind === "pmtiles" &&
+        pmtilesReady &&
+        asset.tileType === "raster" ? (
           <Source id={asset.id} type="raster" url={`pmtiles://${assetUrl}`}>
             <Layer
               id={`${asset.id}-raster`}
@@ -188,7 +198,9 @@ export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
             />
           </Source>
         ) : null}
-        {asset.kind === "pmtiles" && asset.tileType === "vector" ? (
+        {asset.kind === "pmtiles" &&
+        pmtilesReady &&
+        asset.tileType === "vector" ? (
           <Source id={asset.id} type="vector" url={`pmtiles://${assetUrl}`}>
             {vectorSourceLayers.flatMap((sourceLayer) => [
               <Layer

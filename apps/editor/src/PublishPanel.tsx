@@ -245,6 +245,13 @@ export function PublishPanel({
                       if (saved)
                         setPreflight(await getPublicationPreflight(saved.id));
                     })
+                    .catch((cause: unknown) =>
+                      setError(
+                        cause instanceof Error
+                          ? cause.message
+                          : "The publication profile could not be updated.",
+                      ),
+                    )
                     .finally(() => setLoading(false));
                 }}
               />

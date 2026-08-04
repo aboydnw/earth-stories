@@ -7,6 +7,7 @@ import type {
 import { storyProjectSchema } from "@earth-stories/story-schema";
 import { compileProject } from "./compile.js";
 import { containedRealPath } from "./paths.js";
+import { authorizedFetch } from "./remote-fetch.js";
 
 export type PreflightSeverity = "error" | "warning" | "info";
 export interface PreflightIssue {
@@ -134,10 +135,14 @@ export async function preflightPublication(
     if (remoteLocator && /^https?:\/\//i.test(remoteLocator)) {
       let reportedSize = source.sizeBytes;
       try {
-        let response = await fetch(remoteLocator, { method: "HEAD" });
+        let response = await authorizedFetch(remoteLocator, {
+          method: "HEAD",
+          signal: AbortSignal.timeout(15_000),
+        });
         if (response.status === 403 || response.status === 405)
-          response = await fetch(remoteLocator, {
+          response = await authorizedFetch(remoteLocator, {
             headers: { range: "bytes=0-0" },
+            signal: AbortSignal.timeout(15_000),
           });
         if (!response.ok)
           throw new Error(`remote server returned ${response.status}`);

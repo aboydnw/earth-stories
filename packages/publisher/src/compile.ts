@@ -8,6 +8,7 @@ import {
   publicationManifestSchema,
   storyProjectSchema,
 } from "@earth-stories/story-schema";
+import { validateRemoteUrl } from "./remote-url.js";
 
 export const RUNTIME_VERSION = "0.1.0";
 
@@ -65,6 +66,7 @@ function compileAsset(
   };
   const requestedDelivery = source.delivery;
   const profileDelivery = (locator: string) => {
+    if (/^https?:\/\//.test(locator)) validateRemoteUrl(locator);
     if (requestedDelivery !== "auto") return requestedDelivery;
     if (
       profile === "portable" &&
@@ -93,7 +95,7 @@ function compileAsset(
         tileType: null,
         presentation,
       };
-    case "pmtiles":
+    case "pmtiles": {
       const pmtilesConnected = connected(source.locator);
       return {
         id: source.id,
@@ -106,6 +108,7 @@ function compileAsset(
         tileType: source.tileType,
         presentation,
       };
+    }
     case "geoparquet": {
       const isConnected = connected(source.locator);
       return {
@@ -144,7 +147,7 @@ function compileAsset(
         tileType: null,
         presentation,
       };
-    case "cog":
+    case "cog": {
       const cogConnected = profileDelivery(source.locator) === "connected";
       return {
         id: source.id,
@@ -157,6 +160,7 @@ function compileAsset(
         tileType: null,
         presentation,
       };
+    }
     case "xyz":
       return {
         id: source.id,
@@ -315,8 +319,10 @@ export function compileProject(input: unknown): PublicationManifest {
     ],
     hostingRequirements: [
       "static-http",
-      ...(assets.some((asset) =>
-        ["cog", "pmtiles", "geoparquet"].includes(asset.kind),
+      ...(assets.some(
+        (asset) =>
+          asset.delivery === "included" &&
+          ["cog", "pmtiles", "geoparquet"].includes(asset.kind),
       )
         ? (["byte-ranges"] as const)
         : []),

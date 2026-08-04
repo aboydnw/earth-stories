@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Layer as DeckLayer } from "@deck.gl/core";
 import { GeoJsonLayer } from "@deck.gl/layers";
-import { MapboxOverlay } from "@deck.gl/mapbox";
 import * as duckdb from "@duckdb/duckdb-wasm";
 import type { Table } from "apache-arrow";
-import { useControl } from "react-map-gl/maplibre";
 import type { PublicationAsset } from "@earth-stories/story-schema";
+import { DeckOverlay } from "./DeckOverlay.js";
 
 const FEATURE_CAP = 100_000;
 let databasePromise: Promise<{
@@ -40,14 +39,6 @@ async function database() {
     throw cause;
   });
   return databasePromise;
-}
-
-function Overlay({ layers }: { layers: DeckLayer[] }) {
-  const overlay = useControl(
-    () => new MapboxOverlay({ interleaved: false, layers }),
-  );
-  overlay.setProps({ layers });
-  return null;
 }
 
 function rowsToGeoJson(table: Table) {
@@ -94,18 +85,21 @@ export function GeoParquetOverlay({
     let active = true;
     void database()
       .then(async ({ connection }) => {
-        const safeUrl = asset.href.replaceAll("'", "''");
-        const count = await connection.query(
-          `SELECT COUNT(*) AS count FROM read_parquet('${safeUrl}')`,
+        const countStatement = await connection.prepare(
+          "SELECT COUNT(*) AS count FROM read_parquet(?)",
         );
+        const count = await countStatement.query(asset.href);
+        await countStatement.close();
         const featureCount = Number(count.get(0)?.count ?? 0);
         if (featureCount > FEATURE_CAP)
           throw new Error(
             `${featureCount.toLocaleString()} features exceeds the ${FEATURE_CAP.toLocaleString()}-feature browser limit. Convert this source to PMTiles.`,
           );
-        const description = await connection.query(
-          `DESCRIBE SELECT * FROM read_parquet('${safeUrl}') LIMIT 0`,
+        const descriptionStatement = await connection.prepare(
+          "DESCRIBE SELECT * FROM read_parquet(?) LIMIT 0",
         );
+        const description = await descriptionStatement.query(asset.href);
+        await descriptionStatement.close();
         let geometryColumn: string | null = null;
         for (let index = 0; index < description.numRows; index += 1) {
           const row = description.get(index);
@@ -123,9 +117,13 @@ export function GeoParquetOverlay({
         if (!geometryColumn)
           throw new Error("No GeoParquet geometry column was found.");
         const quoted = geometryColumn.replaceAll('"', '""');
-        const table = (await connection.query(
-          `SELECT * EXCLUDE ("${quoted}"), ST_AsGeoJSON("${quoted}") AS __geojson FROM read_parquet('${safeUrl}') LIMIT ${FEATURE_CAP}`,
+        const featuresStatement = await connection.prepare(
+          `SELECT * EXCLUDE ("${quoted}"), ST_AsGeoJSON("${quoted}") AS __geojson FROM read_parquet(?) LIMIT ${FEATURE_CAP}`,
+        );
+        const table = (await featuresStatement.query(
+          asset.href,
         )) as unknown as Table;
+        await featuresStatement.close();
         if (active) setData(rowsToGeoJson(table));
       })
       .catch((cause: unknown) => {
@@ -160,5 +158,5 @@ export function GeoParquetOverlay({
         : [],
     [asset, data],
   );
-  return <Overlay layers={layers} />;
+  return <DeckOverlay layers={layers} />;
 }

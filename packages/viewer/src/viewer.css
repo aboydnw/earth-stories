@@ -134,7 +134,7 @@
   right: 12px;
   max-width: 52%;
   color: var(--story-muted);
-  font-size: 10px;
+  font-size: 12px;
   text-align: right;
 }
 .story-map__legend {
@@ -145,7 +145,7 @@
   align-items: center;
   gap: 7px;
   color: var(--story-ink);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 .story-map__legend span {

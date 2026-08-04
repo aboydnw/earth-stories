@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -25,6 +25,10 @@ import {
   type PublicationPreflight,
 } from "./preflight.js";
 import { containedRealPath } from "./paths.js";
+import { authorizedFetch } from "./remote-fetch.js";
+
+const MAX_REMOTE_ASSET_BYTES = 2 * 1024 * 1024 * 1024;
+const REMOTE_ASSET_TIMEOUT_MS = 5 * 60 * 1000;
 
 export interface BuildPublicationOptions {
   projectDirectory: string;
@@ -100,17 +104,53 @@ async function copyIncludedAssets(
     const destinationPath = join(outputDirectory, asset.href);
     await mkdir(dirname(destinationPath), { recursive: true });
     if (/^https?:\/\//i.test(sourceLocator)) {
-      const response = await fetch(sourceLocator);
-      if (!response.ok || !response.body)
-        throw new Error(
-          `Could not include “${source.label}” (${response.status})`,
-        );
-      await pipeline(
-        Readable.fromWeb(
-          response.body as import("node:stream/web").ReadableStream,
-        ),
-        createWriteStream(destinationPath),
+      const temporaryPath = `${destinationPath}.partial-${randomUUID()}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(
+        () => controller.abort(new Error("Remote asset download timed out.")),
+        REMOTE_ASSET_TIMEOUT_MS,
       );
+      try {
+        const response = await authorizedFetch(sourceLocator, {
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.body)
+          throw new Error(
+            `Could not include “${source.label}” (${response.status})`,
+          );
+        const declaredSize = Number(response.headers.get("content-length"));
+        if (
+          Number.isFinite(declaredSize) &&
+          declaredSize > MAX_REMOTE_ASSET_BYTES
+        )
+          throw new Error(
+            `“${source.label}” exceeds the 2 GB inclusion limit.`,
+          );
+        let downloaded = 0;
+        const limit = new Transform({
+          transform(chunk: Buffer, _encoding, callback) {
+            downloaded += chunk.length;
+            if (downloaded > MAX_REMOTE_ASSET_BYTES)
+              callback(
+                new Error(
+                  `“${source.label}” exceeds the 2 GB inclusion limit.`,
+                ),
+              );
+            else callback(null, chunk);
+          },
+        });
+        await pipeline(
+          Readable.fromWeb(
+            response.body as import("node:stream/web").ReadableStream,
+          ),
+          limit,
+          createWriteStream(temporaryPath),
+        );
+        await rename(temporaryPath, destinationPath);
+      } finally {
+        clearTimeout(timeout);
+        await rm(temporaryPath, { force: true });
+      }
     } else {
       const sourcePath = await containedRealPath(
         projectDirectory,

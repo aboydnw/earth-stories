@@ -12,6 +12,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
+}));
 import { buildArchivalHtml } from "./archive.js";
 import { buildLatestPublication, buildPublication } from "./build.js";
 import { compileProject } from "./compile.js";

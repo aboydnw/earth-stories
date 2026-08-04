@@ -1,8 +1,7 @@
 import { useMemo } from "react";
-import { MapboxOverlay } from "@deck.gl/mapbox";
-import { useControl } from "react-map-gl/maplibre";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { buildCogLayers } from "./CogLayer.js";
+import { DeckOverlay } from "./DeckOverlay.js";
 
 export function CogOverlay({
   asset,
@@ -17,9 +16,5 @@ export function CogOverlay({
     () => buildCogLayers(asset, url, onError),
     [asset, onError, url],
   );
-  const overlay = useControl(
-    () => new MapboxOverlay({ interleaved: false, layers }),
-  );
-  overlay.setProps({ layers });
-  return null;
+  return <DeckOverlay layers={layers} />;
 }

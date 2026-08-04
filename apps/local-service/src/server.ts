@@ -352,10 +352,12 @@ export function createLocalServer(store: ProjectStore) {
           "accept-ranges": "bytes",
           "cache-control": "no-cache",
         });
-        createReadStream(
+        const stream = createReadStream(
           assetPath,
           range ? { start: range.start, end: range.end } : undefined,
-        ).pipe(response);
+        );
+        stream.on("error", (cause) => response.destroy(cause));
+        stream.pipe(response);
         return;
       }
 

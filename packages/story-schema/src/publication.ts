@@ -20,9 +20,9 @@ export const publicationAssetSchema = z.object({
   tileType: z.enum(["raster", "vector"]).nullable(),
   presentation: z.object({
     opacity: z.number().min(0).max(1),
-    color: z.string(),
-    strokeColor: z.string(),
-    radius: z.number(),
+    color: z.string().regex(/^#[0-9a-f]{6}$/i),
+    strokeColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+    radius: z.number().min(1).max(40),
     sourceLayer: z.string().nullable(),
     rasterBand: z.number().int().positive(),
     rescale: z.tuple([z.number(), z.number()]).nullable(),
