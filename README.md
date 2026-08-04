@@ -70,6 +70,7 @@ yarn typecheck
 yarn test
 yarn build
 yarn build:publication
+yarn storybook:build
 ```
 
 The fixture publication is written to `dist/publications/field-notes/`.
@@ -84,12 +85,14 @@ packages/story-schema/   Authoring and publication contracts
 packages/project-store/  Validated local project storage and safe writes
 packages/viewer/         Authoritative story renderer
 packages/publisher/      Deterministic project-to-publication compiler
+packages/ui/             Shared design tokens, recipes, and product components
 fixtures/field-notes/    Representative MVP project
 docs/                    Architecture and compatibility decisions
 ```
 
 Implementation notes are recorded in the [MVP completion devlog](docs/devlog/2026-08-04-complete-mvp.md)
 and [publication-hardening devlog](docs/devlog/2026-08-04-publication-hardening.md).
+Design-system conventions live in [the design-system guide](docs/design-system.md).
 
 ## Support posture
 

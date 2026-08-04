@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/ui" },
     { "path": "packages/story-schema" },
     { "path": "packages/project-store" },
     { "path": "packages/viewer" },

@@ -10,6 +10,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import type { StoryProject } from "@earth-stories/story-schema";
+import { ActionButton, StatusNotice } from "@earth-stories/ui";
 import {
   exportProject,
   getPublicationPreflight,
@@ -184,9 +185,13 @@ export function PublishPanel({
             <p>Publication workshop</p>
             <h2 id="publish-title">Build the latest release</h2>
           </div>
-          <button onClick={onClose} aria-label="Close publication workshop">
+          <ActionButton
+            variant="ghost"
+            onClick={onClose}
+            aria-label="Close publication workshop"
+          >
             <X size={20} />
-          </button>
+          </ActionButton>
         </header>
         <div className="publish-summary">
           <div>
@@ -232,7 +237,8 @@ export function PublishPanel({
         ) : null}
         <div className="publish-formats">
           {formats.map(({ id, title, description, icon: Icon }) => (
-            <button
+            <ActionButton
+              variant="surface"
               key={id}
               disabled={loading || !preflight?.ready}
               onClick={() => void run(id)}
@@ -240,7 +246,7 @@ export function PublishPanel({
               <Icon size={22} weight="duotone" />
               <strong>{title}</strong>
               <span>{description}</span>
-            </button>
+            </ActionButton>
           ))}
         </div>
         <label className="publication-url">
@@ -267,12 +273,14 @@ export function PublishPanel({
           </div>
         ) : null}
         {error ? (
-          <p className="publish-result publish-result--error">{error}</p>
+          <StatusNotice className="publish-result" tone="danger">
+            {error}
+          </StatusNotice>
         ) : null}
         {result ? (
-          <p className="publish-result">
+          <StatusNotice className="publish-result" tone="success">
             <CheckCircle weight="fill" /> {result}
-          </p>
+          </StatusNotice>
         ) : null}
         {loading ? (
           <div className="publish-progress">

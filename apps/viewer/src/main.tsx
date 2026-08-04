@@ -15,6 +15,12 @@ async function start() {
     <StrictMode>
       <StoryViewer
         manifest={manifest}
+        theme={
+          new URLSearchParams(window.location.search).get("theme") ===
+          "editorial"
+            ? "editorial"
+            : "cng"
+        }
         embed={
           window.location.pathname.endsWith("/embed.html") ||
           window.location.pathname.endsWith("embed.html")

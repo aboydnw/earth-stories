@@ -4,6 +4,7 @@ dist/
 earth-stories-projects/
 .vite/
 coverage/
+storybook-static/
 .DS_Store
 *.local
 *.tsbuildinfo

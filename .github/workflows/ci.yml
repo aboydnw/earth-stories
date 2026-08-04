@@ -19,12 +19,14 @@ jobs:
       - run: corepack enable
       - run: yarn install --immutable
       - run: yarn check:independence
+      - run: yarn check:ui
       - run: yarn format:check
       - name: Verify clean-checkout viewer bootstrap
         run: yarn clean:types && yarn workspace @earth-stories/viewer-app build
       - run: yarn typecheck
       - run: yarn test
       - run: yarn build
+      - run: yarn storybook:build
       - run: yarn build:publication
       - name: Check publication contents
         run: test -f dist/publications/field-notes/publication.json && test -f dist/publications/field-notes/assets/survey-sites.geojson

@@ -16,6 +16,7 @@ import type {
   StoryProject,
 } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
+import { ActionButton } from "@earth-stories/ui";
 import {
   createProject,
   importAsset,
@@ -334,9 +335,9 @@ export function App() {
               placeholder="Field notes from…"
               autoFocus
             />
-            <button className="button button--primary" type="submit">
+            <ActionButton className="button button--primary" type="submit">
               <Plus size={17} /> Create story
-            </button>
+            </ActionButton>
           </div>
         </form>
         {error ? <p className="error-message">{error}</p> : null}
@@ -350,6 +351,9 @@ export function App() {
   const connected = (publication?.assets.length ?? 0) - included;
   return (
     <div className="editor-shell">
+      <a className="skip-link" href="#top">
+        Skip to story editor
+      </a>
       <header className="editor-topbar">
         <a className="editor-brand" href="#top">
           <MapTrifold size={22} weight="duotone" />
@@ -366,14 +370,15 @@ export function App() {
                 ? "Changes not saved"
                 : "Saved locally"}
         </div>
-        <button
+        <ActionButton
+          variant="surface"
           className="button button--save"
           disabled={saveState !== "changed"}
           onClick={() => void persist()}
         >
           <FloppyDisk size={17} /> Save
-        </button>
-        <button
+        </ActionButton>
+        <ActionButton
           className="button button--primary"
           disabled={!publication || saveState === "exporting"}
           onClick={() => {
@@ -384,7 +389,7 @@ export function App() {
           }}
         >
           <Export size={17} /> Publish
-        </button>
+        </ActionButton>
       </header>
       <aside className="editor-rail">
         <div className="project-label">
