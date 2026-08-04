@@ -1,0 +1,20 @@
+{
+  "name": "@devseed-stories/viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@devseed-stories/story-schema": "workspace:*",
+    "maplibre-gl": "^5.7.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-map-gl": "^8.0.4",
+    "react-markdown": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7"
+  }
+}

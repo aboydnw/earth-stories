@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/story-schema" },
+    { "path": "packages/viewer" },
+    { "path": "packages/publisher" },
+    { "path": "apps/editor" },
+    { "path": "apps/viewer" }
+  ]
+}

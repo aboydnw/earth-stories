@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Tidal basin edge", "status": "observe" },
+      "geometry": { "type": "Point", "coordinates": [-77.0408, 38.8841] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Channel overlook", "status": "restore" },
+      "geometry": { "type": "Point", "coordinates": [-77.0212, 38.8797] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Anacostia crossing", "status": "connect" },
+      "geometry": { "type": "Point", "coordinates": [-76.9952, 38.8915] }
+    }
+  ]
+}

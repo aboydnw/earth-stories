@@ -1,0 +1,48 @@
+{
+  "schema": "devseed-stories/project/v1",
+  "id": "field-notes",
+  "metadata": {
+    "title": "Notes from the river edge",
+    "description": "A small fixture proving local assets and connected basemaps can share one publication.",
+    "author": "Development Seed",
+    "created": "2026-08-04T00:00:00.000Z",
+    "updated": "2026-08-04T00:00:00.000Z"
+  },
+  "basemap": {
+    "id": "carto-positron",
+    "label": "CARTO Positron",
+    "styleUrl": "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    "attribution": "© OpenStreetMap contributors © CARTO"
+  },
+  "sources": [
+    {
+      "id": "survey-sites",
+      "kind": "local-geojson",
+      "label": "River survey sites",
+      "path": "data/survey-sites.geojson",
+      "attribution": "Development Seed demonstration data",
+      "sizeBytes": 612
+    }
+  ],
+  "chapters": [
+    {
+      "id": "arrival",
+      "type": "prose",
+      "title": "Where the river meets the city",
+      "narrative": "A field team followed the river corridor and recorded places where public space, habitat, and infrastructure overlap."
+    },
+    {
+      "id": "sites",
+      "type": "map",
+      "title": "Three places to begin",
+      "narrative": "The first publication fixture keeps these points inside the static site while its basemap remains connected.",
+      "camera": {
+        "center": [-77.026, 38.89],
+        "zoom": 11.2,
+        "bearing": 0,
+        "pitch": 28
+      },
+      "sourceId": "survey-sites"
+    }
+  ]
+}
