@@ -9,7 +9,9 @@
   },
   "dependencies": {
     "@earth-stories/project-store": "workspace:*",
+    "@earth-stories/publisher": "workspace:*",
     "@earth-stories/story-schema": "workspace:*",
+    "fflate": "^0.8.2",
     "tsx": "^4.20.5"
   }
 }

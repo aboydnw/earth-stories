@@ -7,6 +7,9 @@ const MapChapter = lazy(async () => {
   const module = await import("./MapChapter.js");
   return { default: module.MapChapter };
 });
+const ChartChapter = lazy(async () => ({
+  default: (await import("./ChartChapter.js")).ChartChapter,
+}));
 
 export interface StoryViewerProps {
   manifest: PublicationManifest;
@@ -30,9 +33,13 @@ export function StoryViewer({ manifest }: StoryViewerProps) {
       <article className="story-chapters">
         {manifest.chapters.map((chapter, index) => {
           const asset =
-            chapter.type === "map" ? assets.get(chapter.assetId) : null;
+            chapter.type === "prose" ? null : assets.get(chapter.assetId);
           return (
-            <section className="story-chapter" key={chapter.id} id={chapter.id}>
+            <section
+              className={`story-chapter story-chapter--${chapter.type}`}
+              key={chapter.id}
+              id={chapter.id}
+            >
               <p className="story-folio">
                 {String(index + 1).padStart(2, "0")}
               </p>
@@ -40,7 +47,8 @@ export function StoryViewer({ manifest }: StoryViewerProps) {
                 <h2>{chapter.title}</h2>
                 <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
               </div>
-              {chapter.type === "map" && asset ? (
+              {(chapter.type === "map" || chapter.type === "scrolly") &&
+              asset ? (
                 <Suspense
                   fallback={
                     <div className="story-map story-map--loading">
@@ -53,6 +61,23 @@ export function StoryViewer({ manifest }: StoryViewerProps) {
                     asset={asset}
                     basemapStyle={manifest.basemap.styleUrl}
                   />
+                </Suspense>
+              ) : null}
+              {chapter.type === "image" && asset ? (
+                <figure className="story-image">
+                  <img src={asset.href} alt={chapter.alt} />
+                  <figcaption>{chapter.caption || asset.label}</figcaption>
+                </figure>
+              ) : null}
+              {chapter.type === "chart" && asset ? (
+                <Suspense
+                  fallback={
+                    <div className="story-chart story-map--loading">
+                      Preparing chart…
+                    </div>
+                  }
+                >
+                  <ChartChapter chapter={chapter} asset={asset} />
                 </Suspense>
               ) : null}
             </section>

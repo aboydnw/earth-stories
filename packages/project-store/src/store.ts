@@ -8,6 +8,7 @@ import {
   rename,
   stat,
   unlink,
+  writeFile,
 } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import {
@@ -35,6 +36,12 @@ export interface CreateProjectInput {
   title: string;
   description?: string;
   author?: string | null;
+}
+
+export interface ImportedAsset {
+  path: string;
+  filename: string;
+  sizeBytes: number;
 }
 
 function slugify(value: string): string {
@@ -175,6 +182,52 @@ export class ProjectStore {
       throw new Error("Asset path escapes the project directory");
     }
     return candidate;
+  }
+
+  projectPath(id: string): string {
+    return this.directory(id);
+  }
+
+  async importAsset(
+    id: string,
+    filename: string,
+    contents: Uint8Array,
+  ): Promise<ImportedAsset> {
+    await this.read(id);
+    const safeName = filename
+      .normalize("NFKC")
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/^-+/, "");
+    if (!safeName || safeName === "." || safeName === "..")
+      throw new Error("Asset filename is invalid");
+    const assetsDirectory = join(this.directory(id), "assets");
+    await mkdir(assetsDirectory, { recursive: true });
+    let candidate = safeName;
+    let suffix = 2;
+    const dot = safeName.lastIndexOf(".");
+    const stem = dot > 0 ? safeName.slice(0, dot) : safeName;
+    const extension = dot > 0 ? safeName.slice(dot) : "";
+    while (await this.existsAsset(join(assetsDirectory, candidate))) {
+      candidate = `${stem}-${suffix}${extension}`;
+      suffix += 1;
+    }
+    await writeFile(join(assetsDirectory, candidate), contents, { flag: "wx" });
+    return {
+      path: `assets/${candidate}`,
+      filename: candidate,
+      sizeBytes: contents.byteLength,
+    };
+  }
+
+  private async existsAsset(path: string): Promise<boolean> {
+    try {
+      await stat(path);
+      return true;
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT")
+        return false;
+      throw error;
+    }
   }
 
   private async exists(id: string): Promise<boolean> {

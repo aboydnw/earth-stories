@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import type {
   PublicationManifest,
   StoryProject,
@@ -21,10 +21,27 @@ async function copyIncludedAssets(
   const assetsDirectory = join(outputDirectory, "assets");
   await mkdir(assetsDirectory, { recursive: true });
 
+  const manifest = compileProject(project);
   for (const source of project.sources) {
-    if (source.kind !== "local-geojson") continue;
-    const sourcePath = resolve(projectDirectory, source.path);
-    const destinationPath = join(assetsDirectory, `${source.id}.geojson`);
+    const asset = manifest.assets.find(
+      (candidate) => candidate.id === source.id,
+    );
+    if (!asset || asset.delivery !== "included") continue;
+    const sourceLocator =
+      source.kind === "local-geojson" ||
+      source.kind === "image" ||
+      source.kind === "csv"
+        ? source.path
+        : source.kind === "pmtiles" || source.kind === "geoparquet"
+          ? source.locator
+          : null;
+    if (!sourceLocator) continue;
+    const sourcePath = resolve(projectDirectory, sourceLocator);
+    const relation = relative(resolve(projectDirectory), sourcePath);
+    if (relation === ".." || relation.startsWith(`..${sep}`))
+      throw new Error(`Asset ${source.id} escapes the project directory`);
+    const destinationPath = join(outputDirectory, asset.href);
+    await mkdir(dirname(destinationPath), { recursive: true });
     await cp(sourcePath, destinationPath);
   }
 }

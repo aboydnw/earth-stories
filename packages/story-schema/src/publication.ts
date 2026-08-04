@@ -4,7 +4,15 @@ import { cameraSchema } from "./project.js";
 export const publicationAssetSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
-  kind: z.enum(["geojson", "pmtiles", "cog", "xyz"]),
+  kind: z.enum([
+    "geojson",
+    "pmtiles",
+    "cog",
+    "xyz",
+    "geoparquet",
+    "image",
+    "csv",
+  ]),
   delivery: z.enum(["included", "connected"]),
   href: z.string().min(1),
   attribution: z.string().nullable(),
@@ -23,6 +31,24 @@ export const publicationChapterSchema = z.discriminatedUnion("type", [
     type: z.literal("map"),
     camera: cameraSchema,
     assetId: z.string().min(1),
+  }),
+  publicationChapterBaseSchema.extend({
+    type: z.literal("scrolly"),
+    camera: cameraSchema,
+    assetId: z.string().min(1),
+  }),
+  publicationChapterBaseSchema.extend({
+    type: z.literal("image"),
+    assetId: z.string().min(1),
+    alt: z.string(),
+    caption: z.string(),
+  }),
+  publicationChapterBaseSchema.extend({
+    type: z.literal("chart"),
+    assetId: z.string().min(1),
+    chartType: z.enum(["bar", "line"]),
+    xColumn: z.string().min(1),
+    yColumn: z.string().min(1),
   }),
 ]);
 

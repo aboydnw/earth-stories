@@ -170,6 +170,66 @@ nav {
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+.add-content {
+  padding: 16px 14px;
+  border-top: 1px solid rgba(46, 41, 37, 0.35);
+}
+.add-content > p {
+  margin: 0 0 10px;
+  color: #8a7768;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+}
+.add-content > button,
+.add-content > label,
+.add-content form > button {
+  width: 100%;
+  margin: 5px 0;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #2e2925;
+  background: #f6f1e8;
+  font-size: 10px;
+  cursor: pointer;
+}
+.add-content label input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.add-content form {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(46, 41, 37, 0.2);
+}
+.add-content form > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.add-content form select,
+.add-content form input {
+  min-width: 0;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #2e2925;
+  background: #fffaf1;
+  font:
+    10px "DM Mono",
+    monospace;
+}
+.add-content form input {
+  margin: 6px 0 0;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
 .asset-summary > p {
   grid-column: 1 / -1;
 }
@@ -210,6 +270,7 @@ nav {
 }
 .author-panel input,
 .author-panel textarea,
+.author-panel select,
 .start-screen input {
   width: 100%;
   padding: 12px 14px;

@@ -58,9 +58,18 @@ application. In particular it must not add:
 Historical provenance belongs in documentation and commit messages, not in the
 runtime architecture.
 
-## Remaining service boundary
+## Publication service boundary
 
-The MVP service currently owns project lifecycle and asset reads. Publication
-builds still run through the repository command. A later slice can expose export
-planning and static builds through the same loopback boundary. Conversion jobs
-remain deliberately outside the current MVP.
+The MVP service owns project lifecycle, local asset imports and reads, and static
+publication builds. An export is assembled in a temporary directory, zipped,
+returned to the browser, and removed. The export contains the shared viewer,
+the compiled publication manifest, included assets, a human-readable dependency
+report, and deployment instructions.
+
+The compiler—not the editor—is authoritative for delivery policy and rejects
+missing source references or incompatible chapter/source combinations. Connected
+assets remain external dependencies and are reported with their CORS, network,
+and byte-range requirements.
+
+Conversion jobs remain deliberately outside the MVP. Earth Stories accepts
+publication-ready formats instead of reproducing the CNG ingestion stack.

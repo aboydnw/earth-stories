@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently --kill-others --names service,editor \"yarn workspace @earth-stories/local-service dev\" \"yarn workspace @earth-stories/editor dev\"",
+    "dev": "yarn workspace @earth-stories/viewer-app build && concurrently --kill-others --names service,editor \"yarn workspace @earth-stories/local-service dev\" \"yarn workspace @earth-stories/editor dev\"",
     "build": "yarn workspace @earth-stories/editor build && yarn workspace @earth-stories/viewer-app build",
     "build:publication": "yarn workspace @earth-stories/publisher build:fixture",
     "check:independence": "node scripts/check-independence.mjs",

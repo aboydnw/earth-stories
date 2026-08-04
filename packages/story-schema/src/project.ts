@@ -12,6 +12,7 @@ const sourceBaseSchema = z.object({
   label: z.string().min(1),
   attribution: z.string().nullable().default(null),
   sizeBytes: z.number().int().nonnegative().nullable().default(null),
+  delivery: z.enum(["auto", "included", "connected"]).default("auto"),
 });
 
 export const projectSourceSchema = z.discriminatedUnion("kind", [
@@ -23,6 +24,18 @@ export const projectSourceSchema = z.discriminatedUnion("kind", [
     kind: z.literal("pmtiles"),
     locator: z.string().min(1),
     tileType: z.enum(["raster", "vector"]),
+  }),
+  sourceBaseSchema.extend({
+    kind: z.literal("geoparquet"),
+    locator: z.string().min(1),
+  }),
+  sourceBaseSchema.extend({
+    kind: z.literal("image"),
+    path: z.string().min(1),
+  }),
+  sourceBaseSchema.extend({
+    kind: z.literal("csv"),
+    path: z.string().min(1),
   }),
   sourceBaseSchema.extend({
     kind: z.literal("cog"),
@@ -46,6 +59,24 @@ export const projectChapterSchema = z.discriminatedUnion("type", [
     type: z.literal("map"),
     camera: cameraSchema,
     sourceId: z.string().min(1),
+  }),
+  chapterBaseSchema.extend({
+    type: z.literal("scrolly"),
+    camera: cameraSchema,
+    sourceId: z.string().min(1),
+  }),
+  chapterBaseSchema.extend({
+    type: z.literal("image"),
+    sourceId: z.string().min(1),
+    alt: z.string(),
+    caption: z.string().default(""),
+  }),
+  chapterBaseSchema.extend({
+    type: z.literal("chart"),
+    sourceId: z.string().min(1),
+    chartType: z.enum(["bar", "line"]),
+    xColumn: z.string().min(1),
+    yColumn: z.string().min(1),
   }),
 ]);
 
