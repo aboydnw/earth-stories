@@ -3,31 +3,33 @@
 This matrix is intentionally smaller than CNG Sandbox. Unsupported features
 must be rejected explicitly rather than silently changed during export.
 
-| Capability             | MVP status   | Initial behavior                            |
-| ---------------------- | ------------ | ------------------------------------------- |
-| Prose chapter          | Included     | Rendered as authored                        |
-| Map chapter            | Included     | One primary layer and camera state          |
-| Scrollytelling chapter | Included     | Sticky map layout in shared viewer          |
-| Image chapter          | Included     | Project-owned image copied into publication |
-| Basic chart chapter    | Included     | Bar/line presentation from included CSV     |
-| Public COG             | Connected    | Preserved, reported, and linked from map    |
-| PMTiles                | Pass-through | Connected or included per asset policy      |
-| GeoJSON                | Included     | Imported, copied, and rendered in map       |
-| GeoParquet             | Pass-through | Connected or included per asset policy      |
-| XYZ raster             | Included     | Connected external dependency               |
-| Zarr                   | Deferred     | Explicit compatibility error                |
-| COPC                   | Deferred     | Explicit compatibility error                |
-| Trajectory             | Deferred     | Explicit compatibility error                |
-| Flyover / terrain      | Deferred     | Explicit compatibility error                |
-| Offline guarantee      | Deferred     | No offline claim                            |
-| Direct publishing      | Deferred     | User deploys latest folder or ZIP           |
-| Latest folder build    | Included     | Recoverable replacement in project folder   |
-| Archival HTML          | Included     | One self-contained preservation document    |
-| Iframe embed           | Included     | Fixed-height scrollport via `embed.html`    |
-| Publication history    | Deferred     | Latest successful release only              |
+| Capability             | MVP status | Initial behavior                                                |
+| ---------------------- | ---------- | --------------------------------------------------------------- |
+| Prose chapter          | Included   | Rendered as authored                                            |
+| Map chapter            | Included   | One primary layer and camera state                              |
+| Scrollytelling chapter | Included   | Sticky map layout in shared viewer                              |
+| Image chapter          | Included   | Project-owned image copied into publication                     |
+| Basic chart chapter    | Included   | Bar/line presentation from included CSV                         |
+| Public COG             | Rendered   | Direct range-request rendering; connected or portable inclusion |
+| PMTiles                | Rendered   | Vector/raster archive rendering with discovered source layers   |
+| GeoJSON                | Included   | Imported, copied, and rendered in map                           |
+| GeoParquet             | Rendered   | In-browser DuckDB spatial rendering up to 100k features         |
+| XYZ raster             | Included   | Connected external dependency                                   |
+| Zarr                   | Deferred   | Explicit compatibility error                                    |
+| COPC                   | Deferred   | Explicit compatibility error                                    |
+| Trajectory             | Deferred   | Explicit compatibility error                                    |
+| Flyover / terrain      | Deferred   | Explicit compatibility error                                    |
+| Offline guarantee      | Deferred   | No offline claim                                                |
+| Direct publishing      | Deferred   | User deploys latest folder or ZIP                               |
+| Latest folder build    | Included   | Recoverable replacement in project folder                       |
+| Archival HTML          | Included   | One self-contained preservation document                        |
+| Iframe embed           | Included   | Fixed-height scrollport via `embed.html`                        |
+| Publication history    | Deferred   | Latest successful release only                                  |
+| Connected profile      | Included   | Remote sources remain dependencies                              |
+| Portable profile       | Included   | Compatible geospatial files copied locally                      |
+| Custom profile         | Included   | Per-asset delivery overrides are authoritative                  |
 
-“Pass-through” means the publication preserves the browser-ready source and its
-delivery requirements without converting it. Generic styling of arbitrary
-vector PMTiles/GeoParquet and client-side COG raster decoding require additional
-source metadata and are post-MVP renderer work; the MVP reader exposes the
-source link instead of silently drawing an empty layer.
+Portable does not mean offline. Basemaps, XYZ tiles, the current GeoParquet WASM
+and spatial-extension runtime, and explicit connected overrides can remain network dependencies.
+Preflight and the deployment report list those exceptions rather than making an
+offline promise.

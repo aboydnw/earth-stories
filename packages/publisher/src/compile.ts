@@ -11,6 +11,19 @@ import {
 
 export const RUNTIME_VERSION = "0.1.0";
 
+const DEFAULT_PRESENTATION: PublicationAsset["presentation"] = {
+  opacity: 0.85,
+  color: "#cf3f02",
+  strokeColor: "#443f3f",
+  radius: 6,
+  sourceLayer: null,
+  rasterBand: 1,
+  rescale: null,
+  colormap: "viridis",
+  legendTitle: "",
+  legendVisible: true,
+};
+
 const HASH_SEEDS = [
   0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35, 0x27d4eb2f, 0x165667b1,
   0xd3a2646c, 0xfd7046c5,
@@ -42,11 +55,29 @@ export function digestProject(project: StoryProject): string {
   }).join("");
 }
 
-function compileAsset(source: ProjectSource): PublicationAsset {
+function compileAsset(
+  source: ProjectSource,
+  profile: StoryProject["publication"]["profile"],
+): PublicationAsset {
+  const presentation = {
+    ...DEFAULT_PRESENTATION,
+    ...source.presentation,
+  };
   const requestedDelivery = source.delivery;
+  const profileDelivery = (locator: string) => {
+    if (requestedDelivery !== "auto") return requestedDelivery;
+    if (
+      profile === "portable" &&
+      source.kind !== "xyz" &&
+      source.kind !== "local-geojson" &&
+      source.kind !== "image" &&
+      source.kind !== "csv"
+    )
+      return "included";
+    return /^https?:\/\//.test(locator) ? "connected" : "included";
+  };
   const connected = (locator: string) =>
-    requestedDelivery === "connected" ||
-    (requestedDelivery === "auto" && /^https?:\/\//.test(locator));
+    profileDelivery(locator) === "connected";
   const extension = (value: string, fallback: string) =>
     value.split(/[?#]/)[0]?.split(".").pop()?.toLowerCase() || fallback;
   switch (source.kind) {
@@ -59,6 +90,8 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: `assets/${source.id}.geojson`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
       };
     case "pmtiles":
       const pmtilesConnected = connected(source.locator);
@@ -70,6 +103,8 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: pmtilesConnected ? source.locator : `assets/${source.id}.pmtiles`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: source.tileType,
+        presentation,
       };
     case "geoparquet": {
       const isConnected = connected(source.locator);
@@ -81,6 +116,8 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: isConnected ? source.locator : `assets/${source.id}.parquet`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
       };
     }
     case "image":
@@ -92,6 +129,8 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: `assets/${source.id}.${extension(source.path, "bin")}`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
       };
     case "csv":
       return {
@@ -102,16 +141,21 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: `assets/${source.id}.csv`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
       };
     case "cog":
+      const cogConnected = profileDelivery(source.locator) === "connected";
       return {
         id: source.id,
         label: source.label,
         kind: "cog",
-        delivery: "connected",
-        href: source.locator,
+        delivery: cogConnected ? "connected" : "included",
+        href: cogConnected ? source.locator : `assets/${source.id}.tif`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
       };
     case "xyz":
       return {
@@ -122,6 +166,8 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: source.locator,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: "raster",
+        presentation,
       };
   }
 }
@@ -160,16 +206,15 @@ export function compileProject(input: unknown): PublicationManifest {
       throw new Error(
         `Local source "${source.label}" cannot use connected delivery`,
       );
-    if (
-      (source.kind === "cog" || source.kind === "xyz") &&
-      source.delivery === "included"
-    )
+    if (source.kind === "xyz" && source.delivery === "included")
       throw new Error(
-        `${source.kind.toUpperCase()} source "${source.label}" is connected-only in the MVP`,
+        `XYZ source "${source.label}" cannot be included because it represents many remote tiles`,
       );
   }
   const projectDigest = digestProject(project);
-  const assets = project.sources.map(compileAsset);
+  const assets = project.sources.map((source) =>
+    compileAsset(source, project.publication.profile),
+  );
   const connectedAssets = assets.filter(
     (asset) => asset.delivery === "connected",
   );
@@ -187,6 +232,7 @@ export function compileProject(input: unknown): PublicationManifest {
       description: project.metadata.description,
       author: project.metadata.author,
     },
+    publication: project.publication,
     basemap: project.basemap,
     assets,
     chapters: project.chapters.map((chapter) =>
@@ -237,10 +283,43 @@ export function compileProject(input: unknown): PublicationManifest {
         resourceId: asset.id,
         href: asset.href,
         requirements:
-          asset.kind === "cog" || asset.kind === "pmtiles"
+          asset.kind === "cog" ||
+          asset.kind === "pmtiles" ||
+          asset.kind === "geoparquet"
             ? (["network", "cors", "byte-ranges"] as const)
             : (["network", "cors"] as const),
       })),
+      ...(assets.some((asset) => asset.kind === "geoparquet")
+        ? [
+            {
+              resourceId: "earth-stories-geoparquet-runtime",
+              href: "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/",
+              requirements: ["network", "cors"] as const,
+            },
+            {
+              resourceId: "duckdb-spatial-extension",
+              href: "https://extensions.duckdb.org/",
+              requirements: ["network", "cors"] as const,
+            },
+          ]
+        : []),
+      ...(assets.some((asset) => asset.kind === "cog")
+        ? [
+            {
+              resourceId: "cog-epsg-resolver",
+              href: "https://epsg.io/",
+              requirements: ["network", "cors"] as const,
+            },
+          ]
+        : []),
+    ],
+    hostingRequirements: [
+      "static-http",
+      ...(assets.some((asset) =>
+        ["cog", "pmtiles", "geoparquet"].includes(asset.kind),
+      )
+        ? (["byte-ranges"] as const)
+        : []),
     ],
   });
 }

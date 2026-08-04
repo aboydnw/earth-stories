@@ -17,6 +17,19 @@ export const publicationAssetSchema = z.object({
   href: z.string().min(1),
   attribution: z.string().nullable(),
   sizeBytes: z.number().int().nonnegative().nullable(),
+  tileType: z.enum(["raster", "vector"]).nullable(),
+  presentation: z.object({
+    opacity: z.number().min(0).max(1),
+    color: z.string(),
+    strokeColor: z.string(),
+    radius: z.number(),
+    sourceLayer: z.string().nullable(),
+    rasterBand: z.number().int().positive(),
+    rescale: z.tuple([z.number(), z.number()]).nullable(),
+    colormap: z.enum(["viridis", "magma", "terrain", "grayscale"]),
+    legendTitle: z.string(),
+    legendVisible: z.boolean(),
+  }),
 });
 
 const publicationChapterBaseSchema = z.object({
@@ -65,6 +78,10 @@ export const publicationManifestSchema = z.object({
     description: z.string(),
     author: z.string().nullable(),
   }),
+  publication: z.object({
+    profile: z.enum(["connected", "portable", "custom"]),
+    theme: z.enum(["cng", "editorial"]),
+  }),
   basemap: z.object({
     id: z.string().min(1),
     label: z.string().min(1),
@@ -80,6 +97,7 @@ export const publicationManifestSchema = z.object({
       requirements: z.array(z.enum(["network", "cors", "byte-ranges"])),
     }),
   ),
+  hostingRequirements: z.array(z.enum(["static-http", "cors", "byte-ranges"])),
 });
 
 export type PublicationAsset = z.infer<typeof publicationAssetSchema>;

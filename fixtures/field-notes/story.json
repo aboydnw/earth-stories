@@ -14,6 +14,10 @@
     "styleUrl": "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     "attribution": "© OpenStreetMap contributors © CARTO"
   },
+  "publication": {
+    "profile": "connected",
+    "theme": "cng"
+  },
   "sources": [
     {
       "id": "survey-sites",
@@ -21,7 +25,20 @@
       "label": "River survey sites",
       "path": "data/survey-sites.geojson",
       "attribution": "Development Seed demonstration data",
-      "sizeBytes": 612
+      "sizeBytes": 612,
+      "delivery": "auto",
+      "presentation": {
+        "opacity": 0.9,
+        "color": "#cf3f02",
+        "strokeColor": "#443f3f",
+        "radius": 6,
+        "sourceLayer": null,
+        "rasterBand": 1,
+        "rescale": null,
+        "colormap": "viridis",
+        "legendTitle": "River survey sites",
+        "legendVisible": true
+      }
     }
   ],
   "chapters": [

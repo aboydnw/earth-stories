@@ -20,13 +20,13 @@ export interface StoryViewerProps {
 export function StoryViewer({
   manifest,
   embed = false,
-  theme = "cng",
+  theme,
 }: StoryViewerProps) {
   const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
 
   return (
     <main
-      className={`story-publication story-publication--${theme}${embed ? " story-publication--embed" : ""}`}
+      className={`story-publication story-publication--${theme ?? manifest.publication.theme}${embed ? " story-publication--embed" : ""}`}
     >
       {!embed ? (
         <header className="story-masthead">

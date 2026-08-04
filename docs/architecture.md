@@ -86,5 +86,17 @@ missing source references or incompatible chapter/source combinations. Connected
 assets remain external dependencies and are reported with their CORS, network,
 and byte-range requirements.
 
+Publication profiles are compiler inputs stored with the project but selected
+in the release workflow. The compiler resolves each profile plus any per-asset
+override into the manifest's final `included` or `connected` decision. Portable
+remote files are streamed into the candidate release by the local service;
+browser code never receives filesystem authority or cloud credentials.
+
+COG, PMTiles, GeoParquet, GeoJSON, and XYZ rendering live in the shared viewer.
+Heavy COG and GeoParquet runtimes are dynamically imported only when a chapter
+uses those formats. Map presentation is schema data, not editor-only state, so
+the same opacity, colors, camera, legend, and attribution survive every
+interactive output and archival map capture.
+
 Conversion jobs remain deliberately outside the MVP. Earth Stories accepts
 publication-ready formats instead of reproducing the CNG ingestion stack.

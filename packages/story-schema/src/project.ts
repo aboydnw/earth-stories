@@ -13,6 +13,28 @@ const sourceBaseSchema = z.object({
   attribution: z.string().nullable().default(null),
   sizeBytes: z.number().int().nonnegative().nullable().default(null),
   delivery: z.enum(["auto", "included", "connected"]).default("auto"),
+  presentation: z
+    .object({
+      opacity: z.number().min(0).max(1).default(0.85),
+      color: z
+        .string()
+        .regex(/^#[0-9a-f]{6}$/i)
+        .default("#cf3f02"),
+      strokeColor: z
+        .string()
+        .regex(/^#[0-9a-f]{6}$/i)
+        .default("#443f3f"),
+      radius: z.number().min(1).max(40).default(6),
+      sourceLayer: z.string().nullable().default(null),
+      rasterBand: z.number().int().positive().default(1),
+      rescale: z.tuple([z.number(), z.number()]).nullable().default(null),
+      colormap: z
+        .enum(["viridis", "magma", "terrain", "grayscale"])
+        .default("viridis"),
+      legendTitle: z.string().default(""),
+      legendVisible: z.boolean().default(true),
+    })
+    .optional(),
 });
 
 export const projectSourceSchema = z.discriminatedUnion("kind", [
@@ -97,6 +119,14 @@ export const storyProjectSchema = z
       styleUrl: z.string().url(),
       attribution: z.string().nullable().default(null),
     }),
+    publication: z
+      .object({
+        profile: z
+          .enum(["connected", "portable", "custom"])
+          .default("connected"),
+        theme: z.enum(["cng", "editorial"]).default("cng"),
+      })
+      .default({ profile: "connected", theme: "cng" }),
     sources: z.array(projectSourceSchema),
     chapters: z.array(projectChapterSchema).min(1),
   })

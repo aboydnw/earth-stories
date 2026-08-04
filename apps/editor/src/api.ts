@@ -30,6 +30,7 @@ export interface PublicationPreflight {
   estimatedIncludedBytes: number;
   includedAssets: number;
   connectedAssets: number;
+  profile: "connected" | "portable" | "custom";
   issues: PreflightIssue[];
 }
 export type ExportFormat = "zip" | "folder" | "archive" | "embed";

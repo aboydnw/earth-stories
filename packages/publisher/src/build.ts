@@ -8,6 +8,9 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { createWriteStream } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type {
   PublicationManifest,
@@ -88,18 +91,34 @@ async function copyIncludedAssets(
       source.kind === "image" ||
       source.kind === "csv"
         ? source.path
-        : source.kind === "pmtiles" || source.kind === "geoparquet"
+        : source.kind === "pmtiles" ||
+            source.kind === "geoparquet" ||
+            source.kind === "cog"
           ? source.locator
           : null;
     if (!sourceLocator) continue;
-    const sourcePath = await containedRealPath(
-      projectDirectory,
-      sourceLocator,
-      `Asset ${source.id} escapes the project directory`,
-    );
     const destinationPath = join(outputDirectory, asset.href);
     await mkdir(dirname(destinationPath), { recursive: true });
-    await cp(sourcePath, destinationPath);
+    if (/^https?:\/\//i.test(sourceLocator)) {
+      const response = await fetch(sourceLocator);
+      if (!response.ok || !response.body)
+        throw new Error(
+          `Could not include “${source.label}” (${response.status})`,
+        );
+      await pipeline(
+        Readable.fromWeb(
+          response.body as import("node:stream/web").ReadableStream,
+        ),
+        createWriteStream(destinationPath),
+      );
+    } else {
+      const sourcePath = await containedRealPath(
+        projectDirectory,
+        sourceLocator,
+        `Asset ${source.id} escapes the project directory`,
+      );
+      await cp(sourcePath, destinationPath);
+    }
   }
 }
 
@@ -125,7 +144,7 @@ function reportHtml(manifest: PublicationManifest): string {
         `<li><code>${escapeHtml(dependency.resourceId)}</code> — ${escapeHtml(dependency.href)}<br><small>${escapeHtml(dependency.requirements.join(", "))}</small></li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Publication report</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:16px/1.55 system-ui;color:#332b27}h1,h2{font-family:Georgia,serif}code{background:#f2ede7;padding:2px 5px}</style><body><h1>Publication report</h1><p><strong>${escapeHtml(manifest.metadata.title)}</strong></p><p>Build <code>${escapeHtml(manifest.build.id)}</code> · Runtime ${escapeHtml(manifest.build.runtimeVersion)}</p><h2>Included assets</h2>${list(included)}<h2>Connected data assets</h2>${list(connected)}<h2>All external dependencies</h2><ul>${dependencies}</ul><p>External dependencies must remain publicly accessible for the story to work.</p></body></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Publication report</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:16px/1.55 system-ui;color:#332b27}h1,h2{font-family:Georgia,serif}code{background:#f2ede7;padding:2px 5px}</style><body><h1>Publication report</h1><p><strong>${escapeHtml(manifest.metadata.title)}</strong></p><p>Build <code>${escapeHtml(manifest.build.id)}</code> · Runtime ${escapeHtml(manifest.build.runtimeVersion)} · Profile ${escapeHtml(manifest.publication.profile)}</p><h2>Hosting requirements</h2><p>${escapeHtml(manifest.hostingRequirements.join(", "))}</p><h2>Included assets</h2>${list(included)}<h2>Connected data assets</h2>${list(connected)}<h2>All external dependencies</h2><ul>${dependencies}</ul><p>External dependencies must remain publicly accessible for the story to work.</p></body></html>`;
 }
 
 export async function buildPublication({

@@ -36,9 +36,19 @@
 - Type checking, reproducible production builds, and CI enforcement
 - User, architecture, compatibility, and troubleshooting documentation
 
+## Phase 6 — Storytelling and publication depth
+
+- Connected, portable, and custom publication profiles selected at publish time
+- Per-asset policy overrides with size, network, CORS, and byte-range preflight
+- Direct browser rendering for COG, vector/raster PMTiles, and GeoParquet
+- Layer opacity, vector colors, point radius, COG band/rescale/colormap, legends,
+  source-layer selection, and attribution
+- Camera position, pitch, bearing, map/scrolly presentation, chapter reorder,
+  duplication, deletion, story credits, basemap, and publication-theme controls
+- Profile-aware folder, ZIP, archive, and embed outputs with deployment reports
+
 ## After MVP
 
-Native installers, direct deployment integrations, richer map styling and data
-inspection, generic client-side COG/GeoParquet rendering, offline profiles,
+Native installers, direct deployment integrations, offline guarantees,
 collaboration, and AI assistance require separate product decisions and support
-commitments. They are intentionally not prerequisites for pilot evaluation.
+commitments. They remain intentionally outside this milestone.

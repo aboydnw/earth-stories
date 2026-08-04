@@ -58,6 +58,10 @@ From the editor:
 Every successful build replaces `<project>/publication/`; the MVP intentionally
 keeps only the latest release. See [Publishing](docs/publication.md).
 
+The publication workshop offers connected, portable, and custom profiles.
+Earth Stories now renders COG, vector/raster PMTiles, GeoParquet, GeoJSON, XYZ,
+images, and CSV charts through the same preview and publication runtime.
+
 Projects are ordinary folders under `earth-stories-projects/` by default. Set
 `EARTH_STORIES_PROJECTS_DIR` before starting the app to choose another parent
 folder. Every save writes atomically and preserves the previous story file in
@@ -96,6 +100,8 @@ docs/                    Architecture and compatibility decisions
 Implementation notes are recorded in the [MVP completion devlog](docs/devlog/2026-08-04-complete-mvp.md)
 and [publication-hardening devlog](docs/devlog/2026-08-04-publication-hardening.md).
 Design-system conventions live in [the design-system guide](docs/design-system.md).
+The renderer and profile milestone is recorded in the
+[storytelling and publication depth devlog](docs/devlog/2026-08-04-storytelling-publication-depth.md).
 Like the other private workspace packages, `@earth-stories/ui` exports its
 TypeScript source directly for Vite and project-reference consumption; it is not
 published as a precompiled package. Its stylesheet remains a separate explicit

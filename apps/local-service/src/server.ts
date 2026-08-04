@@ -13,6 +13,7 @@ import {
   preflightPublication,
 } from "@earth-stories/publisher";
 import { Zip, ZipDeflate } from "fflate";
+import { parseByteRange } from "./range.js";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.EARTH_STORIES_PORT ?? 4317);
@@ -326,15 +327,35 @@ export function createLocalServer(store: ProjectStore) {
         await access(assetPath);
         const info = await stat(assetPath);
         if (!info.isFile()) throw new Error("Asset is not a file");
-        response.writeHead(200, {
+        let range;
+        try {
+          range = parseByteRange(request.headers.range, info.size);
+        } catch {
+          response.writeHead(416, {
+            "content-range": `bytes */${info.size}`,
+            "accept-ranges": "bytes",
+          });
+          response.end();
+          return;
+        }
+        const contentLength = range ? range.end - range.start + 1 : info.size;
+        response.writeHead(range ? 206 : 200, {
           "content-type":
             contentTypes[extname(assetPath).toLowerCase()] ??
             "application/octet-stream",
-          "content-length": info.size,
+          "content-length": contentLength,
+          ...(range
+            ? {
+                "content-range": `bytes ${range.start}-${range.end}/${info.size}`,
+              }
+            : {}),
           "accept-ranges": "bytes",
           "cache-control": "no-cache",
         });
-        createReadStream(assetPath).pipe(response);
+        createReadStream(
+          assetPath,
+          range ? { start: range.start, end: range.end } : undefined,
+        ).pipe(response);
         return;
       }
 

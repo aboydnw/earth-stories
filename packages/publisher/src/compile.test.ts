@@ -112,4 +112,45 @@ describe("compileProject", () => {
       "cannot use connected delivery",
     );
   });
+
+  it("applies publication profile defaults while preserving per-asset overrides", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.sources.push(
+      {
+        id: "rain",
+        kind: "cog",
+        label: "Rain",
+        locator: "https://example.com/rain.tif",
+        attribution: null,
+        sizeBytes: 2048,
+        delivery: "auto",
+      },
+      {
+        id: "boundaries",
+        kind: "pmtiles",
+        tileType: "vector",
+        label: "Boundaries",
+        locator: "https://example.com/boundaries.pmtiles",
+        attribution: null,
+        sizeBytes: 1024,
+        delivery: "connected",
+      },
+    );
+    fixture.publication.profile = "portable";
+    const portable = compileProject(fixture);
+    expect(portable.assets.find((asset) => asset.id === "rain")).toMatchObject({
+      delivery: "included",
+      href: "assets/rain.tif",
+    });
+    expect(
+      portable.assets.find((asset) => asset.id === "boundaries")?.delivery,
+    ).toBe("connected");
+    expect(portable.hostingRequirements).toContain("byte-ranges");
+
+    fixture.publication.profile = "connected";
+    expect(
+      compileProject(fixture).assets.find((asset) => asset.id === "rain")
+        ?.delivery,
+    ).toBe("connected");
+  });
 });

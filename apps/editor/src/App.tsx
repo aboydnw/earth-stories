@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Check,
+  Copy,
+  ArrowDown,
+  ArrowUp,
   Export,
   FileArrowUp,
   FloppyDisk,
   Link,
   MapTrifold,
   Plus,
+  Trash,
   TextT,
 } from "@phosphor-icons/react";
 import { compileProject } from "@earth-stories/publisher/compile";
@@ -33,6 +37,18 @@ const camera = {
   zoom: 1.5,
   bearing: 0,
   pitch: 0,
+};
+const presentation = {
+  opacity: 0.85,
+  color: "#cf3f02",
+  strokeColor: "#443f3f",
+  radius: 6,
+  sourceLayer: null,
+  rasterBand: 1,
+  rescale: null,
+  colormap: "viridis" as const,
+  legendTitle: "",
+  legendVisible: true,
 };
 const sourcePath = (source: ProjectSource) =>
   source.kind === "local-geojson" ||
@@ -114,6 +130,21 @@ export function App() {
           (source) => source.id === selectedChapter.sourceId,
         )
       : null;
+  const selectedPresentation = {
+    ...presentation,
+    ...selectedSource?.presentation,
+  };
+  function updateSelectedSource(
+    update: (source: ProjectSource) => ProjectSource,
+  ) {
+    if (!selectedSource) return;
+    changeProject((current) => ({
+      ...current,
+      sources: current.sources.map((source) =>
+        source.id === selectedSource.id ? update(source) : source,
+      ),
+    }));
+  }
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
@@ -163,6 +194,54 @@ export function App() {
       title: "New chapter",
       narrative: "",
     });
+  }
+  function moveChapter(offset: number) {
+    if (!selectedChapter) return;
+    changeProject((current) => {
+      const from = current.chapters.findIndex(
+        (chapter) => chapter.id === selectedChapter.id,
+      );
+      const to = Math.max(
+        0,
+        Math.min(current.chapters.length - 1, from + offset),
+      );
+      if (from === to) return current;
+      const chapters = [...current.chapters];
+      const [chapter] = chapters.splice(from, 1);
+      chapters.splice(to, 0, chapter!);
+      return { ...current, chapters };
+    });
+  }
+  function duplicateChapter() {
+    if (!selectedChapter) return;
+    const duplicate = {
+      ...structuredClone(selectedChapter),
+      id: crypto.randomUUID(),
+      title: `${selectedChapter.title} copy`,
+    } as ProjectChapter;
+    changeProject((current) => {
+      const index = current.chapters.findIndex(
+        (chapter) => chapter.id === selectedChapter.id,
+      );
+      const chapters = [...current.chapters];
+      chapters.splice(index + 1, 0, duplicate);
+      return { ...current, chapters };
+    });
+    setActiveChapter(duplicate.id);
+  }
+  function deleteChapter() {
+    if (!selectedChapter || !project || project.chapters.length === 1) return;
+    const index = project.chapters.findIndex(
+      (chapter) => chapter.id === selectedChapter.id,
+    );
+    const next = project.chapters[index + 1] ?? project.chapters[index - 1];
+    changeProject((current) => ({
+      ...current,
+      chapters: current.chapters.filter(
+        (chapter) => chapter.id !== selectedChapter.id,
+      ),
+    }));
+    setActiveChapter(next?.id ?? "");
   }
   async function handleFile(file: File) {
     if (!project) return;
@@ -496,8 +575,113 @@ export function App() {
               }
             />
           </label>
+          <div className="field-row">
+            <label>
+              Story description
+              <textarea
+                rows={2}
+                value={project.metadata.description}
+                onChange={(event) =>
+                  changeProject((current) => ({
+                    ...current,
+                    metadata: {
+                      ...current.metadata,
+                      description: event.target.value,
+                    },
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Author or organization
+              <input
+                value={project.metadata.author ?? ""}
+                onChange={(event) =>
+                  changeProject((current) => ({
+                    ...current,
+                    metadata: {
+                      ...current.metadata,
+                      author: event.target.value || null,
+                    },
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Publication appearance
+              <select
+                value={project.publication.theme}
+                onChange={(event) =>
+                  changeProject((current) => ({
+                    ...current,
+                    publication: {
+                      ...current.publication,
+                      theme: event.target.value as "cng" | "editorial",
+                    },
+                  }))
+                }
+              >
+                <option value="cng">Earth Stories</option>
+                <option value="editorial">Field journal</option>
+              </select>
+            </label>
+          </div>
+          <details className="basemap-settings">
+            <summary>Basemap and credits</summary>
+            <div className="field-row">
+              <label>
+                Map style URL
+                <input
+                  type="url"
+                  value={project.basemap.styleUrl}
+                  onChange={(event) =>
+                    changeProject((current) => ({
+                      ...current,
+                      basemap: {
+                        ...current.basemap,
+                        styleUrl: event.target.value,
+                      },
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                Basemap attribution
+                <input
+                  value={project.basemap.attribution ?? ""}
+                  onChange={(event) =>
+                    changeProject((current) => ({
+                      ...current,
+                      basemap: {
+                        ...current.basemap,
+                        attribution: event.target.value || null,
+                      },
+                    }))
+                  }
+                />
+              </label>
+            </div>
+          </details>
           {selectedChapter ? (
             <>
+              <div className="chapter-actions" aria-label="Chapter actions">
+                <button type="button" onClick={() => moveChapter(-1)}>
+                  <ArrowUp size={15} /> Move up
+                </button>
+                <button type="button" onClick={() => moveChapter(1)}>
+                  <ArrowDown size={15} /> Move down
+                </button>
+                <button type="button" onClick={duplicateChapter}>
+                  <Copy size={15} /> Duplicate
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteChapter}
+                  disabled={project.chapters.length === 1}
+                >
+                  <Trash size={15} /> Delete
+                </button>
+              </div>
               <label>
                 Chapter title
                 <input
@@ -686,37 +870,389 @@ export function App() {
                       }
                     />
                   </label>
+                  <label>
+                    Longitude
+                    <input
+                      type="number"
+                      min="-180"
+                      max="180"
+                      step="0.0001"
+                      value={selectedChapter.camera.center[0]}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  camera: {
+                                    ...chapter.camera,
+                                    center: [
+                                      Number(event.target.value),
+                                      chapter.camera.center[1],
+                                    ],
+                                  },
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Latitude
+                    <input
+                      type="number"
+                      min="-85"
+                      max="85"
+                      step="0.0001"
+                      value={selectedChapter.camera.center[1]}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  camera: {
+                                    ...chapter.camera,
+                                    center: [
+                                      chapter.camera.center[0],
+                                      Number(event.target.value),
+                                    ],
+                                  },
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Bearing
+                    <input
+                      type="number"
+                      min="-180"
+                      max="180"
+                      value={selectedChapter.camera.bearing}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  camera: {
+                                    ...chapter.camera,
+                                    bearing: Number(event.target.value),
+                                  },
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Pitch
+                    <input
+                      type="number"
+                      min="0"
+                      max="85"
+                      value={selectedChapter.camera.pitch}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  camera: {
+                                    ...chapter.camera,
+                                    pitch: Number(event.target.value),
+                                  },
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
                 </div>
               ) : null}
               {selectedSource ? (
-                <label>
-                  Publication data policy
-                  <select
-                    value={selectedSource.delivery}
-                    onChange={(event) =>
-                      changeProject((current) => ({
-                        ...current,
-                        sources: current.sources.map((source) =>
-                          source.id === selectedSource.id
-                            ? {
+                <fieldset className="source-presentation">
+                  <legend>Data and map presentation</legend>
+                  <div className="field-row">
+                    <label>
+                      Source label
+                      <input
+                        value={selectedSource.label}
+                        onChange={(event) =>
+                          updateSelectedSource((source) => ({
+                            ...source,
+                            label: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Attribution
+                      <input
+                        value={selectedSource.attribution ?? ""}
+                        onChange={(event) =>
+                          updateSelectedSource((source) => ({
+                            ...source,
+                            attribution: event.target.value || null,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Publication data policy
+                      <select
+                        value={selectedSource.delivery}
+                        onChange={(event) =>
+                          updateSelectedSource((source) => ({
+                            ...source,
+                            delivery: event.target.value as
+                              "auto" | "included" | "connected",
+                          }))
+                        }
+                      >
+                        <option value="auto">Follow publication profile</option>
+                        <option value="included">Always include</option>
+                        {selectedSource.kind !== "local-geojson" &&
+                        selectedSource.kind !== "image" &&
+                        selectedSource.kind !== "csv" ? (
+                          <option value="connected">Always connect</option>
+                        ) : null}
+                      </select>
+                    </label>
+                    <label>
+                      Layer opacity
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={selectedPresentation.opacity}
+                        onChange={(event) =>
+                          updateSelectedSource((source) => ({
+                            ...source,
+                            presentation: {
+                              ...selectedPresentation,
+                              opacity: Number(event.target.value),
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Fill color
+                      <input
+                        type="color"
+                        value={selectedPresentation.color}
+                        onChange={(event) =>
+                          updateSelectedSource((source) => ({
+                            ...source,
+                            presentation: {
+                              ...selectedPresentation,
+                              color: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Outline color
+                      <input
+                        type="color"
+                        value={selectedPresentation.strokeColor}
+                        onChange={(event) =>
+                          updateSelectedSource((source) => ({
+                            ...source,
+                            presentation: {
+                              ...selectedPresentation,
+                              strokeColor: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                    {selectedSource.kind === "cog" ? (
+                      <>
+                        <label>
+                          Raster band
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={selectedPresentation.rasterBand}
+                            onChange={(event) =>
+                              updateSelectedSource((source) => ({
                                 ...source,
-                                delivery: event.target.value as
-                                  "auto" | "included" | "connected",
-                              }
-                            : source,
-                        ),
-                      }))
-                    }
-                  >
-                    <option value="auto">Automatic</option>
-                    <option value="included">Include in ZIP</option>
-                    {selectedSource.kind !== "local-geojson" &&
-                    selectedSource.kind !== "image" &&
-                    selectedSource.kind !== "csv" ? (
-                      <option value="connected">Keep connected</option>
+                                presentation: {
+                                  ...selectedPresentation,
+                                  rasterBand: Number(event.target.value),
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Color ramp
+                          <select
+                            value={selectedPresentation.colormap}
+                            onChange={(event) =>
+                              updateSelectedSource((source) => ({
+                                ...source,
+                                presentation: {
+                                  ...selectedPresentation,
+                                  colormap: event.target.value as
+                                    | "viridis"
+                                    | "magma"
+                                    | "terrain"
+                                    | "grayscale",
+                                },
+                              }))
+                            }
+                          >
+                            <option value="viridis">Viridis</option>
+                            <option value="magma">Magma</option>
+                            <option value="terrain">Terrain</option>
+                            <option value="grayscale">Grayscale</option>
+                          </select>
+                        </label>
+                        <label>
+                          Rescale minimum
+                          <input
+                            type="number"
+                            value={selectedPresentation.rescale?.[0] ?? ""}
+                            placeholder="Use source values"
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              updateSelectedSource((source) => ({
+                                ...source,
+                                presentation: {
+                                  ...selectedPresentation,
+                                  rescale: value
+                                    ? [
+                                        Number(value),
+                                        selectedPresentation.rescale?.[1] ?? 1,
+                                      ]
+                                    : null,
+                                },
+                              }));
+                            }}
+                          />
+                        </label>
+                        <label>
+                          Rescale maximum
+                          <input
+                            type="number"
+                            value={selectedPresentation.rescale?.[1] ?? ""}
+                            placeholder="Use source values"
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              updateSelectedSource((source) => ({
+                                ...source,
+                                presentation: {
+                                  ...selectedPresentation,
+                                  rescale: value
+                                    ? [
+                                        selectedPresentation.rescale?.[0] ?? 0,
+                                        Number(value),
+                                      ]
+                                    : null,
+                                },
+                              }));
+                            }}
+                          />
+                        </label>
+                      </>
                     ) : null}
-                  </select>
-                </label>
+                    <label>
+                      Legend title
+                      <input
+                        value={selectedPresentation.legendTitle}
+                        onChange={(event) =>
+                          updateSelectedSource((source) => ({
+                            ...source,
+                            presentation: {
+                              ...selectedPresentation,
+                              legendTitle: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="checkbox-field">
+                      <input
+                        type="checkbox"
+                        checked={selectedPresentation.legendVisible}
+                        onChange={(event) =>
+                          updateSelectedSource((source) => ({
+                            ...source,
+                            presentation: {
+                              ...selectedPresentation,
+                              legendVisible: event.target.checked,
+                            },
+                          }))
+                        }
+                      />
+                      Show legend
+                    </label>
+                    {selectedSource.kind === "pmtiles" &&
+                    selectedSource.tileType === "vector" ? (
+                      <label>
+                        Source layer (optional)
+                        <input
+                          value={selectedPresentation.sourceLayer ?? ""}
+                          onChange={(event) =>
+                            updateSelectedSource((source) => ({
+                              ...source,
+                              presentation: {
+                                ...selectedPresentation,
+                                sourceLayer: event.target.value || null,
+                              },
+                            }))
+                          }
+                        />
+                      </label>
+                    ) : null}
+                    {selectedSource.kind === "pmtiles" ? (
+                      <label>
+                        PMTiles content
+                        <select
+                          value={selectedSource.tileType}
+                          onChange={(event) =>
+                            updateSelectedSource((source) =>
+                              source.kind === "pmtiles"
+                                ? {
+                                    ...source,
+                                    tileType: event.target.value as
+                                      "vector" | "raster",
+                                  }
+                                : source,
+                            )
+                          }
+                        >
+                          <option value="vector">Vector tiles</option>
+                          <option value="raster">Raster tiles</option>
+                        </select>
+                      </label>
+                    ) : null}
+                  </div>
+                </fieldset>
               ) : null}
             </>
           ) : null}
@@ -750,6 +1286,24 @@ export function App() {
         onBeforeExport={() =>
           saveState === "saved" ? Promise.resolve(project) : persist()
         }
+        onProfileChange={async (profile) => {
+          const next = {
+            ...project,
+            publication: { ...project.publication, profile },
+          };
+          try {
+            setSaveState("saving");
+            const saved = await saveProject(next);
+            setProject(saved);
+            setSaveState("saved");
+            await refreshProjects();
+            return saved;
+          } catch (cause) {
+            setSaveState("changed");
+            showError(cause);
+            return null;
+          }
+        }}
       />
     </div>
   );
