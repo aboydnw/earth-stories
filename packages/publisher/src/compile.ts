@@ -43,26 +43,63 @@ export function digestProject(project: StoryProject): string {
 }
 
 function compileAsset(source: ProjectSource): PublicationAsset {
+  const requestedDelivery = source.delivery;
+  const connected = (locator: string) =>
+    requestedDelivery === "connected" ||
+    (requestedDelivery === "auto" && /^https?:\/\//.test(locator));
+  const extension = (value: string, fallback: string) =>
+    value.split(/[?#]/)[0]?.split(".").pop()?.toLowerCase() || fallback;
   switch (source.kind) {
     case "local-geojson":
       return {
         id: source.id,
         label: source.label,
         kind: "geojson",
-        delivery: "included",
+        delivery: requestedDelivery === "connected" ? "connected" : "included",
         href: `assets/${source.id}.geojson`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
       };
     case "pmtiles":
+      const pmtilesConnected = connected(source.locator);
       return {
         id: source.id,
         label: source.label,
         kind: "pmtiles",
-        delivery: source.locator.startsWith("http") ? "connected" : "included",
-        href: source.locator.startsWith("http")
-          ? source.locator
-          : `assets/${source.id}.pmtiles`,
+        delivery: pmtilesConnected ? "connected" : "included",
+        href: pmtilesConnected ? source.locator : `assets/${source.id}.pmtiles`,
+        attribution: source.attribution,
+        sizeBytes: source.sizeBytes,
+      };
+    case "geoparquet": {
+      const isConnected = connected(source.locator);
+      return {
+        id: source.id,
+        label: source.label,
+        kind: "geoparquet",
+        delivery: isConnected ? "connected" : "included",
+        href: isConnected ? source.locator : `assets/${source.id}.parquet`,
+        attribution: source.attribution,
+        sizeBytes: source.sizeBytes,
+      };
+    }
+    case "image":
+      return {
+        id: source.id,
+        label: source.label,
+        kind: "image",
+        delivery: "included",
+        href: `assets/${source.id}.${extension(source.path, "bin")}`,
+        attribution: source.attribution,
+        sizeBytes: source.sizeBytes,
+      };
+    case "csv":
+      return {
+        id: source.id,
+        label: source.label,
+        kind: "csv",
+        delivery: "included",
+        href: `assets/${source.id}.csv`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
       };
@@ -91,6 +128,46 @@ function compileAsset(source: ProjectSource): PublicationAsset {
 
 export function compileProject(input: unknown): PublicationManifest {
   const project = storyProjectSchema.parse(input);
+  const sources = new Map(project.sources.map((source) => [source.id, source]));
+  for (const chapter of project.chapters) {
+    if (chapter.type === "prose") continue;
+    const source = sources.get(chapter.sourceId);
+    if (!source)
+      throw new Error(
+        `Chapter "${chapter.title}" references missing source ${chapter.sourceId}`,
+      );
+    if (chapter.type === "image" && source.kind !== "image")
+      throw new Error(
+        `Image chapter "${chapter.title}" requires an image source`,
+      );
+    if (chapter.type === "chart" && source.kind !== "csv")
+      throw new Error(`Chart chapter "${chapter.title}" requires a CSV source`);
+    if (
+      (chapter.type === "map" || chapter.type === "scrolly") &&
+      (source.kind === "image" || source.kind === "csv")
+    )
+      throw new Error(
+        `Map chapter "${chapter.title}" requires a geospatial source`,
+      );
+  }
+  for (const source of project.sources) {
+    if (
+      (source.kind === "local-geojson" ||
+        source.kind === "image" ||
+        source.kind === "csv") &&
+      source.delivery === "connected"
+    )
+      throw new Error(
+        `Local source "${source.label}" cannot use connected delivery`,
+      );
+    if (
+      (source.kind === "cog" || source.kind === "xyz") &&
+      source.delivery === "included"
+    )
+      throw new Error(
+        `${source.kind.toUpperCase()} source "${source.label}" is connected-only in the MVP`,
+      );
+  }
   const projectDigest = digestProject(project);
   const assets = project.sources.map(compileAsset);
   const connectedAssets = assets.filter(
@@ -113,7 +190,7 @@ export function compileProject(input: unknown): PublicationManifest {
     basemap: project.basemap,
     assets,
     chapters: project.chapters.map((chapter) =>
-      chapter.type === "map"
+      chapter.type === "map" || chapter.type === "scrolly"
         ? {
             id: chapter.id,
             type: chapter.type,
@@ -122,12 +199,33 @@ export function compileProject(input: unknown): PublicationManifest {
             camera: chapter.camera,
             assetId: chapter.sourceId,
           }
-        : {
-            id: chapter.id,
-            type: chapter.type,
-            title: chapter.title,
-            narrative: chapter.narrative,
-          },
+        : chapter.type === "image"
+          ? {
+              id: chapter.id,
+              type: chapter.type,
+              title: chapter.title,
+              narrative: chapter.narrative,
+              assetId: chapter.sourceId,
+              alt: chapter.alt,
+              caption: chapter.caption,
+            }
+          : chapter.type === "chart"
+            ? {
+                id: chapter.id,
+                type: chapter.type,
+                title: chapter.title,
+                narrative: chapter.narrative,
+                assetId: chapter.sourceId,
+                chartType: chapter.chartType,
+                xColumn: chapter.xColumn,
+                yColumn: chapter.yColumn,
+              }
+            : {
+                id: chapter.id,
+                type: chapter.type,
+                title: chapter.title,
+                narrative: chapter.narrative,
+              },
     ),
     externalDependencies: [
       {

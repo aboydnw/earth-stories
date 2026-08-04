@@ -11,6 +11,12 @@ export interface ProjectSummary {
   chapterCount: number;
 }
 
+export interface ImportedAsset {
+  path: string;
+  filename: string;
+  sizeBytes: number;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   const body = (await response.json()) as T | { error?: string };
@@ -56,4 +62,43 @@ export async function saveProject(
     },
   );
   return storyProjectSchema.parse(value);
+}
+
+export async function importAsset(
+  projectId: string,
+  file: File,
+): Promise<ImportedAsset> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/assets?filename=${encodeURIComponent(file.name)}`,
+    {
+      method: "POST",
+      headers: { "content-type": file.type || "application/octet-stream" },
+      body: file,
+    },
+  );
+  const value = (await response.json()) as ImportedAsset | { error?: string };
+  if (!response.ok)
+    throw new Error(
+      "error" in value && value.error ? value.error : "Could not import asset",
+    );
+  return value as ImportedAsset;
+}
+
+export async function exportProject(
+  projectId: string,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/export`,
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    const value = (await response.json()) as { error?: string };
+    throw new Error(value.error ?? "Could not export publication");
+  }
+  const disposition = response.headers.get("content-disposition") ?? "";
+  return {
+    blob: await response.blob(),
+    filename:
+      disposition.match(/filename="([^"]+)"/)?.[1] ?? `${projectId}.zip`,
+  };
 }

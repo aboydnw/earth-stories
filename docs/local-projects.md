@@ -31,6 +31,20 @@ The editor uses a private loopback API:
 - `GET /api/projects/:id` opens and validates one.
 - `PUT /api/projects/:id` validates and saves one.
 - `GET /api/projects/:id/assets/*` serves a file contained by that project.
+- `POST /api/projects/:id/assets?filename=…` imports a file into the project.
+- `POST /api/projects/:id/export` builds and downloads a static ZIP.
 
 This API is not a public integration contract. Tools should integrate through
 the versioned `story.json` schema or publication manifest instead.
+
+## Publication profiles
+
+The MVP exposes two practical delivery policies during authoring:
+
+- **Included** copies a local publication-ready asset into the ZIP.
+- **Connected** keeps a public URL and records its runtime requirements.
+
+**Automatic** chooses between them from the source location. These policies are
+the foundation for future portable and offline profiles, but the MVP makes no
+offline guarantee because the basemap and connected assets may require network
+access.

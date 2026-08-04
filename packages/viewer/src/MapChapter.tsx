@@ -7,7 +7,7 @@ import type {
 import "maplibre-gl/dist/maplibre-gl.css";
 
 interface MapChapterProps {
-  chapter: Extract<PublicationChapter, { type: "map" }>;
+  chapter: Extract<PublicationChapter, { type: "map" | "scrolly" }>;
   asset: PublicationAsset;
   basemapStyle: string;
 }
@@ -49,8 +49,30 @@ export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
             />
           </Source>
         ) : null}
+        {asset.kind === "xyz" ? (
+          <Source
+            id={asset.id}
+            type="raster"
+            tiles={[asset.href]}
+            tileSize={256}
+          >
+            <Layer id={`${asset.id}-raster`} type="raster" />
+          </Source>
+        ) : null}
       </Map>
       <div className="story-map__label">{asset.label}</div>
+      {asset.kind === "cog" ||
+      asset.kind === "pmtiles" ||
+      asset.kind === "geoparquet" ? (
+        <a
+          className="story-map__source"
+          href={asset.href}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Open connected {asset.kind.toUpperCase()} source
+        </a>
+      ) : null}
     </div>
   );
 }

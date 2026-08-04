@@ -1,12 +1,15 @@
 import { createReadStream } from "node:fs";
-import { access, stat } from "node:fs/promises";
+import { access, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import { extname, resolve } from "node:path";
+import { extname, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { ProjectStore } from "@earth-stories/project-store";
+import { buildPublication } from "@earth-stories/publisher";
+import { zipSync } from "fflate";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.EARTH_STORIES_PORT ?? 4317);
@@ -14,6 +17,10 @@ const PROJECTS_DIRECTORY = resolve(
   process.env.EARTH_STORIES_PROJECTS_DIR ?? "./earth-stories-projects",
 );
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_ASSET_BYTES = 100 * 1024 * 1024;
+const VIEWER_DIRECTORY = resolve(
+  process.env.EARTH_STORIES_VIEWER_DIR ?? "./dist/viewer",
+);
 
 const contentTypes: Record<string, string> = {
   ".geojson": "application/geo+json",
@@ -38,15 +45,39 @@ function json(response: ServerResponse, status: number, value: unknown): void {
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {
+  return JSON.parse(
+    (await readBody(request, MAX_BODY_BYTES)).toString("utf8"),
+  ) as unknown;
+}
+
+async function readBody(
+  request: IncomingMessage,
+  limit: number,
+): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let total = 0;
   for await (const chunk of request) {
     const buffer = Buffer.from(chunk);
     total += buffer.length;
-    if (total > MAX_BODY_BYTES) throw new Error("Request body is too large");
+    if (total > limit) throw new Error("Request body is too large");
     chunks.push(buffer);
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+  return Buffer.concat(chunks);
+}
+
+async function collectFiles(
+  directory: string,
+  root = directory,
+): Promise<Record<string, Uint8Array>> {
+  const files: Record<string, Uint8Array> = {};
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory())
+      Object.assign(files, await collectFiles(path, root));
+    else if (entry.isFile())
+      files[relative(root, path).replaceAll("\\", "/")] = await readFile(path);
+  }
+  return files;
 }
 
 function projectRoute(pathname: string): { id: string; asset?: string } | null {
@@ -91,6 +122,52 @@ export function createLocalServer(store: ProjectStore) {
       }
 
       const route = projectRoute(url.pathname);
+      const exportMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/export$/,
+      );
+      if (exportMatch && request.method === "POST") {
+        const id = decodeURIComponent(exportMatch[1]);
+        await access(join(VIEWER_DIRECTORY, "index.html"));
+        const temporaryRoot = await mkdtemp(
+          join(tmpdir(), "earth-stories-export-"),
+        );
+        const outputDirectory = join(temporaryRoot, id);
+        try {
+          const manifest = await buildPublication({
+            projectDirectory: store.projectPath(id),
+            outputDirectory,
+            viewerDirectory: VIEWER_DIRECTORY,
+          });
+          const archive = zipSync(await collectFiles(outputDirectory), {
+            level: 6,
+          });
+          response.writeHead(200, {
+            "content-type": "application/zip",
+            "content-disposition": `attachment; filename="${id}-${manifest.build.id}.zip"`,
+            "content-length": archive.byteLength,
+            "cache-control": "no-store",
+          });
+          response.end(archive);
+        } finally {
+          await rm(temporaryRoot, { recursive: true, force: true });
+        }
+        return;
+      }
+
+      const assetCollectionMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/assets$/,
+      );
+      if (assetCollectionMatch && request.method === "POST") {
+        const filename = url.searchParams.get("filename") ?? "";
+        const imported = await store.importAsset(
+          decodeURIComponent(assetCollectionMatch[1]),
+          filename,
+          await readBody(request, MAX_ASSET_BYTES),
+        );
+        json(response, 201, imported);
+        return;
+      }
+
       if (route && route.asset && request.method === "GET") {
         const assetPath = store.assetPath(route.id, route.asset);
         await access(assetPath);

@@ -68,4 +68,24 @@ describe("ProjectStore", () => {
       "escapes the project directory",
     );
   });
+
+  it("imports assets with safe unique filenames", async () => {
+    const store = await createStore();
+    const project = await store.create({ title: "Asset Story" });
+    const first = await store.importAsset(
+      project.id,
+      "field notes.csv",
+      new TextEncoder().encode("label,value\na,2\n"),
+    );
+    const second = await store.importAsset(
+      project.id,
+      "field notes.csv",
+      new TextEncoder().encode("label,value\nb,3\n"),
+    );
+    expect(first.path).toBe("assets/field-notes.csv");
+    expect(second.path).toBe("assets/field-notes-2.csv");
+    expect(
+      await readFile(store.assetPath(project.id, first.path), "utf8"),
+    ).toContain("a,2");
+  });
 });

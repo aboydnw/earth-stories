@@ -42,6 +42,101 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
+.story-image,
+.story-chart {
+  grid-column: 1 / -1;
+  margin: 18px 0 0;
+}
+.story-image img {
+  display: block;
+  width: 100%;
+  max-height: 78vh;
+  object-fit: cover;
+  border: 1px solid var(--story-ink);
+}
+.story-image figcaption,
+.story-chart figcaption {
+  margin-top: 8px;
+  color: var(--story-muted);
+  font-size: 11px;
+}
+.story-chart {
+  padding: clamp(20px, 4vw, 46px);
+  border: 1px solid var(--story-ink);
+  background: var(--story-paper);
+}
+.story-chart__plot {
+  height: 280px;
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  border-bottom: 1px solid var(--story-ink);
+}
+.story-chart__item {
+  min-width: 0;
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+  text-align: center;
+}
+.story-chart__bar {
+  position: relative;
+  min-height: 2px;
+  background: var(--story-accent);
+  transition: height 0.35s ease;
+}
+.story-chart__bar span {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  translate: -50% 0;
+  font-size: 9px;
+}
+.story-chart__item small {
+  overflow: hidden;
+  padding: 8px 2px;
+  text-overflow: ellipsis;
+  font-size: 8px;
+}
+.story-chart__line {
+  display: block;
+  width: 100%;
+  height: 280px;
+  overflow: visible;
+  border-bottom: 1px solid var(--story-ink);
+}
+.story-chart__line polyline {
+  stroke: var(--story-accent);
+  stroke-width: 3;
+}
+.story-chart__line circle {
+  fill: var(--story-paper);
+  stroke: var(--story-ink);
+  stroke-width: 0.7;
+}
+.story-media-error {
+  grid-column: 1 / -1;
+  padding: 18px;
+  border: 1px solid var(--story-accent);
+}
+.story-map__source {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  padding: 7px 9px;
+  border: 1px solid var(--story-ink);
+  background: var(--story-paper);
+  color: var(--story-ink);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+.story-chapter--scrolly .story-map {
+  position: sticky;
+  top: 16px;
+}
 
 .story-kicker {
   color: #dd4b1a;

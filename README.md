@@ -8,9 +8,9 @@ This repository is a new, independent project. It reuses selected MIT-licensed
 ideas and code from the CNG Sandbox prototype, but it has no git, package,
 runtime, API, or deployment dependency on that repository.
 
-## Current milestone
+## MVP capability
 
-The repository is implementing the first MVP slice:
+The repository now implements the complete first MVP workflow:
 
 - separate authoring-project and publication-manifest contracts;
 - stable IDs and deterministic compilation;
@@ -18,9 +18,13 @@ The repository is implementing the first MVP slice:
 - a representative story fixture;
 - a loopback-only project service with atomic saves and backups;
 - a local editor that creates, opens, edits, saves, and previews projects;
-- static publication output with an external-dependency report.
+- prose, map, scrollytelling, image, and basic CSV chart chapters;
+- local GeoJSON, PMTiles, GeoParquet, image, and CSV imports;
+- connected COG, PMTiles, GeoParquet, and XYZ source records;
+- per-source included/connected publication policies;
+- downloadable static ZIP publications with a dependency report.
 
-This is not yet a supported end-user release. Direct publishing, offline
+This is still a pilot release rather than a supported end-user product. Direct publishing, offline
 guarantees, collaboration, AI features, and full CNG feature parity are outside
 the MVP.
 
@@ -36,6 +40,14 @@ yarn dev
 
 The editor opens at `http://localhost:5173`. `yarn dev` also starts a small
 local service at `127.0.0.1:4317`; it is not exposed to the network.
+
+From the editor:
+
+1. Create or open a local story.
+2. Add text, import a supported local file, or connect a public data URL.
+3. Edit chapter copy and presentation settings while checking the live preview.
+4. Review the included and connected asset counts, then select **Export ZIP**.
+5. Unzip the download and upload the whole folder to any static web host.
 
 Projects are ordinary folders under `earth-stories-projects/` by default. Set
 `EARTH_STORIES_PROJECTS_DIR` before starting the app to choose another parent

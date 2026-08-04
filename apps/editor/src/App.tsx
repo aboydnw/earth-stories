@@ -2,114 +2,331 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Check,
   Export,
+  FileArrowUp,
   FloppyDisk,
+  Link,
   MapTrifold,
   Plus,
+  TextT,
 } from "@phosphor-icons/react";
 import { compileProject } from "@earth-stories/publisher/compile";
-import type { StoryProject } from "@earth-stories/story-schema";
+import type {
+  ProjectChapter,
+  ProjectSource,
+  StoryProject,
+} from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
 import {
   createProject,
+  exportProject,
+  importAsset,
   listProjects,
   openProject,
   saveProject,
   type ProjectSummary,
 } from "./api";
 
-type SaveState = "saved" | "changed" | "saving";
+type SaveState = "saved" | "changed" | "saving" | "exporting";
+const camera = {
+  center: [0, 20] as [number, number],
+  zoom: 1.5,
+  bearing: 0,
+  pitch: 0,
+};
+const sourcePath = (source: ProjectSource) =>
+  source.kind === "local-geojson" ||
+  source.kind === "image" ||
+  source.kind === "csv"
+    ? source.path
+    : source.kind === "pmtiles" || source.kind === "geoparquet"
+      ? source.locator
+      : null;
 
 export function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StoryProject | null>(null);
   const [activeChapter, setActiveChapter] = useState("");
   const [newTitle, setNewTitle] = useState("");
+  const [connectedUrl, setConnectedUrl] = useState("");
+  const [connectedKind, setConnectedKind] = useState<
+    "cog" | "pmtiles" | "geoparquet" | "xyz"
+  >("cog");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function refreshProjects() {
-    setProjects(await listProjects());
-  }
-
+  const refreshProjects = async () => setProjects(await listProjects());
   useEffect(() => {
     listProjects()
       .then(async (items) => {
         setProjects(items);
-        if (items[0]) {
-          const opened = await openProject(items[0].id);
-          setProject(opened);
-          setActiveChapter(opened.chapters[0]?.id ?? "");
-        }
+        if (items[0]) activate(await openProject(items[0].id));
       })
-      .catch((cause: unknown) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Could not open local projects",
-        ),
-      )
+      .catch(showError)
       .finally(() => setLoading(false));
   }, []);
-
-  const publication = useMemo(
-    () => (project ? compileProject(project) : null),
-    [project],
-  );
-  const selectedChapter = project?.chapters.find(
-    (chapter) => chapter.id === activeChapter,
-  );
-
+  function showError(cause: unknown) {
+    setError(
+      cause instanceof Error
+        ? cause.message
+        : "Earth Stories could not complete that action",
+    );
+  }
+  function activate(next: StoryProject) {
+    setProject(next);
+    setActiveChapter(next.chapters[0]?.id ?? "");
+    setSaveState("saved");
+  }
   function changeProject(update: (current: StoryProject) => StoryProject) {
     setProject((current) => (current ? update(current) : current));
     setSaveState("changed");
+    setError(null);
   }
+
+  const publication = useMemo(() => {
+    if (!project || !project.metadata.title.trim()) return null;
+    const compiled = compileProject(project);
+    const sources = new Map(
+      project.sources.map((source) => [source.id, source]),
+    );
+    return {
+      ...compiled,
+      assets: compiled.assets.map((asset) => {
+        const source = sources.get(asset.id);
+        const path = source ? sourcePath(source) : null;
+        return asset.delivery === "included" && path
+          ? {
+              ...asset,
+              href: `/api/projects/${encodeURIComponent(project.id)}/assets/${path.split("/").map(encodeURIComponent).join("/")}`,
+            }
+          : asset;
+      }),
+    };
+  }, [project]);
+  const selectedChapter = project?.chapters.find(
+    (chapter) => chapter.id === activeChapter,
+  );
+  const selectedSource =
+    selectedChapter && selectedChapter.type !== "prose"
+      ? project?.sources.find(
+          (source) => source.id === selectedChapter.sourceId,
+        )
+      : null;
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
     if (!newTitle.trim()) return;
     try {
-      setError(null);
-      const created = await createProject(newTitle);
-      setProject(created);
-      setActiveChapter(created.chapters[0]?.id ?? "");
+      activate(await createProject(newTitle));
       setNewTitle("");
-      setSaveState("saved");
       await refreshProjects();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not create project",
-      );
+      showError(cause);
     }
   }
-
   async function handleOpen(id: string) {
     try {
-      const opened = await openProject(id);
-      setProject(opened);
-      setActiveChapter(opened.chapters[0]?.id ?? "");
-      setSaveState("saved");
+      activate(await openProject(id));
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not open project",
-      );
+      showError(cause);
     }
   }
-
-  async function handleSave() {
-    if (!project) return;
+  async function persist(): Promise<StoryProject | null> {
+    if (!project) return null;
     try {
       setSaveState("saving");
       const saved = await saveProject(project);
       setProject(saved);
       setSaveState("saved");
       await refreshProjects();
+      return saved;
     } catch (cause) {
       setSaveState("changed");
-      setError(
-        cause instanceof Error ? cause.message : "Could not save project",
-      );
+      showError(cause);
+      return null;
     }
+  }
+  async function handleExport() {
+    const saved = saveState === "saved" ? project : await persist();
+    if (!saved) return;
+    try {
+      setSaveState("exporting");
+      const result = await exportProject(saved.id);
+      const href = URL.createObjectURL(result.blob);
+      const anchor = document.createElement("a");
+      anchor.href = href;
+      anchor.download = result.filename;
+      anchor.click();
+      URL.revokeObjectURL(href);
+      setSaveState("saved");
+    } catch (cause) {
+      setSaveState("saved");
+      showError(cause);
+    }
+  }
+
+  function addChapter(chapter: ProjectChapter) {
+    changeProject((current) => ({
+      ...current,
+      chapters: [...current.chapters, chapter],
+    }));
+    setActiveChapter(chapter.id);
+  }
+  function addProse() {
+    addChapter({
+      id: crypto.randomUUID(),
+      type: "prose",
+      title: "New chapter",
+      narrative: "",
+    });
+  }
+  async function handleFile(file: File) {
+    if (!project) return;
+    try {
+      const uploaded = await importAsset(project.id, file);
+      const id = crypto.randomUUID();
+      const extension = uploaded.filename.split(".").pop()?.toLowerCase();
+      let source: ProjectSource;
+      let chapter: ProjectChapter;
+      if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension ?? "")) {
+        source = {
+          id,
+          kind: "image",
+          label: file.name,
+          path: uploaded.path,
+          attribution: null,
+          sizeBytes: uploaded.sizeBytes,
+          delivery: "included",
+        };
+        chapter = {
+          id: crypto.randomUUID(),
+          type: "image",
+          title: file.name.replace(/\.[^.]+$/, ""),
+          narrative: "",
+          sourceId: id,
+          alt: "",
+          caption: "",
+        };
+      } else if (extension === "csv") {
+        source = {
+          id,
+          kind: "csv",
+          label: file.name,
+          path: uploaded.path,
+          attribution: null,
+          sizeBytes: uploaded.sizeBytes,
+          delivery: "included",
+        };
+        chapter = {
+          id: crypto.randomUUID(),
+          type: "chart",
+          title: file.name.replace(/\.[^.]+$/, ""),
+          narrative: "",
+          sourceId: id,
+          chartType: "bar",
+          xColumn: "label",
+          yColumn: "value",
+        };
+      } else if (extension === "geojson" || extension === "json") {
+        source = {
+          id,
+          kind: "local-geojson",
+          label: file.name,
+          path: uploaded.path,
+          attribution: null,
+          sizeBytes: uploaded.sizeBytes,
+          delivery: "included",
+        };
+        chapter = {
+          id: crypto.randomUUID(),
+          type: "map",
+          title: file.name.replace(/\.[^.]+$/, ""),
+          narrative: "",
+          sourceId: id,
+          camera,
+        };
+      } else if (extension === "pmtiles") {
+        source = {
+          id,
+          kind: "pmtiles",
+          label: file.name,
+          locator: uploaded.path,
+          tileType: "vector",
+          attribution: null,
+          sizeBytes: uploaded.sizeBytes,
+          delivery: "included",
+        };
+        chapter = {
+          id: crypto.randomUUID(),
+          type: "map",
+          title: file.name.replace(/\.[^.]+$/, ""),
+          narrative: "",
+          sourceId: id,
+          camera,
+        };
+      } else if (extension === "parquet") {
+        source = {
+          id,
+          kind: "geoparquet",
+          label: file.name,
+          locator: uploaded.path,
+          attribution: null,
+          sizeBytes: uploaded.sizeBytes,
+          delivery: "included",
+        };
+        chapter = {
+          id: crypto.randomUUID(),
+          type: "map",
+          title: file.name.replace(/\.[^.]+$/, ""),
+          narrative: "",
+          sourceId: id,
+          camera,
+        };
+      } else
+        throw new Error(
+          "Use GeoJSON, PMTiles, GeoParquet, CSV, PNG, JPEG, WebP, or GIF files.",
+        );
+      changeProject((current) => ({
+        ...current,
+        sources: [...current.sources, source],
+        chapters: [...current.chapters, chapter],
+      }));
+      setActiveChapter(chapter.id);
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  function addConnected(event: React.FormEvent) {
+    event.preventDefault();
+    if (!project || !connectedUrl.trim()) return;
+    const id = crypto.randomUUID();
+    const common = {
+      id,
+      label: new URL(connectedUrl).hostname,
+      locator: connectedUrl,
+      attribution: null,
+      sizeBytes: null,
+      delivery: "connected" as const,
+    };
+    const source: ProjectSource =
+      connectedKind === "pmtiles"
+        ? { ...common, kind: "pmtiles", tileType: "vector" }
+        : { ...common, kind: connectedKind };
+    const chapter: ProjectChapter = {
+      id: crypto.randomUUID(),
+      type: "map",
+      title: source.label,
+      narrative: "",
+      sourceId: id,
+      camera,
+    };
+    changeProject((current) => ({
+      ...current,
+      sources: [...current.sources, source],
+      chapters: [...current.chapters, chapter],
+    }));
+    setActiveChapter(chapter.id);
+    setConnectedUrl("");
   }
 
   if (loading)
@@ -118,8 +335,7 @@ export function App() {
         <p>Opening your local workspace…</p>
       </main>
     );
-
-  if (!project || !publication) {
+  if (!project)
     return (
       <main className="start-screen">
         <MapTrifold size={42} weight="duotone" />
@@ -140,27 +356,19 @@ export function App() {
             </button>
           </div>
         </form>
-        {error && (
-          <p className="error-message" role="alert">
-            {error}
-          </p>
-        )}
-        <small>
-          Your files stay in the Earth Stories projects folder. No account
-          required.
-        </small>
+        {error ? <p className="error-message">{error}</p> : null}
+        <small>Your files stay on this computer. No account required.</small>
       </main>
     );
-  }
 
-  const included = publication.assets.filter(
-    (asset) => asset.delivery === "included",
-  ).length;
-  const connected = publication.assets.length - included;
+  const included =
+    publication?.assets.filter((asset) => asset.delivery === "included")
+      .length ?? 0;
+  const connected = (publication?.assets.length ?? 0) - included;
   return (
     <div className="editor-shell">
       <header className="editor-topbar">
-        <a className="editor-brand" href="#top" aria-label="Earth Stories home">
+        <a className="editor-brand" href="#top">
           <MapTrifold size={22} weight="duotone" />
           <span>Earth Stories</span>
           <small>local</small>
@@ -169,29 +377,33 @@ export function App() {
           <Check size={14} weight="bold" />{" "}
           {saveState === "saving"
             ? "Saving…"
-            : saveState === "changed"
-              ? "Changes not saved"
-              : "Saved locally"}
+            : saveState === "exporting"
+              ? "Building publication…"
+              : saveState === "changed"
+                ? "Changes not saved"
+                : "Saved locally"}
         </div>
         <button
           className="button button--save"
-          disabled={saveState === "saved"}
-          onClick={handleSave}
-          type="button"
+          disabled={saveState !== "changed"}
+          onClick={() => void persist()}
         >
           <FloppyDisk size={17} /> Save
         </button>
-        <button className="button button--primary" type="button">
-          <Export size={17} /> Export story
+        <button
+          className="button button--primary"
+          disabled={!publication || saveState === "exporting"}
+          onClick={() => void handleExport()}
+        >
+          <Export size={17} /> Export ZIP
         </button>
       </header>
       <aside className="editor-rail">
         <div className="project-label">
           <span>Local project</span>
           <select
-            aria-label="Open project"
             value={project.id}
-            onChange={(event) => handleOpen(event.target.value)}
+            onChange={(event) => void handleOpen(event.target.value)}
           >
             {projects.map((item) => (
               <option value={item.id} key={item.id}>
@@ -211,14 +423,55 @@ export function App() {
               }
               key={chapter.id}
               onClick={() => setActiveChapter(chapter.id)}
-              type="button"
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{chapter.title}</strong>
+              <strong>{chapter.title || "Untitled"}</strong>
               <small>{chapter.type}</small>
             </button>
           ))}
         </nav>
+        <div className="add-content">
+          <p>Add content</p>
+          <button onClick={addProse}>
+            <TextT size={16} /> Text chapter
+          </button>
+          <label>
+            <FileArrowUp size={16} /> Import file
+            <input
+              type="file"
+              accept=".geojson,.json,.pmtiles,.parquet,.csv,.png,.jpg,.jpeg,.webp,.gif"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void handleFile(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <form onSubmit={addConnected}>
+            <div>
+              <Link size={16} />
+              <select
+                value={connectedKind}
+                onChange={(event) =>
+                  setConnectedKind(event.target.value as typeof connectedKind)
+                }
+              >
+                <option value="cog">COG</option>
+                <option value="pmtiles">PMTiles</option>
+                <option value="geoparquet">GeoParquet</option>
+                <option value="xyz">XYZ tiles</option>
+              </select>
+            </div>
+            <input
+              type="url"
+              required
+              value={connectedUrl}
+              onChange={(event) => setConnectedUrl(event.target.value)}
+              placeholder="Public URL"
+            />
+            <button type="submit">Connect source</button>
+          </form>
+        </div>
         <div className="asset-summary">
           <p>Export plan</p>
           <div>
@@ -232,11 +485,11 @@ export function App() {
         </div>
       </aside>
       <section className="editor-workspace" id="top">
-        {error && (
+        {error ? (
           <p className="error-message" role="alert">
             {error}
           </p>
-        )}
+        ) : null}
         <div className="author-panel">
           <label>
             Story title
@@ -250,7 +503,7 @@ export function App() {
               }
             />
           </label>
-          {selectedChapter && (
+          {selectedChapter ? (
             <>
               <label>
                 Chapter title
@@ -285,8 +538,195 @@ export function App() {
                   }
                 />
               </label>
+              {selectedChapter.type === "image" ? (
+                <div className="field-row">
+                  <label>
+                    Alternative text
+                    <input
+                      value={selectedChapter.alt}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "image"
+                              ? { ...chapter, alt: event.target.value }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Caption
+                    <input
+                      value={selectedChapter.caption}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "image"
+                              ? { ...chapter, caption: event.target.value }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {selectedChapter.type === "chart" ? (
+                <div className="field-row">
+                  <label>
+                    Chart style
+                    <select
+                      value={selectedChapter.chartType}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "chart"
+                              ? {
+                                  ...chapter,
+                                  chartType: event.target.value as
+                                    "bar" | "line",
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    >
+                      <option value="bar">Bar</option>
+                      <option value="line">Line</option>
+                    </select>
+                  </label>
+                  <label>
+                    X column
+                    <input
+                      value={selectedChapter.xColumn}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "chart"
+                              ? { ...chapter, xColumn: event.target.value }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Y column
+                    <input
+                      value={selectedChapter.yColumn}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "chart"
+                              ? { ...chapter, yColumn: event.target.value }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {selectedChapter.type === "map" ||
+              selectedChapter.type === "scrolly" ? (
+                <div className="field-row">
+                  <label>
+                    Presentation
+                    <select
+                      value={selectedChapter.type}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  type: event.target.value as "map" | "scrolly",
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    >
+                      <option value="map">Standard map</option>
+                      <option value="scrolly">Sticky scrollytelling</option>
+                    </select>
+                  </label>
+                  <label>
+                    Zoom
+                    <input
+                      type="number"
+                      min="0"
+                      max="22"
+                      step="0.25"
+                      value={selectedChapter.camera.zoom}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  camera: {
+                                    ...chapter.camera,
+                                    zoom: Number(event.target.value),
+                                  },
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {selectedSource ? (
+                <label>
+                  Publication data policy
+                  <select
+                    value={selectedSource.delivery}
+                    onChange={(event) =>
+                      changeProject((current) => ({
+                        ...current,
+                        sources: current.sources.map((source) =>
+                          source.id === selectedSource.id
+                            ? {
+                                ...source,
+                                delivery: event.target.value as
+                                  "auto" | "included" | "connected",
+                              }
+                            : source,
+                        ),
+                      }))
+                    }
+                  >
+                    <option value="auto">Automatic</option>
+                    <option value="included">Include in ZIP</option>
+                    {selectedSource.kind !== "local-geojson" &&
+                    selectedSource.kind !== "image" &&
+                    selectedSource.kind !== "csv" ? (
+                      <option value="connected">Keep connected</option>
+                    ) : null}
+                  </select>
+                </label>
+              ) : null}
             </>
-          )}
+          ) : null}
         </div>
         <div className="workspace-heading">
           <div>
@@ -294,15 +734,21 @@ export function App() {
             <h1>What you see is what you export.</h1>
           </div>
         </div>
-        <div className="preview-frame" id="preview">
-          <div className="preview-browser">
-            <span />
-            <span />
-            <span />
-            <code>local preview · build {publication.build.id}</code>
+        {publication ? (
+          <div className="preview-frame">
+            <div className="preview-browser">
+              <span />
+              <span />
+              <span />
+              <code>local preview · build {publication.build.id}</code>
+            </div>
+            <StoryViewer manifest={publication} />
           </div>
-          <StoryViewer manifest={publication} />
-        </div>
+        ) : (
+          <p className="error-message">
+            Give the story a title to generate its publication preview.
+          </p>
+        )}
       </section>
     </div>
   );
