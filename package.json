@@ -12,6 +12,7 @@
     "dev": "yarn workspace @devseed-stories/editor dev",
     "build": "yarn workspace @devseed-stories/editor build && yarn workspace @devseed-stories/viewer-app build",
     "build:publication": "yarn workspace @devseed-stories/publisher build:fixture",
+    "check:independence": "node scripts/check-independence.mjs",
     "test": "vitest run",
     "typecheck": "tsc --build",
     "format": "prettier --write .",
