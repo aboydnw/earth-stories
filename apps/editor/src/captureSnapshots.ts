@@ -36,11 +36,19 @@ export async function captureMapSnapshots(
   );
   for (const section of sections) {
     const id = section.dataset.chapterId;
+    const map = section.querySelector<HTMLElement>(".story-map");
     const canvases = [
       ...section.querySelectorAll<HTMLCanvasElement>(".story-map canvas"),
     ];
     const first = canvases[0];
-    if (!id || !first || first.width === 0 || first.height === 0) continue;
+    if (
+      !id ||
+      map?.dataset.mapReady !== "true" ||
+      !first ||
+      first.width === 0 ||
+      first.height === 0
+    )
+      continue;
     try {
       const output = document.createElement("canvas");
       output.width = first.width;

@@ -108,6 +108,11 @@ export function PublishPanel({
       if (!items.length) return;
       const first = items[0];
       const last = items.at(-1)!;
+      if (!panel.contains(document.activeElement)) {
+        event.preventDefault();
+        first.focus();
+        return;
+      }
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
@@ -116,9 +121,9 @@ export function PublishPanel({
         first.focus();
       }
     }
-    panel.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown, true);
     return () => {
-      panel.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown, true);
       previousFocus?.focus();
     };
   }, [open]);

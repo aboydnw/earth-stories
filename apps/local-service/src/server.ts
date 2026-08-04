@@ -123,11 +123,26 @@ async function streamZip(
       const entry = new ZipDeflate(file.archive, { level: 6 });
       archive.add(entry);
       for await (const chunk of createReadStream(file.absolute)) {
+        if (response.writableEnded || response.destroyed)
+          throw new Error("Client closed the publication download");
         entry.push(new Uint8Array(chunk), false);
         if (backpressured) {
-          await new Promise<void>((resolveDrain) =>
-            response.once("drain", resolveDrain),
-          );
+          await new Promise<void>((resolveDrain, rejectDrain) => {
+            const settle = (cause?: unknown) => {
+              response.off("drain", onDrain);
+              response.off("close", onClose);
+              response.off("error", onError);
+              if (cause) rejectDrain(cause);
+              else resolveDrain();
+            };
+            const onDrain = () => settle();
+            const onClose = () =>
+              settle(new Error("Client closed the publication download"));
+            const onError = (cause: Error) => settle(cause);
+            response.once("drain", onDrain);
+            response.once("close", onClose);
+            response.once("error", onError);
+          });
           backpressured = false;
         }
       }
@@ -283,7 +298,11 @@ export function createLocalServer(store: ProjectStore) {
             "content-disposition": `attachment; filename="${id}-${latest.manifest.build.id}.zip"`,
             "cache-control": "no-store",
           });
-          await streamZip(latest.directory, response);
+          try {
+            await streamZip(latest.directory, response);
+          } catch (cause) {
+            response.destroy(cause instanceof Error ? cause : undefined);
+          }
         });
         return;
       }

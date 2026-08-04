@@ -1,9 +1,13 @@
 import { realpath } from "node:fs/promises";
-import { relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 function inside(root: string, candidate: string): boolean {
   const relation = relative(root, candidate);
-  return relation !== ".." && !relation.startsWith(`..${sep}`);
+  return (
+    relation !== ".." &&
+    !relation.startsWith(`..${sep}`) &&
+    !isAbsolute(relation)
+  );
 }
 
 export async function containedRealPath(
