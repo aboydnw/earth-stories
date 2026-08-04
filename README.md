@@ -79,6 +79,8 @@ fixtures/field-notes/    Representative MVP project
 docs/                    Architecture and compatibility decisions
 ```
 
+Implementation notes are recorded in the [MVP completion devlog](docs/devlog/2026-08-04-complete-mvp.md).
+
 ## Support posture
 
 The current phase is an engineering prototype for Development Seed contributors
