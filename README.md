@@ -64,3 +64,9 @@ The current phase is an engineering prototype for Development Seed contributors
 and technically confident pilot users. Clone-and-run is the intended initial
 distribution. Easier launchers or native installers may follow only after the
 local project and publication architecture are validated.
+
+## Contributor troubleshooting
+
+- [GitHub authentication from sandboxed agents](docs/github-auth-troubleshooting.md)
+  explains why a restricted `gh auth status` can incorrectly look like an
+  expired token and the checks required before asking someone to re-authenticate.
