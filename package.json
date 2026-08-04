@@ -1,5 +1,5 @@
 {
-  "name": "devseed-stories",
+  "name": "earth-stories",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,9 +9,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "yarn workspace @devseed-stories/editor dev",
-    "build": "yarn workspace @devseed-stories/editor build && yarn workspace @devseed-stories/viewer-app build",
-    "build:publication": "yarn workspace @devseed-stories/publisher build:fixture",
+    "dev": "concurrently --kill-others --names service,editor \"yarn workspace @earth-stories/local-service dev\" \"yarn workspace @earth-stories/editor dev\"",
+    "build": "yarn workspace @earth-stories/editor build && yarn workspace @earth-stories/viewer-app build",
+    "build:publication": "yarn workspace @earth-stories/publisher build:fixture",
     "check:independence": "node scripts/check-independence.mjs",
     "test": "vitest run",
     "typecheck": "tsc --build",
@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "concurrently": "^9.2.1",
     "prettier": "^3.6.2",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"

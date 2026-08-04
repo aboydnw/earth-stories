@@ -3,11 +3,11 @@ import type {
   PublicationManifest,
   ProjectSource,
   StoryProject,
-} from "@devseed-stories/story-schema";
+} from "@earth-stories/story-schema";
 import {
   publicationManifestSchema,
   storyProjectSchema,
-} from "@devseed-stories/story-schema";
+} from "@earth-stories/story-schema";
 
 export const RUNTIME_VERSION = "0.1.0";
 
@@ -98,7 +98,7 @@ export function compileProject(input: unknown): PublicationManifest {
   );
 
   return publicationManifestSchema.parse({
-    schema: "devseed-stories/publication/v1",
+    schema: "earth-stories/publication/v1",
     build: {
       id: projectDigest.slice(0, 16),
       projectId: project.id,

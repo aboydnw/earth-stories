@@ -1,5 +1,5 @@
 {
-  "name": "@devseed-stories/viewer-app",
+  "name": "@earth-stories/viewer-app",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,8 +8,8 @@
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
-    "@devseed-stories/story-schema": "workspace:*",
-    "@devseed-stories/viewer": "workspace:*",
+    "@earth-stories/story-schema": "workspace:*",
+    "@earth-stories/viewer": "workspace:*",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

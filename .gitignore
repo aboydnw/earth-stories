@@ -1,6 +1,7 @@
 node_modules/
 .yarn/install-state.gz
 dist/
+earth-stories-projects/
 .vite/
 coverage/
 .DS_Store

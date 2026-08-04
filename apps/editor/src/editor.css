@@ -27,7 +27,7 @@ button {
 .editor-topbar {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 292px 1fr auto;
+  grid-template-columns: 292px 1fr auto auto;
   align-items: center;
   border-bottom: 1px solid #2e2925;
   background: #f6f1e8;
@@ -77,6 +77,13 @@ button {
 .button--primary:hover {
   background: #b9350b;
 }
+.button--save {
+  background: #f6f1e8;
+}
+.button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
 .editor-rail {
   background: #ece5da;
   border-right: 1px solid #2e2925;
@@ -102,6 +109,13 @@ nav > p,
   font-family: "Newsreader", serif;
   font-size: 25px;
   line-height: 1.05;
+}
+.project-label select {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #2e2925;
+  background: #f6f1e8;
+  font: inherit;
 }
 .project-label button {
   margin-top: 18px;
@@ -177,6 +191,93 @@ nav {
   padding: clamp(24px, 4vw, 58px);
   background: #d8d2c7;
 }
+.author-panel {
+  margin-bottom: 34px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.author-panel label {
+  display: grid;
+  gap: 8px;
+  color: #8a7768;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.author-panel label:last-child {
+  grid-column: 1 / -1;
+}
+.author-panel input,
+.author-panel textarea,
+.start-screen input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #2e2925;
+  border-radius: 0;
+  background: #f6f1e8;
+  color: #2e2925;
+  font:
+    14px/1.5 "DM Mono",
+    monospace;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.author-panel textarea {
+  resize: vertical;
+}
+.error-message {
+  padding: 12px;
+  border: 1px solid #a92c08;
+  background: #fff0e9;
+  color: #a92c08;
+  font-size: 11px;
+}
+.start-screen {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: start;
+  gap: 12px;
+  padding: 30px;
+  background: #d8d2c7;
+}
+.start-screen > p {
+  margin: 0;
+  color: #dd4b1a;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.start-screen h1 {
+  max-width: 720px;
+  margin: 0 0 22px;
+  font:
+    400 clamp(42px, 7vw, 82px)/0.94 "Newsreader",
+    serif;
+}
+.start-screen form {
+  width: min(100%, 620px);
+}
+.start-screen form label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.start-screen form div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+}
+.start-screen form .button {
+  height: auto;
+  border: 1px solid #2e2925;
+  white-space: nowrap;
+}
+.start-screen > small {
+  max-width: 560px;
+  color: #6d6259;
+}
 .workspace-heading {
   display: flex;
   justify-content: space-between;
@@ -234,7 +335,7 @@ nav {
     grid-template: 66px auto 1fr / 1fr;
   }
   .editor-topbar {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr auto auto;
   }
   .editor-brand {
     border-right: 0;
@@ -260,5 +361,11 @@ nav {
   }
   .project-label {
     display: none;
+  }
+  .author-panel {
+    grid-template-columns: 1fr;
+  }
+  .author-panel label:last-child {
+    grid-column: auto;
   }
 }

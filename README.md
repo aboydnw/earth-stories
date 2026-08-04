@@ -1,6 +1,6 @@
-# DevSeed Stories
+# Earth Stories
 
-DevSeed Stories is an experimental local-first visual editor for geospatial
+Earth Stories is an experimental local-first visual editor for geospatial
 stories. Authors work in local project folders and export static publications
 that do not depend on a DevSeed-hosted application.
 
@@ -16,7 +16,8 @@ The repository is implementing the first MVP slice:
 - stable IDs and deterministic compilation;
 - one viewer shared by editor preview and static publication;
 - a representative story fixture;
-- an initial local editor shell;
+- a loopback-only project service with atomic saves and backups;
+- a local editor that creates, opens, edits, saves, and previews projects;
 - static publication output with an external-dependency report.
 
 This is not yet a supported end-user release. Direct publishing, offline
@@ -33,7 +34,13 @@ yarn install
 yarn dev
 ```
 
-The editor opens at `http://localhost:5173`.
+The editor opens at `http://localhost:5173`. `yarn dev` also starts a small
+local service at `127.0.0.1:4317`; it is not exposed to the network.
+
+Projects are ordinary folders under `earth-stories-projects/` by default. Set
+`EARTH_STORIES_PROJECTS_DIR` before starting the app to choose another parent
+folder. Every save writes atomically and preserves the previous story file in
+the project's `.earth-stories/backups/` folder.
 
 ## Build and test
 
@@ -50,8 +57,10 @@ The fixture publication is written to `dist/publications/field-notes/`.
 
 ```text
 apps/editor/             Local authoring shell
+apps/local-service/      Loopback project API and local asset server
 apps/viewer/             Static publication entry point
 packages/story-schema/   Authoring and publication contracts
+packages/project-store/  Validated local project storage and safe writes
 packages/viewer/         Authoritative story renderer
 packages/publisher/      Deterministic project-to-publication compiler
 fixtures/field-notes/    Representative MVP project
@@ -62,8 +71,9 @@ docs/                    Architecture and compatibility decisions
 
 The current phase is an engineering prototype for Development Seed contributors
 and technically confident pilot users. Clone-and-run is the intended initial
-distribution. Easier launchers or native installers may follow only after the
-local project and publication architecture are validated.
+distribution. The product boundary is already desktop-like—the browser UI talks
+only to a process on the same computer—but native packaging is intentionally
+deferred until this workflow is validated.
 
 ## Contributor troubleshooting
 

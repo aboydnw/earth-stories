@@ -3,7 +3,7 @@ import Map, { Layer, Source } from "react-map-gl/maplibre";
 import type {
   PublicationAsset,
   PublicationChapter,
-} from "@devseed-stories/story-schema";
+} from "@earth-stories/story-schema";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 interface MapChapterProps {

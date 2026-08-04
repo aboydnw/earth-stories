@@ -3,8 +3,8 @@ import { basename, join, resolve } from "node:path";
 import type {
   PublicationManifest,
   StoryProject,
-} from "@devseed-stories/story-schema";
-import { storyProjectSchema } from "@devseed-stories/story-schema";
+} from "@earth-stories/story-schema";
+import { storyProjectSchema } from "@earth-stories/story-schema";
 import { compileProject } from "./compile.js";
 
 export interface BuildPublicationOptions {

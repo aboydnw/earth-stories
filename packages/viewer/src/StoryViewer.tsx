@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import ReactMarkdown from "react-markdown";
-import type { PublicationManifest } from "@devseed-stories/story-schema";
+import type { PublicationManifest } from "@earth-stories/story-schema";
 import "./viewer.css";
 
 const MapChapter = lazy(async () => {
@@ -61,7 +61,7 @@ export function StoryViewer({ manifest }: StoryViewerProps) {
       </article>
 
       <footer className="story-footer">
-        <span>Built with DevSeed Stories</span>
+        <span>Built with Earth Stories</span>
         <span>Build {manifest.build.id}</span>
       </footer>
     </main>

@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-DevSeed Stories is a local authoring application, not a locally deployed SaaS
+Earth Stories is a local authoring application, not a locally deployed SaaS
 stack. The editable project is owned by the author and the publication is a
 compiled static artifact.
 
@@ -17,9 +17,32 @@ The two contracts are deliberately separate:
 
 ## Runtime rule
 
-`@devseed-stories/viewer` is the only interactive story renderer. The editor
+`@earth-stories/viewer` is the only interactive story renderer. The editor
 embeds it for preview and the static viewer app embeds it for publication. A
 story feature is not MVP-compatible until both paths support it.
+
+## Local authoring runtime
+
+`yarn dev` starts two cooperating processes:
+
+```text
+browser editor :5173 -> loopback project service 127.0.0.1:4317 -> project folders
+                       |
+                       +-> validated story.json
+                       +-> local project assets
+                       +-> timestamped save backups
+```
+
+The service binds only to the loopback interface. It lists, creates, opens, and
+saves projects and serves assets from inside a selected project directory. Path
+containment checks prevent asset requests from escaping that directory. Writes
+use a per-project lock, a fully flushed temporary file, and an atomic rename.
+The previous `story.json` is copied to `.earth-stories/backups/` first.
+
+This service is an implementation detail of the local application, not a
+multi-user server or remotely operated API. `story.json` and assets remain the
+portable source of truth; the editor can later be placed in a native wrapper
+without changing the project format.
 
 ## Independence from CNG Sandbox
 
@@ -35,10 +58,9 @@ application. In particular it must not add:
 Historical provenance belongs in documentation and commit messages, not in the
 runtime architecture.
 
-## Planned local service
+## Remaining service boundary
 
-The current slice uses fixture projects directly while the contracts settle.
-The next slice adds a loopback-only local service responsible for atomic project
-writes, local asset serving, conversion jobs, export planning, and builds. Its
-operational database and cache will remain disposable; `story.json` and project
-assets are the durable source of truth.
+The MVP service currently owns project lifecycle and asset reads. Publication
+builds still run through the repository command. A later slice can expose export
+planning and static builds through the same loopback boundary. Conversion jobs
+remain deliberately outside the current MVP.

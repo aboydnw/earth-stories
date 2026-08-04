@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { publicationManifestSchema } from "@devseed-stories/story-schema";
-import { StoryViewer } from "@devseed-stories/viewer";
+import { publicationManifestSchema } from "@earth-stories/story-schema";
+import { StoryViewer } from "@earth-stories/viewer";
 
 async function start() {
   const response = await fetch("./publication.json");

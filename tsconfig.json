@@ -2,9 +2,11 @@
   "files": [],
   "references": [
     { "path": "packages/story-schema" },
+    { "path": "packages/project-store" },
     { "path": "packages/viewer" },
     { "path": "packages/publisher" },
     { "path": "apps/editor" },
+    { "path": "apps/local-service" },
     { "path": "apps/viewer" }
   ]
 }

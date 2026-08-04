@@ -1,5 +1,5 @@
 {
-  "name": "@devseed-stories/publisher",
+  "name": "@earth-stories/publisher",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "build:fixture": "node --import tsx src/cli.ts ../../fixtures/field-notes ../../dist/publications/field-notes ../../dist/viewer"
   },
   "dependencies": {
-    "@devseed-stories/story-schema": "workspace:*"
+    "@earth-stories/story-schema": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.20.5"

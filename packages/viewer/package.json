@@ -1,12 +1,12 @@
 {
-  "name": "@devseed-stories/viewer",
+  "name": "@earth-stories/viewer",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
-    "@devseed-stories/story-schema": "workspace:*",
+    "@earth-stories/story-schema": "workspace:*",
     "maplibre-gl": "^5.7.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

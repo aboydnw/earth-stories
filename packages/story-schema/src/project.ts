@@ -51,7 +51,7 @@ export const projectChapterSchema = z.discriminatedUnion("type", [
 
 export const storyProjectSchema = z
   .object({
-    schema: z.literal("devseed-stories/project/v1"),
+    schema: z.literal("earth-stories/project/v1"),
     id: z.string().min(1),
     metadata: z.object({
       title: z.string().min(1),

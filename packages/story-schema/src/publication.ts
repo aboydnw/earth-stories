@@ -27,7 +27,7 @@ export const publicationChapterSchema = z.discriminatedUnion("type", [
 ]);
 
 export const publicationManifestSchema = z.object({
-  schema: z.literal("devseed-stories/publication/v1"),
+  schema: z.literal("earth-stories/publication/v1"),
   build: z.object({
     id: z.string().min(1),
     projectId: z.string().min(1),

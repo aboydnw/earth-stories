@@ -1,11 +1,11 @@
 {
-  "name": "@earth-stories/story-schema",
+  "name": "@earth-stories/project-store",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
-    "zod": "^4.1.5"
+    "@earth-stories/story-schema": "workspace:*"
   }
 }
