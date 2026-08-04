@@ -33,7 +33,13 @@ export const Colors: Story = {
           <Box
             key={token}
             bg={token}
-            color={token === "fg" ? "bg.raised" : "fg"}
+            color={
+              token === "fg"
+                ? "bg.raised"
+                : token === "action.primary"
+                  ? "action.onPrimary"
+                  : "fg"
+            }
             border="1px solid"
             borderColor="border"
             borderRadius="panel"

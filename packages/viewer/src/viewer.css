@@ -1,29 +1,27 @@
-@import url("https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap");
+@import "https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700&display=swap";
+@import "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap";
 
-:root {
+.story-publication {
   --story-ink: #443f3f;
   --story-muted: #716b68;
   --story-paper: #fff;
   --story-canvas: #f5f3f0;
   --story-border: #e8e5e0;
   --story-accent: #cf3f02;
+  --story-accent-text: #bf3a00;
+
   color: var(--story-ink);
   background: var(--story-canvas);
-  font-family: "Satoshi", "Satoshi Variable", "Inter", system-ui, sans-serif;
+  font-family: Satoshi, "Satoshi Variable", Inter, system-ui, sans-serif;
   font-synthesis: none;
 }
-* {
+.story-publication,
+.story-publication * {
   box-sizing: border-box;
 }
-body {
-  margin: 0;
-  background: var(--story-canvas);
-}
 .story-publication {
+  margin: 0;
   min-height: 100dvh;
-  color: var(--story-ink);
-  background: var(--story-canvas);
 }
 .story-publication--embed {
   min-height: 100dvh;
@@ -47,7 +45,7 @@ body {
 }
 .story-kicker {
   margin: 0;
-  color: var(--story-accent);
+  color: var(--story-accent-text);
 }
 .story-masthead h1 {
   max-width: 960px;
@@ -88,7 +86,7 @@ body {
 }
 .story-folio {
   margin: 5px 0 0;
-  color: var(--story-accent);
+  color: var(--story-accent-text);
   font-family: "DM Mono", monospace;
 }
 .story-copy h2 {
@@ -202,6 +200,7 @@ body {
   overflow: hidden;
   padding: 8px 2px;
   text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 9px;
 }
 .story-chart__line {
@@ -243,6 +242,7 @@ body {
   --story-paper: #f6f1e8;
   --story-canvas: #f6f1e8;
   --story-border: rgba(51, 43, 39, 0.3);
+
   font-family: Georgia, serif;
 }
 .story-publication--editorial .story-masthead h1,

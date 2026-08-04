@@ -68,6 +68,9 @@ the project's `.earth-stories/backups/` folder.
 ```bash
 yarn typecheck
 yarn test
+yarn check:independence
+yarn check:ui
+yarn format:check
 yarn build
 yarn build:publication
 yarn storybook:build
@@ -93,6 +96,10 @@ docs/                    Architecture and compatibility decisions
 Implementation notes are recorded in the [MVP completion devlog](docs/devlog/2026-08-04-complete-mvp.md)
 and [publication-hardening devlog](docs/devlog/2026-08-04-publication-hardening.md).
 Design-system conventions live in [the design-system guide](docs/design-system.md).
+Like the other private workspace packages, `@earth-stories/ui` exports its
+TypeScript source directly for Vite and project-reference consumption; it is not
+published as a precompiled package. Its stylesheet remains a separate explicit
+export so consumers control when global design tokens are loaded.
 
 ## Support posture
 
