@@ -12,6 +12,7 @@
     "noEmit": true
   },
   "references": [
+    { "path": "../../packages/ui" },
     { "path": "../../packages/story-schema" },
     { "path": "../../packages/viewer" },
     { "path": "../../packages/publisher" }

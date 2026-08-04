@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { publicationManifestSchema } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
+import "./viewer-app.css";
 
 async function start() {
   const response = await fetch("./publication.json");
@@ -15,6 +16,12 @@ async function start() {
     <StrictMode>
       <StoryViewer
         manifest={manifest}
+        theme={
+          new URLSearchParams(window.location.search).get("theme") ===
+          "editorial"
+            ? "editorial"
+            : "cng"
+        }
         embed={
           window.location.pathname.endsWith("/embed.html") ||
           window.location.pathname.endsWith("embed.html")

@@ -21,6 +21,17 @@ The two contracts are deliberately separate:
 embeds it for preview and the static viewer app embeds it for publication. A
 story feature is not MVP-compatible until both paths support it.
 
+## Design-system rule
+
+`@earth-stories/ui` is the source of truth for product-interface tokens,
+recipes, and reusable components. The editor and publication workshop consume
+that package; Storybook documents its supported states. This is a copied and
+adapted continuation of the CNG design system, not an upstream dependency.
+
+The reader shares the Development Seed defaults but keeps publication themes
+separate from product chrome. The CNG-derived reader theme is the default; the
+earlier editorial treatment is optional.
+
 ## Local authoring runtime
 
 `yarn dev` starts two cooperating processes:

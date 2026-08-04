@@ -10,6 +10,7 @@
   "dependencies": {
     "@earth-stories/publisher": "workspace:*",
     "@earth-stories/story-schema": "workspace:*",
+    "@earth-stories/ui": "workspace:*",
     "@earth-stories/viewer": "workspace:*",
     "@phosphor-icons/react": "^2.1.10",
     "react": "^19.1.1",

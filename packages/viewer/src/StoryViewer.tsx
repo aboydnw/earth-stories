@@ -14,18 +14,19 @@ const ChartChapter = lazy(async () => ({
 export interface StoryViewerProps {
   manifest: PublicationManifest;
   embed?: boolean;
+  theme?: "cng" | "editorial";
 }
 
-export function StoryViewer({ manifest, embed = false }: StoryViewerProps) {
+export function StoryViewer({
+  manifest,
+  embed = false,
+  theme = "cng",
+}: StoryViewerProps) {
   const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
 
   return (
     <main
-      className={
-        embed
-          ? "story-publication story-publication--embed"
-          : "story-publication"
-      }
+      className={`story-publication story-publication--${theme}${embed ? " story-publication--embed" : ""}`}
     >
       {!embed ? (
         <header className="story-masthead">
