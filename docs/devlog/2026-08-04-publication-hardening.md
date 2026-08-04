@@ -19,6 +19,10 @@ workshop.
   regression tests.
 - Fixed clean-checkout startup by making editor/viewer builds bootstrap their
   TypeScript project references; CI now verifies that path before root typecheck.
+- Hardened the review path: publishing now saves draft edits first, waits for
+  map-idle snapshots, manages modal focus, serializes same-project releases,
+  streams ZIP downloads, blocks symlink escapes and unsafe archive URLs, escapes
+  report content, and preserves fully quoted CSV records.
 
 ## Differences from CNG Sandbox
 

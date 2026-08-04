@@ -1,10 +1,40 @@
-export function captureMapSnapshots(
+const MAP_READY_TIMEOUT_MS = 10_000;
+
+async function waitForMap(map: HTMLElement): Promise<void> {
+  if (map.dataset.mapReady === "true") return;
+  await new Promise<void>((resolve) => {
+    const observer = new MutationObserver(() => {
+      if (map.dataset.mapReady === "true") finish();
+    });
+    const timer = window.setTimeout(finish, MAP_READY_TIMEOUT_MS);
+    function finish() {
+      window.clearTimeout(timer);
+      observer.disconnect();
+      resolve();
+    }
+    observer.observe(map, {
+      attributes: true,
+      attributeFilter: ["data-map-ready"],
+    });
+  });
+}
+
+export async function captureMapSnapshots(
   root: ParentNode = document,
-): Record<string, string> {
+): Promise<Record<string, string>> {
   const snapshots: Record<string, string> = {};
-  for (const section of root.querySelectorAll<HTMLElement>(
-    ".story-chapter--map, .story-chapter--scrolly",
-  )) {
+  const sections = [
+    ...root.querySelectorAll<HTMLElement>(
+      ".story-chapter--map, .story-chapter--scrolly",
+    ),
+  ];
+  await Promise.all(
+    sections.map(async (section) => {
+      const map = section.querySelector<HTMLElement>(".story-map");
+      if (map) await waitForMap(map);
+    }),
+  );
+  for (const section of sections) {
     const id = section.dataset.chapterId;
     const canvases = [
       ...section.querySelectorAll<HTMLCanvasElement>(".story-map canvas"),

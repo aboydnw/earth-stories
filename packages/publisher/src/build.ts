@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type {
   PublicationManifest,
   StoryProject,
@@ -21,6 +21,7 @@ import {
   preflightPublication,
   type PublicationPreflight,
 } from "./preflight.js";
+import { containedRealPath } from "./paths.js";
 
 export interface BuildPublicationOptions {
   projectDirectory: string;
@@ -35,6 +36,37 @@ export interface LatestPublication {
   directory: string;
   totalBytes: number;
   builtAt: string;
+}
+
+const publicationLocks = new Map<string, Promise<void>>();
+
+async function withPublicationLock<T>(
+  projectDirectory: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = publicationLocks.get(projectDirectory) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolveLock) => {
+    release = resolveLock;
+  });
+  const tail = previous.then(() => current);
+  publicationLocks.set(projectDirectory, tail);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (publicationLocks.get(projectDirectory) === tail)
+      publicationLocks.delete(projectDirectory);
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 async function copyIncludedAssets(
@@ -60,10 +92,11 @@ async function copyIncludedAssets(
           ? source.locator
           : null;
     if (!sourceLocator) continue;
-    const sourcePath = resolve(projectDirectory, sourceLocator);
-    const relation = relative(resolve(projectDirectory), sourcePath);
-    if (relation === ".." || relation.startsWith(`..${sep}`))
-      throw new Error(`Asset ${source.id} escapes the project directory`);
+    const sourcePath = await containedRealPath(
+      projectDirectory,
+      sourceLocator,
+      `Asset ${source.id} escapes the project directory`,
+    );
     const destinationPath = join(outputDirectory, asset.href);
     await mkdir(dirname(destinationPath), { recursive: true });
     await cp(sourcePath, destinationPath);
@@ -83,16 +116,16 @@ function reportHtml(manifest: PublicationManifest): string {
       : `<ul>${items
           .map(
             (asset) =>
-              `<li><strong>${asset.label}</strong> — ${asset.href}</li>`,
+              `<li><strong>${escapeHtml(asset.label)}</strong> — ${escapeHtml(asset.href)}</li>`,
           )
           .join("")}</ul>`;
   const dependencies = manifest.externalDependencies
     .map(
       (dependency) =>
-        `<li><code>${dependency.resourceId}</code> — ${dependency.href}<br><small>${dependency.requirements.join(", ")}</small></li>`,
+        `<li><code>${escapeHtml(dependency.resourceId)}</code> — ${escapeHtml(dependency.href)}<br><small>${escapeHtml(dependency.requirements.join(", "))}</small></li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Publication report</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:16px/1.55 system-ui;color:#332b27}h1,h2{font-family:Georgia,serif}code{background:#f2ede7;padding:2px 5px}</style><body><h1>Publication report</h1><p><strong>${manifest.metadata.title}</strong></p><p>Build <code>${manifest.build.id}</code> · Runtime ${manifest.build.runtimeVersion}</p><h2>Included assets</h2>${list(included)}<h2>Connected data assets</h2>${list(connected)}<h2>All external dependencies</h2><ul>${dependencies}</ul><p>External dependencies must remain publicly accessible for the story to work.</p></body></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Publication report</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:16px/1.55 system-ui;color:#332b27}h1,h2{font-family:Georgia,serif}code{background:#f2ede7;padding:2px 5px}</style><body><h1>Publication report</h1><p><strong>${escapeHtml(manifest.metadata.title)}</strong></p><p>Build <code>${escapeHtml(manifest.build.id)}</code> · Runtime ${escapeHtml(manifest.build.runtimeVersion)}</p><h2>Included assets</h2>${list(included)}<h2>Connected data assets</h2>${list(connected)}<h2>All external dependencies</h2><ul>${dependencies}</ul><p>External dependencies must remain publicly accessible for the story to work.</p></body></html>`;
 }
 
 export async function buildPublication({
@@ -137,17 +170,18 @@ export async function buildPublication({
       mapSnapshots,
     }),
   );
-  await writeFile(
-    join(outputDirectory, "EMBED.txt"),
-    embedInstructions(manifest.metadata.title),
-  );
+  if (viewerDirectory)
+    await writeFile(
+      join(outputDirectory, "EMBED.txt"),
+      embedInstructions(manifest.metadata.title),
+    );
   await writeFile(
     join(outputDirectory, "publication-report.html"),
     reportHtml(manifest),
   );
   await writeFile(
     join(outputDirectory, "README.txt"),
-    `${manifest.metadata.title}\n\nUpload every file in this directory to the same static website directory. Open index.html through a static web server.\n\nInteractive story: index.html\nEmbeddable story: embed.html\nArchival edition: archival.html\nEmbed instructions: EMBED.txt\nBuild: ${manifest.build.id}\nProject: ${basename(projectDirectory)}\nManifest: publication.json\nReport: publication-report.html\n`,
+    `${manifest.metadata.title}\n\nUpload every file in this directory to the same static website directory. Open index.html through a static web server.\n\nInteractive story: index.html\n${viewerDirectory ? "Embeddable story: embed.html\nEmbed instructions: EMBED.txt\n" : ""}Archival edition: archival.html\nBuild: ${manifest.build.id}\nProject: ${basename(projectDirectory)}\nManifest: publication.json\nReport: publication-report.html\n`,
   );
   return manifest;
 }
@@ -169,6 +203,15 @@ async function directorySize(directory: string): Promise<number> {
 }
 
 export async function buildLatestPublication(
+  options: Omit<BuildPublicationOptions, "outputDirectory">,
+): Promise<LatestPublication> {
+  const projectDirectory = resolve(options.projectDirectory);
+  return withPublicationLock(projectDirectory, () =>
+    buildLatestPublicationUnlocked({ ...options, projectDirectory }),
+  );
+}
+
+async function buildLatestPublicationUnlocked(
   options: Omit<BuildPublicationOptions, "outputDirectory">,
 ): Promise<LatestPublication> {
   const projectDirectory = resolve(options.projectDirectory);
@@ -198,16 +241,15 @@ export async function buildLatestPublication(
     });
     let totalBytes = await directorySize(temporary);
     const summaryPath = join(temporary, "publication-summary.json");
-    await writeFile(
-      summaryPath,
-      `${JSON.stringify({ builtAt, totalBytes, preflight: { ...preflight, manifest: undefined } }, null, 2)}\n`,
-    );
-    totalBytes = await directorySize(temporary);
-    await writeFile(
-      summaryPath,
-      `${JSON.stringify({ builtAt, totalBytes, preflight: { ...preflight, manifest: undefined } }, null, 2)}\n`,
-    );
-    totalBytes = await directorySize(temporary);
+    for (;;) {
+      await writeFile(
+        summaryPath,
+        `${JSON.stringify({ builtAt, totalBytes, preflight: { ...preflight, manifest: undefined } }, null, 2)}\n`,
+      );
+      const measuredBytes = await directorySize(temporary);
+      if (measuredBytes === totalBytes) break;
+      totalBytes = measuredBytes;
+    }
     await rm(previous, { recursive: true, force: true });
     try {
       await rename(target, previous);

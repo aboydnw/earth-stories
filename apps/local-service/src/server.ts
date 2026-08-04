@@ -12,7 +12,7 @@ import {
   createEmbedSnippet,
   preflightPublication,
 } from "@earth-stories/publisher";
-import { zipSync } from "fflate";
+import { Zip, ZipDeflate } from "fflate";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.EARTH_STORIES_PORT ?? 4317);
@@ -78,19 +78,88 @@ async function readBody(
   return Buffer.concat(chunks);
 }
 
-async function collectFiles(
+async function collectFilePaths(
   directory: string,
   root = directory,
-): Promise<Record<string, Uint8Array>> {
-  const files: Record<string, Uint8Array> = {};
+): Promise<Array<{ absolute: string; archive: string }>> {
+  const files: Array<{ absolute: string; archive: string }> = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory())
-      Object.assign(files, await collectFiles(path, root));
+      files.push(...(await collectFilePaths(path, root)));
     else if (entry.isFile())
-      files[relative(root, path).replaceAll("\\", "/")] = await readFile(path);
+      files.push({
+        absolute: path,
+        archive: relative(root, path).replaceAll("\\", "/"),
+      });
   }
   return files;
+}
+
+async function streamZip(
+  directory: string,
+  response: ServerResponse,
+): Promise<void> {
+  let backpressured = false;
+  let resolveDone!: () => void;
+  let rejectDone!: (cause: unknown) => void;
+  const done = new Promise<void>((resolve, reject) => {
+    resolveDone = resolve;
+    rejectDone = reject;
+  });
+  const archive = new Zip((error, chunk, final) => {
+    if (error) {
+      rejectDone(error);
+      return;
+    }
+    if (chunk.length) backpressured = !response.write(chunk);
+    if (final) {
+      response.end();
+      resolveDone();
+    }
+  });
+  try {
+    for (const file of await collectFilePaths(directory)) {
+      const entry = new ZipDeflate(file.archive, { level: 6 });
+      archive.add(entry);
+      for await (const chunk of createReadStream(file.absolute)) {
+        entry.push(new Uint8Array(chunk), false);
+        if (backpressured) {
+          await new Promise<void>((resolveDrain) =>
+            response.once("drain", resolveDrain),
+          );
+          backpressured = false;
+        }
+      }
+      entry.push(new Uint8Array(), true);
+    }
+    archive.end();
+    await done;
+  } catch (cause) {
+    archive.terminate();
+    throw cause;
+  }
+}
+
+const exportLocks = new Map<string, Promise<void>>();
+async function withProjectExportLock<T>(
+  projectId: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = exportLocks.get(projectId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolveLock) => {
+    release = resolveLock;
+  });
+  const tail = previous.then(() => current);
+  exportLocks.set(projectId, tail);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (exportLocks.get(projectId) === tail) exportLocks.delete(projectId);
+  }
 }
 
 function projectRoute(pathname: string): { id: string; asset?: string } | null {
@@ -162,60 +231,60 @@ export function createLocalServer(store: ProjectStore) {
           typeof body.mapSnapshots === "object" && body.mapSnapshots !== null
             ? (body.mapSnapshots as Record<string, string>)
             : undefined;
-        const latest = await buildLatestPublication({
-          projectDirectory: store.projectPath(id),
-          viewerDirectory: VIEWER_DIRECTORY,
-          mapSnapshots: snapshots,
-        });
-        if (format === "folder") {
-          json(response, 200, {
-            format,
-            directory: latest.directory,
-            buildId: latest.manifest.build.id,
-            totalBytes: latest.totalBytes,
-            builtAt: latest.builtAt,
+        await withProjectExportLock(id, async () => {
+          const latest = await buildLatestPublication({
+            projectDirectory: store.projectPath(id),
+            viewerDirectory: VIEWER_DIRECTORY,
+            mapSnapshots: snapshots,
           });
-          return;
-        }
-        if (format === "archive") {
-          const html = await readFile(join(latest.directory, "archival.html"));
+          if (format === "folder") {
+            json(response, 200, {
+              format,
+              directory: latest.directory,
+              buildId: latest.manifest.build.id,
+              totalBytes: latest.totalBytes,
+              builtAt: latest.builtAt,
+            });
+            return;
+          }
+          if (format === "archive") {
+            const html = await readFile(
+              join(latest.directory, "archival.html"),
+            );
+            response.writeHead(200, {
+              "content-type": "text/html; charset=utf-8",
+              "content-disposition": `attachment; filename="${id}-${latest.manifest.build.id}-archival.html"`,
+              "content-length": html.byteLength,
+              "cache-control": "no-store",
+            });
+            response.end(html);
+            return;
+          }
+          if (format === "embed") {
+            const publicationUrl =
+              typeof body.publicationUrl === "string" &&
+              body.publicationUrl.trim()
+                ? body.publicationUrl.trim()
+                : "{{PUBLICATION_URL}}";
+            json(response, 200, {
+              format,
+              directory: latest.directory,
+              buildId: latest.manifest.build.id,
+              entrypoint: "embed.html",
+              snippet: createEmbedSnippet({
+                publicationUrl,
+                title: latest.manifest.metadata.title,
+              }),
+            });
+            return;
+          }
           response.writeHead(200, {
-            "content-type": "text/html; charset=utf-8",
-            "content-disposition": `attachment; filename="${id}-${latest.manifest.build.id}-archival.html"`,
-            "content-length": html.byteLength,
+            "content-type": "application/zip",
+            "content-disposition": `attachment; filename="${id}-${latest.manifest.build.id}.zip"`,
             "cache-control": "no-store",
           });
-          response.end(html);
-          return;
-        }
-        if (format === "embed") {
-          const publicationUrl =
-            typeof body.publicationUrl === "string" &&
-            body.publicationUrl.trim()
-              ? body.publicationUrl.trim()
-              : "{{PUBLICATION_URL}}";
-          json(response, 200, {
-            format,
-            directory: latest.directory,
-            buildId: latest.manifest.build.id,
-            entrypoint: "embed.html",
-            snippet: createEmbedSnippet({
-              publicationUrl,
-              title: latest.manifest.metadata.title,
-            }),
-          });
-          return;
-        }
-        const archive = zipSync(await collectFiles(latest.directory), {
-          level: 6,
+          await streamZip(latest.directory, response);
         });
-        response.writeHead(200, {
-          "content-type": "application/zip",
-          "content-disposition": `attachment; filename="${id}-${latest.manifest.build.id}.zip"`,
-          "content-length": archive.byteLength,
-          "cache-control": "no-store",
-        });
-        response.end(archive);
         return;
       }
 

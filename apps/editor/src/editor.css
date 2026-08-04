@@ -329,7 +329,7 @@ nav {
 .publish-panel > header h2 {
   margin: 0;
   font:
-    400 clamp(34px, 5vw, 54px)/0.95 "Newsreader",
+    400 clamp(34px, 5vw, 54px)/0.95 Newsreader,
     serif;
 }
 .publish-panel > header button {
@@ -356,7 +356,7 @@ nav {
 }
 .publish-summary strong {
   font:
-    400 25px "Newsreader",
+    400 25px Newsreader,
     serif;
   color: #dd4b1a;
 }
@@ -421,7 +421,7 @@ nav {
 }
 .publish-formats strong {
   font:
-    600 20px "Newsreader",
+    600 20px Newsreader,
     serif;
 }
 .publish-formats span {

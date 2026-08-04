@@ -1,11 +1,12 @@
 import { access, readFile, stat } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { join } from "node:path";
 import type {
   PublicationManifest,
   StoryProject,
 } from "@earth-stories/story-schema";
 import { storyProjectSchema } from "@earth-stories/story-schema";
 import { compileProject } from "./compile.js";
+import { containedRealPath } from "./paths.js";
 
 export type PreflightSeverity = "error" | "warning" | "info";
 export interface PreflightIssue {
@@ -35,11 +36,6 @@ function localLocator(source: StoryProject["sources"][number]): string | null {
       ? source.locator
       : null;
 }
-function inside(root: string, candidate: string): boolean {
-  const path = relative(root, candidate);
-  return path !== ".." && !path.startsWith(`..${sep}`);
-}
-
 export async function preflightPublication(
   projectDirectory: string,
 ): Promise<PublicationPreflight> {
@@ -130,28 +126,29 @@ export async function preflightPublication(
     }
     const locator = localLocator(source);
     if (!locator) continue;
-    const candidate = resolve(projectDirectory, locator);
-    if (!inside(resolve(projectDirectory), candidate)) {
-      issues.push({
-        id: `escape-${source.id}`,
-        severity: "error",
-        resourceId: source.id,
-        message: `“${source.label}” points outside the project folder.`,
-      });
-      continue;
-    }
     try {
+      const candidate = await containedRealPath(
+        projectDirectory,
+        locator,
+        `“${source.label}” points outside the project folder.`,
+      );
       await access(candidate);
       const details = await stat(candidate);
       if (!details.isFile()) throw new Error("not a file");
       estimatedIncludedBytes += details.size;
-    } catch {
+    } catch (cause) {
+      const escaped =
+        cause instanceof Error && cause.message.includes("outside the project");
       issues.push({
-        id: `missing-${source.id}`,
+        id: `${escaped ? "escape" : "missing"}-${source.id}`,
         severity: "error",
         resourceId: source.id,
-        message: `The local file for “${source.label}” is missing.`,
-        resolution: "Restore or replace the asset before exporting.",
+        message: escaped
+          ? cause.message
+          : `The local file for “${source.label}” is missing.`,
+        resolution: escaped
+          ? undefined
+          : "Restore or replace the asset before exporting.",
       });
     }
   }

@@ -376,7 +376,12 @@ export function App() {
         <button
           className="button button--primary"
           disabled={!publication || saveState === "exporting"}
-          onClick={() => setPublishOpen(true)}
+          onClick={() => {
+            void (async () => {
+              const saved = saveState === "saved" ? project : await persist();
+              if (saved) setPublishOpen(true);
+            })();
+          }}
         >
           <Export size={17} /> Publish
         </button>

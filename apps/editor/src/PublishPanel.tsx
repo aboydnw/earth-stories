@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Archive,
   CheckCircle,
@@ -74,6 +74,9 @@ export function PublishPanel({
   const [result, setResult] = useState<string | null>(null);
   const [snippet, setSnippet] = useState("");
   const [publicationUrl, setPublicationUrl] = useState("");
+  const panelRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     setError(null);
@@ -84,6 +87,41 @@ export function PublishPanel({
         setError(cause instanceof Error ? cause.message : "Preflight failed"),
       );
   }, [open, project.id, project.metadata.updated]);
+  useEffect(() => {
+    if (!open || !panelRef.current) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const panel = panelRef.current;
+    const focusable = () => [
+      ...panel.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+      ),
+    ];
+    focusable()[0]?.focus();
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    panel.addEventListener("keydown", handleKeyDown);
+    return () => {
+      panel.removeEventListener("keydown", handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [open]);
   if (!open) return null;
   async function run(format: ExportFormat) {
     setLoading(true);
@@ -92,7 +130,7 @@ export function PublishPanel({
     try {
       const saved = await onBeforeExport();
       if (!saved) return;
-      const mapSnapshots = captureMapSnapshots();
+      const mapSnapshots = await captureMapSnapshots();
       const response = await exportProject(saved.id, format, {
         mapSnapshots,
         publicationUrl,
@@ -130,6 +168,7 @@ export function PublishPanel({
   return (
     <div className="publish-backdrop" role="presentation">
       <section
+        ref={panelRef}
         className="publish-panel"
         role="dialog"
         aria-modal="true"

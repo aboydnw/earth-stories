@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { extname, relative, resolve, sep } from "node:path";
+import { extname } from "node:path";
 import type {
   PublicationManifest,
   StoryProject,
 } from "@earth-stories/story-schema";
+import { parseCsv } from "./csv.js";
+import { containedRealPath } from "./paths.js";
 
 export interface ArchivalOptions {
   project: StoryProject;
@@ -46,13 +48,15 @@ function mime(path: string): string {
 async function dataUrl(path: string): Promise<string> {
   return `data:${mime(path)};base64,${(await readFile(path)).toString("base64")}`;
 }
-function projectAsset(projectDirectory: string, locator: string): string {
-  const root = resolve(projectDirectory);
-  const candidate = resolve(root, locator);
-  const relation = relative(root, candidate);
-  if (relation === ".." || relation.startsWith(`..${sep}`))
-    throw new Error("Archival asset escapes the project directory");
-  return candidate;
+async function projectAsset(
+  projectDirectory: string,
+  locator: string,
+): Promise<string> {
+  return containedRealPath(
+    projectDirectory,
+    locator,
+    "Archival asset escapes the project directory",
+  );
 }
 
 function chartSvg(
@@ -61,14 +65,13 @@ function chartSvg(
   yColumn: string,
   title: string,
 ): string {
-  const lines = csv.trim().split(/\r?\n/);
-  const headers = lines[0]?.split(",").map((item) => item.trim()) ?? [];
+  const rows = parseCsv(csv);
+  const headers = rows[0]?.map((item) => item.trim()) ?? [];
   const x = headers.indexOf(xColumn);
   const y = headers.indexOf(yColumn);
-  const values = lines
+  const values = rows
     .slice(1)
-    .map((line) => {
-      const cells = line.split(",");
+    .map((cells) => {
       return { label: cells[x]?.trim() ?? "", value: Number(cells[y]) };
     })
     .filter((item) => Number.isFinite(item.value))
@@ -105,14 +108,21 @@ export async function buildArchivalHtml({
     }
     if (chapter.type === "map" || chapter.type === "scrolly") {
       const snapshot = mapSnapshots[chapter.id];
+      const validSnapshot =
+        snapshot &&
+        /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(
+          snapshot,
+        );
       chapters.push(
-        `<section>${heading}${snapshot?.startsWith("data:image/") ? `<img src="${snapshot}" alt="Map snapshot for ${escapeHtml(chapter.title)}">` : `<div class="unavailable">Map snapshot unavailable. Camera: ${chapter.camera.center.join(", ")} at zoom ${chapter.camera.zoom}.</div>`}${narrative}</section>`,
+        `<section>${heading}${validSnapshot ? `<img src="${escapeHtml(snapshot)}" alt="Map snapshot for ${escapeHtml(chapter.title)}">` : `<div class="unavailable">Map snapshot unavailable. Camera: ${chapter.camera.center.join(", ")} at zoom ${chapter.camera.zoom}.</div>`}${narrative}</section>`,
       );
       continue;
     }
     const source = sources.get(chapter.sourceId);
     if (chapter.type === "image" && source?.kind === "image") {
-      const src = await dataUrl(projectAsset(projectDirectory, source.path));
+      const src = await dataUrl(
+        await projectAsset(projectDirectory, source.path),
+      );
       chapters.push(
         `<section>${heading}<figure><img src="${src}" alt="${escapeHtml(chapter.alt)}"><figcaption>${escapeHtml(chapter.caption || source.label)}</figcaption></figure>${narrative}</section>`,
       );
@@ -120,7 +130,10 @@ export async function buildArchivalHtml({
     }
     if (chapter.type === "chart" && source?.kind === "csv") {
       const svg = chartSvg(
-        await readFile(projectAsset(projectDirectory, source.path), "utf8"),
+        await readFile(
+          await projectAsset(projectDirectory, source.path),
+          "utf8",
+        ),
         chapter.xColumn,
         chapter.yColumn,
         chapter.title,
@@ -131,8 +144,17 @@ export async function buildArchivalHtml({
       continue;
     }
   }
-  const sourceTags = manifest.assets
-    .filter((asset) => asset.delivery === "connected")
+  const safeConnectedAssets = manifest.assets.filter((asset) => {
+    if (asset.delivery !== "connected") return false;
+    try {
+      const url = new URL(asset.href);
+      return url.protocol === "http:" || url.protocol === "https:";
+    } catch {
+      return false;
+    }
+  });
+  const safeConnectedIds = new Set(safeConnectedAssets.map(({ id }) => id));
+  const sourceTags = safeConnectedAssets
     .map(
       (asset) => `<meta name="dc.source" content="${escapeHtml(asset.href)}">`,
     )
@@ -140,7 +162,7 @@ export async function buildArchivalHtml({
   const citations = manifest.assets
     .map(
       (asset) =>
-        `<li><strong>${escapeHtml(asset.label)}</strong>${asset.attribution ? ` — ${escapeHtml(asset.attribution)}` : ""}${asset.delivery === "connected" ? ` — <a href="${escapeHtml(asset.href)}">source</a>` : ""}</li>`,
+        `<li><strong>${escapeHtml(asset.label)}</strong>${asset.attribution ? ` — ${escapeHtml(asset.attribution)}` : ""}${safeConnectedIds.has(asset.id) ? ` — <a href="${escapeHtml(asset.href)}">source</a>` : ""}</li>`,
     )
     .join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(project.metadata.title)}</title><meta name="dc.title" content="${escapeHtml(project.metadata.title)}">${project.metadata.author ? `<meta name="dc.creator" content="${escapeHtml(project.metadata.author)}">` : ""}<meta name="dc.date" content="${escapeHtml(exportedAt)}"><meta name="dc.description" content="${escapeHtml(project.metadata.description)}">${sourceTags}<style>${archiveCss}</style></head><body><article><header><p class="kicker">Earth Stories archival edition</p><h1>${escapeHtml(project.metadata.title)}</h1><p class="description">${escapeHtml(project.metadata.description)}</p>${project.metadata.author ? `<p>By ${escapeHtml(project.metadata.author)}</p>` : ""}</header>${chapters.join("\n")}<section class="citations"><h2>Sources and attribution</h2><ul>${citations || "<li>None recorded.</li>"}</ul></section></article><footer>Exported ${escapeHtml(exportedAt)} · Project ${escapeHtml(project.id)} · Build ${escapeHtml(manifest.build.id)} · Earth Stories</footer></body></html>`;

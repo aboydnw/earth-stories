@@ -1,8 +1,20 @@
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildLatestPublication } from "./build.js";
+import { buildArchivalHtml } from "./archive.js";
+import { buildLatestPublication, buildPublication } from "./build.js";
+import { compileProject } from "./compile.js";
 import { createEmbedSnippet } from "./embed.js";
 import { preflightPublication } from "./preflight.js";
 
@@ -32,6 +44,20 @@ async function setup() {
   return { root, project, viewer };
 }
 
+async function readProject(project: string) {
+  return JSON.parse(await readFile(join(project, "story.json"), "utf8"));
+}
+
+async function directorySize(directory: string): Promise<number> {
+  let total = 0;
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) total += await directorySize(path);
+    else if (entry.isFile()) total += (await stat(path)).size;
+  }
+  return total;
+}
+
 describe("publication hardening", () => {
   it("preflights and atomically builds every latest-export artifact", async () => {
     const { project, viewer } = await setup();
@@ -57,6 +83,10 @@ describe("publication hardening", () => {
     );
     expect(archival).toContain('name="dc.title"');
     expect(archival).toContain(snapshot);
+    const summary = JSON.parse(
+      await readFile(join(first.directory, "publication-summary.json"), "utf8"),
+    ) as { totalBytes: number };
+    expect(summary.totalBytes).toBe(await directorySize(first.directory));
     await writeFile(join(first.directory, "obsolete.txt"), "old");
     await buildLatestPublication({
       projectDirectory: project,
@@ -78,6 +108,130 @@ describe("publication hardening", () => {
         severity: "error",
       }),
     );
+  });
+
+  it("rejects an included symlink that resolves outside the project", async () => {
+    const { root, project } = await setup();
+    const outside = join(root, "outside.geojson");
+    await writeFile(outside, '{"type":"FeatureCollection","features":[]}');
+    await symlink(outside, join(project, "data", "linked.geojson"));
+    const story = await readProject(project);
+    story.sources[0].path = "data/linked.geojson";
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+    const result = await preflightPublication(project);
+    expect(result.ready).toBe(false);
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        id: "escape-survey-sites",
+        severity: "error",
+      }),
+    );
+  });
+
+  it("escapes report values and omits embed artifacts without a viewer", async () => {
+    const { root, project } = await setup();
+    const output = join(root, "output");
+    const story = await readProject(project);
+    story.metadata.title = '</strong><img src=x onerror="alert(1)">';
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+    await buildPublication({
+      projectDirectory: project,
+      outputDirectory: output,
+    });
+    const report = await readFile(
+      join(output, "publication-report.html"),
+      "utf8",
+    );
+    expect(report).toContain("&lt;/strong&gt;&lt;img");
+    expect(report).not.toContain('<img src=x onerror="alert(1)">');
+    await expect(readFile(join(output, "embed.html"))).rejects.toThrow();
+    await expect(readFile(join(output, "EMBED.txt"))).rejects.toThrow();
+    expect(await readFile(join(output, "README.txt"), "utf8")).not.toContain(
+      "embed.html",
+    );
+  });
+
+  it("preserves quoted commas, quotes, and multiline CSV cells in archives", async () => {
+    const { project } = await setup();
+    const story = await readProject(project);
+    story.sources.push({
+      id: "observations",
+      kind: "csv",
+      label: "Observations",
+      path: "data/observations.csv",
+      attribution: null,
+      sizeBytes: null,
+      delivery: "included",
+    });
+    story.chapters.push({
+      id: "chart",
+      type: "chart",
+      title: "Observations",
+      narrative: "",
+      sourceId: "observations",
+      chartType: "bar",
+      xColumn: "label",
+      yColumn: "value",
+    });
+    await writeFile(
+      join(project, "data", "observations.csv"),
+      'label,value\n"North, bank",12\n"Multi\nline",8\n"Quote ""A""",4\n',
+    );
+    const manifest = compileProject(story);
+    const archive = await buildArchivalHtml({
+      project: story,
+      manifest,
+      projectDirectory: project,
+    });
+    expect(archive).toContain("North, bank: 12");
+    expect(archive).toContain("Multi\nline: 8");
+    expect(archive).toContain("Quote &quot;A&quot;: 4");
+  });
+
+  it("rejects unsafe archive links and malformed map snapshot data", async () => {
+    const { project } = await setup();
+    const story = await readProject(project);
+    const manifest = compileProject(story);
+    manifest.assets.push({
+      id: "unsafe",
+      label: "Unsafe",
+      kind: "xyz",
+      delivery: "connected",
+      href: "javascript:alert(1)",
+      attribution: null,
+      sizeBytes: null,
+    });
+    const archive = await buildArchivalHtml({
+      project: story,
+      manifest,
+      projectDirectory: project,
+      mapSnapshots: {
+        sites: 'data:image/png;base64,aGVsbG8=" onerror="alert(1)',
+      },
+    });
+    expect(archive).not.toContain('href="javascript:');
+    expect(archive).not.toContain('onerror="alert(1)');
+    expect(archive).toContain("Map snapshot unavailable");
+  });
+
+  it("serializes concurrent latest builds for the same project", async () => {
+    const { project, viewer } = await setup();
+    const results = await Promise.all([
+      buildLatestPublication({
+        projectDirectory: project,
+        viewerDirectory: viewer,
+      }),
+      buildLatestPublication({
+        projectDirectory: project,
+        viewerDirectory: viewer,
+      }),
+    ]);
+    expect(results[0].directory).toBe(results[1].directory);
+    expect(
+      JSON.parse(
+        await readFile(join(results[0].directory, "publication.json"), "utf8"),
+      ),
+    ).toHaveProperty("schema", "earth-stories/publication/v1");
   });
 
   it("escapes embed attributes and preserves the fixed iframe scrollport", () => {
