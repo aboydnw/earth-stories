@@ -43,6 +43,10 @@ yarn dev
 The editor opens at `http://localhost:5173`. `yarn dev` also starts a small
 local service at `127.0.0.1:4317`; it is not exposed to the network.
 
+Application builds use TypeScript build mode, so a fresh checkout creates the
+referenced package declarations automatically. Running `yarn typecheck` first
+is not required.
+
 From the editor:
 
 1. Create or open a local story.

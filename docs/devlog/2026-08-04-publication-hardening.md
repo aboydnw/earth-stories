@@ -17,6 +17,8 @@ workshop.
   generator that preserves the fixed viewport required by scrollytelling.
 - Added editor progress, output results, embed copying, documentation, and
   regression tests.
+- Fixed clean-checkout startup by making editor/viewer builds bootstrap their
+  TypeScript project references; CI now verifies that path before root typecheck.
 
 ## Differences from CNG Sandbox
 
