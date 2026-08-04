@@ -26,6 +26,12 @@ body {
     ),
     #f6f1e8;
 }
+.story-publication--embed {
+  min-height: 100vh;
+}
+.story-publication--embed .story-chapters {
+  padding-top: clamp(24px, 5vw, 72px);
+}
 
 .story-masthead {
   max-width: 1180px;

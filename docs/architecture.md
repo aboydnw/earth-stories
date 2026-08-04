@@ -60,11 +60,15 @@ runtime architecture.
 
 ## Publication service boundary
 
-The MVP service owns project lifecycle, local asset imports and reads, and static
-publication builds. An export is assembled in a temporary directory, zipped,
-returned to the browser, and removed. The export contains the shared viewer,
-the compiled publication manifest, included assets, a human-readable dependency
-report, and deployment instructions.
+The MVP service owns project lifecycle, local asset imports and reads, preflight,
+and publication builds. It assembles a candidate directory beside the project,
+then replaces `<project>/publication/` through a recoverable two-phase rename.
+Only the latest successful release remains. ZIP, archival, and embed responses
+are derived from that same directory so their manifests cannot drift.
+
+The latest folder contains the shared viewer, compiled manifest, included
+assets, `embed.html`, self-contained `archival.html`, dependency report,
+preflight summary, embed instructions, and deployment instructions.
 
 The compiler—not the editor—is authoritative for delivery policy and rejects
 missing source references or incompatible chapter/source combinations. Connected

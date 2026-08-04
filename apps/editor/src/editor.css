@@ -294,6 +294,211 @@ nav {
   color: #a92c08;
   font-size: 11px;
 }
+.publish-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  justify-items: end;
+  background: rgba(46, 41, 37, 0.55);
+  backdrop-filter: blur(3px);
+}
+.publish-panel {
+  width: min(680px, 100vw);
+  height: 100vh;
+  overflow-y: auto;
+  padding: clamp(24px, 5vw, 52px);
+  border-left: 1px solid #2e2925;
+  background: #f6f1e8;
+  box-shadow: -20px 0 50px rgba(46, 41, 37, 0.18);
+}
+.publish-panel > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #2e2925;
+}
+.publish-panel > header p {
+  margin: 0 0 6px;
+  color: #dd4b1a;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.publish-panel > header h2 {
+  margin: 0;
+  font:
+    400 clamp(34px, 5vw, 54px)/0.95 "Newsreader",
+    serif;
+}
+.publish-panel > header button {
+  align-self: start;
+  padding: 8px;
+  border: 1px solid #2e2925;
+  background: transparent;
+  cursor: pointer;
+}
+.publish-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid #2e2925;
+  border-top: 0;
+}
+.publish-summary div {
+  padding: 16px;
+  display: grid;
+  gap: 3px;
+  border-right: 1px solid #2e2925;
+}
+.publish-summary div:last-child {
+  border-right: 0;
+}
+.publish-summary strong {
+  font:
+    400 25px "Newsreader",
+    serif;
+  color: #dd4b1a;
+}
+.publish-summary span {
+  color: #76685e;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+.publish-issues {
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid #b87918;
+  background: #fff6db;
+}
+.publish-issues--error {
+  border-color: #a92c08;
+  background: #fff0e9;
+}
+.publish-issues h3 {
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font:
+    600 14px "DM Mono",
+    monospace;
+}
+.publish-issues p {
+  margin: 8px 0;
+  font-size: 11px;
+}
+.publish-issues small {
+  display: block;
+  margin-top: 3px;
+  color: #76685e;
+}
+.publish-formats {
+  margin: 28px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.publish-formats button {
+  min-height: 142px;
+  padding: 18px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  text-align: left;
+  border: 1px solid #2e2925;
+  background: #ece5da;
+  cursor: pointer;
+}
+.publish-formats button:hover:not(:disabled) {
+  translate: -3px -3px;
+  box-shadow: 6px 6px 0 rgba(221, 75, 26, 0.22);
+  background: #fffaf1;
+}
+.publish-formats button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.publish-formats strong {
+  font:
+    600 20px "Newsreader",
+    serif;
+}
+.publish-formats span {
+  color: #695d54;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.publication-url {
+  display: grid;
+  gap: 7px;
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+.publication-url input,
+.embed-result textarea {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid #2e2925;
+  background: #fffaf1;
+  font:
+    11px/1.5 "DM Mono",
+    monospace;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.publication-url small {
+  color: #76685e;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.embed-result {
+  margin-top: 18px;
+}
+.embed-result button {
+  margin-top: 8px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 7px;
+  border: 1px solid #2e2925;
+  background: #ece5da;
+  cursor: pointer;
+}
+.publish-result {
+  margin-top: 18px;
+  padding: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #4d6a4a;
+  background: #eef4e9;
+  font-size: 10px;
+}
+.publish-result--error {
+  border-color: #a92c08;
+  background: #fff0e9;
+}
+.publish-progress {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+}
+.publish-progress span {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #dd4b1a;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: publish-spin 0.8s linear infinite;
+}
+@keyframes publish-spin {
+  to {
+    rotate: 1turn;
+  }
+}
 .start-screen {
   min-height: 100vh;
   display: grid;
@@ -428,5 +633,8 @@ nav {
   }
   .author-panel label:last-child {
     grid-column: auto;
+  }
+  .publish-formats {
+    grid-template-columns: 1fr;
   }
 }

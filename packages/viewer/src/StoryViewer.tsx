@@ -13,22 +13,31 @@ const ChartChapter = lazy(async () => ({
 
 export interface StoryViewerProps {
   manifest: PublicationManifest;
+  embed?: boolean;
 }
 
-export function StoryViewer({ manifest }: StoryViewerProps) {
+export function StoryViewer({ manifest, embed = false }: StoryViewerProps) {
   const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
 
   return (
-    <main className="story-publication">
-      <header className="story-masthead">
-        <p className="story-kicker">A geospatial field story</p>
-        <h1>{manifest.metadata.title}</h1>
-        <p className="story-deck">{manifest.metadata.description}</p>
-        <div className="story-rule" aria-hidden="true" />
-        <p className="story-byline">
-          {manifest.metadata.author ?? "Independent publication"}
-        </p>
-      </header>
+    <main
+      className={
+        embed
+          ? "story-publication story-publication--embed"
+          : "story-publication"
+      }
+    >
+      {!embed ? (
+        <header className="story-masthead">
+          <p className="story-kicker">A geospatial field story</p>
+          <h1>{manifest.metadata.title}</h1>
+          <p className="story-deck">{manifest.metadata.description}</p>
+          <div className="story-rule" aria-hidden="true" />
+          <p className="story-byline">
+            {manifest.metadata.author ?? "Independent publication"}
+          </p>
+        </header>
+      ) : null}
 
       <article className="story-chapters">
         {manifest.chapters.map((chapter, index) => {
@@ -39,6 +48,7 @@ export function StoryViewer({ manifest }: StoryViewerProps) {
               className={`story-chapter story-chapter--${chapter.type}`}
               key={chapter.id}
               id={chapter.id}
+              data-chapter-id={chapter.id}
             >
               <p className="story-folio">
                 {String(index + 1).padStart(2, "0")}
@@ -85,10 +95,12 @@ export function StoryViewer({ manifest }: StoryViewerProps) {
         })}
       </article>
 
-      <footer className="story-footer">
-        <span>Built with Earth Stories</span>
-        <span>Build {manifest.build.id}</span>
-      </footer>
+      {!embed ? (
+        <footer className="story-footer">
+          <span>Built with Earth Stories</span>
+          <span>Build {manifest.build.id}</span>
+        </footer>
+      ) : null}
     </main>
   );
 }

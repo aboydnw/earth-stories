@@ -26,7 +26,11 @@ export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
 
   return (
     <div className="story-map" aria-label={`Map for ${chapter.title}`}>
-      <Map initialViewState={initialViewState} mapStyle={basemapStyle}>
+      <Map
+        initialViewState={initialViewState}
+        mapStyle={basemapStyle}
+        preserveDrawingBuffer
+      >
         {asset.kind === "geojson" ? (
           <Source id={asset.id} type="geojson" data={asset.href}>
             <Layer

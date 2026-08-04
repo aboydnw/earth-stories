@@ -1,14 +1,17 @@
 import { createReadStream } from "node:fs";
-import { access, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { access, readFile, readdir, stat } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
 import { extname, join, relative, resolve } from "node:path";
-import { tmpdir } from "node:os";
 import { ProjectStore } from "@earth-stories/project-store";
-import { buildPublication } from "@earth-stories/publisher";
+import {
+  buildLatestPublication,
+  createEmbedSnippet,
+  preflightPublication,
+} from "@earth-stories/publisher";
 import { zipSync } from "fflate";
 
 const HOST = "127.0.0.1";
@@ -18,6 +21,7 @@ const PROJECTS_DIRECTORY = resolve(
 );
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_ASSET_BYTES = 100 * 1024 * 1024;
+const MAX_EXPORT_BODY_BYTES = 50 * 1024 * 1024;
 const VIEWER_DIRECTORY = resolve(
   process.env.EARTH_STORIES_VIEWER_DIR ?? "./dist/viewer",
 );
@@ -48,6 +52,15 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(
     (await readBody(request, MAX_BODY_BYTES)).toString("utf8"),
   ) as unknown;
+}
+
+async function readOptionalJson(
+  request: IncomingMessage,
+): Promise<Record<string, unknown>> {
+  const body = await readBody(request, MAX_EXPORT_BODY_BYTES);
+  return body.length
+    ? (JSON.parse(body.toString("utf8")) as Record<string, unknown>)
+    : {};
 }
 
 async function readBody(
@@ -122,35 +135,87 @@ export function createLocalServer(store: ProjectStore) {
       }
 
       const route = projectRoute(url.pathname);
+      const preflightMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/export\/preflight$/,
+      );
+      if (preflightMatch && request.method === "GET") {
+        json(
+          response,
+          200,
+          await preflightPublication(
+            store.projectPath(decodeURIComponent(preflightMatch[1])),
+          ),
+        );
+        return;
+      }
       const exportMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/export$/,
       );
       if (exportMatch && request.method === "POST") {
         const id = decodeURIComponent(exportMatch[1]);
+        const format = url.searchParams.get("format") ?? "zip";
+        if (!["zip", "folder", "archive", "embed"].includes(format))
+          throw new Error("Unknown export format");
         await access(join(VIEWER_DIRECTORY, "index.html"));
-        const temporaryRoot = await mkdtemp(
-          join(tmpdir(), "earth-stories-export-"),
-        );
-        const outputDirectory = join(temporaryRoot, id);
-        try {
-          const manifest = await buildPublication({
-            projectDirectory: store.projectPath(id),
-            outputDirectory,
-            viewerDirectory: VIEWER_DIRECTORY,
+        const body = await readOptionalJson(request);
+        const snapshots =
+          typeof body.mapSnapshots === "object" && body.mapSnapshots !== null
+            ? (body.mapSnapshots as Record<string, string>)
+            : undefined;
+        const latest = await buildLatestPublication({
+          projectDirectory: store.projectPath(id),
+          viewerDirectory: VIEWER_DIRECTORY,
+          mapSnapshots: snapshots,
+        });
+        if (format === "folder") {
+          json(response, 200, {
+            format,
+            directory: latest.directory,
+            buildId: latest.manifest.build.id,
+            totalBytes: latest.totalBytes,
+            builtAt: latest.builtAt,
           });
-          const archive = zipSync(await collectFiles(outputDirectory), {
-            level: 6,
-          });
+          return;
+        }
+        if (format === "archive") {
+          const html = await readFile(join(latest.directory, "archival.html"));
           response.writeHead(200, {
-            "content-type": "application/zip",
-            "content-disposition": `attachment; filename="${id}-${manifest.build.id}.zip"`,
-            "content-length": archive.byteLength,
+            "content-type": "text/html; charset=utf-8",
+            "content-disposition": `attachment; filename="${id}-${latest.manifest.build.id}-archival.html"`,
+            "content-length": html.byteLength,
             "cache-control": "no-store",
           });
-          response.end(archive);
-        } finally {
-          await rm(temporaryRoot, { recursive: true, force: true });
+          response.end(html);
+          return;
         }
+        if (format === "embed") {
+          const publicationUrl =
+            typeof body.publicationUrl === "string" &&
+            body.publicationUrl.trim()
+              ? body.publicationUrl.trim()
+              : "{{PUBLICATION_URL}}";
+          json(response, 200, {
+            format,
+            directory: latest.directory,
+            buildId: latest.manifest.build.id,
+            entrypoint: "embed.html",
+            snippet: createEmbedSnippet({
+              publicationUrl,
+              title: latest.manifest.metadata.title,
+            }),
+          });
+          return;
+        }
+        const archive = zipSync(await collectFiles(latest.directory), {
+          level: 6,
+        });
+        response.writeHead(200, {
+          "content-type": "application/zip",
+          "content-disposition": `attachment; filename="${id}-${latest.manifest.build.id}.zip"`,
+          "content-length": archive.byteLength,
+          "cache-control": "no-store",
+        });
+        response.end(archive);
         return;
       }
 

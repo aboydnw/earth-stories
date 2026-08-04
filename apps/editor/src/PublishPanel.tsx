@@ -1,0 +1,241 @@
+import { useEffect, useState } from "react";
+import {
+  Archive,
+  CheckCircle,
+  Copy,
+  DownloadSimple,
+  FolderOpen,
+  Globe,
+  Warning,
+  X,
+} from "@phosphor-icons/react";
+import type { StoryProject } from "@earth-stories/story-schema";
+import {
+  exportProject,
+  getPublicationPreflight,
+  type ExportFormat,
+  type PublicationPreflight,
+} from "./api";
+import { captureMapSnapshots } from "./captureSnapshots";
+
+interface Props {
+  open: boolean;
+  project: StoryProject;
+  onClose: () => void;
+  onBeforeExport: () => Promise<StoryProject | null>;
+}
+const formats: Array<{
+  id: ExportFormat;
+  title: string;
+  description: string;
+  icon: typeof DownloadSimple;
+}> = [
+  {
+    id: "zip",
+    title: "Static ZIP",
+    description:
+      "Interactive site, assets, archive and embed files in one download.",
+    icon: DownloadSimple,
+  },
+  {
+    id: "folder",
+    title: "Latest folder",
+    description: "Build the publication folder beside your project files.",
+    icon: FolderOpen,
+  },
+  {
+    id: "archive",
+    title: "Archival HTML",
+    description: "One self-contained preservation copy with map snapshots.",
+    icon: Archive,
+  },
+  {
+    id: "embed",
+    title: "Embed code",
+    description: "Create an iframe for the deployed publication’s embed page.",
+    icon: Globe,
+  },
+];
+function bytes(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / 1024 ** 2).toFixed(1)} MB`;
+}
+
+export function PublishPanel({
+  open,
+  project,
+  onClose,
+  onBeforeExport,
+}: Props) {
+  const [preflight, setPreflight] = useState<PublicationPreflight | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [snippet, setSnippet] = useState("");
+  const [publicationUrl, setPublicationUrl] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    setResult(null);
+    getPublicationPreflight(project.id)
+      .then(setPreflight)
+      .catch((cause: unknown) =>
+        setError(cause instanceof Error ? cause.message : "Preflight failed"),
+      );
+  }, [open, project.id, project.metadata.updated]);
+  if (!open) return null;
+  async function run(format: ExportFormat) {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const saved = await onBeforeExport();
+      if (!saved) return;
+      const mapSnapshots = captureMapSnapshots();
+      const response = await exportProject(saved.id, format, {
+        mapSnapshots,
+        publicationUrl,
+      });
+      if (response.blob && response.filename) {
+        const href = URL.createObjectURL(response.blob);
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.download = response.filename;
+        anchor.click();
+        URL.revokeObjectURL(href);
+        setResult(`Downloaded ${response.filename}`);
+      } else if (format === "folder")
+        setResult(`Latest publication built at ${response.directory}`);
+      else if (format === "embed") {
+        setSnippet(response.snippet ?? "");
+        setResult(
+          "Embed code is ready. Deploy the latest publication folder before using it.",
+        );
+      }
+      setPreflight(await getPublicationPreflight(saved.id));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Export failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+  async function copySnippet() {
+    if (snippet) await navigator.clipboard.writeText(snippet);
+  }
+  const errors =
+    preflight?.issues.filter((issue) => issue.severity === "error") ?? [];
+  const warnings =
+    preflight?.issues.filter((issue) => issue.severity === "warning") ?? [];
+  return (
+    <div className="publish-backdrop" role="presentation">
+      <section
+        className="publish-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="publish-title"
+      >
+        <header>
+          <div>
+            <p>Publication workshop</p>
+            <h2 id="publish-title">Build the latest release</h2>
+          </div>
+          <button onClick={onClose} aria-label="Close publication workshop">
+            <X size={20} />
+          </button>
+        </header>
+        <div className="publish-summary">
+          <div>
+            <strong>
+              {preflight ? bytes(preflight.estimatedIncludedBytes) : "—"}
+            </strong>
+            <span>included data</span>
+          </div>
+          <div>
+            <strong>{preflight?.includedAssets ?? "—"}</strong>
+            <span>included assets</span>
+          </div>
+          <div>
+            <strong>{preflight?.connectedAssets ?? "—"}</strong>
+            <span>connected assets</span>
+          </div>
+        </div>
+        {errors.length ? (
+          <div className="publish-issues publish-issues--error">
+            <h3>
+              <Warning weight="fill" /> Fix before exporting
+            </h3>
+            {errors.map((issue) => (
+              <p key={issue.id}>
+                {issue.message}
+                <small>{issue.resolution}</small>
+              </p>
+            ))}
+          </div>
+        ) : null}
+        {warnings.length ? (
+          <div className="publish-issues">
+            <h3>
+              <Warning /> Review before sharing
+            </h3>
+            {warnings.map((issue) => (
+              <p key={issue.id}>
+                {issue.message}
+                <small>{issue.resolution}</small>
+              </p>
+            ))}
+          </div>
+        ) : null}
+        <div className="publish-formats">
+          {formats.map(({ id, title, description, icon: Icon }) => (
+            <button
+              key={id}
+              disabled={loading || !preflight?.ready}
+              onClick={() => void run(id)}
+            >
+              <Icon size={22} weight="duotone" />
+              <strong>{title}</strong>
+              <span>{description}</span>
+            </button>
+          ))}
+        </div>
+        <label className="publication-url">
+          Deployed publication URL{" "}
+          <input
+            type="url"
+            value={publicationUrl}
+            onChange={(event) => setPublicationUrl(event.target.value)}
+            placeholder="https://example.org/my-story"
+          />
+          <small>Optional until you generate embed code.</small>
+        </label>
+        {snippet ? (
+          <div className="embed-result">
+            <textarea
+              readOnly
+              value={snippet}
+              rows={5}
+              onClick={(event) => event.currentTarget.select()}
+            />
+            <button onClick={() => void copySnippet()}>
+              <Copy size={16} /> Copy iframe
+            </button>
+          </div>
+        ) : null}
+        {error ? (
+          <p className="publish-result publish-result--error">{error}</p>
+        ) : null}
+        {result ? (
+          <p className="publish-result">
+            <CheckCircle weight="fill" /> {result}
+          </p>
+        ) : null}
+        {loading ? (
+          <div className="publish-progress">
+            <span /> Building and validating the latest publication…
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}

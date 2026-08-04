@@ -18,13 +18,13 @@ import type {
 import { StoryViewer } from "@earth-stories/viewer";
 import {
   createProject,
-  exportProject,
   importAsset,
   listProjects,
   openProject,
   saveProject,
   type ProjectSummary,
 } from "./api";
+import { PublishPanel } from "./PublishPanel";
 
 type SaveState = "saved" | "changed" | "saving" | "exporting";
 const camera = {
@@ -54,6 +54,7 @@ export function App() {
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [publishOpen, setPublishOpen] = useState(false);
 
   const refreshProjects = async () => setProjects(await listProjects());
   useEffect(() => {
@@ -144,24 +145,6 @@ export function App() {
       setSaveState("changed");
       showError(cause);
       return null;
-    }
-  }
-  async function handleExport() {
-    const saved = saveState === "saved" ? project : await persist();
-    if (!saved) return;
-    try {
-      setSaveState("exporting");
-      const result = await exportProject(saved.id);
-      const href = URL.createObjectURL(result.blob);
-      const anchor = document.createElement("a");
-      anchor.href = href;
-      anchor.download = result.filename;
-      anchor.click();
-      URL.revokeObjectURL(href);
-      setSaveState("saved");
-    } catch (cause) {
-      setSaveState("saved");
-      showError(cause);
     }
   }
 
@@ -393,9 +376,9 @@ export function App() {
         <button
           className="button button--primary"
           disabled={!publication || saveState === "exporting"}
-          onClick={() => void handleExport()}
+          onClick={() => setPublishOpen(true)}
         >
-          <Export size={17} /> Export ZIP
+          <Export size={17} /> Publish
         </button>
       </header>
       <aside className="editor-rail">
@@ -750,6 +733,14 @@ export function App() {
           </p>
         )}
       </section>
+      <PublishPanel
+        open={publishOpen}
+        project={project}
+        onClose={() => setPublishOpen(false)}
+        onBeforeExport={() =>
+          saveState === "saved" ? Promise.resolve(project) : persist()
+        }
+      />
     </div>
   );
 }

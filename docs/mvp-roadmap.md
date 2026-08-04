@@ -23,7 +23,10 @@
 ## Phase 4 — Portable publication (complete)
 
 - Static viewer build packaged with publication manifest and included assets
-- ZIP download from the local editor
+- Latest folder and ZIP outputs from the local editor
+- Self-contained archival HTML with Dublin Core metadata
+- Fixed-scrollport iframe output and deployment-aware embed snippet
+- Publication preflight, included-size estimates, and actionable findings
 - External dependency and deployment report
 - Explicit compatibility failures for invalid source/chapter combinations
 
