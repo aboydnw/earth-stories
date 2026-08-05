@@ -20,11 +20,14 @@ The repository now implements the complete first MVP workflow:
 - a local editor that creates, opens, edits, saves, and previews projects;
 - prose, map, scrollytelling, image, and basic CSV chart chapters;
 - local GeoJSON, PMTiles, GeoParquet, image, and CSV imports;
+- local COG import and direct range-request preview;
 - connected COG, PMTiles, GeoParquet, and XYZ source records;
 - per-source included/connected publication policies;
 - publication preflight with blocking errors, portability warnings, and size estimates;
 - latest-release folder and ZIP outputs with a dependency report;
 - self-contained archival HTML and fixed-scrollport iframe/embed outputs.
+- editable example stories and curated public example connections;
+- post-build publication verification before the latest release is promoted.
 
 This is still a pilot release rather than a supported end-user product. Direct publishing, offline
 guarantees, collaboration, AI features, and full CNG feature parity are outside
@@ -49,7 +52,7 @@ is not required.
 
 From the editor:
 
-1. Create or open a local story.
+1. Create a story, open an existing project, or make an editable copy of an example.
 2. Add text, import a supported local file, or connect a public data URL.
 3. Edit chapter copy and presentation settings while checking the live preview.
 4. Open **Publish**, review preflight findings, and choose a release output.
@@ -57,6 +60,10 @@ From the editor:
 
 Every successful build replaces `<project>/publication/`; the MVP intentionally
 keeps only the latest release. See [Publishing](docs/publication.md).
+
+The first-run screen includes example stories that exercise supported COG and
+PMTiles workflows. The editor also exposes curated example connections that can
+be added to any project. See [Examples](docs/examples.md).
 
 The publication workshop offers connected, portable, and custom profiles.
 Earth Stories now renders COG, vector/raster PMTiles, GeoParquet, GeoJSON, XYZ,
@@ -102,6 +109,8 @@ and [publication-hardening devlog](docs/devlog/2026-08-04-publication-hardening.
 Design-system conventions live in [the design-system guide](docs/design-system.md).
 The renderer and profile milestone is recorded in the
 [storytelling and publication depth devlog](docs/devlog/2026-08-04-storytelling-publication-depth.md).
+The pilot starting-point work is recorded in the
+[pilot examples devlog](docs/devlog/2026-08-05-pilot-examples.md).
 Like the other private workspace packages, `@earth-stories/ui` exports its
 TypeScript source directly for Vite and project-reference consumption; it is not
 published as a precompiled package. Its stylesheet remains a separate explicit

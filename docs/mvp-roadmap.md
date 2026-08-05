@@ -47,8 +47,20 @@
   duplication, deletion, story credits, basemap, and publication-theme controls
 - Profile-aware folder, ZIP, archive, and embed outputs with deployment reports
 
+## Phase 7 — Pilot-ready starting points
+
+- Built-in example-story catalog with independent, editable local copies
+- Curated public COG and PMTiles connections that can be added to any story
+- First-run guidance and actionable local-service startup diagnostics
+- Local COG import through the same shared preview and publication renderer
+- Post-build verification of publication entrypoints, manifest, and included assets
+
+Automated browser tests remain deferred while the authoring interface is changing
+quickly. The current suite protects schemas, project cloning, compilation,
+publication integrity, asset safety, and the example catalog.
+
 ## After MVP
 
-Native installers, direct deployment integrations, offline guarantees,
-collaboration, and AI assistance require separate product decisions and support
-commitments. They remain intentionally outside this milestone.
+Pilot usability sessions come next. Native installers, direct deployment
+integrations, offline guarantees, collaboration, and AI assistance require
+separate product decisions and support commitments.

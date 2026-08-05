@@ -61,3 +61,9 @@ A build is assembled in a temporary sibling directory. The service moves the
 current publication aside, promotes the completed candidate, restores the prior
 directory if promotion fails, and deletes the prior directory after success.
 Release history and rollback UI are post-MVP work.
+
+Before promotion, Earth Stories verifies the candidate's entrypoints,
+publication manifest, archival output, reports, and every included asset. A
+failed verification leaves the existing latest publication untouched. A
+successful release includes `publication-verification.json` with the build ID,
+verification time, and number of checked files.

@@ -34,7 +34,9 @@ function localLocator(source: StoryProject["sources"][number]): string | null {
     source.kind === "image" ||
     source.kind === "csv"
     ? source.path
-    : source.kind === "pmtiles" || source.kind === "geoparquet"
+    : source.kind === "pmtiles" ||
+        source.kind === "geoparquet" ||
+        source.kind === "cog"
       ? source.locator
       : null;
 }

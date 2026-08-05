@@ -26,6 +26,7 @@ import {
 } from "./preflight.js";
 import { containedRealPath } from "./paths.js";
 import { authorizedFetch } from "./remote-fetch.js";
+import { verifyPublication } from "./verify.js";
 
 const MAX_REMOTE_ASSET_BYTES = 2 * 1024 * 1024 * 1024;
 const REMOTE_ASSET_TIMEOUT_MS = 5 * 60 * 1000;
@@ -298,6 +299,13 @@ async function buildLatestPublicationUnlocked(
       projectDirectory,
       outputDirectory: temporary,
     });
+    const verification = await verifyPublication(temporary, manifest, {
+      requireEmbed: Boolean(options.viewerDirectory),
+    });
+    await writeFile(
+      join(temporary, "publication-verification.json"),
+      `${JSON.stringify(verification, null, 2)}\n`,
+    );
     let totalBytes = await directorySize(temporary);
     const summaryPath = join(temporary, "publication-summary.json");
     for (;;) {

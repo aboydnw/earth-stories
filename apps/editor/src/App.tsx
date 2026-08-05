@@ -4,6 +4,9 @@ import {
   Copy,
   ArrowDown,
   ArrowUp,
+  ArrowClockwise,
+  BookOpen,
+  Database,
   Export,
   FileArrowUp,
   FloppyDisk,
@@ -23,11 +26,15 @@ import { StoryViewer } from "@earth-stories/viewer";
 import { ActionButton } from "@earth-stories/ui";
 import {
   createProject,
+  createExampleStory,
+  getExamples,
   importAsset,
   listProjects,
   openProject,
   saveProject,
   type ProjectSummary,
+  type ExampleCatalog,
+  type ExampleConnection,
 } from "./api";
 import { PublishPanel } from "./PublishPanel";
 
@@ -55,7 +62,9 @@ const sourcePath = (source: ProjectSource) =>
   source.kind === "image" ||
   source.kind === "csv"
     ? source.path
-    : source.kind === "pmtiles" || source.kind === "geoparquet"
+    : source.kind === "pmtiles" ||
+        source.kind === "geoparquet" ||
+        source.kind === "cog"
       ? source.locator
       : null;
 
@@ -73,9 +82,13 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [examples, setExamples] = useState<ExampleCatalog | null>(null);
 
   const refreshProjects = async () => setProjects(await listProjects());
   useEffect(() => {
+    getExamples()
+      .then(setExamples)
+      .catch(() => undefined);
     listProjects()
       .then(async (items) => {
         setProjects(items);
@@ -122,7 +135,9 @@ export function App() {
         return asset.delivery === "included" && path
           ? {
               ...asset,
-              href: `/api/projects/${encodeURIComponent(project.id)}/assets/${path.split("/").map(encodeURIComponent).join("/")}`,
+              href: /^https?:\/\//i.test(path)
+                ? path
+                : `/api/projects/${encodeURIComponent(project.id)}/assets/${path.split("/").map(encodeURIComponent).join("/")}`,
             }
           : asset;
       }),
@@ -169,6 +184,17 @@ export function App() {
       activate(await openProject(id));
     } catch (cause) {
       showError(cause);
+    }
+  }
+  async function handleExampleStory(id: string) {
+    try {
+      setLoading(true);
+      activate(await createExampleStory(id));
+      await refreshProjects();
+    } catch (cause) {
+      showError(cause);
+    } finally {
+      setLoading(false);
     }
   }
   async function persist(): Promise<StoryProject | null> {
@@ -366,9 +392,27 @@ export function App() {
           sourceId: id,
           camera,
         };
+      } else if (extension === "tif" || extension === "tiff") {
+        source = {
+          id,
+          kind: "cog",
+          label: file.name,
+          locator: uploaded.path,
+          attribution: null,
+          sizeBytes: uploaded.sizeBytes,
+          delivery: "included",
+        };
+        chapter = {
+          id: crypto.randomUUID(),
+          type: "map",
+          title: file.name.replace(/\.[^.]+$/, ""),
+          narrative: "",
+          sourceId: id,
+          camera,
+        };
       } else
         throw new Error(
-          "Use GeoJSON, PMTiles, GeoParquet, CSV, PNG, JPEG, WebP, or GIF files.",
+          "Use COG, GeoJSON, PMTiles, GeoParquet, CSV, PNG, JPEG, WebP, or GIF files.",
         );
       changeProject((current) => ({
         ...current,
@@ -413,6 +457,41 @@ export function App() {
     setConnectedUrl("");
   }
 
+  function addExampleConnection(example: ExampleConnection) {
+    if (!project) return;
+    const id = crypto.randomUUID();
+    const common = {
+      id,
+      label: example.title,
+      locator: example.locator,
+      attribution: example.attribution,
+      sizeBytes: null,
+      delivery: "connected" as const,
+    };
+    const source: ProjectSource =
+      example.kind === "pmtiles"
+        ? {
+            ...common,
+            kind: "pmtiles",
+            tileType: example.tileType ?? "vector",
+          }
+        : { ...common, kind: example.kind };
+    const chapter: ProjectChapter = {
+      id: crypto.randomUUID(),
+      type: "map",
+      title: example.title,
+      narrative: example.description,
+      sourceId: id,
+      camera: example.camera,
+    };
+    changeProject((current) => ({
+      ...current,
+      sources: [...current.sources, source],
+      chapters: [...current.chapters, chapter],
+    }));
+    setActiveChapter(chapter.id);
+  }
+
   if (loading)
     return (
       <main className="start-screen">
@@ -440,7 +519,40 @@ export function App() {
             </ActionButton>
           </div>
         </form>
-        {error ? <p className="error-message">{error}</p> : null}
+        {error ? (
+          <div className="start-error" role="alert">
+            <p className="error-message">{error}</p>
+            <button onClick={() => window.location.reload()}>
+              <ArrowClockwise size={16} /> Retry connection
+            </button>
+          </div>
+        ) : null}
+        {examples?.stories.length ? (
+          <section
+            className="example-stories"
+            aria-labelledby="example-heading"
+          >
+            <div>
+              <BookOpen size={20} />
+              <h2 id="example-heading">Or begin with an example</h2>
+            </div>
+            <div className="example-story-list">
+              {examples.stories.map((story) => (
+                <button
+                  key={story.id}
+                  onClick={() => void handleExampleStory(story.id)}
+                >
+                  <span>{story.formats.join(" + ")}</span>
+                  <strong>{story.title}</strong>
+                  <small>{story.description}</small>
+                  <em>
+                    {story.chapterCount} chapters · creates an editable copy
+                  </em>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <small>Your files stay on this computer. No account required.</small>
       </main>
     );
@@ -532,7 +644,7 @@ export function App() {
             <FileArrowUp size={16} /> Import file
             <input
               type="file"
-              accept=".geojson,.json,.pmtiles,.parquet,.csv,.png,.jpg,.jpeg,.webp,.gif"
+              accept=".tif,.tiff,.geojson,.json,.pmtiles,.parquet,.csv,.png,.jpg,.jpeg,.webp,.gif"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) void handleFile(file);
@@ -564,6 +676,42 @@ export function App() {
             />
             <button type="submit">Connect source</button>
           </form>
+          {examples?.stories.length ? (
+            <details className="example-connections">
+              <summary>
+                <BookOpen size={16} /> Example stories
+              </summary>
+              <p>Create a separate editable project from a complete example.</p>
+              {examples.stories.map((story) => (
+                <button
+                  key={story.id}
+                  onClick={() => void handleExampleStory(story.id)}
+                >
+                  <span>{story.formats.join(" + ")}</span>
+                  <strong>{story.title}</strong>
+                  <small>{story.description}</small>
+                </button>
+              ))}
+            </details>
+          ) : null}
+          {examples?.connections.length ? (
+            <details className="example-connections">
+              <summary>
+                <Database size={16} /> Example data
+              </summary>
+              <p>Add a public, editable connection and a map chapter.</p>
+              {examples.connections.map((example) => (
+                <button
+                  key={example.id}
+                  onClick={() => addExampleConnection(example)}
+                >
+                  <span>{example.kind}</span>
+                  <strong>{example.title}</strong>
+                  <small>{example.description}</small>
+                </button>
+              ))}
+            </details>
+          ) : null}
         </div>
         <div className="asset-summary">
           <p>Export plan</p>

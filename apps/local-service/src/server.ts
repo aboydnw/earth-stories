@@ -14,6 +14,7 @@ import {
 } from "@earth-stories/publisher";
 import { Zip, ZipDeflate } from "fflate";
 import { parseByteRange } from "./range.js";
+import { exampleCatalog, findExampleStory } from "./examples.js";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.EARTH_STORIES_PORT ?? 4317);
@@ -203,6 +204,26 @@ export function createLocalServer(store: ProjectStore) {
         return;
       }
 
+      if (url.pathname === "/api/examples" && request.method === "GET") {
+        json(response, 200, exampleCatalog());
+        return;
+      }
+
+      const exampleStoryMatch = url.pathname.match(
+        /^\/api\/examples\/stories\/([^/]+)$/,
+      );
+      if (exampleStoryMatch && request.method === "POST") {
+        const example = findExampleStory(
+          decodeURIComponent(exampleStoryMatch[1]),
+        );
+        if (!example) {
+          json(response, 404, { error: "Example story not found" });
+          return;
+        }
+        json(response, 201, await store.createFromTemplate(example));
+        return;
+      }
+
       if (url.pathname === "/api/projects" && request.method === "POST") {
         const body = (await readJson(request)) as {
           title?: unknown;
@@ -389,6 +410,16 @@ export function createLocalServer(store: ProjectStore) {
 const store = new ProjectStore(PROJECTS_DIRECTORY);
 await store.initialize();
 const server = createLocalServer(store);
+server.on("error", (cause: NodeJS.ErrnoException) => {
+  const message =
+    cause.code === "EADDRINUSE"
+      ? `Earth Stories could not start because port ${PORT} is already in use. Stop the other local service or set EARTH_STORIES_PORT to an available port.`
+      : cause.code === "EACCES"
+        ? `Earth Stories does not have permission to listen on port ${PORT}. Set EARTH_STORIES_PORT to an unprivileged port.`
+        : `Earth Stories local service could not start: ${cause.message}`;
+  process.stderr.write(`${message}\n`);
+  process.exitCode = 1;
+});
 server.listen(PORT, HOST, () => {
   process.stdout.write(
     `Earth Stories local service ready at http://${HOST}:${PORT}\nProjects: ${PROJECTS_DIRECTORY}\n`,

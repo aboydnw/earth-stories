@@ -92,6 +92,19 @@ describe("publication hardening", () => {
       await readFile(join(first.directory, "publication-summary.json"), "utf8"),
     ) as { totalBytes: number };
     expect(summary.totalBytes).toBe(await directorySize(first.directory));
+    expect(
+      JSON.parse(
+        await readFile(
+          join(first.directory, "publication-verification.json"),
+          "utf8",
+        ),
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        buildId: first.manifest.build.id,
+        status: "passed",
+      }),
+    );
     await writeFile(join(first.directory, "obsolete.txt"), "old");
     await buildLatestPublication({
       projectDirectory: project,
