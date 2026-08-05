@@ -1118,7 +1118,6 @@ nav {
   cursor: pointer;
 }
 .project-list > button:hover {
-  padding-left: 16px;
   background: var(--es-bg-raised);
 }
 .project-list__number {
@@ -1548,6 +1547,7 @@ nav {
 .data-connect button {
   width: 100%;
   min-height: 42px;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1569,6 +1569,11 @@ nav {
   width: 1px;
   height: 1px;
   opacity: 0;
+}
+.file-import:focus-within {
+  border-color: var(--es-action);
+  outline: 2px solid var(--es-action);
+  outline-offset: 2px;
 }
 .data-panel section > small {
   display: block;
@@ -1634,6 +1639,9 @@ nav {
   .editor-workspace {
     grid-template-columns: minmax(460px, 1fr) 340px;
   }
+  .editor-workspace > .error-message {
+    right: 360px;
+  }
   .workspace-intro {
     grid-template-columns: 1fr;
     align-items: start;
@@ -1691,9 +1699,17 @@ nav {
     display: block;
     overflow: visible;
   }
-  .project-label,
-  .rail-mode {
+  .project-label {
     display: none;
+  }
+  .rail-mode {
+    margin: 8px 10px 0;
+  }
+  .rail-mode small {
+    display: none;
+  }
+  .rail-mode--data {
+    margin-top: 8px;
   }
   .editor-rail nav {
     display: flex;
@@ -1707,7 +1723,7 @@ nav {
     min-width: 190px;
   }
   .chapter-item__actions {
-    display: none;
+    opacity: 1;
   }
   .chapter-add {
     border-top: 1px solid var(--es-border);

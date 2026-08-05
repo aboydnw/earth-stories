@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Copy,
@@ -18,6 +18,7 @@ import {
   Plus,
   Trash,
   TextT,
+  VideoCamera,
 } from "@phosphor-icons/react";
 import { compileProject } from "@earth-stories/publisher/compile";
 import type {
@@ -92,6 +93,7 @@ export function App() {
   const [examples, setExamples] = useState<ExampleCatalog | null>(null);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("chapter");
   const [addChapterOpen, setAddChapterOpen] = useState(false);
+  const chapterAddRef = useRef<HTMLDivElement>(null);
 
   const refreshProjects = async () => setProjects(await listProjects());
   useEffect(() => {
@@ -99,12 +101,27 @@ export function App() {
       .then(setExamples)
       .catch(() => undefined);
     listProjects()
-      .then(async (items) => {
-        setProjects(items);
-      })
+      .then(setProjects)
       .catch(showError)
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => {
+    if (!addChapterOpen) return;
+    const dismiss = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent) {
+        if (event.key === "Escape") setAddChapterOpen(false);
+        return;
+      }
+      if (!chapterAddRef.current?.contains(event.target as Node))
+        setAddChapterOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismiss);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismiss);
+    };
+  }, [addChapterOpen]);
   function showError(cause: unknown) {
     setError(
       cause instanceof Error
@@ -239,6 +256,8 @@ export function App() {
       chapters: [...current.chapters, chapter],
     }));
     setActiveChapter(chapter.id);
+    setInspectorMode("chapter");
+    setAddChapterOpen(false);
   }
   function addProse() {
     addChapter({
@@ -247,7 +266,6 @@ export function App() {
       title: "New chapter",
       narrative: "",
     });
-    setAddChapterOpen(false);
   }
   function addVideo() {
     addChapter({
@@ -259,7 +277,6 @@ export function App() {
       videoId: "VIDEO_ID",
       originalUrl: "https://www.youtube.com/",
     });
-    setAddChapterOpen(false);
   }
   function addFlyover() {
     const start =
@@ -289,7 +306,6 @@ export function App() {
         },
       ],
     });
-    setAddChapterOpen(false);
   }
   function moveChapter(chapterId: string, offset: number) {
     changeProject((current) => {
@@ -499,11 +515,20 @@ export function App() {
   function addConnected(event: React.FormEvent) {
     event.preventDefault();
     if (!project || !connectedUrl.trim()) return;
+    let url: URL;
+    try {
+      url = new URL(connectedUrl.trim());
+      if (url.protocol !== "http:" && url.protocol !== "https:")
+        throw new Error();
+    } catch {
+      showError("Connected sources must use an HTTP or HTTPS URL.");
+      return;
+    }
     const id = crypto.randomUUID();
     const common = {
       id,
-      label: new URL(connectedUrl).hostname,
-      locator: connectedUrl,
+      label: url.hostname,
+      locator: url.href,
       attribution: null,
       sizeBytes: null,
       delivery: "connected" as const,
@@ -546,6 +571,15 @@ export function App() {
     }));
     setActiveChapter(chapter.id);
     setConnectedUrl("");
+  }
+
+  function leaveProject() {
+    void (async () => {
+      if (saveState === "changed" && !(await persist())) return;
+      setProject(null);
+      setError(null);
+      setAddChapterOpen(false);
+    })();
   }
 
   function addExampleConnection(example: ExampleConnection) {
@@ -761,13 +795,7 @@ export function App() {
         <button
           className="editor-brand"
           type="button"
-          onClick={() => {
-            void (async () => {
-              if (saveState === "changed" && !(await persist())) return;
-              setProject(null);
-              setError(null);
-            })();
-          }}
+          onClick={leaveProject}
           aria-label="Return to your workspace"
         >
           <MapTrifold size={22} weight="duotone" />
@@ -807,15 +835,7 @@ export function App() {
       </header>
       <aside className="editor-rail">
         <div className="project-label">
-          <button
-            type="button"
-            onClick={() => {
-              void (async () => {
-                if (saveState === "changed" && !(await persist())) return;
-                setProject(null);
-              })();
-            }}
-          >
+          <button type="button" onClick={leaveProject}>
             <House size={15} /> Workspace
           </button>
           <span>Editing</span>
@@ -850,6 +870,11 @@ export function App() {
             >
               <button
                 className="chapter-link"
+                aria-current={
+                  chapter.id === activeChapter && inspectorMode === "chapter"
+                    ? "page"
+                    : undefined
+                }
                 onClick={() => {
                   setActiveChapter(chapter.id);
                   setInspectorMode("chapter");
@@ -862,6 +887,7 @@ export function App() {
               {chapter.id === activeChapter && inspectorMode === "chapter" ? (
                 <div
                   className="chapter-item__actions"
+                  role="group"
                   aria-label={`Actions for ${chapter.title}`}
                 >
                   <button
@@ -900,11 +926,12 @@ export function App() {
             </div>
           ))}
         </nav>
-        <div className="chapter-add">
+        <div className="chapter-add" ref={chapterAddRef}>
           <button
             className="chapter-add__trigger"
             type="button"
             onClick={() => setAddChapterOpen((open) => !open)}
+            aria-haspopup="menu"
             aria-expanded={addChapterOpen}
           >
             <Plus size={16} /> Add chapter <CaretDown size={14} />
@@ -913,7 +940,7 @@ export function App() {
             <div className="chapter-add__menu">
               <p>Choose a chapter type</p>
               <button type="button" onClick={addProse}>
-                <TextT size={17} />
+                <VideoCamera size={17} />
                 <span>
                   <strong>Text</strong>
                   <small>Prose, headings and links</small>

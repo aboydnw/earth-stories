@@ -135,6 +135,8 @@ The pilot starting-point work is recorded in the
 [pilot examples devlog](docs/devlog/2026-08-05-pilot-examples.md).
 The feature-parity renderer wave is recorded in the
 [feature-parity devlog](docs/devlog/2026-08-05-feature-parity-wave.md).
+The workspace and editor redesign is recorded in the
+[workspace and editor redesign devlog](docs/devlog/2026-08-05-workspace-editor-redesign.md).
 Like the other private workspace packages, `@earth-stories/ui` exports its
 TypeScript source directly for Vite and project-reference consumption; it is not
 published as a precompiled package. Its stylesheet remains a separate explicit
