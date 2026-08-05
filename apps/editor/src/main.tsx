@@ -14,3 +14,11 @@ createRoot(root).render(
     </EarthStoriesProvider>
   </StrictMode>,
 );
+
+if (import.meta.env.DEV) {
+  import("./devFeedback")
+    .then(({ mountDevFeedback }) => mountDevFeedback())
+    .catch((error: unknown) => {
+      console.warn("Earth Stories feedback recorder could not start", error);
+    });
+}
