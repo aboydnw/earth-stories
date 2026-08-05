@@ -58,6 +58,15 @@ describe("ProjectStore", () => {
     );
   });
 
+  it("archives a project outside the active workspace", async () => {
+    const store = await createStore();
+    const project = await store.create({ title: "Finished draft" });
+    await store.archive(project.id);
+    expect(await store.list()).toEqual([]);
+    await expect(store.read(project.id)).rejects.toThrow();
+    expect(await readdir(join(store.root, ".trash"))).toHaveLength(1);
+  });
+
   it("creates one editable local copy for each example template", async () => {
     const store = await createStore();
     const template = await store.create({ title: "Example River" });

@@ -191,6 +191,14 @@ export class ProjectStore {
     return updated;
   }
 
+  async archive(id: string): Promise<void> {
+    await this.read(id);
+    const trash = join(this.root, ".trash");
+    await mkdir(trash, { recursive: true });
+    const archivedAt = new Date().toISOString().replace(/[:.]/g, "-");
+    await rename(this.directory(id), join(trash, `${id}-${archivedAt}`));
+  }
+
   assetPath(id: string, requestedPath: string): string {
     const projectDirectory = this.directory(id);
     const candidate = resolve(projectDirectory, requestedPath);

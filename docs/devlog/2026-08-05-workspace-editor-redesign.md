@@ -37,3 +37,11 @@ entries in the main story list, and reopening an example reuses its existing
 editable project. Native selects and checkboxes now receive the shared Earth
 Stories control treatment so the inspector is visually consistent across
 platforms.
+
+A second narrated pass focused on workspace and preview polish. Story rows now
+offer rename and recoverable removal actions; removed projects move to the
+workspace's `.trash` directory rather than being destroyed. The workspace also
+states that stories remain local until publication. Publication option cards
+now contain and wrap their descriptions, the live story uses the full preview
+canvas without decorative browser chrome, and shared form-control styling has
+crisper selected and focused states.

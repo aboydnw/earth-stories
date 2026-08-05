@@ -18,6 +18,10 @@ story, chapter, or data settings in the right inspector. This interface state
 does not add fields to `story.json`; the project remains the portable source of
 truth.
 
+Workspace rows can rename a story or remove it from the active list. Removal is
+recoverable: Earth Stories moves the complete project directory into `.trash`
+inside the configured projects directory instead of deleting its files.
+
 ## Save safety
 
 The local service validates the full project against the authoring schema before
@@ -37,6 +41,7 @@ The editor uses a private loopback API:
 - `POST /api/projects` creates a project.
 - `GET /api/projects/:id` opens and validates one.
 - `PUT /api/projects/:id` validates and saves one.
+- `DELETE /api/projects/:id` moves one into the workspace's local trash.
 - `GET /api/projects/:id/assets/*` serves a file contained by that project.
 - `POST /api/projects/:id/assets?filename=…` imports a file into the project.
 - `GET /api/projects/:id/export/preflight` validates publication readiness.

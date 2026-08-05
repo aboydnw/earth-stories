@@ -16,6 +16,7 @@ import {
   GearSix,
   House,
   Plus,
+  PencilSimple,
   Trash,
   TextT,
   VideoCamera,
@@ -37,6 +38,7 @@ import {
   listProjects,
   openProject,
   saveProject,
+  deleteProject,
   type ProjectSummary,
   type ExampleCatalog,
   type ExampleConnection,
@@ -219,6 +221,34 @@ export function App() {
   async function handleOpen(id: string) {
     try {
       activate(await openProject(id));
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  async function handleRename(item: ProjectSummary) {
+    const title = window.prompt("Story title", item.title)?.trim();
+    if (!title || title === item.title) return;
+    try {
+      const current = await openProject(item.id);
+      await saveProject({
+        ...current,
+        metadata: { ...current.metadata, title },
+      });
+      await refreshProjects();
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  async function handleDelete(item: ProjectSummary) {
+    if (
+      !window.confirm(
+        `Remove “${item.title}” from this workspace? It will be kept in Earth Stories’ local trash folder.`,
+      )
+    )
+      return;
+    try {
+      await deleteProject(item.id);
+      await refreshProjects();
     } catch (cause) {
       showError(cause);
     }
@@ -669,7 +699,7 @@ export function App() {
             <span>Earth Stories</span>
             <small>local</small>
           </div>
-          <span>Your stories stay on this computer</span>
+          <span>Your stories stay on this computer until you publish</span>
         </header>
         <main className="workspace-main">
           <section className="workspace-intro">
@@ -720,28 +750,48 @@ export function App() {
             {projects.length || examples?.stories.length ? (
               <div className="project-list">
                 {projects.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => void handleOpen(item.id)}
-                  >
-                    <span className="project-list__number">
-                      {String(item.chapterCount).padStart(2, "0")}
-                    </span>
-                    <span>
-                      <strong>
-                        {item.title}
-                        {item.isExample ? (
-                          <mark className="project-list__tag">Example</mark>
-                        ) : null}
-                      </strong>
-                      <small>{item.description || "No description yet"}</small>
-                    </span>
-                    <em>
-                      {item.chapterCount}{" "}
-                      {item.chapterCount === 1 ? "chapter" : "chapters"}
-                    </em>
-                    <CaretDown size={18} className="project-list__arrow" />
-                  </button>
+                  <div className="project-list__row" key={item.id}>
+                    <button
+                      className="project-list__open"
+                      onClick={() => void handleOpen(item.id)}
+                    >
+                      <span className="project-list__number">
+                        {String(item.chapterCount).padStart(2, "0")}
+                      </span>
+                      <span>
+                        <strong>
+                          {item.title}
+                          {item.isExample ? (
+                            <mark className="project-list__tag">Example</mark>
+                          ) : null}
+                        </strong>
+                        <small>
+                          {item.description || "No description yet"}
+                        </small>
+                      </span>
+                      <em>
+                        {item.chapterCount}{" "}
+                        {item.chapterCount === 1 ? "chapter" : "chapters"}
+                      </em>
+                      <CaretDown size={18} className="project-list__arrow" />
+                    </button>
+                    <div className="project-list__actions">
+                      <button
+                        type="button"
+                        aria-label={`Rename ${item.title}`}
+                        onClick={() => void handleRename(item)}
+                      >
+                        <PencilSimple size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${item.title}`}
+                        onClick={() => void handleDelete(item)}
+                      >
+                        <Trash size={16} />
+                      </button>
+                    </div>
+                  </div>
                 ))}
                 {examples?.stories
                   .filter(
@@ -2432,12 +2482,6 @@ export function App() {
         </div>
         {publication ? (
           <div className="preview-frame">
-            <div className="preview-browser">
-              <span />
-              <span />
-              <span />
-              <code>local preview · build {publication.build.id}</code>
-            </div>
             <StoryViewer manifest={publication} />
           </div>
         ) : (

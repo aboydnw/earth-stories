@@ -39,6 +39,10 @@ select {
     5px 5px,
     5px 5px;
   background-repeat: no-repeat;
+  border-color: var(--es-border-emphasized) !important;
+  background-color: var(--es-bg-raised);
+  box-shadow: 0 1px 2px rgba(68, 63, 63, 0.04);
+  cursor: pointer;
 }
 
 input[type="checkbox"] {
@@ -57,14 +61,15 @@ input[type="checkbox"] {
 input[type="checkbox"]:checked {
   border-color: var(--es-action);
   background-color: var(--es-action);
-  background-image:
-    linear-gradient(135deg, transparent 46%, white 46% 57%, transparent 57%),
-    linear-gradient(45deg, transparent 39%, white 39% 50%, transparent 50%);
-  background-position:
-    1px 1px,
-    5px 7px;
-  background-size:
-    9px 12px,
-    8px 6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m3.2 8.2 3 3.1 6.6-7' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: center;
+  background-size: 14px;
   background-repeat: no-repeat;
+}
+
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--es-action);
+  outline-offset: 2px;
 }
