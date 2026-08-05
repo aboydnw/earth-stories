@@ -23,7 +23,7 @@ The initial catalog contains:
 
 ## Example connections
 
-The editor's **Example data** section adds a curated connection and a map
+The editor's **Story data** inspector adds a curated connection and a map
 chapter to the current story. The initial catalog includes Antakya aerial
 imagery, global country and state/province PMTiles, Fields of The World Zarr,
 and Autzen Stadium COPC. These URLs and their

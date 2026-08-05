@@ -11,6 +11,13 @@ my-story/
 Local data and media may live anywhere below that directory, conventionally in
 `assets/`. Connected web sources remain URLs in `story.json`.
 
+The application opens on a workspace that lists local projects and bundled
+example stories. Opening a project enters a three-part visual editor: chapter
+structure on the left, the shared publication renderer in the center, and
+story, chapter, or data settings in the right inspector. This interface state
+does not add fields to `story.json`; the project remains the portable source of
+truth.
+
 ## Save safety
 
 The local service validates the full project against the authoring schema before
