@@ -41,8 +41,9 @@ compatible remote file into a portable release.
 - Add only public HTTPS sources with stable attribution.
 - Add a story only after every chapter and source renders in the shared viewer.
 - Keep templates small enough to understand and edit.
-- Give every template a stable ID. Example selection materializes one editable
-  local copy per template and reopens it thereafter; it never references
-  mutable catalog state.
+- Give every template a stable ID in the reserved `example-*` namespace.
+  Ordinary project creation cannot occupy that namespace. Example selection
+  materializes one editable local copy per template and reopens it thereafter;
+  it never references mutable catalog state.
 - Recheck remote availability during pilot reviews; the publication preflight
   remains authoritative at export time.

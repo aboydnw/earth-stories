@@ -56,6 +56,9 @@ describe("ProjectStore", () => {
     expect((await store.create({ title: "River Atlas" })).id).toBe(
       "river-atlas-2",
     );
+    expect((await store.create({ title: "Example Antakya" })).id).toBe(
+      "story-example-antakya",
+    );
   });
 
   it("archives a project outside the active workspace", async () => {
@@ -72,7 +75,7 @@ describe("ProjectStore", () => {
     const template = await store.create({ title: "Example River" });
     const copy = await store.createFromTemplate({
       ...template,
-      id: "master-example",
+      id: "example-master",
       metadata: {
         ...template.metadata,
         title: "Example River copy",
@@ -81,13 +84,13 @@ describe("ProjectStore", () => {
     });
     const reopened = await store.createFromTemplate({
       ...template,
-      id: "master-example",
+      id: "example-master",
       metadata: {
         ...template.metadata,
         title: "A changed catalog title",
       },
     });
-    expect(copy.id).toBe("master-example");
+    expect(copy.id).toBe("example-master");
     expect(copy.metadata.description).toBe("A curated starting point");
     expect(reopened).toEqual(copy);
     expect(

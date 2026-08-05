@@ -114,7 +114,10 @@ export class ProjectStore {
     if (!title) throw new Error("Project title is required");
     await this.initialize();
 
-    const base = slugify(title) || "untitled-story";
+    const candidate = slugify(title) || "untitled-story";
+    const base = candidate.startsWith("example-")
+      ? `story-${candidate}`
+      : candidate;
     let id = base;
     let suffix = 2;
     while (await this.exists(id)) {
@@ -155,6 +158,8 @@ export class ProjectStore {
     await this.initialize();
     const id = validated.id;
     assertSafeId(id);
+    if (!id.startsWith("example-"))
+      throw new Error('Example template IDs must start with "example-"');
     if (await this.exists(id)) return this.read(id);
     const now = new Date().toISOString();
     const project = storyProjectSchema.parse({
