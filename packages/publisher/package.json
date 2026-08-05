@@ -13,7 +13,8 @@
     "build:fixture": "node --import tsx src/cli.ts ../../fixtures/field-notes ../../dist/publications/field-notes ../../dist/viewer"
   },
   "dependencies": {
-    "@earth-stories/story-schema": "workspace:*"
+    "@earth-stories/story-schema": "workspace:*",
+    "undici": "^7.16.0"
   },
   "devDependencies": {
     "tsx": "^4.20.5"

@@ -30,12 +30,47 @@ export interface PublicationPreflight {
   estimatedIncludedBytes: number;
   includedAssets: number;
   connectedAssets: number;
+  profile: "connected" | "portable" | "custom";
   issues: PreflightIssue[];
 }
 export type ExportFormat = "zip" | "folder" | "archive" | "embed";
+export interface ExampleConnection {
+  id: string;
+  title: string;
+  description: string;
+  kind:
+    "cog" | "pmtiles" | "geoparquet" | "xyz" | "zarr" | "trajectory" | "copc";
+  locator: string;
+  tileType?: "raster" | "vector";
+  attribution: string;
+  config?: Record<string, unknown>;
+  camera: {
+    center: [number, number];
+    zoom: number;
+    bearing: number;
+    pitch: number;
+  };
+}
+export interface ExampleCatalog {
+  stories: Array<{
+    id: string;
+    title: string;
+    description: string;
+    chapterCount: number;
+    formats: string[];
+  }>;
+  connections: ExampleConnection[];
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
+  let response: Response;
+  try {
+    response = await fetch(path, init);
+  } catch {
+    throw new Error(
+      "The local Earth Stories service is not responding. Return to the terminal, confirm yarn dev is still running, then retry.",
+    );
+  }
   const body = (await response.json()) as T | { error?: string };
   if (!response.ok) {
     throw new Error(
@@ -46,6 +81,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
   return body as T;
+}
+
+export function getExamples(): Promise<ExampleCatalog> {
+  return request("/api/examples");
+}
+
+export async function createExampleStory(id: string): Promise<StoryProject> {
+  return storyProjectSchema.parse(
+    await request<unknown>(`/api/examples/stories/${encodeURIComponent(id)}`, {
+      method: "POST",
+    }),
+  );
 }
 
 export function listProjects(): Promise<ProjectSummary[]> {

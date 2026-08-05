@@ -8,8 +8,22 @@ import {
   publicationManifestSchema,
   storyProjectSchema,
 } from "@earth-stories/story-schema";
+import { validateRemoteUrl } from "./remote-url.js";
 
 export const RUNTIME_VERSION = "0.1.0";
+
+const DEFAULT_PRESENTATION: PublicationAsset["presentation"] = {
+  opacity: 0.85,
+  color: "#cf3f02",
+  strokeColor: "#443f3f",
+  radius: 6,
+  sourceLayer: null,
+  rasterBand: 1,
+  rescale: null,
+  colormap: "viridis",
+  legendTitle: "",
+  legendVisible: true,
+};
 
 const HASH_SEEDS = [
   0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35, 0x27d4eb2f, 0x165667b1,
@@ -42,11 +56,37 @@ export function digestProject(project: StoryProject): string {
   }).join("");
 }
 
-function compileAsset(source: ProjectSource): PublicationAsset {
+function compileAsset(
+  source: ProjectSource,
+  profile: StoryProject["publication"]["profile"],
+): PublicationAsset {
+  const presentation = {
+    ...DEFAULT_PRESENTATION,
+    ...source.presentation,
+  };
+  const specialized = (value?: Partial<PublicationAsset>) => ({
+    zarr: null,
+    trajectory: null,
+    copc: null,
+    ...value,
+  });
   const requestedDelivery = source.delivery;
+  const profileDelivery = (locator: string) => {
+    if (/^https?:\/\//.test(locator)) validateRemoteUrl(locator);
+    if (requestedDelivery !== "auto") return requestedDelivery;
+    if (
+      profile === "portable" &&
+      source.kind !== "xyz" &&
+      source.kind !== "local-geojson" &&
+      source.kind !== "image" &&
+      source.kind !== "csv" &&
+      source.kind !== "zarr"
+    )
+      return "included";
+    return /^https?:\/\//.test(locator) ? "connected" : "included";
+  };
   const connected = (locator: string) =>
-    requestedDelivery === "connected" ||
-    (requestedDelivery === "auto" && /^https?:\/\//.test(locator));
+    profileDelivery(locator) === "connected";
   const extension = (value: string, fallback: string) =>
     value.split(/[?#]/)[0]?.split(".").pop()?.toLowerCase() || fallback;
   switch (source.kind) {
@@ -59,8 +99,11 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: `assets/${source.id}.geojson`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
+        ...specialized(),
       };
-    case "pmtiles":
+    case "pmtiles": {
       const pmtilesConnected = connected(source.locator);
       return {
         id: source.id,
@@ -70,7 +113,11 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: pmtilesConnected ? source.locator : `assets/${source.id}.pmtiles`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: source.tileType,
+        presentation,
+        ...specialized(),
       };
+    }
     case "geoparquet": {
       const isConnected = connected(source.locator);
       return {
@@ -81,6 +128,9 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: isConnected ? source.locator : `assets/${source.id}.parquet`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
+        ...specialized(),
       };
     }
     case "image":
@@ -92,6 +142,9 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: `assets/${source.id}.${extension(source.path, "bin")}`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
+        ...specialized(),
       };
     case "csv":
       return {
@@ -102,17 +155,25 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: `assets/${source.id}.csv`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
+        ...specialized(),
       };
-    case "cog":
+    case "cog": {
+      const cogConnected = profileDelivery(source.locator) === "connected";
       return {
         id: source.id,
         label: source.label,
         kind: "cog",
-        delivery: "connected",
-        href: source.locator,
+        delivery: cogConnected ? "connected" : "included",
+        href: cogConnected ? source.locator : `assets/${source.id}.tif`,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
+        ...specialized(),
       };
+    }
     case "xyz":
       return {
         id: source.id,
@@ -122,7 +183,64 @@ function compileAsset(source: ProjectSource): PublicationAsset {
         href: source.locator,
         attribution: source.attribution,
         sizeBytes: source.sizeBytes,
+        tileType: "raster",
+        presentation,
+        ...specialized(),
       };
+    case "zarr":
+      validateRemoteUrl(source.locator);
+      return {
+        id: source.id,
+        label: source.label,
+        kind: "zarr",
+        delivery: "connected",
+        href: source.locator,
+        attribution: source.attribution,
+        sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
+        ...specialized({
+          zarr: {
+            variable: source.variable,
+            selection: source.selection,
+            timeDimension: source.timeDimension,
+            timesteps: source.timesteps,
+            geozarr: source.geozarr,
+          },
+        }),
+      };
+    case "trajectory": {
+      const isConnected = connected(source.locator);
+      return {
+        id: source.id,
+        label: source.label,
+        kind: "trajectory",
+        delivery: isConnected ? "connected" : "included",
+        href: isConnected ? source.locator : `assets/${source.id}.json`,
+        attribution: source.attribution,
+        sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
+        ...specialized({ trajectory: { trailLength: source.trailLength } }),
+      };
+    }
+    case "copc": {
+      const isConnected = connected(source.locator);
+      return {
+        id: source.id,
+        label: source.label,
+        kind: "copc",
+        delivery: isConnected ? "connected" : "included",
+        href: isConnected ? source.locator : `assets/${source.id}.copc.laz`,
+        attribution: source.attribution,
+        sizeBytes: source.sizeBytes,
+        tileType: null,
+        presentation,
+        ...specialized({
+          copc: { colorMode: source.colorMode, pointSize: source.pointSize },
+        }),
+      };
+    }
   }
 }
 
@@ -130,11 +248,26 @@ export function compileProject(input: unknown): PublicationManifest {
   const project = storyProjectSchema.parse(input);
   const sources = new Map(project.sources.map((source) => [source.id, source]));
   for (const chapter of project.chapters) {
-    if (chapter.type === "prose") continue;
-    const source = sources.get(chapter.sourceId);
+    if (chapter.type === "prose" || chapter.type === "video") continue;
+    if ("overlaySourceIds" in chapter) {
+      for (const overlayId of chapter.overlaySourceIds ?? []) {
+        const overlay = sources.get(overlayId);
+        if (!overlay)
+          throw new Error(
+            `Chapter "${chapter.title}" references missing overlay ${overlayId}`,
+          );
+        if (overlay.kind === "image" || overlay.kind === "csv")
+          throw new Error(
+            `Chapter "${chapter.title}" requires geospatial overlays`,
+          );
+      }
+    }
+    const sourceId = chapter.sourceId;
+    if (!sourceId && chapter.type === "flyover") continue;
+    const source = sourceId ? sources.get(sourceId) : undefined;
     if (!source)
       throw new Error(
-        `Chapter "${chapter.title}" references missing source ${chapter.sourceId}`,
+        `Chapter "${chapter.title}" references missing source ${sourceId}`,
       );
     if (chapter.type === "image" && source.kind !== "image")
       throw new Error(
@@ -143,7 +276,9 @@ export function compileProject(input: unknown): PublicationManifest {
     if (chapter.type === "chart" && source.kind !== "csv")
       throw new Error(`Chart chapter "${chapter.title}" requires a CSV source`);
     if (
-      (chapter.type === "map" || chapter.type === "scrolly") &&
+      (chapter.type === "map" ||
+        chapter.type === "scrolly" ||
+        chapter.type === "flyover") &&
       (source.kind === "image" || source.kind === "csv")
     )
       throw new Error(
@@ -154,22 +289,27 @@ export function compileProject(input: unknown): PublicationManifest {
     if (
       (source.kind === "local-geojson" ||
         source.kind === "image" ||
-        source.kind === "csv") &&
+        source.kind === "csv" ||
+        (source.kind === "trajectory" &&
+          !/^https?:\/\//i.test(source.locator))) &&
       source.delivery === "connected"
     )
       throw new Error(
         `Local source "${source.label}" cannot use connected delivery`,
       );
-    if (
-      (source.kind === "cog" || source.kind === "xyz") &&
-      source.delivery === "included"
-    )
+    if (source.kind === "xyz" && source.delivery === "included")
       throw new Error(
-        `${source.kind.toUpperCase()} source "${source.label}" is connected-only in the MVP`,
+        `XYZ source "${source.label}" cannot be included because it represents many remote tiles`,
+      );
+    if (source.kind === "zarr" && source.delivery === "included")
+      throw new Error(
+        `Zarr source "${source.label}" cannot be included yet because it is a multi-file store`,
       );
   }
   const projectDigest = digestProject(project);
-  const assets = project.sources.map(compileAsset);
+  const assets = project.sources.map((source) =>
+    compileAsset(source, project.publication.profile),
+  );
   const connectedAssets = assets.filter(
     (asset) => asset.delivery === "connected",
   );
@@ -187,6 +327,7 @@ export function compileProject(input: unknown): PublicationManifest {
       description: project.metadata.description,
       author: project.metadata.author,
     },
+    publication: project.publication,
     basemap: project.basemap,
     assets,
     chapters: project.chapters.map((chapter) =>
@@ -198,6 +339,11 @@ export function compileProject(input: unknown): PublicationManifest {
             narrative: chapter.narrative,
             camera: chapter.camera,
             assetId: chapter.sourceId,
+            overlayAssetIds: chapter.overlaySourceIds ?? [],
+            transition: chapter.transition ?? "fly-to",
+            ...(chapter.type === "scrolly"
+              ? { overlayPosition: chapter.overlayPosition ?? "left" }
+              : {}),
           }
         : chapter.type === "image"
           ? {
@@ -219,13 +365,41 @@ export function compileProject(input: unknown): PublicationManifest {
                 chartType: chapter.chartType,
                 xColumn: chapter.xColumn,
                 yColumn: chapter.yColumn,
+                yColumns: chapter.yColumns ?? [],
+                seriesColumn: chapter.seriesColumn ?? null,
+                xLabel: chapter.xLabel ?? "",
+                yLabel: chapter.yLabel ?? "",
+                yScale: chapter.yScale ?? "linear",
+                xMin: chapter.xMin ?? null,
+                xMax: chapter.xMax ?? null,
               }
-            : {
-                id: chapter.id,
-                type: chapter.type,
-                title: chapter.title,
-                narrative: chapter.narrative,
-              },
+            : chapter.type === "video"
+              ? {
+                  id: chapter.id,
+                  type: chapter.type,
+                  title: chapter.title,
+                  narrative: chapter.narrative,
+                  provider: chapter.provider,
+                  videoId: chapter.videoId,
+                  originalUrl: chapter.originalUrl,
+                }
+              : chapter.type === "flyover"
+                ? {
+                    id: chapter.id,
+                    type: chapter.type,
+                    title: chapter.title,
+                    narrative: chapter.narrative,
+                    assetId: chapter.sourceId,
+                    overlayAssetIds: chapter.overlaySourceIds ?? [],
+                    keyframes: chapter.keyframes,
+                    scrollLength: chapter.scrollLength,
+                  }
+                : {
+                    id: chapter.id,
+                    type: chapter.type,
+                    title: chapter.title,
+                    narrative: chapter.narrative,
+                  },
     ),
     externalDependencies: [
       {
@@ -237,10 +411,46 @@ export function compileProject(input: unknown): PublicationManifest {
         resourceId: asset.id,
         href: asset.href,
         requirements:
-          asset.kind === "cog" || asset.kind === "pmtiles"
+          asset.kind === "cog" ||
+          asset.kind === "pmtiles" ||
+          asset.kind === "geoparquet" ||
+          asset.kind === "copc"
             ? (["network", "cors", "byte-ranges"] as const)
             : (["network", "cors"] as const),
       })),
+      ...(assets.some((asset) => asset.kind === "geoparquet")
+        ? [
+            {
+              resourceId: "earth-stories-geoparquet-runtime",
+              href: "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/",
+              requirements: ["network", "cors"] as const,
+            },
+            {
+              resourceId: "duckdb-spatial-extension",
+              href: "https://extensions.duckdb.org/",
+              requirements: ["network", "cors"] as const,
+            },
+          ]
+        : []),
+      ...(assets.some((asset) => asset.kind === "cog")
+        ? [
+            {
+              resourceId: "cog-epsg-resolver",
+              href: "https://epsg.io/",
+              requirements: ["network", "cors"] as const,
+            },
+          ]
+        : []),
+    ],
+    hostingRequirements: [
+      "static-http",
+      ...(assets.some(
+        (asset) =>
+          asset.delivery === "included" &&
+          ["cog", "pmtiles", "geoparquet", "copc"].includes(asset.kind),
+      )
+        ? (["byte-ranges"] as const)
+        : []),
     ],
   });
 }

@@ -11,12 +11,17 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
+}));
 import { buildArchivalHtml } from "./archive.js";
 import { buildLatestPublication, buildPublication } from "./build.js";
 import { compileProject } from "./compile.js";
 import { createEmbedSnippet } from "./embed.js";
 import { preflightPublication } from "./preflight.js";
+import { verifyPublication } from "./verify.js";
 
 const temporary: string[] = [];
 afterEach(async () =>
@@ -26,6 +31,7 @@ afterEach(async () =>
       .map((path) => rm(path, { recursive: true, force: true })),
   ),
 );
+afterEach(() => vi.restoreAllMocks());
 
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), "earth-stories-publication-test-"));
@@ -87,6 +93,19 @@ describe("publication hardening", () => {
       await readFile(join(first.directory, "publication-summary.json"), "utf8"),
     ) as { totalBytes: number };
     expect(summary.totalBytes).toBe(await directorySize(first.directory));
+    expect(
+      JSON.parse(
+        await readFile(
+          join(first.directory, "publication-verification.json"),
+          "utf8",
+        ),
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        buildId: first.manifest.build.id,
+        status: "passed",
+      }),
+    );
     await writeFile(join(first.directory, "obsolete.txt"), "old");
     await buildLatestPublication({
       projectDirectory: project,
@@ -125,6 +144,24 @@ describe("publication hardening", () => {
         id: "escape-survey-sites",
         severity: "error",
       }),
+    );
+  });
+
+  it("rejects viewer symlinks that escape the release", async () => {
+    const { root, project } = await setup();
+    const outside = join(root, "outside.geojson");
+    await writeFile(outside, '{"type":"FeatureCollection","features":[]}');
+    const output = join(root, "output");
+    const story = await readProject(project);
+    const manifest = compileProject(story);
+    await buildPublication({
+      projectDirectory: project,
+      outputDirectory: output,
+    });
+    await rm(join(output, "assets", "survey-sites.geojson"));
+    await symlink(outside, join(output, "assets", "survey-sites.geojson"));
+    await expect(verifyPublication(output, manifest)).rejects.toThrow(
+      "links outside the release folder",
     );
   });
 
@@ -200,6 +237,11 @@ describe("publication hardening", () => {
       href: "javascript:alert(1)",
       attribution: null,
       sizeBytes: null,
+      tileType: "raster",
+      presentation: manifest.assets[0]!.presentation,
+      zarr: null,
+      trajectory: null,
+      copc: null,
     });
     const archive = await buildArchivalHtml({
       project: story,
@@ -248,5 +290,49 @@ describe("publication hardening", () => {
         title: "Unsafe",
       }),
     ).toThrow("HTTP or HTTPS");
+  });
+
+  it("preflights and copies remote geospatial data for a portable profile", async () => {
+    const { root, project } = await setup();
+    const story = await readProject(project);
+    story.publication = { profile: "portable", theme: "cng" };
+    story.sources.push({
+      id: "rain",
+      kind: "cog",
+      label: "Rain",
+      locator: "https://example.com/rain.tif",
+      attribution: null,
+      sizeBytes: null,
+      delivery: "auto",
+    });
+    story.chapters.push({
+      id: "rain-map",
+      type: "map",
+      title: "Rain",
+      narrative: "",
+      sourceId: "rain",
+      camera: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+    });
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) =>
+      init?.method === "HEAD"
+        ? new Response(null, {
+            status: 200,
+            headers: { "content-length": "8" },
+          })
+        : new Response("cog-data", { status: 200 }),
+    );
+    const preflight = await preflightPublication(project);
+    expect(preflight.ready).toBe(true);
+    expect(preflight.profile).toBe("portable");
+    expect(preflight.estimatedIncludedBytes).toBeGreaterThanOrEqual(8);
+    const output = join(root, "portable-output");
+    await buildPublication({
+      projectDirectory: project,
+      outputDirectory: output,
+    });
+    expect(await readFile(join(output, "assets", "rain.tif"), "utf8")).toBe(
+      "cog-data",
+    );
   });
 });

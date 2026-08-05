@@ -13,6 +13,9 @@ import {
   preflightPublication,
 } from "@earth-stories/publisher";
 import { Zip, ZipDeflate } from "fflate";
+import { parseByteRange } from "./range.js";
+import { exampleCatalog, findExampleStory } from "./examples.js";
+import { isTrustedMutationOrigin } from "./security.js";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.EARTH_STORIES_PORT ?? 4317);
@@ -186,12 +189,21 @@ function projectRoute(pathname: string): { id: string; asset?: string } | null {
   };
 }
 
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 export function createLocalServer(store: ProjectStore) {
   return createServer(async (request, response) => {
     response.setHeader("x-content-type-options", "nosniff");
     const url = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
 
     try {
+      if (
+        MUTATING_METHODS.has(request.method ?? "") &&
+        !isTrustedMutationOrigin(request.headers.origin)
+      ) {
+        json(response, 403, { error: "Untrusted request origin" });
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/health") {
         json(response, 200, { status: "ready", projectsDirectory: store.root });
         return;
@@ -199,6 +211,26 @@ export function createLocalServer(store: ProjectStore) {
 
       if (url.pathname === "/api/projects" && request.method === "GET") {
         json(response, 200, await store.list());
+        return;
+      }
+
+      if (url.pathname === "/api/examples" && request.method === "GET") {
+        json(response, 200, exampleCatalog());
+        return;
+      }
+
+      const exampleStoryMatch = url.pathname.match(
+        /^\/api\/examples\/stories\/([^/]+)$/,
+      );
+      if (exampleStoryMatch && request.method === "POST") {
+        const example = findExampleStory(
+          decodeURIComponent(exampleStoryMatch[1]),
+        );
+        if (!example) {
+          json(response, 404, { error: "Example story not found" });
+          return;
+        }
+        json(response, 201, await store.createFromTemplate(example));
         return;
       }
 
@@ -326,15 +358,37 @@ export function createLocalServer(store: ProjectStore) {
         await access(assetPath);
         const info = await stat(assetPath);
         if (!info.isFile()) throw new Error("Asset is not a file");
-        response.writeHead(200, {
+        let range;
+        try {
+          range = parseByteRange(request.headers.range, info.size);
+        } catch {
+          response.writeHead(416, {
+            "content-range": `bytes */${info.size}`,
+            "accept-ranges": "bytes",
+          });
+          response.end();
+          return;
+        }
+        const contentLength = range ? range.end - range.start + 1 : info.size;
+        response.writeHead(range ? 206 : 200, {
           "content-type":
             contentTypes[extname(assetPath).toLowerCase()] ??
             "application/octet-stream",
-          "content-length": info.size,
+          "content-length": contentLength,
+          ...(range
+            ? {
+                "content-range": `bytes ${range.start}-${range.end}/${info.size}`,
+              }
+            : {}),
           "accept-ranges": "bytes",
           "cache-control": "no-cache",
         });
-        createReadStream(assetPath).pipe(response);
+        const stream = createReadStream(
+          assetPath,
+          range ? { start: range.start, end: range.end } : undefined,
+        );
+        stream.on("error", (cause) => response.destroy(cause));
+        stream.pipe(response);
         return;
       }
 
@@ -366,6 +420,16 @@ export function createLocalServer(store: ProjectStore) {
 const store = new ProjectStore(PROJECTS_DIRECTORY);
 await store.initialize();
 const server = createLocalServer(store);
+server.on("error", (cause: NodeJS.ErrnoException) => {
+  const message =
+    cause.code === "EADDRINUSE"
+      ? `Earth Stories could not start because port ${PORT} is already in use. Stop the other local service or set EARTH_STORIES_PORT to an available port.`
+      : cause.code === "EACCES"
+        ? `Earth Stories does not have permission to listen on port ${PORT}. Set EARTH_STORIES_PORT to an unprivileged port.`
+        : `Earth Stories local service could not start: ${cause.message}`;
+  process.stderr.write(`${message}\n`);
+  process.exitCode = 1;
+});
 server.listen(PORT, HOST, () => {
   process.stdout.write(
     `Earth Stories local service ready at http://${HOST}:${PORT}\nProjects: ${PROJECTS_DIRECTORY}\n`,

@@ -7,6 +7,7 @@ import type {
 import { storyProjectSchema } from "@earth-stories/story-schema";
 import { compileProject } from "./compile.js";
 import { containedRealPath } from "./paths.js";
+import { authorizedFetch } from "./remote-fetch.js";
 
 export type PreflightSeverity = "error" | "warning" | "info";
 export interface PreflightIssue {
@@ -23,6 +24,7 @@ export interface PublicationPreflight {
   estimatedIncludedBytes: number;
   includedAssets: number;
   connectedAssets: number;
+  profile: StoryProject["publication"]["profile"];
   issues: PreflightIssue[];
   manifest: PublicationManifest | null;
 }
@@ -32,7 +34,11 @@ function localLocator(source: StoryProject["sources"][number]): string | null {
     source.kind === "image" ||
     source.kind === "csv"
     ? source.path
-    : source.kind === "pmtiles" || source.kind === "geoparquet"
+    : source.kind === "pmtiles" ||
+        source.kind === "geoparquet" ||
+        source.kind === "cog" ||
+        source.kind === "trajectory" ||
+        source.kind === "copc"
       ? source.locator
       : null;
 }
@@ -85,7 +91,11 @@ export async function preflightPublication(
         resolution:
           "Describe the image for readers using assistive technology.",
       });
-    if (chapter.type === "map" || chapter.type === "scrolly")
+    if (
+      chapter.type === "map" ||
+      chapter.type === "scrolly" ||
+      chapter.type === "flyover"
+    )
       issues.push({
         id: `archive-snapshot-${chapter.id}`,
         severity: "info",
@@ -124,6 +134,62 @@ export async function preflightPublication(
       );
       continue;
     }
+    const remoteLocator =
+      source.kind === "cog" ||
+      source.kind === "pmtiles" ||
+      source.kind === "geoparquet" ||
+      source.kind === "trajectory" ||
+      source.kind === "copc"
+        ? source.locator
+        : null;
+    if (remoteLocator && /^https?:\/\//i.test(remoteLocator)) {
+      let reportedSize = source.sizeBytes;
+      try {
+        let response = await authorizedFetch(remoteLocator, {
+          method: "HEAD",
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (response.status === 403 || response.status === 405)
+          response = await authorizedFetch(remoteLocator, {
+            headers: { range: "bytes=0-0" },
+            signal: AbortSignal.timeout(15_000),
+          });
+        if (!response.ok)
+          throw new Error(`remote server returned ${response.status}`);
+        const contentRange = response.headers.get("content-range");
+        const contentLength = response.headers.get("content-length");
+        const reportedLength = contentRange?.match(/\/(\d+)$/)?.[1];
+        const length = Number(reportedLength ?? contentLength);
+        if (
+          (reportedLength !== undefined || contentLength !== null) &&
+          Number.isFinite(length) &&
+          length >= 0
+        )
+          reportedSize = length;
+        if (reportedSize !== null) estimatedIncludedBytes += reportedSize;
+        else
+          issues.push({
+            id: `unknown-size-${source.id}`,
+            severity: "warning",
+            resourceId: source.id,
+            message: `The portable size of “${source.label}” is unknown.`,
+            resolution:
+              "Confirm there is enough disk space before building this release.",
+          });
+      } catch (cause) {
+        issues.push({
+          id: `unreachable-${source.id}`,
+          severity: "error",
+          resourceId: source.id,
+          message: `Earth Stories could not reach “${source.label}” for portable inclusion.`,
+          resolution:
+            cause instanceof Error
+              ? cause.message
+              : "Check the source URL and try again.",
+        });
+      }
+      continue;
+    }
     const locator = localLocator(source);
     if (!locator) continue;
     try {
@@ -158,9 +224,29 @@ export async function preflightPublication(
       severity: "info",
       message: `${manifest.externalDependencies.length} external resource${manifest.externalDependencies.length === 1 ? " is" : "s are"} required by the interactive publication.`,
     });
+  if (manifest?.hostingRequirements.includes("byte-ranges"))
+    issues.push({
+      id: "hosting-byte-ranges",
+      severity: "info",
+      message:
+        "This publication contains browser-streamed geospatial data and needs a static host that supports HTTP byte-range requests.",
+    });
+  if (
+    project.publication.profile === "portable" &&
+    Boolean(manifest?.externalDependencies.length)
+  )
+    issues.push({
+      id: "portable-connected-exceptions",
+      severity: "warning",
+      message:
+        "This portable release still has connected exceptions, such as its basemap or XYZ tiles.",
+      resolution:
+        "Review the dependency report. Earth Stories does not claim offline support yet.",
+    });
   return {
     ready: !issues.some((issue) => issue.severity === "error"),
     projectId: project.id,
+    profile: project.publication.profile,
     buildId: manifest?.build.id ?? null,
     estimatedIncludedBytes,
     includedAssets:

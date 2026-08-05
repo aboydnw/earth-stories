@@ -148,6 +148,27 @@ export class ProjectStore {
     return project;
   }
 
+  async createFromTemplate(template: StoryProject): Promise<StoryProject> {
+    const validated = storyProjectSchema.parse(template);
+    await this.initialize();
+    const base = slugify(validated.metadata.title) || "example-story";
+    let id = base;
+    let suffix = 2;
+    while (await this.exists(id)) {
+      id = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    const now = new Date().toISOString();
+    const project = storyProjectSchema.parse({
+      ...structuredClone(validated),
+      id,
+      metadata: { ...validated.metadata, created: now, updated: now },
+    });
+    await mkdir(this.directory(id), { recursive: false });
+    await this.writeAtomic(id, project, false);
+    return project;
+  }
+
   async read(id: string): Promise<StoryProject> {
     const contents = await readFile(
       join(this.directory(id), STORY_FILENAME),

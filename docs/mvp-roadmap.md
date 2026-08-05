@@ -36,9 +36,36 @@
 - Type checking, reproducible production builds, and CI enforcement
 - User, architecture, compatibility, and troubleshooting documentation
 
+## Phase 6 — Storytelling and publication depth
+
+- Connected, portable, and custom publication profiles selected at publish time
+- Per-asset policy overrides with size, network, CORS, and byte-range preflight
+- Direct browser rendering for COG, vector/raster PMTiles, and GeoParquet
+- Layer opacity, vector colors, point radius, COG band/rescale/colormap, legends,
+  source-layer selection, and attribution
+- Camera position, pitch, bearing, map/scrolly presentation, chapter reorder,
+  duplication, deletion, story credits, basemap, and publication-theme controls
+- Profile-aware folder, ZIP, archive, and embed outputs with deployment reports
+- Ordered chapter overlays; embedded video; multi-series, ranged, and log charts
+- Globe, terrain, buildings, and scroll-driven flyover camera keyframes
+- Direct connected Zarr rendering with temporal controls, COPC streaming, and
+  trajectory playback controls
+
+## Phase 7 — Pilot-ready starting points
+
+- Built-in example-story catalog with independent, editable local copies
+- Curated public COG, PMTiles, Zarr, and COPC connections that can be added to
+  any story
+- First-run guidance and actionable local-service startup diagnostics
+- Local COG import through the same shared preview and publication renderer
+- Post-build verification of publication entrypoints, manifest, and included assets
+
+Automated browser tests remain deferred while the authoring interface is changing
+quickly. The current suite protects schemas, project cloning, compilation,
+publication integrity, asset safety, and the example catalog.
+
 ## After MVP
 
-Native installers, direct deployment integrations, richer map styling and data
-inspection, generic client-side COG/GeoParquet rendering, offline profiles,
-collaboration, and AI assistance require separate product decisions and support
-commitments. They are intentionally not prerequisites for pilot evaluation.
+Pilot usability sessions come next. Native installers, direct deployment
+integrations, offline guarantees, collaboration, and AI assistance require
+separate product decisions and support commitments.

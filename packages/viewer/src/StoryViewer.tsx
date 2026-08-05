@@ -10,6 +10,9 @@ const MapChapter = lazy(async () => {
 const ChartChapter = lazy(async () => ({
   default: (await import("./ChartChapter.js")).ChartChapter,
 }));
+const FlyoverChapter = lazy(async () => ({
+  default: (await import("./FlyoverChapter.js")).FlyoverChapter,
+}));
 
 export interface StoryViewerProps {
   manifest: PublicationManifest;
@@ -20,13 +23,13 @@ export interface StoryViewerProps {
 export function StoryViewer({
   manifest,
   embed = false,
-  theme = "cng",
+  theme,
 }: StoryViewerProps) {
   const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
 
   return (
     <main
-      className={`story-publication story-publication--${theme}${embed ? " story-publication--embed" : ""}`}
+      className={`story-publication story-publication--${theme ?? manifest.publication.theme}${embed ? " story-publication--embed" : ""}`}
     >
       {!embed ? (
         <header className="story-masthead">
@@ -43,7 +46,16 @@ export function StoryViewer({
       <article className="story-chapters">
         {manifest.chapters.map((chapter, index) => {
           const asset =
-            chapter.type === "prose" ? null : assets.get(chapter.assetId);
+            "assetId" in chapter && chapter.assetId
+              ? assets.get(chapter.assetId)
+              : null;
+          const overlayAssets =
+            "overlayAssetIds" in chapter
+              ? chapter.overlayAssetIds.flatMap((id) => {
+                  const overlay = assets.get(id);
+                  return overlay ? [overlay] : [];
+                })
+              : [];
           return (
             <section
               className={`story-chapter story-chapter--${chapter.type}`}
@@ -70,6 +82,40 @@ export function StoryViewer({
                   <MapChapter
                     chapter={chapter}
                     asset={asset}
+                    overlayAssets={overlayAssets}
+                    basemapStyle={manifest.basemap.styleUrl}
+                  />
+                </Suspense>
+              ) : null}
+              {chapter.type === "video" ? (
+                <figure className="story-video">
+                  <iframe
+                    src={
+                      chapter.provider === "youtube"
+                        ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(chapter.videoId)}`
+                        : `https://player.vimeo.com/video/${encodeURIComponent(chapter.videoId)}`
+                    }
+                    title={chapter.title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                  <figcaption>
+                    <a href={chapter.originalUrl}>Open original video</a>
+                  </figcaption>
+                </figure>
+              ) : null}
+              {chapter.type === "flyover" ? (
+                <Suspense
+                  fallback={
+                    <div className="story-map story-map--loading">
+                      Preparing flyover…
+                    </div>
+                  }
+                >
+                  <FlyoverChapter
+                    chapter={chapter}
+                    asset={asset ?? null}
+                    overlayAssets={overlayAssets}
                     basemapStyle={manifest.basemap.styleUrl}
                   />
                 </Suspense>

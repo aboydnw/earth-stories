@@ -62,32 +62,68 @@ async function projectAsset(
 function chartSvg(
   csv: string,
   xColumn: string,
-  yColumn: string,
+  yColumns: string[],
+  chartType: "bar" | "line",
   title: string,
 ): string {
   const rows = parseCsv(csv);
   const headers = rows[0]?.map((item) => item.trim()) ?? [];
   const x = headers.indexOf(xColumn);
-  const y = headers.indexOf(yColumn);
-  const values = rows
-    .slice(1)
-    .map((cells) => {
-      return { label: cells[x]?.trim() ?? "", value: Number(cells[y]) };
-    })
-    .filter((item) => Number.isFinite(item.value))
-    .slice(0, 30);
-  const maximum = Math.max(...values.map((item) => item.value), 1);
+  const series = yColumns.map((column) => ({
+    column,
+    values: rows
+      .slice(1)
+      .map((cells) => ({
+        label: cells[x]?.trim() ?? "",
+        value: Number(cells[headers.indexOf(column)]),
+      }))
+      .filter((item) => Number.isFinite(item.value))
+      .slice(0, 30),
+  }));
+  const allValues = series.flatMap((item) =>
+    item.values.map((value) => value.value),
+  );
+  const minimum = Math.min(...allValues, 0);
+  const maximum = Math.max(...allValues, 1);
+  const valueRange = maximum - minimum || 1;
+  const normalized = (value: number) => (value - minimum) / valueRange;
   const width = 900;
   const height = 420;
-  const slot = values.length ? 760 / values.length : 760;
-  const bars = values
-    .map((item, index) => {
-      const barHeight = (item.value / maximum) * 300;
-      const left = 90 + index * slot;
-      return `<rect x="${left}" y="${350 - barHeight}" width="${Math.max(3, slot - 5)}" height="${barHeight}" fill="#dd4b1a"><title>${escapeHtml(item.label)}: ${item.value}</title></rect><text x="${left + slot / 2}" y="375" text-anchor="middle" font-size="10">${escapeHtml(item.label.slice(0, 12))}</text>`;
-    })
+  const longestSeries = series.reduce(
+    (longest, item) =>
+      item.values.length > longest.values.length ? item : longest,
+    { column: "", values: [] as Array<{ label: string; value: number }> },
+  );
+  const slot = longestSeries.values.length
+    ? 760 / longestSeries.values.length
+    : 760;
+  const colors = ["#dd4b1a", "#126e75", "#7054a0", "#d59d12"];
+  const marks =
+    chartType === "line"
+      ? series
+          .map(
+            (item, seriesIndex) =>
+              `<polyline fill="none" stroke="${colors[seriesIndex % colors.length]}" stroke-width="4" points="${item.values.map((value, index) => `${90 + index * slot + slot / 2},${350 - normalized(value.value) * 300}`).join(" ")}"><title>${escapeHtml(item.column)}</title></polyline>`,
+          )
+          .join("")
+      : series
+          .flatMap((item, seriesIndex) =>
+            item.values.map((value, index) => {
+              const groupWidth = Math.max(3, slot - 5);
+              const barWidth = groupWidth / series.length;
+              const height = normalized(value.value) * 300;
+              const left = 90 + index * slot + seriesIndex * barWidth;
+              return `<rect x="${left}" y="${350 - height}" width="${barWidth}" height="${height}" fill="${colors[seriesIndex % colors.length]}"><title>${escapeHtml(item.column)} — ${escapeHtml(value.label)}: ${value.value}</title></rect>`;
+            }),
+          )
+          .join("");
+  const labels = longestSeries.values
+    .map(
+      (item, index) =>
+        `<text x="${90 + index * slot + slot / 2}" y="375" text-anchor="middle" font-size="10">${escapeHtml(item.label.slice(0, 12))}</text>`,
+    )
     .join("");
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}"><rect width="100%" height="100%" fill="#f6f1e8"/><line x1="80" y1="350" x2="860" y2="350" stroke="#332b27"/>${bars}</svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}"><rect width="100%" height="100%" fill="#f6f1e8"/><line x1="80" y1="350" x2="860" y2="350" stroke="#332b27"/>${marks}${labels}</svg>`;
 }
 
 export async function buildArchivalHtml({
@@ -106,7 +142,11 @@ export async function buildArchivalHtml({
       chapters.push(`<section>${heading}${narrative}</section>`);
       continue;
     }
-    if (chapter.type === "map" || chapter.type === "scrolly") {
+    if (
+      chapter.type === "map" ||
+      chapter.type === "scrolly" ||
+      chapter.type === "flyover"
+    ) {
       const snapshot = mapSnapshots[chapter.id];
       const validSnapshot =
         snapshot &&
@@ -114,7 +154,13 @@ export async function buildArchivalHtml({
           snapshot,
         );
       chapters.push(
-        `<section>${heading}${validSnapshot ? `<img src="${escapeHtml(snapshot)}" alt="Map snapshot for ${escapeHtml(chapter.title)}">` : `<div class="unavailable">Map snapshot unavailable. Camera: ${chapter.camera.center.join(", ")} at zoom ${chapter.camera.zoom}.</div>`}${narrative}</section>`,
+        `<section>${heading}${validSnapshot ? `<img src="${escapeHtml(snapshot)}" alt="Map snapshot for ${escapeHtml(chapter.title)}">` : `<div class="unavailable">Map snapshot unavailable.${chapter.type === "flyover" ? ` Flyover contains ${chapter.keyframes.length} camera keyframes.` : ` Camera: ${chapter.camera.center.join(", ")} at zoom ${chapter.camera.zoom}.`}</div>`}${narrative}</section>`,
+      );
+      continue;
+    }
+    if (chapter.type === "video") {
+      chapters.push(
+        `<section>${heading}<div class="unavailable">Embedded video is preserved as a reference in this archival edition. <a href="${escapeHtml(chapter.originalUrl)}">Open original video</a>.</div>${narrative}</section>`,
       );
       continue;
     }
@@ -135,7 +181,8 @@ export async function buildArchivalHtml({
           "utf8",
         ),
         chapter.xColumn,
-        chapter.yColumn,
+        [chapter.yColumn, ...(chapter.yColumns ?? [])],
+        chapter.chartType,
         chapter.title,
       );
       chapters.push(

@@ -58,6 +58,23 @@ describe("ProjectStore", () => {
     );
   });
 
+  it("creates independent editable copies from an example template", async () => {
+    const store = await createStore();
+    const template = await store.create({ title: "Example River" });
+    const copy = await store.createFromTemplate({
+      ...template,
+      id: "master-example",
+      metadata: {
+        ...template.metadata,
+        title: "Example River copy",
+        description: "A curated starting point",
+      },
+    });
+    expect(copy.id).toBe("example-river-copy");
+    expect(copy.metadata.description).toBe("A curated starting point");
+    expect(await store.read(template.id)).toEqual(template);
+  });
+
   it("rejects traversal-shaped project and asset paths", async () => {
     const store = await createStore();
     await expect(store.read("../private")).rejects.toThrow(

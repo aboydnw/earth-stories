@@ -24,6 +24,9 @@ interface Props {
   project: StoryProject;
   onClose: () => void;
   onBeforeExport: () => Promise<StoryProject | null>;
+  onProfileChange: (
+    profile: StoryProject["publication"]["profile"],
+  ) => Promise<StoryProject | null>;
 }
 const formats: Array<{
   id: ExportFormat;
@@ -68,6 +71,7 @@ export function PublishPanel({
   project,
   onClose,
   onBeforeExport,
+  onProfileChange,
 }: Props) {
   const [preflight, setPreflight] = useState<PublicationPreflight | null>(null);
   const [loading, setLoading] = useState(false);
@@ -209,6 +213,55 @@ export function PublishPanel({
             <span>connected assets</span>
           </div>
         </div>
+        <fieldset className="publication-profiles">
+          <legend>Publication profile</legend>
+          {(
+            [
+              [
+                "connected",
+                "Connected",
+                "Keep public data at its source for a smaller release.",
+              ],
+              [
+                "portable",
+                "Portable",
+                "Copy compatible COG, PMTiles, and GeoParquet data into the release.",
+              ],
+              ["custom", "Custom", "Use each asset’s publication data policy."],
+            ] as const
+          ).map(([id, title, description]) => (
+            <label key={id}>
+              <input
+                type="radio"
+                name="publication-profile"
+                value={id}
+                checked={project.publication.profile === id}
+                disabled={loading}
+                onChange={() => {
+                  setLoading(true);
+                  setError(null);
+                  void onProfileChange(id)
+                    .then(async (saved) => {
+                      if (saved)
+                        setPreflight(await getPublicationPreflight(saved.id));
+                    })
+                    .catch((cause: unknown) =>
+                      setError(
+                        cause instanceof Error
+                          ? cause.message
+                          : "The publication profile could not be updated.",
+                      ),
+                    )
+                    .finally(() => setLoading(false));
+                }}
+              />
+              <span>
+                <strong>{title}</strong>
+                <small>{description}</small>
+              </span>
+            </label>
+          ))}
+        </fieldset>
         {errors.length ? (
           <div className="publish-issues publish-issues--error">
             <h3>

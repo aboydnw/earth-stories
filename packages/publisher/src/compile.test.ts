@@ -112,4 +112,113 @@ describe("compileProject", () => {
       "cannot use connected delivery",
     );
   });
+
+  it("applies publication profile defaults while preserving per-asset overrides", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.sources.push(
+      {
+        id: "rain",
+        kind: "cog",
+        label: "Rain",
+        locator: "https://example.com/rain.tif",
+        attribution: null,
+        sizeBytes: 2048,
+        delivery: "auto",
+      },
+      {
+        id: "boundaries",
+        kind: "pmtiles",
+        tileType: "vector",
+        label: "Boundaries",
+        locator: "https://example.com/boundaries.pmtiles",
+        attribution: null,
+        sizeBytes: 1024,
+        delivery: "connected",
+      },
+    );
+    fixture.publication.profile = "portable";
+    const portable = compileProject(fixture);
+    expect(portable.assets.find((asset) => asset.id === "rain")).toMatchObject({
+      delivery: "included",
+      href: "assets/rain.tif",
+    });
+    expect(
+      portable.assets.find((asset) => asset.id === "boundaries")?.delivery,
+    ).toBe("connected");
+    expect(portable.hostingRequirements).toContain("byte-ranges");
+
+    fixture.publication.profile = "connected";
+    expect(
+      compileProject(fixture).assets.find((asset) => asset.id === "rain")
+        ?.delivery,
+    ).toBe("connected");
+  });
+
+  it("compiles overlays, temporal Zarr, COPC, video, and flyover chapters", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.sources.push(
+      {
+        id: "time",
+        kind: "zarr",
+        label: "Time",
+        locator: "https://example.com/time.zarr",
+        variable: "data",
+        selection: {},
+        timeDimension: "time",
+        timesteps: [{ label: "Now", index: 0 }],
+        geozarr: null,
+        delivery: "auto",
+        attribution: null,
+        sizeBytes: null,
+      },
+      {
+        id: "cloud",
+        kind: "copc",
+        label: "Cloud",
+        locator: "https://example.com/cloud.copc.laz",
+        colorMode: "elevation",
+        pointSize: 2,
+        delivery: "auto",
+        attribution: null,
+        sizeBytes: null,
+      },
+    );
+    fixture.chapters.push(
+      {
+        id: "video",
+        type: "video",
+        title: "Video",
+        narrative: "",
+        provider: "youtube",
+        videoId: "abc",
+        originalUrl: "https://youtube.com/watch?v=abc",
+      },
+      {
+        id: "fly",
+        type: "flyover",
+        title: "Fly",
+        narrative: "",
+        sourceId: "cloud",
+        overlaySourceIds: ["time"],
+        keyframes: [
+          { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+          { center: [1, 1], zoom: 4, bearing: 20, pitch: 45 },
+        ],
+        scrollLength: 1,
+      },
+    );
+    const result = compileProject(fixture);
+    expect(
+      result.chapters.find((chapter) => chapter.id === "fly"),
+    ).toMatchObject({ type: "flyover", overlayAssetIds: ["time"] });
+    expect(result.assets.find((asset) => asset.id === "time")).toMatchObject({
+      kind: "zarr",
+      delivery: "connected",
+      zarr: { timeDimension: "time" },
+    });
+    expect(result.assets.find((asset) => asset.id === "cloud")?.copc).toEqual({
+      colorMode: "elevation",
+      pointSize: 2,
+    });
+  });
 });
