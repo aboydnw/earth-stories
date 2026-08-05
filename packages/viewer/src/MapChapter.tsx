@@ -101,8 +101,16 @@ function AssetLayer({
         );
     }
     if (asset.kind === "trajectory") {
+      setTrajectory(null);
+      setTrajectoryProgress(1);
       fetch(assetUrl, { signal: controller.signal })
-        .then((response) => response.json())
+        .then((response) => {
+          if (!response.ok)
+            throw new Error(
+              `The trajectory source returned ${response.status}.`,
+            );
+          return response.json();
+        })
         .then(
           (data: {
             tracks?: Array<{
