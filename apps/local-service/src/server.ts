@@ -406,6 +406,13 @@ export function createLocalServer(store: ProjectStore) {
         return;
       }
 
+      if (route && !route.asset && request.method === "DELETE") {
+        await store.archive(route.id);
+        response.writeHead(204, { "cache-control": "no-store" });
+        response.end();
+        return;
+      }
+
       json(response, 404, { error: "Not found" });
     } catch (error) {
       const message =

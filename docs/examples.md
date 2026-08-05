@@ -6,10 +6,12 @@ the application code and requires no hosted Earth Stories account or database.
 
 ## Example stories
 
-The first-run screen offers complete stories built only from capabilities the
-shared viewer currently supports. Choosing one creates a new project folder
-with its own `story.json`. The copy is ordinary author-owned content: edits,
-publication settings, and exports never modify the bundled template.
+The workspace lists complete stories built only from capabilities the shared
+viewer currently supports alongside the author's own stories, with an
+**Example** tag. Choosing one creates its project folder and `story.json` the
+first time; later selections reopen that same editable local copy instead of
+creating duplicates. Edits, publication settings, and exports never modify the
+bundled template.
 
 The initial catalog contains:
 
@@ -23,7 +25,7 @@ The initial catalog contains:
 
 ## Example connections
 
-The editor's **Example data** section adds a curated connection and a map
+The editor's **Story data** inspector adds a curated connection and a map
 chapter to the current story. The initial catalog includes Antakya aerial
 imagery, global country and state/province PMTiles, Fields of The World Zarr,
 and Autzen Stadium COPC. These URLs and their
@@ -39,7 +41,9 @@ compatible remote file into a portable release.
 - Add only public HTTPS sources with stable attribution.
 - Add a story only after every chapter and source renders in the shared viewer.
 - Keep templates small enough to understand and edit.
-- Treat example selection as a copy operation, never a reference to mutable
-  authoring state.
+- Give every template a stable ID in the reserved `example-*` namespace.
+  Ordinary project creation cannot occupy that namespace. Example selection
+  materializes one editable local copy per template and reopens it thereafter;
+  it never references mutable catalog state.
 - Recheck remote availability during pilot reviews; the publication preflight
   remains authoritative at export time.

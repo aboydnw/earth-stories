@@ -56,22 +56,46 @@ describe("ProjectStore", () => {
     expect((await store.create({ title: "River Atlas" })).id).toBe(
       "river-atlas-2",
     );
+    expect((await store.create({ title: "Example Antakya" })).id).toBe(
+      "story-example-antakya",
+    );
   });
 
-  it("creates independent editable copies from an example template", async () => {
+  it("archives a project outside the active workspace", async () => {
+    const store = await createStore();
+    const project = await store.create({ title: "Finished draft" });
+    await store.archive(project.id);
+    expect(await store.list()).toEqual([]);
+    await expect(store.read(project.id)).rejects.toThrow();
+    expect(await readdir(join(store.root, ".trash"))).toHaveLength(1);
+  });
+
+  it("creates one editable local copy for each example template", async () => {
     const store = await createStore();
     const template = await store.create({ title: "Example River" });
     const copy = await store.createFromTemplate({
       ...template,
-      id: "master-example",
+      id: "example-master",
       metadata: {
         ...template.metadata,
         title: "Example River copy",
         description: "A curated starting point",
       },
     });
-    expect(copy.id).toBe("example-river-copy");
+    const reopened = await store.createFromTemplate({
+      ...template,
+      id: "example-master",
+      metadata: {
+        ...template.metadata,
+        title: "A changed catalog title",
+      },
+    });
+    expect(copy.id).toBe("example-master");
     expect(copy.metadata.description).toBe("A curated starting point");
+    expect(reopened).toEqual(copy);
+    expect(
+      (await store.list()).filter(({ id }) => id === copy.id),
+    ).toHaveLength(1);
     expect(await store.read(template.id)).toEqual(template);
   });
 

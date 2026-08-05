@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   Copy,
@@ -6,15 +6,20 @@ import {
   ArrowUp,
   ArrowClockwise,
   BookOpen,
+  CaretDown,
   Database,
   Export,
   FileArrowUp,
   FloppyDisk,
   Link,
   MapTrifold,
+  GearSix,
+  House,
   Plus,
+  PencilSimple,
   Trash,
   TextT,
+  VideoCamera,
 } from "@phosphor-icons/react";
 import { compileProject } from "@earth-stories/publisher/compile";
 import type {
@@ -24,6 +29,7 @@ import type {
 } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
 import { ActionButton } from "@earth-stories/ui";
+import { reorderChapters } from "./chapterOrder";
 import {
   createProject,
   createExampleStory,
@@ -32,6 +38,7 @@ import {
   listProjects,
   openProject,
   saveProject,
+  deleteProject,
   type ProjectSummary,
   type ExampleCatalog,
   type ExampleConnection,
@@ -39,6 +46,7 @@ import {
 import { PublishPanel } from "./PublishPanel";
 
 type SaveState = "saved" | "changed" | "saving" | "exporting";
+type InspectorMode = "chapter" | "story" | "data";
 const camera = {
   center: [0, 20] as [number, number],
   zoom: 1.5,
@@ -85,6 +93,9 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [publishOpen, setPublishOpen] = useState(false);
   const [examples, setExamples] = useState<ExampleCatalog | null>(null);
+  const [inspectorMode, setInspectorMode] = useState<InspectorMode>("chapter");
+  const [addChapterOpen, setAddChapterOpen] = useState(false);
+  const chapterAddRef = useRef<HTMLDivElement>(null);
 
   const refreshProjects = async () => setProjects(await listProjects());
   useEffect(() => {
@@ -92,13 +103,27 @@ export function App() {
       .then(setExamples)
       .catch(() => undefined);
     listProjects()
-      .then(async (items) => {
-        setProjects(items);
-        if (items[0]) activate(await openProject(items[0].id));
-      })
+      .then(setProjects)
       .catch(showError)
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => {
+    if (!addChapterOpen) return;
+    const dismiss = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent) {
+        if (event.key === "Escape") setAddChapterOpen(false);
+        return;
+      }
+      if (!chapterAddRef.current?.contains(event.target as Node))
+        setAddChapterOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismiss);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismiss);
+    };
+  }, [addChapterOpen]);
   function showError(cause: unknown) {
     setError(
       cause instanceof Error
@@ -110,6 +135,8 @@ export function App() {
     setProject(next);
     setBasemapStyleDraft(next.basemap.styleUrl);
     setActiveChapter(next.chapters[0]?.id ?? "");
+    setInspectorMode("chapter");
+    setAddChapterOpen(false);
     setSaveState("saved");
   }
   function changeProject(update: (current: StoryProject) => StoryProject) {
@@ -183,9 +210,8 @@ export function App() {
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
-    if (!newTitle.trim()) return;
     try {
-      activate(await createProject(newTitle));
+      activate(await createProject(newTitle.trim() || "Untitled story"));
       setNewTitle("");
       await refreshProjects();
     } catch (cause) {
@@ -195,6 +221,34 @@ export function App() {
   async function handleOpen(id: string) {
     try {
       activate(await openProject(id));
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  async function handleRename(item: ProjectSummary) {
+    const title = window.prompt("Story title", item.title)?.trim();
+    if (!title || title === item.title) return;
+    try {
+      const current = await openProject(item.id);
+      await saveProject({
+        ...current,
+        metadata: { ...current.metadata, title },
+      });
+      await refreshProjects();
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  async function handleDelete(item: ProjectSummary) {
+    if (
+      !window.confirm(
+        `Remove “${item.title}” from this workspace? It will be kept in Earth Stories’ local trash folder.`,
+      )
+    )
+      return;
+    try {
+      await deleteProject(item.id);
+      await refreshProjects();
     } catch (cause) {
       showError(cause);
     }
@@ -232,6 +286,8 @@ export function App() {
       chapters: [...current.chapters, chapter],
     }));
     setActiveChapter(chapter.id);
+    setInspectorMode("chapter");
+    setAddChapterOpen(false);
   }
   function addProse() {
     addChapter({
@@ -281,20 +337,10 @@ export function App() {
       ],
     });
   }
-  function moveChapter(offset: number) {
-    if (!selectedChapter) return;
+  function moveChapter(chapterId: string, offset: number) {
     changeProject((current) => {
-      const from = current.chapters.findIndex(
-        (chapter) => chapter.id === selectedChapter.id,
-      );
-      const to = Math.max(
-        0,
-        Math.min(current.chapters.length - 1, from + offset),
-      );
-      if (from === to) return current;
-      const chapters = [...current.chapters];
-      const [chapter] = chapters.splice(from, 1);
-      chapters.splice(to, 0, chapter!);
+      const chapters = reorderChapters(current.chapters, chapterId, offset);
+      if (chapters === current.chapters) return current;
       return { ...current, chapters };
     });
   }
@@ -499,11 +545,20 @@ export function App() {
   function addConnected(event: React.FormEvent) {
     event.preventDefault();
     if (!project || !connectedUrl.trim()) return;
+    let url: URL;
+    try {
+      url = new URL(connectedUrl.trim());
+      if (url.protocol !== "http:" && url.protocol !== "https:")
+        throw new Error();
+    } catch {
+      showError("Connected sources must use an HTTP or HTTPS URL.");
+      return;
+    }
     const id = crypto.randomUUID();
     const common = {
       id,
-      label: new URL(connectedUrl).hostname,
-      locator: connectedUrl,
+      label: url.hostname,
+      locator: url.href,
       attribution: null,
       sizeBytes: null,
       delivery: "connected" as const,
@@ -546,6 +601,15 @@ export function App() {
     }));
     setActiveChapter(chapter.id);
     setConnectedUrl("");
+  }
+
+  function leaveProject() {
+    void (async () => {
+      if (saveState === "changed" && !(await persist())) return;
+      setProject(null);
+      setError(null);
+      setAddChapterOpen(false);
+    })();
   }
 
   function addExampleConnection(example: ExampleConnection) {
@@ -621,84 +685,173 @@ export function App() {
 
   if (loading)
     return (
-      <main className="start-screen">
+      <main className="workspace-screen workspace-screen--loading">
+        <MapTrifold size={32} weight="duotone" />
         <p>Opening your local workspace…</p>
       </main>
     );
   if (!project)
     return (
-      <main className="start-screen">
-        <MapTrifold size={42} weight="duotone" />
-        <p>Earth Stories</p>
-        <h1>Make a story that lives on your computer.</h1>
-        <form onSubmit={handleCreate}>
-          <label htmlFor="story-title">Name your first story</label>
-          <div>
-            <input
-              id="story-title"
-              value={newTitle}
-              onChange={(event) => setNewTitle(event.target.value)}
-              placeholder="Field notes from…"
-              autoFocus
-            />
-            <ActionButton className="button button--primary" type="submit">
-              <Plus size={17} /> Create story
-            </ActionButton>
+      <div className="workspace-screen">
+        <header className="workspace-topbar">
+          <div className="workspace-brand">
+            <MapTrifold size={23} weight="duotone" />
+            <span>Earth Stories</span>
+            <small>local</small>
           </div>
-        </form>
-        {error ? (
-          <div className="start-error" role="alert">
-            <p className="error-message">{error}</p>
-            <button onClick={() => window.location.reload()}>
-              <ArrowClockwise size={16} /> Retry connection
-            </button>
-          </div>
-        ) : null}
-        {examples?.stories.length ? (
-          <section
-            className="example-stories"
-            aria-labelledby="example-heading"
-          >
+          <span>Your stories stay on this computer until you publish</span>
+        </header>
+        <main className="workspace-main">
+          <section className="workspace-intro">
             <div>
-              <BookOpen size={20} />
-              <h2 id="example-heading">Or begin with an example</h2>
+              <p>Your workspace</p>
+              <h1>Stories, ready when you are.</h1>
+              <span>
+                Return to a recent story, start a new one, or explore an
+                editable example.
+              </span>
             </div>
-            <div className="example-story-list">
-              {examples.stories.map((story) => (
-                <button
-                  key={story.id}
-                  onClick={() => void handleExampleStory(story.id)}
-                >
-                  <span>{story.formats.join(" + ")}</span>
-                  <strong>{story.title}</strong>
-                  <small>{story.description}</small>
-                  <em>
-                    {story.chapterCount} chapters · creates an editable copy
-                  </em>
-                </button>
-              ))}
-            </div>
+            <form className="workspace-create" onSubmit={handleCreate}>
+              <label htmlFor="story-title">New story title (optional)</label>
+              <div>
+                <input
+                  id="story-title"
+                  value={newTitle}
+                  onChange={(event) => setNewTitle(event.target.value)}
+                  placeholder="Untitled story"
+                />
+                <ActionButton className="button button--primary" type="submit">
+                  <Plus size={17} /> Create story
+                </ActionButton>
+              </div>
+            </form>
           </section>
-        ) : null}
-        <small>Your files stay on this computer. No account required.</small>
-      </main>
+          {error ? (
+            <div className="start-error" role="alert">
+              <p className="error-message">{error}</p>
+              <button onClick={() => window.location.reload()}>
+                <ArrowClockwise size={16} /> Retry connection
+              </button>
+            </div>
+          ) : null}
+          <section
+            className="workspace-projects"
+            aria-labelledby="stories-heading"
+          >
+            <header>
+              <div>
+                <p>On this computer</p>
+                <h2 id="stories-heading">Your stories</h2>
+              </div>
+              <span>
+                {projects.length} {projects.length === 1 ? "story" : "stories"}
+              </span>
+            </header>
+            {projects.length || examples?.stories.length ? (
+              <div className="project-list">
+                {projects.map((item) => (
+                  <div className="project-list__row" key={item.id}>
+                    <button
+                      className="project-list__open"
+                      onClick={() => void handleOpen(item.id)}
+                    >
+                      <span className="project-list__number">
+                        {String(item.chapterCount).padStart(2, "0")}
+                      </span>
+                      <span>
+                        <strong>
+                          {item.title}
+                          {item.isExample ? (
+                            <mark className="project-list__tag">Example</mark>
+                          ) : null}
+                        </strong>
+                        <small>
+                          {item.description || "No description yet"}
+                        </small>
+                      </span>
+                      <em>
+                        {item.chapterCount}{" "}
+                        {item.chapterCount === 1 ? "chapter" : "chapters"}
+                      </em>
+                      <CaretDown size={18} className="project-list__arrow" />
+                    </button>
+                    <div className="project-list__actions">
+                      <button
+                        type="button"
+                        aria-label={`Rename ${item.title}`}
+                        onClick={() => void handleRename(item)}
+                      >
+                        <PencilSimple size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${item.title}`}
+                        onClick={() => void handleDelete(item)}
+                      >
+                        <Trash size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {examples?.stories
+                  .filter(
+                    (story) =>
+                      !projects.some(
+                        (project) => project.id === `example-${story.id}`,
+                      ),
+                  )
+                  .map((story) => (
+                    <button
+                      key={`example-${story.id}`}
+                      onClick={() => void handleExampleStory(story.id)}
+                    >
+                      <span className="project-list__number">
+                        {String(story.chapterCount).padStart(2, "0")}
+                      </span>
+                      <span>
+                        <strong>
+                          {story.title}
+                          <mark className="project-list__tag">Example</mark>
+                        </strong>
+                        <small>{story.description}</small>
+                      </span>
+                      <em>{story.formats.join(" + ")}</em>
+                      <CaretDown size={18} className="project-list__arrow" />
+                    </button>
+                  ))}
+              </div>
+            ) : (
+              <div className="workspace-empty">
+                <MapTrifold size={28} weight="duotone" />
+                <strong>Create your first story</strong>
+                <span>Name it above. You can change everything later.</span>
+              </div>
+            )}
+          </section>
+        </main>
+        <footer className="workspace-footer">
+          <span>Built for portable geospatial storytelling</span>
+          <span>No account required</span>
+        </footer>
+      </div>
     );
 
-  const included =
-    publication?.assets.filter((asset) => asset.delivery === "included")
-      .length ?? 0;
-  const connected = (publication?.assets.length ?? 0) - included;
   return (
     <div className="editor-shell">
       <a className="skip-link" href="#top">
         Skip to story editor
       </a>
       <header className="editor-topbar">
-        <a className="editor-brand" href="#top">
+        <button
+          className="editor-brand"
+          type="button"
+          onClick={leaveProject}
+          aria-label="Return to your workspace"
+        >
           <MapTrifold size={22} weight="duotone" />
           <span>Earth Stories</span>
           <small>local</small>
-        </a>
+        </button>
         <div className="editor-status">
           <Check size={14} weight="bold" />{" "}
           {saveState === "saving"
@@ -732,138 +885,149 @@ export function App() {
       </header>
       <aside className="editor-rail">
         <div className="project-label">
-          <span>Local project</span>
-          <select
-            value={project.id}
-            onChange={(event) => void handleOpen(event.target.value)}
-          >
-            {projects.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.title}
-              </option>
-            ))}
-          </select>
+          <button type="button" onClick={leaveProject}>
+            <House size={15} /> Workspace
+          </button>
+          <span>Editing</span>
+          <strong>{project.metadata.title || "Untitled story"}</strong>
         </div>
+        <button
+          className={
+            inspectorMode === "story" ? "rail-mode is-active" : "rail-mode"
+          }
+          type="button"
+          onClick={() => setInspectorMode("story")}
+        >
+          <GearSix size={16} />
+          <span>
+            <strong>Story settings</strong>
+            <small>Title, theme, basemap and credits</small>
+          </span>
+        </button>
         <nav aria-label="Story chapters">
-          <p>Chapters</p>
+          <div className="rail-section-heading">
+            <p>Chapters</p>
+            <span>{project.chapters.length}</span>
+          </div>
           {project.chapters.map((chapter, index) => (
-            <button
+            <div
               className={
-                chapter.id === activeChapter
-                  ? "chapter-link is-active"
-                  : "chapter-link"
+                chapter.id === activeChapter && inspectorMode === "chapter"
+                  ? "chapter-item is-active"
+                  : "chapter-item"
               }
               key={chapter.id}
-              onClick={() => setActiveChapter(chapter.id)}
             >
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{chapter.title || "Untitled"}</strong>
-              <small>{chapter.type}</small>
-            </button>
+              <button
+                className="chapter-link"
+                aria-current={
+                  chapter.id === activeChapter && inspectorMode === "chapter"
+                    ? "page"
+                    : undefined
+                }
+                onClick={() => {
+                  setActiveChapter(chapter.id);
+                  setInspectorMode("chapter");
+                }}
+              >
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <strong>{chapter.title || "Untitled"}</strong>
+                <small>{chapter.type}</small>
+              </button>
+              {chapter.id === activeChapter && inspectorMode === "chapter" ? (
+                <div
+                  className="chapter-item__actions"
+                  role="group"
+                  aria-label={`Actions for ${chapter.title}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => moveChapter(chapter.id, -1)}
+                    disabled={index === 0}
+                    aria-label="Move chapter up"
+                  >
+                    <ArrowUp size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveChapter(chapter.id, 1)}
+                    disabled={index === project.chapters.length - 1}
+                    aria-label="Move chapter down"
+                  >
+                    <ArrowDown size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={duplicateChapter}
+                    aria-label="Duplicate chapter"
+                  >
+                    <Copy size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={deleteChapter}
+                    disabled={project.chapters.length === 1}
+                    aria-label="Delete chapter"
+                  >
+                    <Trash size={14} />
+                  </button>
+                </div>
+              ) : null}
+            </div>
           ))}
         </nav>
-        <div className="add-content">
-          <p>Add content</p>
-          <button onClick={addProse}>
-            <TextT size={16} /> Text chapter
+        <div className="chapter-add" ref={chapterAddRef}>
+          <button
+            className="chapter-add__trigger"
+            type="button"
+            onClick={() => setAddChapterOpen((open) => !open)}
+            aria-haspopup="menu"
+            aria-expanded={addChapterOpen}
+          >
+            <Plus size={16} /> Add chapter <CaretDown size={14} />
           </button>
-          <button onClick={addVideo}>
-            <TextT size={16} /> Video chapter
-          </button>
-          <button onClick={addFlyover}>
-            <MapTrifold size={16} /> Flyover chapter
-          </button>
-          <label>
-            <FileArrowUp size={16} /> Import file
-            <input
-              type="file"
-              accept=".tif,.tiff,.geojson,.json,.pmtiles,.parquet,.csv,.png,.jpg,.jpeg,.webp,.gif"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void handleFile(file);
-                event.target.value = "";
-              }}
-            />
-          </label>
-          <small>
-            Trajectory imports must use a browser-ready{" "}
-            <code>*.trips.json</code> file containing paths and timestamps.
-          </small>
-          <form onSubmit={addConnected}>
-            <div>
-              <Link size={16} />
-              <select
-                value={connectedKind}
-                onChange={(event) =>
-                  setConnectedKind(event.target.value as typeof connectedKind)
-                }
-              >
-                <option value="cog">COG</option>
-                <option value="pmtiles">PMTiles</option>
-                <option value="geoparquet">GeoParquet</option>
-                <option value="xyz">XYZ tiles</option>
-                <option value="zarr">Zarr</option>
-                <option value="trajectory">Trajectory JSON</option>
-                <option value="copc">COPC point cloud</option>
-              </select>
+          {addChapterOpen ? (
+            <div className="chapter-add__menu">
+              <p>Choose a chapter type</p>
+              <button type="button" onClick={addProse}>
+                <VideoCamera size={17} />
+                <span>
+                  <strong>Text</strong>
+                  <small>Prose, headings and links</small>
+                </span>
+              </button>
+              <button type="button" onClick={addVideo}>
+                <TextT size={17} />
+                <span>
+                  <strong>Video</strong>
+                  <small>YouTube or Vimeo</small>
+                </span>
+              </button>
+              <button type="button" onClick={addFlyover}>
+                <MapTrifold size={17} />
+                <span>
+                  <strong>Flyover</strong>
+                  <small>Animate between map views</small>
+                </span>
+              </button>
             </div>
-            <input
-              type="url"
-              required
-              value={connectedUrl}
-              onChange={(event) => setConnectedUrl(event.target.value)}
-              placeholder="Public URL"
-            />
-            <button type="submit">Connect source</button>
-          </form>
-          {examples?.stories.length ? (
-            <details className="example-connections">
-              <summary>
-                <BookOpen size={16} /> Example stories
-              </summary>
-              <p>Create a separate editable project from a complete example.</p>
-              {examples.stories.map((story) => (
-                <button
-                  key={story.id}
-                  onClick={() => void handleExampleStory(story.id)}
-                >
-                  <span>{story.formats.join(" + ")}</span>
-                  <strong>{story.title}</strong>
-                  <small>{story.description}</small>
-                </button>
-              ))}
-            </details>
-          ) : null}
-          {examples?.connections.length ? (
-            <details className="example-connections">
-              <summary>
-                <Database size={16} /> Example data
-              </summary>
-              <p>Add a public, editable connection and a map chapter.</p>
-              {examples.connections.map((example) => (
-                <button
-                  key={example.id}
-                  onClick={() => addExampleConnection(example)}
-                >
-                  <span>{example.kind}</span>
-                  <strong>{example.title}</strong>
-                  <small>{example.description}</small>
-                </button>
-              ))}
-            </details>
           ) : null}
         </div>
-        <div className="asset-summary">
-          <p>Export plan</p>
-          <div>
-            <strong>{included}</strong>
-            <span>included</span>
-          </div>
-          <div>
-            <strong>{connected}</strong>
-            <span>connected</span>
-          </div>
-        </div>
+        <button
+          className={
+            inspectorMode === "data"
+              ? "rail-mode rail-mode--data is-active"
+              : "rail-mode rail-mode--data"
+          }
+          type="button"
+          onClick={() => setInspectorMode("data")}
+        >
+          <Database size={16} />
+          <span>
+            <strong>Story data</strong>
+            <small>Import or connect a source</small>
+          </span>
+        </button>
       </aside>
       <section className="editor-workspace" id="top">
         {error ? (
@@ -872,139 +1036,241 @@ export function App() {
           </p>
         ) : null}
         <div className="author-panel">
-          <label>
-            Story title
-            <input
-              value={project.metadata.title}
-              onChange={(event) =>
-                changeProject((current) => ({
-                  ...current,
-                  metadata: { ...current.metadata, title: event.target.value },
-                }))
-              }
-            />
-          </label>
-          <div className="field-row">
-            <label>
-              Story description
-              <textarea
-                rows={2}
-                value={project.metadata.description}
-                onChange={(event) =>
-                  changeProject((current) => ({
-                    ...current,
-                    metadata: {
-                      ...current.metadata,
-                      description: event.target.value,
-                    },
-                  }))
-                }
-              />
-            </label>
-            <label>
-              Author or organization
-              <input
-                value={project.metadata.author ?? ""}
-                onChange={(event) =>
-                  changeProject((current) => ({
-                    ...current,
-                    metadata: {
-                      ...current.metadata,
-                      author: event.target.value || null,
-                    },
-                  }))
-                }
-              />
-            </label>
-            <label>
-              Publication appearance
-              <select
-                value={project.publication.theme}
-                onChange={(event) =>
-                  changeProject((current) => ({
-                    ...current,
-                    publication: {
-                      ...current.publication,
-                      theme: event.target.value as "cng" | "editorial",
-                    },
-                  }))
-                }
-              >
-                <option value="cng">Earth Stories</option>
-                <option value="editorial">Field journal</option>
-              </select>
-            </label>
-          </div>
-          <details className="basemap-settings">
-            <summary>Basemap and credits</summary>
-            <div className="field-row">
+          <header className="inspector-heading">
+            <p>
+              {inspectorMode === "story"
+                ? "Story settings"
+                : inspectorMode === "data"
+                  ? "Story data"
+                  : `Chapter ${String(project.chapters.findIndex((chapter) => chapter.id === activeChapter) + 1).padStart(2, "0")}`}
+            </p>
+            <h2>
+              {inspectorMode === "story"
+                ? "Story details"
+                : inspectorMode === "data"
+                  ? "Add data"
+                  : selectedChapter?.title || "Untitled chapter"}
+            </h2>
+            <span>
+              {inspectorMode === "story"
+                ? "Settings shared by the whole publication."
+                : inspectorMode === "data"
+                  ? "Import a local file or connect a public source."
+                  : `Edit this ${selectedChapter?.type ?? "story"} chapter while watching the preview.`}
+            </span>
+          </header>
+          {inspectorMode === "data" ? (
+            <div className="data-panel">
+              <section>
+                <h3>Import from this computer</h3>
+                <p>
+                  The file becomes an included story asset and creates a
+                  matching chapter.
+                </p>
+                <label className="file-import">
+                  <FileArrowUp size={18} /> Choose a file
+                  <input
+                    type="file"
+                    accept=".tif,.tiff,.geojson,.json,.pmtiles,.parquet,.csv,.png,.jpg,.jpeg,.webp,.gif"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void handleFile(file);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+                <small>
+                  COG, GeoJSON, PMTiles, GeoParquet, CSV, images, or
+                  browser-ready <code>*.trips.json</code>.
+                </small>
+              </section>
+              <section>
+                <h3>Connect a public source</h3>
+                <p>Keep larger datasets where they already live.</p>
+                <form className="data-connect" onSubmit={addConnected}>
+                  <label>
+                    Data format
+                    <select
+                      value={connectedKind}
+                      onChange={(event) =>
+                        setConnectedKind(
+                          event.target.value as typeof connectedKind,
+                        )
+                      }
+                    >
+                      <option value="cog">COG</option>
+                      <option value="pmtiles">PMTiles</option>
+                      <option value="geoparquet">GeoParquet</option>
+                      <option value="xyz">XYZ tiles</option>
+                      <option value="zarr">Zarr</option>
+                      <option value="trajectory">Trajectory JSON</option>
+                      <option value="copc">COPC point cloud</option>
+                    </select>
+                  </label>
+                  <label>
+                    Public URL
+                    <input
+                      type="url"
+                      required
+                      value={connectedUrl}
+                      onChange={(event) => setConnectedUrl(event.target.value)}
+                      placeholder="https://…"
+                    />
+                  </label>
+                  <button type="submit">
+                    <Link size={16} /> Connect and add chapter
+                  </button>
+                </form>
+              </section>
+              {examples?.connections.length ? (
+                <section>
+                  <h3>Example data</h3>
+                  <p>Add a ready-to-use public connection and map chapter.</p>
+                  <div className="example-data-list">
+                    {examples.connections.map((example) => (
+                      <button
+                        key={example.id}
+                        type="button"
+                        onClick={() => addExampleConnection(example)}
+                      >
+                        <span>{example.kind}</span>
+                        <strong>{example.title}</strong>
+                        <small>{example.description}</small>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+            </div>
+          ) : null}
+          {inspectorMode === "story" ? (
+            <div className="story-settings">
               <label>
-                Map style URL
+                Story title
                 <input
-                  type="url"
-                  value={basemapStyleDraft}
-                  onChange={(event) => setBasemapStyleDraft(event.target.value)}
-                  onBlur={() => {
-                    try {
-                      const parsed = new URL(basemapStyleDraft);
-                      if (
-                        parsed.protocol !== "http:" &&
-                        parsed.protocol !== "https:"
-                      )
-                        throw new Error();
-                      changeProject((current) => ({
-                        ...current,
-                        basemap: {
-                          ...current.basemap,
-                          styleUrl: basemapStyleDraft,
-                        },
-                      }));
-                    } catch {
-                      setBasemapStyleDraft(project.basemap.styleUrl);
-                      setError(
-                        "Map style URL must be a valid HTTP or HTTPS URL.",
-                      );
-                    }
-                  }}
-                />
-              </label>
-              <label>
-                Basemap attribution
-                <input
-                  value={project.basemap.attribution ?? ""}
+                  value={project.metadata.title}
                   onChange={(event) =>
                     changeProject((current) => ({
                       ...current,
-                      basemap: {
-                        ...current.basemap,
-                        attribution: event.target.value || null,
+                      metadata: {
+                        ...current.metadata,
+                        title: event.target.value,
                       },
                     }))
                   }
                 />
               </label>
-            </div>
-          </details>
-          {selectedChapter ? (
-            <>
-              <div className="chapter-actions" aria-label="Chapter actions">
-                <button type="button" onClick={() => moveChapter(-1)}>
-                  <ArrowUp size={15} /> Move up
-                </button>
-                <button type="button" onClick={() => moveChapter(1)}>
-                  <ArrowDown size={15} /> Move down
-                </button>
-                <button type="button" onClick={duplicateChapter}>
-                  <Copy size={15} /> Duplicate
-                </button>
-                <button
-                  type="button"
-                  onClick={deleteChapter}
-                  disabled={project.chapters.length === 1}
-                >
-                  <Trash size={15} /> Delete
-                </button>
+              <div className="field-row">
+                <label>
+                  Story description
+                  <textarea
+                    rows={2}
+                    value={project.metadata.description}
+                    onChange={(event) =>
+                      changeProject((current) => ({
+                        ...current,
+                        metadata: {
+                          ...current.metadata,
+                          description: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Author or organization
+                  <input
+                    value={project.metadata.author ?? ""}
+                    onChange={(event) =>
+                      changeProject((current) => ({
+                        ...current,
+                        metadata: {
+                          ...current.metadata,
+                          author: event.target.value || null,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Story theme
+                  <select
+                    value={project.publication.theme}
+                    onChange={(event) =>
+                      changeProject((current) => ({
+                        ...current,
+                        publication: {
+                          ...current.publication,
+                          theme: event.target.value as "cng" | "editorial",
+                        },
+                      }))
+                    }
+                  >
+                    <option value="cng">Earth Stories</option>
+                    <option value="editorial">Field Journal</option>
+                  </select>
+                  <small>
+                    Changes the visual treatment, not how the story is
+                    published.
+                  </small>
+                </label>
               </div>
+              <details className="basemap-settings">
+                <summary>Basemap and credits</summary>
+                <div className="field-row">
+                  <label>
+                    Map style URL
+                    <input
+                      type="url"
+                      value={basemapStyleDraft}
+                      onChange={(event) =>
+                        setBasemapStyleDraft(event.target.value)
+                      }
+                      onBlur={() => {
+                        try {
+                          const parsed = new URL(basemapStyleDraft);
+                          if (
+                            parsed.protocol !== "http:" &&
+                            parsed.protocol !== "https:"
+                          )
+                            throw new Error();
+                          changeProject((current) => ({
+                            ...current,
+                            basemap: {
+                              ...current.basemap,
+                              styleUrl: basemapStyleDraft,
+                            },
+                          }));
+                        } catch {
+                          setBasemapStyleDraft(project.basemap.styleUrl);
+                          setError(
+                            "Map style URL must be a valid HTTP or HTTPS URL.",
+                          );
+                        }
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Basemap attribution
+                    <input
+                      value={project.basemap.attribution ?? ""}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          basemap: {
+                            ...current.basemap,
+                            attribution: event.target.value || null,
+                          },
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              </details>
+            </div>
+          ) : null}
+          {inspectorMode === "chapter" && selectedChapter ? (
+            <>
               <label>
                 Chapter title
                 <input
@@ -2209,18 +2475,13 @@ export function App() {
         </div>
         <div className="workspace-heading">
           <div>
-            <p>Publication preview</p>
-            <h1>What you see is what you export.</h1>
+            <p>Live story</p>
+            <h1>Publication preview</h1>
           </div>
+          <span>What you see here is what you export.</span>
         </div>
         {publication ? (
           <div className="preview-frame">
-            <div className="preview-browser">
-              <span />
-              <span />
-              <span />
-              <code>local preview · build {publication.build.id}</code>
-            </div>
             <StoryViewer manifest={publication} />
           </div>
         ) : (

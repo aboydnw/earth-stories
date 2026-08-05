@@ -9,6 +9,7 @@ export interface ProjectSummary {
   description: string;
   updated: string;
   chapterCount: number;
+  isExample: boolean;
 }
 
 export interface ImportedAsset {
@@ -126,6 +127,16 @@ export async function saveProject(
     },
   );
   return storyProjectSchema.parse(value);
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const response = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const value = (await response.json()) as { error?: string };
+    throw new Error(value.error ?? "Could not remove the story");
+  }
 }
 
 export async function importAsset(

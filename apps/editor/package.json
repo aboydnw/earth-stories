@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --build && vite build"
+    "build": "tsc --build && vite build",
+    "test": "vitest run"
   },
   "dependencies": {
     "@earth-stories/publisher": "workspace:*",

@@ -72,18 +72,20 @@ ignored by Git.
 
 From the editor:
 
-1. Create a story, open an existing project, or make an editable copy of an example.
-2. Add text, import a supported local file, or connect a public data URL.
-3. Edit chapter copy and presentation settings while checking the live preview.
-4. Open **Publish**, review preflight findings, and choose a release output.
-5. Deploy the latest folder or ZIP, preserve the archival HTML, or copy the iframe after supplying the deployed URL.
+1. Choose a recent story from the workspace, create one, or make an editable copy of an example.
+2. Organize chapters in the left outline and use **Add chapter** to choose a chapter type deliberately.
+3. Edit the selected chapter in the right inspector while the publication preview remains visible in the center.
+4. Open **Story data** to import a supported local file, connect a public URL, or add a curated example connection.
+5. Use **Story settings** for the title, theme, basemap, attribution, and other publication-wide details.
+6. Open **Publish**, review preflight findings, and choose a release output.
+7. Deploy the latest folder or ZIP, preserve the archival HTML, or copy the iframe after supplying the deployed URL.
 
 Every successful build replaces `<project>/publication/`; the MVP intentionally
 keeps only the latest release. See [Publishing](docs/publication.md).
 
-The first-run screen includes example stories that exercise supported COG and
-PMTiles workflows. The editor also exposes curated example connections that can
-be added to any project. See [Examples](docs/examples.md).
+The workspace includes example stories that exercise supported COG and PMTiles
+workflows. The editor's **Story data** inspector exposes curated example
+connections that can be added to any project. See [Examples](docs/examples.md).
 
 The publication workshop offers connected, portable, and custom profiles.
 Earth Stories now renders COG, vector/raster PMTiles, GeoParquet, GeoJSON, XYZ,
@@ -133,6 +135,8 @@ The pilot starting-point work is recorded in the
 [pilot examples devlog](docs/devlog/2026-08-05-pilot-examples.md).
 The feature-parity renderer wave is recorded in the
 [feature-parity devlog](docs/devlog/2026-08-05-feature-parity-wave.md).
+The workspace and editor redesign is recorded in the
+[workspace and editor redesign devlog](docs/devlog/2026-08-05-workspace-editor-redesign.md).
 Like the other private workspace packages, `@earth-stories/ui` exports its
 TypeScript source directly for Vite and project-reference consumption; it is not
 published as a precompiled package. Its stylesheet remains a separate explicit
