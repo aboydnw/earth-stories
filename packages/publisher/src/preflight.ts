@@ -36,7 +36,9 @@ function localLocator(source: StoryProject["sources"][number]): string | null {
     ? source.path
     : source.kind === "pmtiles" ||
         source.kind === "geoparquet" ||
-        source.kind === "cog"
+        source.kind === "cog" ||
+        source.kind === "trajectory" ||
+        source.kind === "copc"
       ? source.locator
       : null;
 }
@@ -89,7 +91,11 @@ export async function preflightPublication(
         resolution:
           "Describe the image for readers using assistive technology.",
       });
-    if (chapter.type === "map" || chapter.type === "scrolly")
+    if (
+      chapter.type === "map" ||
+      chapter.type === "scrolly" ||
+      chapter.type === "flyover"
+    )
       issues.push({
         id: `archive-snapshot-${chapter.id}`,
         severity: "info",
@@ -131,7 +137,9 @@ export async function preflightPublication(
     const remoteLocator =
       source.kind === "cog" ||
       source.kind === "pmtiles" ||
-      source.kind === "geoparquet"
+      source.kind === "geoparquet" ||
+      source.kind === "trajectory" ||
+      source.kind === "copc"
         ? source.locator
         : null;
     if (remoteLocator && /^https?:\/\//i.test(remoteLocator)) {

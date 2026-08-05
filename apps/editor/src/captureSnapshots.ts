@@ -25,7 +25,7 @@ export async function captureMapSnapshots(
   const snapshots: Record<string, string> = {};
   const sections = [
     ...root.querySelectorAll<HTMLElement>(
-      ".story-chapter--map, .story-chapter--scrolly",
+      ".story-chapter--map, .story-chapter--scrolly, .story-chapter--flyover",
     ),
   ];
   await Promise.all(

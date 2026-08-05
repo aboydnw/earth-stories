@@ -38,39 +38,83 @@ export function ChartChapter({ chapter, asset }: Props) {
       });
     return () => controller.abort();
   }, [asset.href]);
-  const points = useMemo(
-    () =>
-      rows
-        .map((row) => ({
-          label: row[chapter.xColumn] ?? "",
-          value: Number(row[chapter.yColumn]),
-        }))
-        .filter((point) => Number.isFinite(point.value))
-        .slice(0, 40),
-    [chapter.xColumn, chapter.yColumn, rows],
+  const columns = [chapter.yColumn, ...chapter.yColumns].filter(
+    (value, index, all) => all.indexOf(value) === index,
   );
-  const maximum = Math.max(...points.map((point) => point.value), 1);
+  const series = useMemo(
+    () =>
+      columns.map((column) => ({
+        column,
+        points: rows
+          .filter(
+            (row) =>
+              chapter.xMin === null ||
+              chapter.xMin === undefined ||
+              (row[chapter.xColumn] ?? "") >= String(chapter.xMin),
+          )
+          .filter(
+            (row) =>
+              chapter.xMax === null ||
+              chapter.xMax === undefined ||
+              (row[chapter.xColumn] ?? "") <= String(chapter.xMax),
+          )
+          .map((row) => ({
+            label: row[chapter.xColumn] ?? "",
+            value: Number(row[column]),
+          }))
+          .filter(
+            (point) =>
+              Number.isFinite(point.value) &&
+              (chapter.yScale !== "log" || point.value > 0),
+          )
+          .slice(0, 80),
+      })),
+    [
+      chapter.xColumn,
+      chapter.xMax,
+      chapter.xMin,
+      chapter.yScale,
+      columns.join("|"),
+      rows,
+    ],
+  );
+  const points = series[0]?.points ?? [];
+  const scaleValue = (value: number) =>
+    chapter.yScale === "log" ? Math.log10(value) : value;
+  const maximum = Math.max(
+    ...series.flatMap((item) =>
+      item.points.map((point) => scaleValue(point.value)),
+    ),
+    1,
+  );
   if (error)
     return <p className="story-media-error">Chart data could not be loaded.</p>;
   if (chapter.chartType === "line") {
-    const coordinates = points
-      .map(
-        (point, index) =>
-          `${points.length === 1 ? 50 : (index / (points.length - 1)) * 100},${96 - (point.value / maximum) * 88}`,
-      )
-      .join(" ");
     return (
       <figure className="story-chart" aria-label={`${chapter.title} chart`}>
         <svg className="story-chart__line" viewBox="0 0 100 100" role="img">
-          <polyline
-            points={coordinates}
-            fill="none"
-            vectorEffect="non-scaling-stroke"
-          />
+          {series.map((item, seriesIndex) => (
+            <polyline
+              key={item.column}
+              points={item.points
+                .map(
+                  (point, index) =>
+                    `${item.points.length === 1 ? 50 : (index / (item.points.length - 1)) * 100},${96 - (scaleValue(point.value) / maximum) * 88}`,
+                )
+                .join(" ")}
+              fill="none"
+              vectorEffect="non-scaling-stroke"
+              style={{
+                stroke: ["#cf3f02", "#126e75", "#7054a0", "#d59d12"][
+                  seriesIndex % 4
+                ],
+              }}
+            />
+          ))}
           {points.map((point, index) => {
             const x =
               points.length === 1 ? 50 : (index / (points.length - 1)) * 100;
-            const y = 96 - (point.value / maximum) * 88;
+            const y = 96 - (scaleValue(point.value) / maximum) * 88;
             return (
               <circle
                 key={`${point.label}-${point.value}`}
@@ -86,7 +130,8 @@ export function ChartChapter({ chapter, asset }: Props) {
           })}
         </svg>
         <figcaption>
-          {asset.label} · {chapter.xColumn} by {chapter.yColumn}
+          {asset.label} · {chapter.xLabel || chapter.xColumn} by{" "}
+          {chapter.yLabel || columns.join(", ")}
         </figcaption>
       </figure>
     );

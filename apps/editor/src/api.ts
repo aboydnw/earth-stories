@@ -38,10 +38,12 @@ export interface ExampleConnection {
   id: string;
   title: string;
   description: string;
-  kind: "cog" | "pmtiles" | "geoparquet" | "xyz";
+  kind:
+    "cog" | "pmtiles" | "geoparquet" | "xyz" | "zarr" | "trajectory" | "copc";
   locator: string;
   tileType?: "raster" | "vector";
   attribution: string;
+  config?: Record<string, unknown>;
   camera: {
     center: [number, number];
     zoom: number;

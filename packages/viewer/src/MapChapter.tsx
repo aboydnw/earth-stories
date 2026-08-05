@@ -22,11 +22,19 @@ const CogOverlay = lazy(async () => ({
 const GeoParquetOverlay = lazy(async () => ({
   default: (await import("./GeoParquetOverlay.js")).GeoParquetOverlay,
 }));
+const CopcOverlay = lazy(async () => ({
+  default: (await import("./CopcOverlay.js")).CopcOverlay,
+}));
+const ZarrOverlay = lazy(async () => ({
+  default: (await import("./ZarrOverlay.js")).ZarrOverlay,
+}));
 
 interface MapChapterProps {
   chapter: Extract<PublicationChapter, { type: "map" | "scrolly" }>;
-  asset: PublicationAsset;
+  asset: PublicationAsset | null;
+  overlayAssets?: PublicationAsset[];
   basemapStyle: string;
+  controlled?: boolean;
 }
 
 let protocol: Protocol | null = null;
@@ -49,13 +57,267 @@ const hexOpacity = (hex: string, opacity: number) => {
   return `${hex}${alpha}`;
 };
 
-export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
+function AssetLayer({
+  asset,
+  onError,
+}: {
+  asset: PublicationAsset;
+  onError: (message: string) => void;
+}) {
+  const [pmtilesLayers, setPmtilesLayers] = useState<string[]>([]);
+  const [trajectory, setTrajectory] =
+    useState<GeoJSON.FeatureCollection | null>(null);
+  const [trajectoryProgress, setTrajectoryProgress] = useState(1);
+  const presentation = asset.presentation;
+  const assetUrl = useMemo(() => absoluteAssetUrl(asset.href), [asset.href]);
+  useEffect(() => {
+    let active = true;
+    if (asset.kind === "pmtiles") {
+      ensurePmtilesProtocol();
+      const archive = new PMTiles(assetUrl);
+      protocol?.add(archive);
+      archive
+        .getMetadata()
+        .then((raw) => {
+          const metadata = raw as { vector_layers?: Array<{ id?: unknown }> };
+          if (active)
+            setPmtilesLayers(
+              (metadata.vector_layers ?? []).flatMap((layer) =>
+                typeof layer.id === "string" ? [layer.id] : [],
+              ),
+            );
+        })
+        .catch((cause: unknown) =>
+          onError(
+            cause instanceof Error
+              ? cause.message
+              : "The PMTiles archive could not be opened.",
+          ),
+        );
+    }
+    if (asset.kind === "trajectory") {
+      fetch(assetUrl)
+        .then((response) => response.json())
+        .then(
+          (data: {
+            tracks?: Array<{
+              path?: [number, number][];
+              timestamps?: number[];
+            }>;
+          }) => {
+            if (!active) return;
+            setTrajectory({
+              type: "FeatureCollection",
+              features: (data.tracks ?? []).map((track, index) => ({
+                type: "Feature",
+                id: index,
+                properties: { timestamps: track.timestamps ?? [] },
+                geometry: { type: "LineString", coordinates: track.path ?? [] },
+              })),
+            });
+          },
+        )
+        .catch((cause: unknown) =>
+          onError(
+            cause instanceof Error
+              ? cause.message
+              : "The trajectory could not be opened.",
+          ),
+        );
+    }
+    return () => {
+      active = false;
+    };
+  }, [asset.kind, assetUrl, onError]);
+  const vectorSourceLayers = presentation.sourceLayer
+    ? [presentation.sourceLayer]
+    : pmtilesLayers;
+  const resolvedAsset = { ...asset, href: assetUrl };
+  const displayedTrajectory = useMemo(
+    () =>
+      trajectory
+        ? {
+            ...trajectory,
+            features: trajectory.features.map((feature) => ({
+              ...feature,
+              geometry:
+                feature.geometry.type === "LineString"
+                  ? {
+                      ...feature.geometry,
+                      coordinates: feature.geometry.coordinates.slice(
+                        0,
+                        Math.max(
+                          2,
+                          Math.ceil(
+                            feature.geometry.coordinates.length *
+                              trajectoryProgress,
+                          ),
+                        ),
+                      ),
+                    }
+                  : feature.geometry,
+            })),
+          }
+        : null,
+    [trajectory, trajectoryProgress],
+  );
+  if (asset.kind === "cog")
+    return (
+      <Suspense fallback={null}>
+        <CogOverlay asset={asset} url={assetUrl} onError={onError} />
+      </Suspense>
+    );
+  if (asset.kind === "geoparquet")
+    return (
+      <Suspense fallback={null}>
+        <GeoParquetOverlay asset={resolvedAsset} onError={onError} />
+      </Suspense>
+    );
+  if (asset.kind === "copc")
+    return (
+      <Suspense fallback={null}>
+        <CopcOverlay asset={resolvedAsset} onError={onError} />
+      </Suspense>
+    );
+  if (asset.kind === "zarr")
+    return (
+      <Suspense fallback={null}>
+        <ZarrOverlay asset={resolvedAsset} onError={onError} />
+      </Suspense>
+    );
+  if (
+    asset.kind === "geojson" ||
+    (asset.kind === "trajectory" && displayedTrajectory)
+  ) {
+    return (
+      <>
+        <Source
+          id={asset.id}
+          type="geojson"
+          data={asset.kind === "trajectory" ? displayedTrajectory! : assetUrl}
+        >
+          <Layer
+            id={`${asset.id}-fill`}
+            type="fill"
+            paint={{
+              "fill-color": presentation.color,
+              "fill-opacity": presentation.opacity * 0.45,
+            }}
+          />
+          <Layer
+            id={`${asset.id}-line`}
+            type="line"
+            paint={{
+              "line-color": presentation.color,
+              "line-opacity": presentation.opacity,
+              "line-width": asset.kind === "trajectory" ? 4 : 2,
+            }}
+          />
+          <Layer
+            id={`${asset.id}-points`}
+            type="circle"
+            paint={{
+              "circle-radius": presentation.radius,
+              "circle-color": presentation.color,
+              "circle-opacity": presentation.opacity,
+              "circle-stroke-color": presentation.strokeColor,
+              "circle-stroke-width": 1.5,
+            }}
+          />
+        </Source>
+        {asset.kind === "trajectory" ? (
+          <div className="story-map__time">
+            <label>
+              Journey: {Math.round(trajectoryProgress * 100)}%
+              <input
+                type="range"
+                min="0.02"
+                max="1"
+                step="0.01"
+                value={trajectoryProgress}
+                onChange={(event) =>
+                  setTrajectoryProgress(Number(event.target.value))
+                }
+              />
+            </label>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+  if (asset.kind === "xyz")
+    return (
+      <Source id={asset.id} type="raster" tiles={[assetUrl]} tileSize={256}>
+        <Layer
+          id={`${asset.id}-raster`}
+          type="raster"
+          paint={{ "raster-opacity": presentation.opacity }}
+        />
+      </Source>
+    );
+  if (asset.kind === "pmtiles" && asset.tileType === "raster")
+    return (
+      <Source id={asset.id} type="raster" url={`pmtiles://${assetUrl}`}>
+        <Layer
+          id={`${asset.id}-raster`}
+          type="raster"
+          paint={{ "raster-opacity": presentation.opacity }}
+        />
+      </Source>
+    );
+  if (asset.kind === "pmtiles" && asset.tileType === "vector")
+    return (
+      <Source id={asset.id} type="vector" url={`pmtiles://${assetUrl}`}>
+        {vectorSourceLayers.flatMap((sourceLayer) => [
+          <Layer
+            key={`${sourceLayer}-fill`}
+            id={`${asset.id}-${sourceLayer}-fill`}
+            source-layer={sourceLayer}
+            type="fill"
+            paint={{
+              "fill-color": presentation.color,
+              "fill-opacity": presentation.opacity * 0.45,
+            }}
+          />,
+          <Layer
+            key={`${sourceLayer}-line`}
+            id={`${asset.id}-${sourceLayer}-line`}
+            source-layer={sourceLayer}
+            type="line"
+            paint={{
+              "line-color": presentation.strokeColor,
+              "line-opacity": presentation.opacity,
+              "line-width": 1.5,
+            }}
+          />,
+          <Layer
+            key={`${sourceLayer}-point`}
+            id={`${asset.id}-${sourceLayer}-point`}
+            source-layer={sourceLayer}
+            type="circle"
+            paint={{
+              "circle-radius": presentation.radius,
+              "circle-color": presentation.color,
+              "circle-opacity": presentation.opacity,
+              "circle-stroke-color": presentation.strokeColor,
+            }}
+          />,
+        ])}
+      </Source>
+    );
+  return null;
+}
+
+export function MapChapter({
+  chapter,
+  asset,
+  overlayAssets = [],
+  basemapStyle,
+  controlled = false,
+}: MapChapterProps) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pmtilesLayers, setPmtilesLayers] = useState<string[]>([]);
-  const [pmtilesReady, setPmtilesReady] = useState(asset.kind !== "pmtiles");
   const reportError = useCallback((message: string) => setError(message), []);
-  const presentation = asset.presentation;
   const initialViewState = useMemo(
     () => ({
       longitude: chapter.camera.center[0],
@@ -66,57 +328,7 @@ export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
     }),
     [chapter.camera],
   );
-  const assetUrl = useMemo(() => absoluteAssetUrl(asset.href), [asset.href]);
-  const resolvedAsset = useMemo(
-    () => ({ ...asset, href: assetUrl }),
-    [asset, assetUrl],
-  );
-  useEffect(() => {
-    let active = true;
-    setError(null);
-    setPmtilesLayers([]);
-    setPmtilesReady(asset.kind !== "pmtiles");
-    if (asset.kind !== "pmtiles") return () => void (active = false);
-    ensurePmtilesProtocol();
-    const archive = new PMTiles(assetUrl);
-    protocol?.add(archive);
-    setPmtilesReady(true);
-    archive
-      .getMetadata()
-      .then((rawMetadata) => {
-        const metadata = rawMetadata as {
-          vector_layers?: Array<{ id?: unknown }>;
-        };
-        const layers = Array.isArray(metadata.vector_layers)
-          ? metadata.vector_layers
-              .map((layer: { id?: unknown }) =>
-                typeof layer === "object" &&
-                layer !== null &&
-                "id" in layer &&
-                typeof layer.id === "string"
-                  ? layer.id
-                  : null,
-              )
-              .filter((id: string | null): id is string => Boolean(id))
-          : [];
-        if (active) setPmtilesLayers(layers);
-      })
-      .catch((cause: unknown) => {
-        if (active)
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "The PMTiles archive could not be opened.",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [asset.kind, assetUrl]);
-
-  const vectorSourceLayers = presentation.sourceLayer
-    ? [presentation.sourceLayer]
-    : pmtilesLayers;
+  const mapAssets = asset ? [asset, ...overlayAssets] : overlayAssets;
 
   return (
     <div
@@ -125,138 +337,93 @@ export function MapChapter({ chapter, asset, basemapStyle }: MapChapterProps) {
       data-map-ready={ready ? "true" : "false"}
     >
       <Map
-        initialViewState={initialViewState}
+        {...(controlled
+          ? { viewState: initialViewState }
+          : { initialViewState })}
         mapStyle={basemapStyle}
+        projection={chapter.camera.globe ? { type: "globe" } : undefined}
+        terrain={
+          chapter.camera.terrain?.enabled
+            ? {
+                source: "earth-stories-terrain",
+                exaggeration: chapter.camera.terrain.exaggeration,
+              }
+            : undefined
+        }
         preserveDrawingBuffer
         onIdle={() => setReady(true)}
         onError={(event: { error: Error }) => setError(event.error.message)}
       >
-        {asset.kind === "cog" ? (
-          <Suspense fallback={null}>
-            <CogOverlay asset={asset} url={assetUrl} onError={reportError} />
-          </Suspense>
-        ) : null}
-        {asset.kind === "geoparquet" ? (
-          <Suspense fallback={null}>
-            <GeoParquetOverlay asset={resolvedAsset} onError={reportError} />
-          </Suspense>
-        ) : null}
-        {asset.kind === "geojson" ? (
-          <Source id={asset.id} type="geojson" data={asset.href}>
-            <Layer
-              id={`${asset.id}-fill`}
-              type="fill"
-              paint={{
-                "fill-color": presentation.color,
-                "fill-opacity": presentation.opacity * 0.45,
-              }}
-            />
-            <Layer
-              id={`${asset.id}-line`}
-              type="line"
-              paint={{
-                "line-color": presentation.strokeColor,
-                "line-opacity": presentation.opacity,
-                "line-width": 2,
-              }}
-            />
-            <Layer
-              id={`${asset.id}-points`}
-              type="circle"
-              paint={{
-                "circle-radius": presentation.radius,
-                "circle-color": presentation.color,
-                "circle-opacity": presentation.opacity,
-                "circle-stroke-color": presentation.strokeColor,
-                "circle-stroke-width": 1.5,
-              }}
-            />
-          </Source>
-        ) : null}
-        {asset.kind === "xyz" ? (
+        {chapter.camera.terrain?.enabled ? (
           <Source
-            id={asset.id}
-            type="raster"
-            tiles={[asset.href]}
+            id="earth-stories-terrain"
+            type="raster-dem"
+            tiles={[
+              "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+            ]}
             tileSize={256}
-          >
-            <Layer
-              id={`${asset.id}-raster`}
-              type="raster"
-              paint={{ "raster-opacity": presentation.opacity }}
-            />
-          </Source>
+            encoding="terrarium"
+          />
         ) : null}
-        {asset.kind === "pmtiles" &&
-        pmtilesReady &&
-        asset.tileType === "raster" ? (
-          <Source id={asset.id} type="raster" url={`pmtiles://${assetUrl}`}>
-            <Layer
-              id={`${asset.id}-raster`}
-              type="raster"
-              paint={{ "raster-opacity": presentation.opacity }}
-            />
-          </Source>
+        {chapter.camera.buildings ? (
+          <Layer
+            id="earth-stories-buildings"
+            source="carto"
+            source-layer="building"
+            type="fill-extrusion"
+            minzoom={14}
+            paint={{
+              "fill-extrusion-color": "#d7cdc2",
+              "fill-extrusion-height": [
+                "coalesce",
+                ["get", "render_height"],
+                ["get", "height"],
+                8,
+              ],
+              "fill-extrusion-base": [
+                "coalesce",
+                ["get", "render_min_height"],
+                0,
+              ],
+              "fill-extrusion-opacity": 0.82,
+            }}
+          />
         ) : null}
-        {asset.kind === "pmtiles" &&
-        pmtilesReady &&
-        asset.tileType === "vector" ? (
-          <Source id={asset.id} type="vector" url={`pmtiles://${assetUrl}`}>
-            {vectorSourceLayers.flatMap((sourceLayer) => [
-              <Layer
-                key={`${sourceLayer}-fill`}
-                id={`${asset.id}-${sourceLayer}-fill`}
-                source-layer={sourceLayer}
-                type="fill"
-                paint={{
-                  "fill-color": presentation.color,
-                  "fill-opacity": presentation.opacity * 0.45,
-                }}
-              />,
-              <Layer
-                key={`${sourceLayer}-line`}
-                id={`${asset.id}-${sourceLayer}-line`}
-                source-layer={sourceLayer}
-                type="line"
-                paint={{
-                  "line-color": presentation.strokeColor,
-                  "line-opacity": presentation.opacity,
-                  "line-width": 1.5,
-                }}
-              />,
-              <Layer
-                key={`${sourceLayer}-point`}
-                id={`${asset.id}-${sourceLayer}-point`}
-                source-layer={sourceLayer}
-                type="circle"
-                paint={{
-                  "circle-radius": presentation.radius,
-                  "circle-color": presentation.color,
-                  "circle-opacity": presentation.opacity,
-                  "circle-stroke-color": presentation.strokeColor,
-                }}
-              />,
-            ])}
-          </Source>
-        ) : null}
+        {mapAssets.map((mapAsset) => (
+          <AssetLayer
+            key={mapAsset.id}
+            asset={mapAsset}
+            onError={reportError}
+          />
+        ))}
       </Map>
-      <div className="story-map__label">{asset.label}</div>
-      {asset.attribution ? (
-        <div className="story-map__attribution">{asset.attribution}</div>
+      <div className="story-map__label">
+        {mapAssets.map((item) => item.label).join(" + ") || "Basemap"}
+      </div>
+      {mapAssets.some((item) => item.attribution) ? (
+        <div className="story-map__attribution">
+          {mapAssets
+            .flatMap((item) => (item.attribution ? [item.attribution] : []))
+            .join(" · ")}
+        </div>
       ) : null}
-      {presentation.legendVisible ? (
+      {asset?.presentation.legendVisible ? (
         <aside className="story-map__legend" aria-label="Map legend">
-          <span style={{ background: hexOpacity(presentation.color, 0.9) }} />
-          {presentation.legendTitle || asset.label}
+          <span
+            style={{ background: hexOpacity(asset.presentation.color, 0.9) }}
+          />
+          {asset.presentation.legendTitle || asset.label}
         </aside>
       ) : null}
       {error ? (
         <div className="story-map__error" role="alert">
           <strong>Map source unavailable</strong>
           <span>{error}</span>
-          <a href={asset.href} target="_blank" rel="noreferrer">
-            Open source
-          </a>
+          {asset ? (
+            <a href={asset.href} target="_blank" rel="noreferrer">
+              Open source
+            </a>
+          ) : null}
         </div>
       ) : null}
     </div>

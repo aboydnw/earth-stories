@@ -98,7 +98,9 @@ async function copyIncludedAssets(
         ? source.path
         : source.kind === "pmtiles" ||
             source.kind === "geoparquet" ||
-            source.kind === "cog"
+            source.kind === "cog" ||
+            source.kind === "trajectory" ||
+            source.kind === "copc"
           ? source.locator
           : null;
     if (!sourceLocator) continue;

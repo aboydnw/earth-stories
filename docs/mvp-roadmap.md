@@ -46,11 +46,16 @@
 - Camera position, pitch, bearing, map/scrolly presentation, chapter reorder,
   duplication, deletion, story credits, basemap, and publication-theme controls
 - Profile-aware folder, ZIP, archive, and embed outputs with deployment reports
+- Ordered chapter overlays; embedded video; multi-series, ranged, and log charts
+- Globe, terrain, buildings, and scroll-driven flyover camera keyframes
+- Direct connected Zarr rendering with temporal controls, COPC streaming, and
+  trajectory playback controls
 
 ## Phase 7 — Pilot-ready starting points
 
 - Built-in example-story catalog with independent, editable local copies
-- Curated public COG and PMTiles connections that can be added to any story
+- Curated public COG, PMTiles, Zarr, and COPC connections that can be added to
+  any story
 - First-run guidance and actionable local-service startup diagnostics
 - Local COG import through the same shared preview and publication renderer
 - Post-build verification of publication entrypoints, manifest, and included assets

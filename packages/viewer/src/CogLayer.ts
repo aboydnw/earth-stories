@@ -27,7 +27,7 @@ const ramps = {
   ],
 } as const;
 
-function colorize(name: keyof typeof ramps) {
+export function colorize(name: keyof typeof ramps) {
   const [low, middle, high] = ramps[name];
   return {
     name: `earth-stories-${name}`,

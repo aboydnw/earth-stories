@@ -64,7 +64,9 @@ const sourcePath = (source: ProjectSource) =>
     ? source.path
     : source.kind === "pmtiles" ||
         source.kind === "geoparquet" ||
-        source.kind === "cog"
+        source.kind === "cog" ||
+        source.kind === "trajectory" ||
+        source.kind === "copc"
       ? source.locator
       : null;
 
@@ -76,7 +78,7 @@ export function App() {
   const [connectedUrl, setConnectedUrl] = useState("");
   const [basemapStyleDraft, setBasemapStyleDraft] = useState("");
   const [connectedKind, setConnectedKind] = useState<
-    "cog" | "pmtiles" | "geoparquet" | "xyz"
+    "cog" | "pmtiles" | "geoparquet" | "xyz" | "zarr" | "trajectory" | "copc"
   >("cog");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [error, setError] = useState<string | null>(null);
@@ -147,7 +149,7 @@ export function App() {
     (chapter) => chapter.id === activeChapter,
   );
   const selectedSource =
-    selectedChapter && selectedChapter.type !== "prose"
+    selectedChapter && "sourceId" in selectedChapter && selectedChapter.sourceId
       ? project?.sources.find(
           (source) => source.id === selectedChapter.sourceId,
         )
@@ -226,6 +228,44 @@ export function App() {
       type: "prose",
       title: "New chapter",
       narrative: "",
+    });
+  }
+  function addVideo() {
+    addChapter({
+      id: crypto.randomUUID(),
+      type: "video",
+      title: "Video",
+      narrative: "",
+      provider: "youtube",
+      videoId: "dQw4w9WgXcQ",
+      originalUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    });
+  }
+  function addFlyover() {
+    const start =
+      selectedChapter && "camera" in selectedChapter
+        ? selectedChapter.camera
+        : camera;
+    addChapter({
+      id: crypto.randomUUID(),
+      type: "flyover",
+      title: "Flyover",
+      narrative: "",
+      sourceId:
+        selectedChapter && "sourceId" in selectedChapter
+          ? selectedChapter.sourceId
+          : null,
+      overlaySourceIds: [],
+      scrollLength: 1,
+      keyframes: [
+        start,
+        {
+          ...start,
+          center: [start.center[0] + 8, start.center[1] + 4],
+          zoom: start.zoom + 2,
+          pitch: 55,
+        },
+      ],
     });
   }
   function moveChapter(offset: number) {
@@ -337,6 +377,25 @@ export function App() {
           xColumn: "label",
           yColumn: "value",
         };
+      } else if (uploaded.filename.toLowerCase().endsWith("trips.json")) {
+        source = {
+          id,
+          kind: "trajectory",
+          label: file.name,
+          locator: uploaded.path,
+          trailLength: 600,
+          attribution: null,
+          sizeBytes: uploaded.sizeBytes,
+          delivery: "included",
+        };
+        chapter = {
+          id: crypto.randomUUID(),
+          type: "map",
+          title: file.name.replace(/\.[^.]+$/, ""),
+          narrative: "",
+          sourceId: id,
+          camera,
+        };
       } else if (extension === "geojson" || extension === "json") {
         source = {
           id,
@@ -439,7 +498,26 @@ export function App() {
     const source: ProjectSource =
       connectedKind === "pmtiles"
         ? { ...common, kind: "pmtiles", tileType: "vector" }
-        : { ...common, kind: connectedKind };
+        : connectedKind === "zarr"
+          ? {
+              ...common,
+              kind: "zarr",
+              variable: "data",
+              selection: {},
+              timeDimension: null,
+              timesteps: [],
+              geozarr: null,
+            }
+          : connectedKind === "trajectory"
+            ? { ...common, kind: "trajectory", trailLength: 600 }
+            : connectedKind === "copc"
+              ? {
+                  ...common,
+                  kind: "copc",
+                  colorMode: "elevation",
+                  pointSize: 2,
+                }
+              : { ...common, kind: connectedKind };
     const chapter: ProjectChapter = {
       id: crypto.randomUUID(),
       type: "map",
@@ -475,7 +553,43 @@ export function App() {
             kind: "pmtiles",
             tileType: example.tileType ?? "vector",
           }
-        : { ...common, kind: example.kind };
+        : example.kind === "zarr"
+          ? {
+              ...common,
+              kind: "zarr",
+              variable: String(example.config?.variable ?? "data"),
+              selection:
+                (example.config?.selection as Record<string, number>) ?? {},
+              timeDimension:
+                (example.config?.timeDimension as string | null) ?? null,
+              timesteps:
+                (example.config?.timesteps as Array<{
+                  label: string;
+                  index: number;
+                }>) ?? [],
+              geozarr:
+                (example.config?.geozarr as Extract<
+                  ProjectSource,
+                  { kind: "zarr" }
+                >["geozarr"]) ?? null,
+            }
+          : example.kind === "trajectory"
+            ? {
+                ...common,
+                kind: "trajectory",
+                trailLength: Number(example.config?.trailLength ?? 600),
+              }
+            : example.kind === "copc"
+              ? {
+                  ...common,
+                  kind: "copc",
+                  colorMode:
+                    (example.config?.colorMode as
+                      "elevation" | "intensity" | "classification" | "rgb") ??
+                    "elevation",
+                  pointSize: Number(example.config?.pointSize ?? 2),
+                }
+              : { ...common, kind: example.kind };
     const chapter: ProjectChapter = {
       id: crypto.randomUUID(),
       type: "map",
@@ -640,6 +754,12 @@ export function App() {
           <button onClick={addProse}>
             <TextT size={16} /> Text chapter
           </button>
+          <button onClick={addVideo}>
+            <TextT size={16} /> Video chapter
+          </button>
+          <button onClick={addFlyover}>
+            <MapTrifold size={16} /> Flyover chapter
+          </button>
           <label>
             <FileArrowUp size={16} /> Import file
             <input
@@ -665,6 +785,9 @@ export function App() {
                 <option value="pmtiles">PMTiles</option>
                 <option value="geoparquet">GeoParquet</option>
                 <option value="xyz">XYZ tiles</option>
+                <option value="zarr">Zarr</option>
+                <option value="trajectory">Trajectory JSON</option>
+                <option value="copc">COPC point cloud</option>
               </select>
             </div>
             <input
@@ -898,6 +1021,69 @@ export function App() {
                   }
                 />
               </label>
+              {selectedChapter.type === "video" ? (
+                <div className="field-row">
+                  <label>
+                    Provider
+                    <select
+                      value={selectedChapter.provider}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "video"
+                              ? {
+                                  ...chapter,
+                                  provider: event.target.value as
+                                    "youtube" | "vimeo",
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    >
+                      <option value="youtube">YouTube</option>
+                      <option value="vimeo">Vimeo</option>
+                    </select>
+                  </label>
+                  <label>
+                    Video ID
+                    <input
+                      value={selectedChapter.videoId}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "video"
+                              ? { ...chapter, videoId: event.target.value }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Original URL
+                    <input
+                      type="url"
+                      value={selectedChapter.originalUrl}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "video"
+                              ? { ...chapter, originalUrl: event.target.value }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              ) : null}
               {selectedChapter.type === "image" ? (
                 <div className="field-row">
                   <label>
@@ -996,6 +1182,301 @@ export function App() {
                       }
                     />
                   </label>
+                  <label>
+                    Additional Y columns
+                    <input
+                      placeholder="temperature, rainfall"
+                      value={(selectedChapter.yColumns ?? []).join(", ")}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "chart"
+                              ? {
+                                  ...chapter,
+                                  yColumns: event.target.value
+                                    .split(",")
+                                    .map((value) => value.trim())
+                                    .filter(Boolean),
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Y scale
+                    <select
+                      value={selectedChapter.yScale ?? "linear"}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "chart"
+                              ? {
+                                  ...chapter,
+                                  yScale: event.target.value as
+                                    "linear" | "log",
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    >
+                      <option value="linear">Linear</option>
+                      <option value="log">Logarithmic</option>
+                    </select>
+                  </label>
+                  <label>
+                    X-axis label
+                    <input
+                      value={selectedChapter.xLabel ?? ""}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "chart"
+                              ? { ...chapter, xLabel: event.target.value }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Y-axis label
+                    <input
+                      value={selectedChapter.yLabel ?? ""}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "chart"
+                              ? { ...chapter, yLabel: event.target.value }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {selectedChapter.type === "flyover" ? (
+                <div className="field-row">
+                  <label>
+                    Primary map source
+                    <select
+                      value={selectedChapter.sourceId ?? ""}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "flyover"
+                              ? {
+                                  ...chapter,
+                                  sourceId: event.target.value || null,
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    >
+                      <option value="">Basemap only</option>
+                      {project.sources
+                        .filter(
+                          (source) =>
+                            source.kind !== "image" && source.kind !== "csv",
+                        )
+                        .map((source) => (
+                          <option key={source.id} value={source.id}>
+                            {source.label}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label>
+                    Scroll length
+                    <input
+                      type="number"
+                      min=".5"
+                      max="5"
+                      step=".25"
+                      value={selectedChapter.scrollLength}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            chapter.type === "flyover"
+                              ? {
+                                  ...chapter,
+                                  scrollLength: Number(event.target.value),
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  {selectedChapter.keyframes.map((keyframe, index) => (
+                    <fieldset key={index}>
+                      <legend>Keyframe {index + 1}</legend>
+                      <label>
+                        Longitude
+                        <input
+                          type="number"
+                          value={keyframe.center[0]}
+                          onChange={(event) =>
+                            changeProject((current) => ({
+                              ...current,
+                              chapters: current.chapters.map((chapter) =>
+                                chapter.id === selectedChapter.id &&
+                                chapter.type === "flyover"
+                                  ? {
+                                      ...chapter,
+                                      keyframes: chapter.keyframes.map(
+                                        (frame, frameIndex) =>
+                                          frameIndex === index
+                                            ? {
+                                                ...frame,
+                                                center: [
+                                                  Number(event.target.value),
+                                                  frame.center[1],
+                                                ],
+                                              }
+                                            : frame,
+                                      ),
+                                    }
+                                  : chapter,
+                              ),
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Latitude
+                        <input
+                          type="number"
+                          value={keyframe.center[1]}
+                          onChange={(event) =>
+                            changeProject((current) => ({
+                              ...current,
+                              chapters: current.chapters.map((chapter) =>
+                                chapter.id === selectedChapter.id &&
+                                chapter.type === "flyover"
+                                  ? {
+                                      ...chapter,
+                                      keyframes: chapter.keyframes.map(
+                                        (frame, frameIndex) =>
+                                          frameIndex === index
+                                            ? {
+                                                ...frame,
+                                                center: [
+                                                  frame.center[0],
+                                                  Number(event.target.value),
+                                                ],
+                                              }
+                                            : frame,
+                                      ),
+                                    }
+                                  : chapter,
+                              ),
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Zoom
+                        <input
+                          type="number"
+                          value={keyframe.zoom}
+                          onChange={(event) =>
+                            changeProject((current) => ({
+                              ...current,
+                              chapters: current.chapters.map((chapter) =>
+                                chapter.id === selectedChapter.id &&
+                                chapter.type === "flyover"
+                                  ? {
+                                      ...chapter,
+                                      keyframes: chapter.keyframes.map(
+                                        (frame, frameIndex) =>
+                                          frameIndex === index
+                                            ? {
+                                                ...frame,
+                                                zoom: Number(
+                                                  event.target.value,
+                                                ),
+                                              }
+                                            : frame,
+                                      ),
+                                    }
+                                  : chapter,
+                              ),
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Pitch
+                        <input
+                          type="number"
+                          value={keyframe.pitch}
+                          onChange={(event) =>
+                            changeProject((current) => ({
+                              ...current,
+                              chapters: current.chapters.map((chapter) =>
+                                chapter.id === selectedChapter.id &&
+                                chapter.type === "flyover"
+                                  ? {
+                                      ...chapter,
+                                      keyframes: chapter.keyframes.map(
+                                        (frame, frameIndex) =>
+                                          frameIndex === index
+                                            ? {
+                                                ...frame,
+                                                pitch: Number(
+                                                  event.target.value,
+                                                ),
+                                              }
+                                            : frame,
+                                      ),
+                                    }
+                                  : chapter,
+                              ),
+                            }))
+                          }
+                        />
+                      </label>
+                    </fieldset>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      changeProject((current) => ({
+                        ...current,
+                        chapters: current.chapters.map((chapter) =>
+                          chapter.id === selectedChapter.id &&
+                          chapter.type === "flyover"
+                            ? {
+                                ...chapter,
+                                keyframes: [
+                                  ...chapter.keyframes,
+                                  structuredClone(chapter.keyframes.at(-1)!),
+                                ],
+                              }
+                            : chapter,
+                        ),
+                      }))
+                    }
+                  >
+                    Add keyframe
+                  </button>
                 </div>
               ) : null}
               {selectedChapter.type === "map" ||
@@ -1169,6 +1650,130 @@ export function App() {
                       }
                     />
                   </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedChapter.camera.globe ?? false}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  camera: {
+                                    ...chapter.camera,
+                                    globe: event.target.checked,
+                                  },
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />{" "}
+                    Globe projection
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedChapter.camera.terrain?.enabled ?? false}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  camera: {
+                                    ...chapter.camera,
+                                    terrain: {
+                                      enabled: event.target.checked,
+                                      exaggeration:
+                                        chapter.camera.terrain?.exaggeration ??
+                                        1,
+                                    },
+                                  },
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />{" "}
+                    Terrain
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={selectedChapter.camera.buildings ?? false}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  camera: {
+                                    ...chapter.camera,
+                                    buildings: event.target.checked,
+                                  },
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    />{" "}
+                    3D buildings
+                  </label>
+                  <fieldset>
+                    <legend>Overlays</legend>
+                    {project.sources
+                      .filter(
+                        (source) =>
+                          source.id !== selectedChapter.sourceId &&
+                          source.kind !== "image" &&
+                          source.kind !== "csv",
+                      )
+                      .map((source) => (
+                        <label key={source.id}>
+                          <input
+                            type="checkbox"
+                            checked={(
+                              selectedChapter.overlaySourceIds ?? []
+                            ).includes(source.id)}
+                            onChange={(event) =>
+                              changeProject((current) => ({
+                                ...current,
+                                chapters: current.chapters.map((chapter) =>
+                                  chapter.id === selectedChapter.id &&
+                                  (chapter.type === "map" ||
+                                    chapter.type === "scrolly")
+                                    ? {
+                                        ...chapter,
+                                        overlaySourceIds: event.target.checked
+                                          ? [
+                                              ...(chapter.overlaySourceIds ??
+                                                []),
+                                              source.id,
+                                            ]
+                                          : (
+                                              chapter.overlaySourceIds ?? []
+                                            ).filter((id) => id !== source.id),
+                                      }
+                                    : chapter,
+                                ),
+                              }))
+                            }
+                          />{" "}
+                          {source.label}
+                        </label>
+                      ))}
+                  </fieldset>
                 </div>
               ) : null}
               {selectedSource ? (
@@ -1212,7 +1817,9 @@ export function App() {
                         }
                       >
                         <option value="auto">Follow publication profile</option>
-                        <option value="included">Always include</option>
+                        {selectedSource.kind !== "zarr" ? (
+                          <option value="included">Always include</option>
+                        ) : null}
                         {selectedSource.kind !== "local-geojson" &&
                         selectedSource.kind !== "image" &&
                         selectedSource.kind !== "csv" ? (
@@ -1220,6 +1827,143 @@ export function App() {
                         ) : null}
                       </select>
                     </label>
+                    {selectedSource.kind === "zarr" ? (
+                      <>
+                        <label>
+                          Variable
+                          <input
+                            value={selectedSource.variable}
+                            onChange={(event) =>
+                              updateSelectedSource((source) =>
+                                source.kind === "zarr"
+                                  ? { ...source, variable: event.target.value }
+                                  : source,
+                              )
+                            }
+                          />
+                        </label>
+                        <label>
+                          Time dimension
+                          <input
+                            value={selectedSource.timeDimension ?? ""}
+                            onChange={(event) =>
+                              updateSelectedSource((source) =>
+                                source.kind === "zarr"
+                                  ? {
+                                      ...source,
+                                      timeDimension: event.target.value || null,
+                                    }
+                                  : source,
+                              )
+                            }
+                          />
+                        </label>
+                        <label>
+                          Fixed slices
+                          <input
+                            placeholder="band=1, level=0"
+                            value={Object.entries(selectedSource.selection)
+                              .map(([key, value]) => `${key}=${value}`)
+                              .join(", ")}
+                            onChange={(event) =>
+                              updateSelectedSource((source) =>
+                                source.kind === "zarr"
+                                  ? {
+                                      ...source,
+                                      selection: Object.fromEntries(
+                                        event.target.value
+                                          .split(",")
+                                          .flatMap((part) => {
+                                            const [key, raw] = part
+                                              .split("=")
+                                              .map((value) => value.trim());
+                                            const value = Number(raw);
+                                            return key &&
+                                              Number.isInteger(value) &&
+                                              value >= 0
+                                              ? [[key, value]]
+                                              : [];
+                                          }),
+                                      ),
+                                    }
+                                  : source,
+                              )
+                            }
+                          />
+                        </label>
+                      </>
+                    ) : null}
+                    {selectedSource.kind === "copc" ? (
+                      <>
+                        <label>
+                          Point color
+                          <select
+                            value={selectedSource.colorMode}
+                            onChange={(event) =>
+                              updateSelectedSource((source) =>
+                                source.kind === "copc"
+                                  ? {
+                                      ...source,
+                                      colorMode: event.target.value as
+                                        | "elevation"
+                                        | "intensity"
+                                        | "classification"
+                                        | "rgb",
+                                    }
+                                  : source,
+                              )
+                            }
+                          >
+                            <option value="elevation">Elevation</option>
+                            <option value="intensity">Intensity</option>
+                            <option value="classification">
+                              Classification
+                            </option>
+                            <option value="rgb">RGB</option>
+                          </select>
+                        </label>
+                        <label>
+                          Point size
+                          <input
+                            type="range"
+                            min="1"
+                            max="10"
+                            step=".5"
+                            value={selectedSource.pointSize}
+                            onChange={(event) =>
+                              updateSelectedSource((source) =>
+                                source.kind === "copc"
+                                  ? {
+                                      ...source,
+                                      pointSize: Number(event.target.value),
+                                    }
+                                  : source,
+                              )
+                            }
+                          />
+                        </label>
+                      </>
+                    ) : null}
+                    {selectedSource.kind === "trajectory" ? (
+                      <label>
+                        Trail length
+                        <input
+                          type="number"
+                          min="1"
+                          value={selectedSource.trailLength}
+                          onChange={(event) =>
+                            updateSelectedSource((source) =>
+                              source.kind === "trajectory"
+                                ? {
+                                    ...source,
+                                    trailLength: Number(event.target.value),
+                                  }
+                                : source,
+                            )
+                          }
+                        />
+                      </label>
+                    ) : null}
                     <label>
                       Layer opacity
                       <input

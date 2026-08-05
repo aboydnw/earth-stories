@@ -25,9 +25,15 @@ describe("example catalog", () => {
     expect(exampleConnections.length).toBeGreaterThanOrEqual(3);
     for (const connection of exampleConnections) {
       expect(new URL(connection.locator).protocol).toBe("https:");
-      expect(["cog", "pmtiles", "geoparquet", "xyz"]).toContain(
-        connection.kind,
-      );
+      expect([
+        "cog",
+        "pmtiles",
+        "geoparquet",
+        "xyz",
+        "zarr",
+        "trajectory",
+        "copc",
+      ]).toContain(connection.kind);
     }
   });
 });

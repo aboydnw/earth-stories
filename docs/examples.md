@@ -16,13 +16,17 @@ The initial catalog contains:
 - **Antakya from above**, a connected public COG story using OpenAerialMap
   imagery;
 - **Lines on a shared planet**, a vector PMTiles story using geoBoundaries CGAZ
-  administrative boundaries.
+  administrative boundaries;
+- **Anatomy of a point cloud**, a COPC flyover at Autzen Stadium;
+- **Fields through time**, a temporal Fields of The World Zarr story;
+- **A story beyond the map**, demonstrating video and ordered map overlays.
 
 ## Example connections
 
 The editor's **Example data** section adds a curated connection and a map
 chapter to the current story. The initial catalog includes Antakya aerial
-imagery plus global country and state/province PMTiles. These URLs and their
+imagery, global country and state/province PMTiles, Fields of The World Zarr,
+and Autzen Stadium COPC. These URLs and their
 attribution are explicit, reviewed source data—not silent dependencies on CNG
 Sandbox.
 
