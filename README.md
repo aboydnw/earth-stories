@@ -8,7 +8,7 @@ This repository is a new, independent project. It reuses selected MIT-licensed
 ideas and code from the CNG Sandbox prototype, but it has no git, package,
 runtime, API, or deployment dependency on that repository.
 
-## MVP capability
+## Current capability
 
 The repository now implements the complete first MVP workflow:
 
@@ -18,24 +18,31 @@ The repository now implements the complete first MVP workflow:
 - a representative story fixture;
 - a loopback-only project service with atomic saves and backups;
 - a local editor that creates, opens, edits, saves, and previews projects;
-- prose, map, scrollytelling, image, and basic CSV chart chapters;
-- local GeoJSON, PMTiles, GeoParquet, image, and CSV imports;
+- prose, map, scrollytelling, image, video, rich chart, and flyover chapters;
+- a reusable, project-local data library plus immutable example data;
+- raw GeoTIFF, Shapefile, GeoJSON, CSV, NetCDF, HDF5, LAS/LAZ, and GPX preparation;
+- lazy, per-format Pixi environments with progress and retryable jobs;
 - local COG import and direct range-request preview;
-- connected COG, PMTiles, GeoParquet, and XYZ source records;
+- connected COG, PMTiles, GeoParquet, XYZ, Zarr, trajectory, and COPC sources;
+- URL inspection for access requirements, PMTiles layers, and Zarr variables;
+- property styling/filtering, raster controls, Zarr slices, COPC styling, and animation controls;
 - per-source included/connected publication policies;
 - publication preflight with blocking errors, portability warnings, and size estimates;
 - latest-release folder and ZIP outputs with a dependency report;
-- self-contained archival HTML and fixed-scrollport iframe/embed outputs.
+- self-contained archival HTML, fixed-scrollport iframe/embed outputs, attributed
+  PNG chapter images, and MP4/WebM animated map captures;
 - editable example stories and curated public example connections;
 - post-build publication verification before the latest release is promoted.
 
-This is still a pilot release rather than a supported end-user product. Direct publishing, offline
-guarantees, collaboration, AI features, and full CNG feature parity are outside
-the MVP.
+This is still a pilot release rather than a supported end-user product. The
+local storytelling and data-preparation workflow is the parity target; hosted
+accounts, collaboration, managed storage, direct publishing, offline guarantees,
+and AI features remain intentionally outside scope.
 
 ## Develop
 
-Prerequisites: Node.js 22+ and Corepack.
+Prerequisites: Node.js 22+ and Corepack. Data preparation bootstraps pinned Pixi
+environments on first use, so authors do not install GDAL or PDAL separately.
 
 ```bash
 corepack enable
@@ -90,6 +97,8 @@ connections that can be added to any project. See [Examples](docs/examples.md).
 The publication workshop offers connected, portable, and custom profiles.
 Earth Stories now renders COG, vector/raster PMTiles, GeoParquet, GeoJSON, XYZ,
 images, and CSV charts through the same preview and publication runtime.
+See [Data preparation](docs/data-preparation.md) for format-specific behavior
+and first-use downloads.
 
 Projects are ordinary folders under `earth-stories-projects/` by default. Set
 `EARTH_STORIES_PROJECTS_DIR` before starting the app to choose another parent

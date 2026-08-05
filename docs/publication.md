@@ -49,6 +49,14 @@ SVGs, Dublin Core metadata, citations, and available map snapshots. If browser
 security prevents reading a map canvas, it displays a visible availability and
 camera note rather than silently omitting the chapter.
 
+### Chapter media
+
+The publication workshop can download attributed PNG images for ready map
+chapters. It can also record six-second animated captures for temporal Zarr,
+trajectories, flyovers, or other moving map views. MP4 is preferred when the
+browser exposes an MP4 encoder; otherwise Earth Stories produces WebM and says
+which format was used.
+
 ### Embed
 
 `embed.html` uses the publication runtime without its masthead and footer. The

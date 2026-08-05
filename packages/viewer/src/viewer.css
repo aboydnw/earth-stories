@@ -15,6 +15,15 @@
   font-family: Satoshi, "Satoshi Variable", Inter, system-ui, sans-serif;
   font-synthesis: none;
 }
+.story-publication--cng {
+  --story-ink: #443f3f;
+  --story-muted: #716b68;
+  --story-paper: #fff;
+  --story-canvas: #f5f3f0;
+  --story-border: #e8e5e0;
+  --story-accent: #cf3f02;
+  --story-accent-text: #bf3a00;
+}
 .story-publication,
 .story-publication * {
   box-sizing: border-box;
@@ -25,6 +34,23 @@
 }
 .story-publication--embed {
   min-height: 100dvh;
+}
+.story-reading-progress {
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: rgba(207, 63, 2, 0.12);
+}
+.story-reading-progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left;
+  background: var(--story-accent);
+  transition: transform 80ms linear;
 }
 .story-publication--embed .story-chapters {
   padding-top: clamp(24px, 5vw, 64px);
@@ -101,6 +127,33 @@
   font-size: 18px;
   line-height: 1.62;
 }
+.story-copy :is(ul, ol) {
+  padding-left: 1.25em;
+  color: var(--story-muted);
+  font-size: 18px;
+  line-height: 1.62;
+}
+.story-copy li + li {
+  margin-top: 0.4em;
+}
+.story-copy a {
+  color: var(--story-accent-text);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+.story-copy blockquote {
+  margin: 1.4em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--story-accent);
+  color: var(--story-muted);
+}
+.story-copy code {
+  padding: 0.12em 0.3em;
+  border-radius: 4px;
+  background: var(--story-border);
+  font-family: "DM Mono", monospace;
+  font-size: 0.82em;
+}
 .story-map {
   position: relative;
   min-height: 500px;
@@ -154,6 +207,28 @@
   border: 1px solid var(--story-border);
   border-radius: 3px;
 }
+
+.story-map__legend strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.story-map__legend-item {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  width: auto !important;
+  height: auto !important;
+  margin: 3px 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.story-map__legend-item i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
 .story-map__error {
   position: absolute;
   z-index: 3;
@@ -174,9 +249,33 @@
   color: inherit;
   font-weight: 600;
 }
+.story-chapter--scrolly {
+  min-height: 145dvh;
+  position: relative;
+  grid-template-rows: 1fr;
+}
+.story-chapter--scrolly .story-folio,
+.story-chapter--scrolly .story-copy {
+  position: sticky;
+  z-index: 4;
+  top: 18vh;
+  grid-row: 1;
+  align-self: start;
+}
+.story-chapter--scrolly .story-copy {
+  padding: 22px;
+  border: 1px solid rgba(214, 196, 184, 0.9);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 10px 28px rgba(68, 63, 63, 0.13);
+  backdrop-filter: blur(12px);
+}
 .story-chapter--scrolly .story-map {
+  height: calc(100dvh - 32px);
   position: sticky;
   top: 16px;
+  grid-row: 1;
+  grid-column: 1 / -1;
 }
 .story-image,
 .story-chart {
@@ -317,6 +416,33 @@
   display: grid;
   gap: 5px;
 }
+.story-map__time button {
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--story-border);
+  border-radius: 4px;
+  background: var(--story-paper);
+  color: var(--story-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.story-map__pixel {
+  position: absolute;
+  right: 12px;
+  bottom: 42px;
+  z-index: 4;
+  padding: 7px 10px;
+  border: 1px solid rgba(68, 63, 63, 0.24);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #443f3f;
+  font:
+    600 12px/1.2 system-ui,
+    sans-serif;
+  box-shadow: 0 3px 14px rgba(37, 31, 31, 0.14);
+}
 .story-footer {
   display: flex;
   justify-content: space-between;
@@ -362,7 +488,32 @@
     grid-column: 1 / -1;
     min-height: 62vh;
   }
+  .story-chapter--scrolly {
+    min-height: auto;
+    display: grid;
+  }
+  .story-chapter--scrolly .story-folio,
+  .story-chapter--scrolly .story-copy,
+  .story-chapter--scrolly .story-map {
+    position: relative;
+    top: auto;
+    grid-row: auto;
+  }
+  .story-chapter--scrolly .story-copy {
+    grid-column: 2;
+  }
   .story-masthead h1 {
     font-size: clamp(46px, 16vw, 82px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .story-publication *,
+  .story-publication *::before,
+  .story-publication *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

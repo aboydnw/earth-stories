@@ -1,0 +1,76 @@
+import { Button, Dialog, Portal, Text } from "@chakra-ui/react";
+
+export function ConfirmDialog({
+  open,
+  title,
+  description,
+  error,
+  confirmLabel = "Remove",
+  loading = false,
+  onConfirm,
+  onOpenChange,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  error?: string | null;
+  confirmLabel?: string;
+  loading?: boolean;
+  onConfirm: () => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={(details) => {
+        if (!loading) onOpenChange(details.open);
+      }}
+      role="alertdialog"
+      placement="center"
+    >
+      <Portal>
+        <Dialog.Backdrop />
+        <Dialog.Positioner>
+          <Dialog.Content
+            maxW="440px"
+            bg="bg.raised"
+            border="1px solid"
+            borderColor="border.emphasized"
+            borderRadius="panel"
+            shadow="lg"
+          >
+            <Dialog.Header>
+              <Dialog.Title>{title}</Dialog.Title>
+            </Dialog.Header>
+            <Dialog.Body>
+              <Text color="fg.muted" lineHeight="1.6">
+                {description}
+              </Text>
+              {error ? (
+                <Text color="status.danger.fg" mt={3} role="alert">
+                  {error}
+                </Text>
+              ) : null}
+            </Dialog.Body>
+            <Dialog.Footer gap={2}>
+              <Dialog.ActionTrigger asChild>
+                <Button variant="surface" disabled={loading}>
+                  Cancel
+                </Button>
+              </Dialog.ActionTrigger>
+              <Button
+                bg="status.danger.fg"
+                color="action.onPrimary"
+                _hover={{ bg: "status.danger.hover" }}
+                loading={loading}
+                onClick={onConfirm}
+              >
+                {confirmLabel}
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog.Positioner>
+      </Portal>
+    </Dialog.Root>
+  );
+}

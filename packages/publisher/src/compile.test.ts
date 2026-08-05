@@ -19,6 +19,18 @@ describe("compileProject", () => {
     expect(first.externalDependencies).toContainEqual(
       expect.objectContaining({ resourceId: "carto-positron" }),
     );
+    expect(first.build.projectDigest).toMatch(/^[0-9a-f]{64}$/);
+
+    const changedTimestamp = compileProject({
+      ...(fixture as any),
+      metadata: {
+        ...(fixture as any).metadata,
+        updated: new Date().toISOString(),
+      },
+    });
+    expect(changedTimestamp.build.projectDigest).toBe(
+      first.build.projectDigest,
+    );
   });
 
   it("compiles image, chart, scrolly, and connected asset policies", async () => {
@@ -92,6 +104,38 @@ describe("compileProject", () => {
       result.externalDependencies.find((item) => item.resourceId === "rain")
         ?.requirements,
     ).toContain("byte-ranges");
+  });
+
+  it("preserves property styling, filtering, and raster presentation controls", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.sources[0].presentation = {
+      opacity: 0.7,
+      color: "#cf3f02",
+      strokeColor: "#443f3f",
+      radius: 7,
+      sourceLayer: null,
+      rasterBand: 2,
+      rescale: [0, 100],
+      colormap: "terrain",
+      legendTitle: "Land cover",
+      legendVisible: true,
+      symbolProperty: "class",
+      categoryColors: { forest: "#2f7d32" },
+      filterProperty: "status",
+      filterValue: "current",
+    };
+    const asset = compileProject(fixture).assets.find(
+      (candidate) => candidate.id === fixture.sources[0].id,
+    );
+    expect(asset?.presentation).toMatchObject({
+      rasterBand: 2,
+      rescale: [0, 100],
+      colormap: "terrain",
+      symbolProperty: "class",
+      categoryColors: { forest: "#2f7d32" },
+      filterProperty: "status",
+      filterValue: "current",
+    });
   });
 
   it("rejects broken source references and incompatible delivery overrides", async () => {

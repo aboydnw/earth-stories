@@ -14,6 +14,7 @@
     "build:publication": "yarn workspace @earth-stories/publisher build:fixture",
     "check:independence": "node scripts/check-independence.mjs",
     "check:ui": "node scripts/check-ui-tokens.mjs",
+    "contract:generate": "node --import tsx scripts/generate-conversion-contract.ts",
     "clean:types": "tsc --build --clean",
     "test": "vitest run",
     "typecheck": "tsc --build",

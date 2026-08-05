@@ -60,12 +60,37 @@
 - Local COG import through the same shared preview and publication renderer
 - Post-build verification of publication entrypoints, manifest, and included assets
 
-Automated browser tests remain deferred while the authoring interface is changing
-quickly. The current suite protects schemas, project cloning, compilation,
-publication integrity, asset safety, and the example catalog.
+## Phase 8 — Local data preparation and library (complete)
+
+- Project-local reusable data library and immutable seeded example data
+- Raw GeoTIFF, Shapefile, GeoJSON, CSV, NetCDF, HDF5, LAS/LAZ, and GPX intake
+- DuckDB Spatial vector preparation, GDAL PMTiles, rio-cogeo COG validation,
+  xarray 2D slice selection, PDAL COPC, and trajectory sidecars
+- Lazily provisioned, pinned Pixi capability environments for macOS and Linux
+- Versioned JSON Schema job protocol with generated TypeScript/Pydantic models
+- Progress, size disclosure, retry, verification, and explicit tool credits
+
+## Phase 9 — Discovery and data-specific controls (complete)
+
+- URL format, CORS, byte-range, and size inspection before connecting
+- PMTiles zoom/source-layer and consolidated Zarr variable/dimension discovery
+- Vector property colors and exact-value filters across GeoJSON, GeoParquet, and PMTiles
+- COG band/range/color-ramp controls, Zarr variable/time/slice controls,
+  COPC color/size controls, and trajectory playback
+- Shared schema presentation state in editor preview and every publication output
+
+## Phase 10 — Reader, output, and pilot parity (complete)
+
+- CNG-derived reader typography, reading progress, sticky scrollytelling cards,
+  responsive fallbacks, and reduced-motion behavior
+- Attributed chapter PNGs and browser-native MP4/WebM temporal capture
+- Dynamic-map archival fallbacks and verified folder/ZIP/archive/embed builds
+- End-to-end pilot workflow and data-preparation documentation
+- Full schema, contract, project safety, compiler, publication, UI-token,
+  independence, type, build, fixture, and Storybook gates
 
 ## After MVP
 
-Pilot usability sessions come next. Native installers, direct deployment
+Observed pilot usability sessions come next. Native installers, direct deployment
 integrations, offline guarantees, collaboration, and AI assistance require
 separate product decisions and support commitments.

@@ -17,7 +17,11 @@ import {
   type ExportFormat,
   type PublicationPreflight,
 } from "./api";
-import { captureMapSnapshots } from "./captureSnapshots";
+import {
+  captureMapSnapshots,
+  downloadAnimatedMapCaptures,
+  downloadMapSnapshots,
+} from "./captureSnapshots";
 
 interface Props {
   open: boolean;
@@ -302,6 +306,60 @@ export function PublishPanel({
             </ActionButton>
           ))}
         </div>
+        <ActionButton
+          variant="surface"
+          className="chapter-image-export"
+          disabled={loading}
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            void downloadMapSnapshots(project.metadata.title)
+              .then((count) =>
+                setResult(
+                  count
+                    ? `Downloaded ${count} attributed chapter image${count === 1 ? "" : "s"}`
+                    : "No ready map chapters could be captured.",
+                ),
+              )
+              .catch((cause: unknown) =>
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Chapter images could not be captured.",
+                ),
+              )
+              .finally(() => setLoading(false));
+          }}
+        >
+          <DownloadSimple size={18} /> Download attributed chapter images
+        </ActionButton>
+        <ActionButton
+          variant="surface"
+          className="chapter-image-export"
+          disabled={loading}
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            void downloadAnimatedMapCaptures(project.metadata.title)
+              .then(({ count, format }) =>
+                setResult(
+                  count
+                    ? `Downloaded ${count} animated ${format.toUpperCase()} chapter capture${count === 1 ? "" : "s"}.`
+                    : "No ready map chapters could be recorded.",
+                ),
+              )
+              .catch((cause: unknown) =>
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Animated chapter captures could not be recorded.",
+                ),
+              )
+              .finally(() => setLoading(false));
+          }}
+        >
+          <DownloadSimple size={18} /> Record animated map chapters
+        </ActionButton>
         <label className="publication-url">
           Deployed publication URL{" "}
           <input

@@ -3,6 +3,8 @@ import { COGLayer, type COGLayerProps } from "@developmentseed/deck.gl-geotiff";
 import { CreateTexture } from "@developmentseed/deck.gl-raster/gpu-modules";
 import type { Texture } from "@luma.gl/core";
 import type { PublicationAsset } from "@earth-stories/story-schema";
+import type { GeoTIFF } from "@developmentseed/geotiff";
+import type { ProjectionDefinition } from "@developmentseed/proj";
 
 const ramps = {
   viridis: [
@@ -27,8 +29,31 @@ const ramps = {
   ],
 } as const;
 
-export function colorize(name: keyof typeof ramps) {
+function shaderColor(hex: string) {
+  return [1, 3, 5].map(
+    (offset) => parseInt(hex.slice(offset, offset + 2), 16) / 255,
+  );
+}
+
+export function colorize(
+  name: keyof typeof ramps,
+  categoryColors: Record<string, string> = {},
+  rescale: [number, number] | null = null,
+) {
   const [low, middle, high] = ramps[name];
+  const categoryShader = rescale
+    ? Object.entries(categoryColors)
+        .flatMap(([raw, hex]) => {
+          const value = Number(raw);
+          return Number.isFinite(value)
+            ? [
+                `if (abs(rawValue - ${value}) < 0.00001) mapped = vec3(${shaderColor(hex).join(",")});`,
+              ]
+            : [];
+        })
+        .join("\n")
+    : "";
+  const [minimum, maximum] = rescale ?? [0, 1];
   return {
     name: `earth-stories-${name}`,
     inject: {
@@ -41,6 +66,8 @@ export function colorize(name: keyof typeof ramps) {
         vec3 mapped = value < 0.5
           ? mix(low, middle, value * 2.0)
           : mix(middle, high, (value - 0.5) * 2.0);
+        float rawValue = ${minimum} + value * ${maximum - minimum || 1};
+        ${categoryShader}
         color = vec4(mapped, encoded <= 0.0 ? 0.0 : 1.0);
       `,
     },
@@ -51,6 +78,7 @@ export function buildCogLayers(
   asset: PublicationAsset,
   url: string,
   onError: (message: string) => void,
+  onLoad?: (geotiff: GeoTIFF, projection: ProjectionDefinition) => void,
 ): Layer[] {
   const { presentation } = asset;
   if (!presentation.rescale)
@@ -60,6 +88,8 @@ export function buildCogLayers(
         geotiff: url,
         opacity: presentation.opacity,
         maxError: 0.03,
+        onGeoTIFFLoad: (geotiff, options) =>
+          onLoad?.(geotiff, options.projection),
         onError: (cause: unknown) =>
           onError(
             cause instanceof Error
@@ -119,7 +149,13 @@ export function buildCogLayers(
   const renderTile: COGLayerProps<CogTile>["renderTile"] = (data) => ({
     renderPipeline: [
       { module: CreateTexture, props: { textureName: data.texture } },
-      { module: colorize(presentation.colormap) },
+      {
+        module: colorize(
+          presentation.colormap,
+          presentation.categoryColors,
+          presentation.rescale,
+        ),
+      },
     ],
   });
   return [
@@ -130,6 +166,8 @@ export function buildCogLayers(
       getTileData,
       renderTile,
       maxError: 0.03,
+      onGeoTIFFLoad: (geotiff, options) =>
+        onLoad?.(geotiff, options.projection),
       onError: (cause: unknown) =>
         onError(
           cause instanceof Error

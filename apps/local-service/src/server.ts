@@ -10,12 +10,15 @@ import { ProjectStore } from "@earth-stories/project-store";
 import {
   buildLatestPublication,
   createEmbedSnippet,
+  discoverRemoteSource,
   preflightPublication,
 } from "@earth-stories/publisher";
 import { Zip, ZipDeflate } from "fflate";
 import { parseByteRange } from "./range.js";
 import { exampleCatalog, findExampleStory } from "./examples.js";
 import { isTrustedMutationOrigin } from "./security.js";
+import { ConversionRuntime } from "./conversion-runtime.js";
+import { ConversionJobs } from "./conversion-jobs.js";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.EARTH_STORIES_PORT ?? 4317);
@@ -23,10 +26,14 @@ const PROJECTS_DIRECTORY = resolve(
   process.env.EARTH_STORIES_PROJECTS_DIR ?? "./earth-stories-projects",
 );
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
-const MAX_ASSET_BYTES = 100 * 1024 * 1024;
+const MAX_ASSET_BYTES = 5 * 1024 * 1024 * 1024;
 const MAX_EXPORT_BODY_BYTES = 50 * 1024 * 1024;
 const VIEWER_DIRECTORY = resolve(
   process.env.EARTH_STORIES_VIEWER_DIR ?? "./dist/viewer",
+);
+const REPOSITORY_DIRECTORY = resolve(".");
+const PIXI_EXECUTABLE = resolve(
+  process.env.EARTH_STORIES_PIXI ?? ".earth-stories/bin/pixi",
 );
 
 const contentTypes: Record<string, string> = {
@@ -191,7 +198,16 @@ function projectRoute(pathname: string): { id: string; asset?: string } | null {
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-export function createLocalServer(store: ProjectStore) {
+export function createLocalServer(
+  store: ProjectStore,
+  conversionJobs = new ConversionJobs(
+    store,
+    new ConversionRuntime({
+      pixi: PIXI_EXECUTABLE,
+      repositoryRoot: REPOSITORY_DIRECTORY,
+    }),
+  ),
+) {
   return createServer(async (request, response) => {
     response.setHeader("x-content-type-options", "nosniff");
     const url = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
@@ -211,6 +227,14 @@ export function createLocalServer(store: ProjectStore) {
 
       if (url.pathname === "/api/projects" && request.method === "GET") {
         json(response, 200, await store.list());
+        return;
+      }
+
+      if (url.pathname === "/api/discover" && request.method === "POST") {
+        const body = (await readJson(request)) as { url?: unknown };
+        if (typeof body.url !== "string")
+          throw new Error("Enter a public data URL to inspect");
+        json(response, 200, await discoverRemoteSource(body.url));
         return;
       }
 
@@ -251,6 +275,40 @@ export function createLocalServer(store: ProjectStore) {
       }
 
       const route = projectRoute(url.pathname);
+      const conversionCollectionMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/conversions$/,
+      );
+      if (conversionCollectionMatch && request.method === "POST") {
+        const projectId = decodeURIComponent(conversionCollectionMatch[1]);
+        json(
+          response,
+          202,
+          await conversionJobs.create(
+            projectId,
+            (await readJson(request)) as {
+              operation?: unknown;
+              capability?: unknown;
+              assetPath?: unknown;
+              options?: unknown;
+            },
+          ),
+        );
+        return;
+      }
+      const conversionJobMatch = url.pathname.match(
+        /^\/api\/conversion-jobs\/([^/]+)$/,
+      );
+      if (conversionJobMatch && request.method === "GET") {
+        const job = conversionJobs.get(
+          decodeURIComponent(conversionJobMatch[1]),
+        );
+        if (!job) {
+          json(response, 404, { error: "Conversion job not found" });
+          return;
+        }
+        json(response, 200, job);
+        return;
+      }
       const preflightMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/export\/preflight$/,
       );
@@ -344,10 +402,11 @@ export function createLocalServer(store: ProjectStore) {
       );
       if (assetCollectionMatch && request.method === "POST") {
         const filename = url.searchParams.get("filename") ?? "";
-        const imported = await store.importAsset(
+        const imported = await store.importAssetStream(
           decodeURIComponent(assetCollectionMatch[1]),
           filename,
-          await readBody(request, MAX_ASSET_BYTES),
+          request,
+          MAX_ASSET_BYTES,
         );
         json(response, 201, imported);
         return;

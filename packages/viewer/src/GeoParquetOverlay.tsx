@@ -138,25 +138,42 @@ export function GeoParquetOverlay({
       active = false;
     };
   }, [asset.href, onError]);
-  const layers = useMemo<DeckLayer[]>(
-    () =>
-      data
-        ? [
-            new GeoJsonLayer({
-              id: `${asset.id}-geoparquet`,
-              data,
-              opacity: asset.presentation.opacity,
-              filled: true,
-              stroked: true,
-              pointRadiusMinPixels: asset.presentation.radius,
-              getFillColor: hexColor(asset.presentation.color),
-              getLineColor: hexColor(asset.presentation.strokeColor),
-              getLineWidth: 2,
-              lineWidthMinPixels: 1,
-            }),
-          ]
-        : [],
-    [asset, data],
-  );
+  const layers = useMemo<DeckLayer[]>(() => {
+    if (!data) return [];
+    const presentation = asset.presentation;
+    const filtered = presentation.filterProperty
+      ? {
+          ...data,
+          features: data.features.filter(
+            (feature) =>
+              String(feature.properties[presentation.filterProperty!]) ===
+              presentation.filterValue,
+          ),
+        }
+      : data;
+    const featureColor = (feature: (typeof data.features)[number]) => {
+      const property = presentation.symbolProperty;
+      const category = property
+        ? String(feature.properties[property] ?? "")
+        : "";
+      return hexColor(
+        presentation.categoryColors[category] ?? presentation.color,
+      );
+    };
+    return [
+      new GeoJsonLayer({
+        id: `${asset.id}-geoparquet`,
+        data: filtered,
+        opacity: presentation.opacity,
+        filled: true,
+        stroked: true,
+        pointRadiusMinPixels: presentation.radius,
+        getFillColor: featureColor,
+        getLineColor: featureColor,
+        getLineWidth: 2,
+        lineWidthMinPixels: 1,
+      }),
+    ];
+  }, [asset, data]);
   return <DeckOverlay layers={layers} />;
 }
