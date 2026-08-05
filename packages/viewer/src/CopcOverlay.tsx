@@ -13,6 +13,7 @@ export function CopcOverlay({
 }) {
   const maps = useMap();
   useEffect(() => {
+    let active = true;
     const map = maps.current?.getMap();
     if (!map || asset.kind !== "copc") return;
     const control = new LidarControl({
@@ -28,17 +29,27 @@ export function CopcOverlay({
     map.addControl(control);
     control
       .loadPointCloudStreaming(asset.href)
-      .catch((cause: unknown) =>
-        onError(
-          cause instanceof Error
-            ? cause.message
-            : "The point cloud could not be opened.",
-        ),
+      .catch(
+        (cause: unknown) =>
+          active &&
+          onError(
+            cause instanceof Error
+              ? cause.message
+              : "The point cloud could not be opened.",
+          ),
       );
     return () => {
+      active = false;
       control.unloadPointCloud();
       map.removeControl(control);
     };
-  }, [asset, maps, onError]);
+  }, [
+    asset.href,
+    asset.kind,
+    asset.copc?.colorMode,
+    asset.copc?.pointSize,
+    maps,
+    onError,
+  ]);
   return null;
 }

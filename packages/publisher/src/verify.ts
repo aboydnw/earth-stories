@@ -1,4 +1,4 @@
-import { access, readFile, stat } from "node:fs/promises";
+import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import {
   publicationManifestSchema,
@@ -60,7 +60,17 @@ export async function verifyPublication(
       continue;
     }
     try {
-      await access(path);
+      const linkInfo = await lstat(path);
+      if (linkInfo.isSymbolicLink()) {
+        const target = await realpath(path);
+        const targetFromRoot = relative(await realpath(directory), target);
+        if (targetFromRoot === ".." || targetFromRoot.startsWith(`..${sep}`)) {
+          failures.push(
+            `included asset “${asset.label}” links outside the release folder`,
+          );
+          continue;
+        }
+      }
       if (!(await stat(path)).isFile())
         failures.push(`included asset “${asset.label}” is not a file`);
     } catch {

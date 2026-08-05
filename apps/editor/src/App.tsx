@@ -118,33 +118,44 @@ export function App() {
     setError(null);
   }
 
-  const publication = useMemo(() => {
-    if (!project || !project.metadata.title.trim()) return null;
+  const publicationResult = useMemo(() => {
+    if (!project || !project.metadata.title.trim())
+      return { manifest: null, error: null };
     let compiled;
     try {
       compiled = compileProject(project);
-    } catch {
-      return null;
+    } catch (cause) {
+      return {
+        manifest: null,
+        error:
+          cause instanceof Error
+            ? cause.message
+            : "The story cannot be compiled.",
+      };
     }
     const sources = new Map(
       project.sources.map((source) => [source.id, source]),
     );
     return {
-      ...compiled,
-      assets: compiled.assets.map((asset) => {
-        const source = sources.get(asset.id);
-        const path = source ? sourcePath(source) : null;
-        return asset.delivery === "included" && path
-          ? {
-              ...asset,
-              href: /^https?:\/\//i.test(path)
-                ? path
-                : `/api/projects/${encodeURIComponent(project.id)}/assets/${path.split("/").map(encodeURIComponent).join("/")}`,
-            }
-          : asset;
-      }),
+      error: null,
+      manifest: {
+        ...compiled,
+        assets: compiled.assets.map((asset) => {
+          const source = sources.get(asset.id);
+          const path = source ? sourcePath(source) : null;
+          return asset.delivery === "included" && path
+            ? {
+                ...asset,
+                href: /^https?:\/\//i.test(path)
+                  ? path
+                  : `/api/projects/${encodeURIComponent(project.id)}/assets/${path.split("/").map(encodeURIComponent).join("/")}`,
+              }
+            : asset;
+        }),
+      },
     };
   }, [project]);
+  const publication = publicationResult.manifest;
   const selectedChapter = project?.chapters.find(
     (chapter) => chapter.id === activeChapter,
   );
@@ -237,8 +248,8 @@ export function App() {
       title: "Video",
       narrative: "",
       provider: "youtube",
-      videoId: "dQw4w9WgXcQ",
-      originalUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      videoId: "VIDEO_ID",
+      originalUrl: "https://www.youtube.com/",
     });
   }
   function addFlyover() {
@@ -252,8 +263,10 @@ export function App() {
       title: "Flyover",
       narrative: "",
       sourceId:
-        selectedChapter && "sourceId" in selectedChapter
-          ? selectedChapter.sourceId
+        selectedSource &&
+        selectedSource.kind !== "image" &&
+        selectedSource.kind !== "csv"
+          ? selectedSource.id
           : null,
       overlaySourceIds: [],
       scrollLength: 1,
@@ -772,6 +785,10 @@ export function App() {
               }}
             />
           </label>
+          <small>
+            Trajectory imports must use a browser-ready{" "}
+            <code>*.trips.json</code> file containing paths and timestamps.
+          </small>
           <form onSubmit={addConnected}>
             <div>
               <Link size={16} />
@@ -1316,7 +1333,13 @@ export function App() {
                             chapter.type === "flyover"
                               ? {
                                   ...chapter,
-                                  scrollLength: Number(event.target.value),
+                                  scrollLength: Math.min(
+                                    5,
+                                    Math.max(
+                                      0.5,
+                                      Number(event.target.value) || 0.5,
+                                    ),
+                                  ),
                                 }
                               : chapter,
                           ),
@@ -2202,7 +2225,8 @@ export function App() {
           </div>
         ) : (
           <p className="error-message">
-            Give the story a title to generate its publication preview.
+            {publicationResult.error ??
+              "Give the story a title to generate its publication preview."}
           </p>
         )}
       </section>

@@ -80,20 +80,30 @@ function chartSvg(
       .filter((item) => Number.isFinite(item.value))
       .slice(0, 30),
   }));
-  const maximum = Math.max(
-    ...series.flatMap((item) => item.values.map((value) => value.value)),
-    1,
+  const allValues = series.flatMap((item) =>
+    item.values.map((value) => value.value),
   );
+  const minimum = Math.min(...allValues, 0);
+  const maximum = Math.max(...allValues, 1);
+  const valueRange = maximum - minimum || 1;
+  const normalized = (value: number) => (value - minimum) / valueRange;
   const width = 900;
   const height = 420;
-  const slot = series[0]?.values.length ? 760 / series[0].values.length : 760;
+  const longestSeries = series.reduce(
+    (longest, item) =>
+      item.values.length > longest.values.length ? item : longest,
+    { column: "", values: [] as Array<{ label: string; value: number }> },
+  );
+  const slot = longestSeries.values.length
+    ? 760 / longestSeries.values.length
+    : 760;
   const colors = ["#dd4b1a", "#126e75", "#7054a0", "#d59d12"];
   const marks =
     chartType === "line"
       ? series
           .map(
             (item, seriesIndex) =>
-              `<polyline fill="none" stroke="${colors[seriesIndex % colors.length]}" stroke-width="4" points="${item.values.map((value, index) => `${90 + index * slot + slot / 2},${350 - (value.value / maximum) * 300}`).join(" ")}"><title>${escapeHtml(item.column)}</title></polyline>`,
+              `<polyline fill="none" stroke="${colors[seriesIndex % colors.length]}" stroke-width="4" points="${item.values.map((value, index) => `${90 + index * slot + slot / 2},${350 - normalized(value.value) * 300}`).join(" ")}"><title>${escapeHtml(item.column)}</title></polyline>`,
           )
           .join("")
       : series
@@ -101,13 +111,13 @@ function chartSvg(
             item.values.map((value, index) => {
               const groupWidth = Math.max(3, slot - 5);
               const barWidth = groupWidth / series.length;
-              const height = (value.value / maximum) * 300;
+              const height = normalized(value.value) * 300;
               const left = 90 + index * slot + seriesIndex * barWidth;
               return `<rect x="${left}" y="${350 - height}" width="${barWidth}" height="${height}" fill="${colors[seriesIndex % colors.length]}"><title>${escapeHtml(item.column)} — ${escapeHtml(value.label)}: ${value.value}</title></rect>`;
             }),
           )
           .join("");
-  const labels = (series[0]?.values ?? [])
+  const labels = longestSeries.values
     .map(
       (item, index) =>
         `<text x="${90 + index * slot + slot / 2}" y="375" text-anchor="middle" font-size="10">${escapeHtml(item.label.slice(0, 12))}</text>`,

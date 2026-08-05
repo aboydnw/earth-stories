@@ -106,6 +106,14 @@ export const exampleConnections: ExampleConnection[] = [
   },
 ];
 
+function exampleConnection(id: string): ExampleConnection {
+  const connection = exampleConnections.find(
+    (candidate) => candidate.id === id,
+  );
+  if (!connection) throw new Error(`Missing example connection: ${id}`);
+  return connection;
+}
+
 const antakya: StoryProject = {
   schema: "earth-stories/project/v1",
   id: "example-antakya",
@@ -123,8 +131,8 @@ const antakya: StoryProject = {
       id: "antakya-cog",
       kind: "cog",
       label: "Antakya aerial imagery",
-      locator: exampleConnections[0]!.locator,
-      attribution: exampleConnections[0]!.attribution,
+      locator: exampleConnection("antakya-aerial-cog").locator,
+      attribution: exampleConnection("antakya-aerial-cog").attribution,
       sizeBytes: null,
       delivery: "connected",
       presentation: {
@@ -185,9 +193,9 @@ const boundaries: StoryProject = {
       id: "countries",
       kind: "pmtiles",
       label: "Country boundaries",
-      locator: exampleConnections[1]!.locator,
+      locator: exampleConnection("countries-pmtiles").locator,
       tileType: "vector",
-      attribution: exampleConnections[1]!.attribution,
+      attribution: exampleConnection("countries-pmtiles").attribution,
       sizeBytes: null,
       delivery: "connected",
       presentation: {
@@ -250,7 +258,7 @@ const pointCloud: StoryProject = {
       id: "autzen",
       kind: "copc",
       label: "Autzen Stadium lidar",
-      locator: exampleConnections[4]!.locator,
+      locator: exampleConnection("autzen-copc").locator,
       colorMode: "elevation",
       pointSize: 2,
       attribution: "Hobu Inc.",
@@ -330,7 +338,7 @@ const temporalFields: StoryProject = {
       id: "fields",
       kind: "zarr",
       label: "Global field predictions",
-      locator: exampleConnections[3]!.locator,
+      locator: exampleConnection("fields-zarr").locator,
       variable: "variables",
       selection: { band: 1 },
       timeDimension: "time",
@@ -399,9 +407,9 @@ const richMedia: StoryProject = {
       id: "regions",
       kind: "pmtiles",
       label: "States and provinces",
-      locator: exampleConnections[2]!.locator,
+      locator: exampleConnection("regions-pmtiles").locator,
       tileType: "vector",
-      attribution: exampleConnections[2]!.attribution,
+      attribution: exampleConnection("regions-pmtiles").attribution,
       sizeBytes: null,
       delivery: "connected",
       presentation: {

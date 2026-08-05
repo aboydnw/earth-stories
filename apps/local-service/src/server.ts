@@ -15,6 +15,7 @@ import {
 import { Zip, ZipDeflate } from "fflate";
 import { parseByteRange } from "./range.js";
 import { exampleCatalog, findExampleStory } from "./examples.js";
+import { isTrustedMutationOrigin } from "./security.js";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.EARTH_STORIES_PORT ?? 4317);
@@ -188,12 +189,21 @@ function projectRoute(pathname: string): { id: string; asset?: string } | null {
   };
 }
 
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 export function createLocalServer(store: ProjectStore) {
   return createServer(async (request, response) => {
     response.setHeader("x-content-type-options", "nosniff");
     const url = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
 
     try {
+      if (
+        MUTATING_METHODS.has(request.method ?? "") &&
+        !isTrustedMutationOrigin(request.headers.origin)
+      ) {
+        json(response, 403, { error: "Untrusted request origin" });
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/health") {
         json(response, 200, { status: "ready", projectsDirectory: store.root });
         return;

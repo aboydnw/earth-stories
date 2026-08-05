@@ -18,6 +18,10 @@ export function ZarrOverlay({
     zarr.Group<zarr.Readable> | zarr.Array<zarr.DataType, zarr.Readable> | null
   >(null);
   const [timeIndex, setTimeIndex] = useState(0);
+  useEffect(
+    () => setTimeIndex(0),
+    [asset.id, asset.href, asset.zarr?.timesteps.length],
+  );
   useEffect(() => {
     let active = true;
     (async () => {
@@ -25,7 +29,7 @@ export function ZarrOverlay({
         const store = await zarr.withMaybeConsolidatedMetadata(
           new zarr.FetchStore(asset.href),
         );
-        const root = await zarr.open(store, { kind: "group" });
+        const root = await zarr.open(store);
         if (active) setNode(root);
       } catch (cause) {
         if (active)

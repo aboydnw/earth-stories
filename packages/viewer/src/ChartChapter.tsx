@@ -41,22 +41,30 @@ export function ChartChapter({ chapter, asset }: Props) {
   const columns = [chapter.yColumn, ...chapter.yColumns].filter(
     (value, index, all) => all.indexOf(value) === index,
   );
+  const withinBound = (
+    raw: string,
+    bound: string | number | null,
+    lower: boolean,
+  ) => {
+    if (bound === null) return true;
+    if (typeof bound === "number") {
+      const value = Number(raw);
+      return (
+        Number.isFinite(value) && (lower ? value >= bound : value <= bound)
+      );
+    }
+    return lower ? raw >= bound : raw <= bound;
+  };
   const series = useMemo(
     () =>
       columns.map((column) => ({
         column,
         points: rows
-          .filter(
-            (row) =>
-              chapter.xMin === null ||
-              chapter.xMin === undefined ||
-              (row[chapter.xColumn] ?? "") >= String(chapter.xMin),
+          .filter((row) =>
+            withinBound(row[chapter.xColumn] ?? "", chapter.xMin, true),
           )
-          .filter(
-            (row) =>
-              chapter.xMax === null ||
-              chapter.xMax === undefined ||
-              (row[chapter.xColumn] ?? "") <= String(chapter.xMax),
+          .filter((row) =>
+            withinBound(row[chapter.xColumn] ?? "", chapter.xMax, false),
           )
           .map((row) => ({
             label: row[chapter.xColumn] ?? "",
@@ -81,12 +89,14 @@ export function ChartChapter({ chapter, asset }: Props) {
   const points = series[0]?.points ?? [];
   const scaleValue = (value: number) =>
     chapter.yScale === "log" ? Math.log10(value) : value;
-  const maximum = Math.max(
-    ...series.flatMap((item) =>
-      item.points.map((point) => scaleValue(point.value)),
-    ),
-    1,
+  const scaledValues = series.flatMap((item) =>
+    item.points.map((point) => scaleValue(point.value)),
   );
+  const minimum = Math.min(...scaledValues, 0);
+  const maximum = Math.max(...scaledValues, 1);
+  const scaledRange = maximum - minimum || 1;
+  const normalized = (value: number) =>
+    (scaleValue(value) - minimum) / scaledRange;
   if (error)
     return <p className="story-media-error">Chart data could not be loaded.</p>;
   if (chapter.chartType === "line") {
@@ -99,7 +109,7 @@ export function ChartChapter({ chapter, asset }: Props) {
               points={item.points
                 .map(
                   (point, index) =>
-                    `${item.points.length === 1 ? 50 : (index / (item.points.length - 1)) * 100},${96 - (scaleValue(point.value) / maximum) * 88}`,
+                    `${item.points.length === 1 ? 50 : (index / (item.points.length - 1)) * 100},${96 - normalized(point.value) * 88}`,
                 )
                 .join(" ")}
               fill="none"
@@ -114,7 +124,7 @@ export function ChartChapter({ chapter, asset }: Props) {
           {points.map((point, index) => {
             const x =
               points.length === 1 ? 50 : (index / (points.length - 1)) * 100;
-            const y = 96 - (scaleValue(point.value) / maximum) * 88;
+            const y = 96 - normalized(point.value) * 88;
             return (
               <circle
                 key={`${point.label}-${point.value}`}
@@ -147,7 +157,7 @@ export function ChartChapter({ chapter, asset }: Props) {
             <div
               className="story-chart__bar"
               style={{
-                height: `${Math.max(2, (point.value / maximum) * 100)}%`,
+                height: `${Math.max(2, normalized(point.value) * 100)}%`,
               }}
             >
               <span>{point.value}</span>

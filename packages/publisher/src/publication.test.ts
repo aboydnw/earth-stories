@@ -21,6 +21,7 @@ import { buildLatestPublication, buildPublication } from "./build.js";
 import { compileProject } from "./compile.js";
 import { createEmbedSnippet } from "./embed.js";
 import { preflightPublication } from "./preflight.js";
+import { verifyPublication } from "./verify.js";
 
 const temporary: string[] = [];
 afterEach(async () =>
@@ -146,6 +147,24 @@ describe("publication hardening", () => {
     );
   });
 
+  it("rejects viewer symlinks that escape the release", async () => {
+    const { root, project } = await setup();
+    const outside = join(root, "outside.geojson");
+    await writeFile(outside, '{"type":"FeatureCollection","features":[]}');
+    const output = join(root, "output");
+    const story = await readProject(project);
+    const manifest = compileProject(story);
+    await buildPublication({
+      projectDirectory: project,
+      outputDirectory: output,
+    });
+    await rm(join(output, "assets", "survey-sites.geojson"));
+    await symlink(outside, join(output, "assets", "survey-sites.geojson"));
+    await expect(verifyPublication(output, manifest)).rejects.toThrow(
+      "links outside the release folder",
+    );
+  });
+
   it("escapes report values and omits embed artifacts without a viewer", async () => {
     const { root, project } = await setup();
     const output = join(root, "output");
@@ -220,6 +239,9 @@ describe("publication hardening", () => {
       sizeBytes: null,
       tileType: "raster",
       presentation: manifest.assets[0]!.presentation,
+      zarr: null,
+      trajectory: null,
+      copc: null,
     });
     const archive = await buildArchivalHtml({
       project: story,

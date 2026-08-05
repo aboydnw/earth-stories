@@ -68,19 +68,14 @@ export const publicationAssetSchema = z.object({
         })
         .nullable(),
     })
-    .nullable()
-    .optional(),
-  trajectory: z
-    .object({ trailLength: z.number().positive() })
-    .nullable()
-    .optional(),
+    .nullable(),
+  trajectory: z.object({ trailLength: z.number().positive() }).nullable(),
   copc: z
     .object({
       colorMode: z.enum(["elevation", "intensity", "classification", "rgb"]),
       pointSize: z.number().min(1).max(10),
     })
-    .nullable()
-    .optional(),
+    .nullable(),
 });
 
 const publicationChapterBaseSchema = z.object({

@@ -72,9 +72,12 @@ function AssetLayer({
   const assetUrl = useMemo(() => absoluteAssetUrl(asset.href), [asset.href]);
   useEffect(() => {
     let active = true;
+    let registeredArchive: PMTiles | null = null;
+    const controller = new AbortController();
     if (asset.kind === "pmtiles") {
       ensurePmtilesProtocol();
       const archive = new PMTiles(assetUrl);
+      registeredArchive = archive;
       protocol?.add(archive);
       archive
         .getMetadata()
@@ -87,16 +90,18 @@ function AssetLayer({
               ),
             );
         })
-        .catch((cause: unknown) =>
-          onError(
-            cause instanceof Error
-              ? cause.message
-              : "The PMTiles archive could not be opened.",
-          ),
+        .catch(
+          (cause: unknown) =>
+            active &&
+            onError(
+              cause instanceof Error
+                ? cause.message
+                : "The PMTiles archive could not be opened.",
+            ),
         );
     }
     if (asset.kind === "trajectory") {
-      fetch(assetUrl)
+      fetch(assetUrl, { signal: controller.signal })
         .then((response) => response.json())
         .then(
           (data: {
@@ -117,22 +122,35 @@ function AssetLayer({
             });
           },
         )
-        .catch((cause: unknown) =>
-          onError(
-            cause instanceof Error
-              ? cause.message
-              : "The trajectory could not be opened.",
-          ),
+        .catch(
+          (cause: unknown) =>
+            active &&
+            cause instanceof Error &&
+            cause.name !== "AbortError" &&
+            onError(
+              cause instanceof Error
+                ? cause.message
+                : "The trajectory could not be opened.",
+            ),
         );
     }
     return () => {
       active = false;
+      controller.abort();
+      if (registeredArchive && protocol) {
+        const key = registeredArchive.source.getKey();
+        if (protocol.tiles.get(key) === registeredArchive)
+          protocol.tiles.delete(key);
+      }
     };
   }, [asset.kind, assetUrl, onError]);
   const vectorSourceLayers = presentation.sourceLayer
     ? [presentation.sourceLayer]
     : pmtilesLayers;
-  const resolvedAsset = { ...asset, href: assetUrl };
+  const resolvedAsset = useMemo(
+    () => ({ ...asset, href: assetUrl }),
+    [asset, assetUrl],
+  );
   const displayedTrajectory = useMemo(
     () =>
       trajectory
@@ -318,6 +336,13 @@ export function MapChapter({
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reportError = useCallback((message: string) => setError(message), []);
+  const overlayKey = overlayAssets
+    .map(({ id, href }) => `${id}:${href}`)
+    .join("|");
+  useEffect(
+    () => setError(null),
+    [asset?.id, asset?.href, basemapStyle, overlayKey],
+  );
   const initialViewState = useMemo(
     () => ({
       longitude: chapter.camera.center[0],

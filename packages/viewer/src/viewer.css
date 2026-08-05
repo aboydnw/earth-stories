@@ -282,10 +282,11 @@
 .story-flyover__sticky {
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: 100dvh;
   padding: 4vh 0;
 }
 .story-flyover__sticky .story-map {
+  min-height: 0;
   height: 92vh;
 }
 .story-flyover__progress {
