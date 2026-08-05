@@ -30,6 +30,7 @@ export interface ProjectSummary {
   description: string;
   updated: string;
   chapterCount: number;
+  isExample: boolean;
 }
 
 export interface CreateProjectInput {
@@ -97,6 +98,7 @@ export class ProjectStore {
             description: project.metadata.description,
             updated: project.metadata.updated,
             chapterCount: project.chapters.length,
+            isExample: project.id.startsWith("example-"),
           });
         } catch {
           // A directory is not a project unless its story file validates.
@@ -151,13 +153,9 @@ export class ProjectStore {
   async createFromTemplate(template: StoryProject): Promise<StoryProject> {
     const validated = storyProjectSchema.parse(template);
     await this.initialize();
-    const base = slugify(validated.metadata.title) || "example-story";
-    let id = base;
-    let suffix = 2;
-    while (await this.exists(id)) {
-      id = `${base}-${suffix}`;
-      suffix += 1;
-    }
+    const id = validated.id;
+    assertSafeId(id);
+    if (await this.exists(id)) return this.read(id);
     const now = new Date().toISOString();
     const project = storyProjectSchema.parse({
       ...structuredClone(validated),

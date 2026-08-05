@@ -23,3 +23,17 @@ Validation included formatting, UI-token and repository-independence checks,
 TypeScript build mode, 36 unit tests, editor and viewer production builds,
 Storybook, and headless-browser walkthroughs of the workspace, chapter creation,
 story settings, data connections, and live preview.
+
+## Product-testing follow-up
+
+A narrated pilot session exposed a crash after moving the same chapter twice.
+Chapter reordering now targets an explicit chapter ID inside the state update,
+handles missing and boundary positions without mutation, and has regression
+coverage for repeated moves in both directions.
+
+The same feedback pass also tightened first-run behavior: submitting the new
+story form without a title creates **Untitled story**, examples appear as tagged
+entries in the main story list, and reopening an example reuses its existing
+editable project. Native selects and checkboxes now receive the shared Earth
+Stories control treatment so the inspector is visually consistent across
+platforms.

@@ -9,6 +9,7 @@ export interface ProjectSummary {
   description: string;
   updated: string;
   chapterCount: number;
+  isExample: boolean;
 }
 
 export interface ImportedAsset {

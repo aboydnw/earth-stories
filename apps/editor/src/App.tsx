@@ -27,6 +27,7 @@ import type {
 } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
 import { ActionButton } from "@earth-stories/ui";
+import { reorderChapters } from "./chapterOrder";
 import {
   createProject,
   createExampleStory,
@@ -190,9 +191,8 @@ export function App() {
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
-    if (!newTitle.trim()) return;
     try {
-      activate(await createProject(newTitle));
+      activate(await createProject(newTitle.trim() || "Untitled story"));
       setNewTitle("");
       await refreshProjects();
     } catch (cause) {
@@ -291,20 +291,10 @@ export function App() {
     });
     setAddChapterOpen(false);
   }
-  function moveChapter(offset: number) {
-    if (!selectedChapter) return;
+  function moveChapter(chapterId: string, offset: number) {
     changeProject((current) => {
-      const from = current.chapters.findIndex(
-        (chapter) => chapter.id === selectedChapter.id,
-      );
-      const to = Math.max(
-        0,
-        Math.min(current.chapters.length - 1, from + offset),
-      );
-      if (from === to) return current;
-      const chapters = [...current.chapters];
-      const [chapter] = chapters.splice(from, 1);
-      chapters.splice(to, 0, chapter!);
+      const chapters = reorderChapters(current.chapters, chapterId, offset);
+      if (chapters === current.chapters) return current;
       return { ...current, chapters };
     });
   }
@@ -658,13 +648,13 @@ export function App() {
               </span>
             </div>
             <form className="workspace-create" onSubmit={handleCreate}>
-              <label htmlFor="story-title">New story title</label>
+              <label htmlFor="story-title">New story title (optional)</label>
               <div>
                 <input
                   id="story-title"
                   value={newTitle}
                   onChange={(event) => setNewTitle(event.target.value)}
-                  placeholder="Field notes from…"
+                  placeholder="Untitled story"
                 />
                 <ActionButton className="button button--primary" type="submit">
                   <Plus size={17} /> Create story
@@ -693,7 +683,7 @@ export function App() {
                 {projects.length} {projects.length === 1 ? "story" : "stories"}
               </span>
             </header>
-            {projects.length ? (
+            {projects.length || examples?.stories.length ? (
               <div className="project-list">
                 {projects.map((item) => (
                   <button
@@ -704,7 +694,12 @@ export function App() {
                       {String(item.chapterCount).padStart(2, "0")}
                     </span>
                     <span>
-                      <strong>{item.title}</strong>
+                      <strong>
+                        {item.title}
+                        {item.isExample ? (
+                          <mark className="project-list__tag">Example</mark>
+                        ) : null}
+                      </strong>
                       <small>{item.description || "No description yet"}</small>
                     </span>
                     <em>
@@ -714,6 +709,32 @@ export function App() {
                     <CaretDown size={18} className="project-list__arrow" />
                   </button>
                 ))}
+                {examples?.stories
+                  .filter(
+                    (story) =>
+                      !projects.some(
+                        (project) => project.id === `example-${story.id}`,
+                      ),
+                  )
+                  .map((story) => (
+                    <button
+                      key={`example-${story.id}`}
+                      onClick={() => void handleExampleStory(story.id)}
+                    >
+                      <span className="project-list__number">
+                        {String(story.chapterCount).padStart(2, "0")}
+                      </span>
+                      <span>
+                        <strong>
+                          {story.title}
+                          <mark className="project-list__tag">Example</mark>
+                        </strong>
+                        <small>{story.description}</small>
+                      </span>
+                      <em>{story.formats.join(" + ")}</em>
+                      <CaretDown size={18} className="project-list__arrow" />
+                    </button>
+                  ))}
               </div>
             ) : (
               <div className="workspace-empty">
@@ -723,33 +744,6 @@ export function App() {
               </div>
             )}
           </section>
-          {examples?.stories.length ? (
-            <section
-              className="workspace-examples"
-              aria-labelledby="example-heading"
-            >
-              <header>
-                <div>
-                  <p>Learn from a finished story</p>
-                  <h2 id="example-heading">Example stories</h2>
-                </div>
-                <span>Opening an example creates your own editable copy.</span>
-              </header>
-              <div className="example-story-list">
-                {examples.stories.map((story) => (
-                  <button
-                    key={story.id}
-                    onClick={() => void handleExampleStory(story.id)}
-                  >
-                    <span>{story.formats.join(" + ")}</span>
-                    <strong>{story.title}</strong>
-                    <small>{story.description}</small>
-                    <em>{story.chapterCount} chapters · editable copy</em>
-                  </button>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </main>
         <footer className="workspace-footer">
           <span>Built for portable geospatial storytelling</span>
@@ -872,7 +866,7 @@ export function App() {
                 >
                   <button
                     type="button"
-                    onClick={() => moveChapter(-1)}
+                    onClick={() => moveChapter(chapter.id, -1)}
                     disabled={index === 0}
                     aria-label="Move chapter up"
                   >
@@ -880,7 +874,7 @@ export function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => moveChapter(1)}
+                    onClick={() => moveChapter(chapter.id, 1)}
                     disabled={index === project.chapters.length - 1}
                     aria-label="Move chapter down"
                   >
