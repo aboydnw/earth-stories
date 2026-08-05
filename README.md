@@ -50,6 +50,26 @@ Application builds use TypeScript build mode, so a fresh checkout creates the
 referenced package declarations automatically. Running `yarn typecheck` first
 is not required.
 
+### Record video feedback
+
+Development builds include a **Record feedback** control. Use it to capture the
+Earth Stories tab, optional microphone narration, clicks, network activity, and
+console errors while reproducing an issue. Stop the recording to download a
+`riffrec-*.zip` session, then share that ZIP with the person investigating the
+feedback. Typed values and network request or response contents are not captured.
+
+The recorder is loaded only during local development and is excluded from
+production builds. Screen recording requires `localhost` or HTTPS. When Earth
+Stories is running on a remote development server, open it through an SSH tunnel
+from your laptop, for example:
+
+```bash
+ssh -N -L 5173:localhost:5173 anthony@dev-server
+```
+
+Then visit `http://localhost:5173`. Local `.feedback/` analysis artifacts are
+ignored by Git.
+
 From the editor:
 
 1. Create a story, open an existing project, or make an editable copy of an example.
