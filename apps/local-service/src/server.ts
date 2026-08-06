@@ -7,16 +7,22 @@ import {
 } from "node:http";
 import { extname, join, relative, resolve } from "node:path";
 import { platform } from "node:os";
+import { Readable } from "node:stream";
 import { ProjectStore } from "@earth-stories/project-store";
 import {
   buildLatestPublication,
   createEmbedSnippet,
   discoverRemoteSource,
   preflightPublication,
+  validateRemoteUrl,
 } from "@earth-stories/publisher";
 import { Zip, ZipDeflate } from "fflate";
 import { parseByteRange } from "./range.js";
-import { exampleCatalog, findExampleStory } from "./examples.js";
+import {
+  exampleCatalog,
+  exampleConnections,
+  findExampleStory,
+} from "./examples.js";
 import { isTrustedMutationOrigin } from "./security.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { ConversionJobs } from "./conversion-jobs.js";
@@ -90,6 +96,45 @@ async function readBody(
     chunks.push(buffer);
   }
   return Buffer.concat(chunks);
+}
+
+async function proxyRemoteSource(
+  remoteValue: string,
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<void> {
+  const remoteUrl = validateRemoteUrl(remoteValue);
+  const upstream = await fetch(remoteUrl, {
+    headers: request.headers.range
+      ? { range: request.headers.range }
+      : undefined,
+    redirect: "follow",
+  });
+  validateRemoteUrl(upstream.url);
+  if (!upstream.ok && upstream.status !== 206) {
+    json(response, 502, {
+      error: `The connected source returned ${upstream.status}`,
+    });
+    return;
+  }
+  const headers: Record<string, string> = {
+    "content-type":
+      upstream.headers.get("content-type") ?? "application/octet-stream",
+    "cache-control": "private, max-age=300",
+    "accept-ranges": upstream.headers.get("accept-ranges") ?? "bytes",
+  };
+  for (const name of ["content-length", "content-range", "etag"]) {
+    const value = upstream.headers.get(name);
+    if (value) headers[name] = value;
+  }
+  response.writeHead(upstream.status, headers);
+  if (!upstream.body) {
+    response.end();
+    return;
+  }
+  const stream = Readable.fromWeb(upstream.body as never);
+  stream.on("error", (cause) => response.destroy(cause));
+  stream.pipe(response);
 }
 
 async function collectFilePaths(
@@ -247,6 +292,22 @@ export function createLocalServer(
         return;
       }
 
+      const exampleConnectionContentMatch = url.pathname.match(
+        /^\/api\/examples\/connections\/([^/]+)\/content$/,
+      );
+      if (exampleConnectionContentMatch && request.method === "GET") {
+        const example = exampleConnections.find(
+          (item) =>
+            item.id === decodeURIComponent(exampleConnectionContentMatch[1]),
+        );
+        if (!example) {
+          json(response, 404, { error: "Example connection not found" });
+          return;
+        }
+        await proxyRemoteSource(example.locator, request, response);
+        return;
+      }
+
       const exampleStoryMatch = url.pathname.match(
         /^\/api\/examples\/stories\/([^/]+)$/,
       );
@@ -279,6 +340,25 @@ export function createLocalServer(
       }
 
       const route = projectRoute(url.pathname);
+      const connectedSourceMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/sources\/([^/]+)\/content$/,
+      );
+      if (connectedSourceMatch && request.method === "GET") {
+        const projectId = decodeURIComponent(connectedSourceMatch[1]);
+        const sourceId = decodeURIComponent(connectedSourceMatch[2]);
+        const project = await store.read(projectId);
+        const source = project.sources.find((item) => item.id === sourceId);
+        if (
+          !source ||
+          !("locator" in source) ||
+          source.delivery !== "connected"
+        ) {
+          json(response, 404, { error: "Connected source not found" });
+          return;
+        }
+        await proxyRemoteSource(source.locator, request, response);
+        return;
+      }
       const conversionCollectionMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/conversions$/,
       );
