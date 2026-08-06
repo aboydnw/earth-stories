@@ -12,10 +12,10 @@ import { Readable } from "node:stream";
 import { ProjectStore } from "@earth-stories/project-store";
 import {
   buildLatestPublication,
+  authorizedFetch,
   createEmbedSnippet,
   discoverRemoteSource,
   preflightPublication,
-  validateRemoteUrl,
 } from "@earth-stories/publisher";
 import { Zip, ZipDeflate } from "fflate";
 import { parseByteRange } from "./range.js";
@@ -111,14 +111,21 @@ async function proxyRemoteSource(
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> {
-  const remoteUrl = validateRemoteUrl(remoteValue);
-  const upstream = await fetch(remoteUrl, {
+  const upstream = await authorizedFetch(remoteValue, {
     headers: request.headers.range
       ? { range: request.headers.range }
       : undefined,
-    redirect: "follow",
   });
-  validateRemoteUrl(upstream.url);
+  if (
+    request.headers.range &&
+    (upstream.status !== 206 || !upstream.headers.get("content-range"))
+  ) {
+    await upstream.body?.cancel();
+    json(response, 502, {
+      error: "The connected source does not support valid byte-range responses",
+    });
+    return;
+  }
   if (!upstream.ok && upstream.status !== 206) {
     json(response, 502, {
       error: `The connected source returned ${upstream.status}`,
@@ -129,7 +136,9 @@ async function proxyRemoteSource(
     "content-type":
       upstream.headers.get("content-type") ?? "application/octet-stream",
     "cache-control": "private, max-age=300",
-    "accept-ranges": upstream.headers.get("accept-ranges") ?? "bytes",
+    ...(upstream.headers.get("accept-ranges")
+      ? { "accept-ranges": upstream.headers.get("accept-ranges")! }
+      : {}),
   };
   for (const name of ["content-length", "content-range", "etag"]) {
     const value = upstream.headers.get(name);

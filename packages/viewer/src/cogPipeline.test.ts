@@ -1,7 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { GeoTIFF } from "@developmentseed/geotiff";
-import { deriveCogRescale, supportsInferredPipeline } from "./cogPipeline.js";
+import {
+  deriveCogRescale,
+  selectSampleTiles,
+  supportsInferredPipeline,
+} from "./cogPipeline.js";
 import { SampleFormat } from "@cogeotiff/core";
 
 const FLOAT_COG = new URL(
@@ -45,5 +49,14 @@ describe("cogPipeline", () => {
     expect(Number.isFinite(minimum)).toBe(true);
     expect(Number.isFinite(maximum)).toBe(true);
     expect(minimum).toBeLessThan(maximum);
+  });
+
+  it("samples tiles across the raster extent", () => {
+    expect(selectSampleTiles(8, 2)).toEqual([
+      [0, 0],
+      [5, 0],
+      [2, 1],
+      [7, 1],
+    ]);
   });
 });

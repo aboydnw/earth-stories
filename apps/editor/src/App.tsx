@@ -99,8 +99,8 @@ const sourcePath = (source: ProjectSource) =>
 export function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StoryProject | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<"stories" | "data">(
-    () => (window.location.hash === "#data" ? "data" : "stories"),
+  const [workspaceView, setWorkspaceView] = useState<"stories" | "data">(() =>
+    window.location.hash === "#data" ? "data" : "stories",
   );
   const [activeChapter, setActiveChapter] = useState("");
   const [newTitle, setNewTitle] = useState("");
@@ -2467,6 +2467,16 @@ export function App() {
                           )
                         }
                       >
+                        {!project.sources.some(
+                          (source) =>
+                            source.id === selectedChapter.sourceId &&
+                            source.kind !== "image" &&
+                            source.kind !== "csv",
+                        ) ? (
+                          <option value={selectedChapter.sourceId} disabled>
+                            Dataset unavailable
+                          </option>
+                        ) : null}
                         {project.sources
                           .filter(
                             (source) =>
@@ -2498,31 +2508,39 @@ export function App() {
                         <small>Files that need preparation</small>
                         {project.dataAssets
                           .filter((asset) => !asset.preparedSourceId)
-                          .map((asset) => (
-                            <div key={asset.id}>
-                              <span>{asset.label}</span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void runDataAssetJob(asset, "inspect")
-                                }
-                              >
-                                Inspect
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void runDataAssetJob(
-                                    asset,
-                                    "prepare",
-                                    selectedChapter.id,
-                                  )
-                                }
-                              >
-                                Prepare &amp; use
-                              </button>
-                            </div>
-                          ))}
+                          .map((asset) => {
+                            const job = conversionJobs[asset.id];
+                            const jobRunning =
+                              job?.status === "queued" ||
+                              job?.status === "running";
+                            return (
+                              <div key={asset.id}>
+                                <span>{asset.label}</span>
+                                <button
+                                  type="button"
+                                  disabled={jobRunning}
+                                  onClick={() =>
+                                    void runDataAssetJob(asset, "inspect")
+                                  }
+                                >
+                                  Inspect
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={jobRunning}
+                                  onClick={() =>
+                                    void runDataAssetJob(
+                                      asset,
+                                      "prepare",
+                                      selectedChapter.id,
+                                    )
+                                  }
+                                >
+                                  Prepare &amp; use
+                                </button>
+                              </div>
+                            );
+                          })}
                       </div>
                     ) : null}
                     <details className="chapter-data-connect">

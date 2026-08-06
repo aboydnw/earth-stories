@@ -3,6 +3,20 @@ import type { GeoTIFF, Overview } from "@developmentseed/geotiff";
 
 const MAX_RESCALE_SAMPLE_TILES = 4;
 
+export function selectSampleTiles(
+  columns: number,
+  rows: number,
+  limit = MAX_RESCALE_SAMPLE_TILES,
+): Array<[number, number]> {
+  const total = Math.max(1, columns * rows);
+  const count = Math.min(Math.max(1, limit), total);
+  return Array.from({ length: count }, (_, sample) => {
+    const index =
+      count === 1 ? 0 : Math.round((sample * (total - 1)) / (count - 1));
+    return [index % columns, Math.floor(index / columns)];
+  });
+}
+
 /**
  * Report whether the library's inferred render pipeline can display this
  * raster. Inference only understands unsigned-integer rasters that read as
@@ -49,36 +63,28 @@ export async function deriveCogRescale(
   const rows = Math.max(1, Math.ceil(source.height / source.tileHeight));
   let minimum = Number.POSITIVE_INFINITY;
   let maximum = Number.NEGATIVE_INFINITY;
-  let sampled = 0;
-  for (let row = 0; row < rows && sampled < MAX_RESCALE_SAMPLE_TILES; row += 1) {
-    for (
-      let column = 0;
-      column < columns && sampled < MAX_RESCALE_SAMPLE_TILES;
-      column += 1
-    ) {
-      sampled += 1;
-      const tile = await source.fetchTile(column, row, { boundless: false });
-      const { layout, width, height, mask, nodata } = tile.array;
-      const bandCount = Math.max(1, tile.array.count);
-      const band = Math.min(bandIndex, bandCount - 1);
-      const values =
+  for (const [column, row] of selectSampleTiles(columns, rows)) {
+    const tile = await source.fetchTile(column, row, { boundless: false });
+    const { layout, width, height, mask, nodata } = tile.array;
+    const bandCount = Math.max(1, tile.array.count);
+    const band = Math.min(bandIndex, bandCount - 1);
+    const values =
+      layout === "band-separate"
+        ? (tile.array.bands[band] ?? tile.array.bands[0])
+        : tile.array.data;
+    if (!values) continue;
+    const pixels = width * height;
+    for (let index = 0; index < pixels; index += 1) {
+      const value = Number(
         layout === "band-separate"
-          ? (tile.array.bands[band] ?? tile.array.bands[0])
-          : tile.array.data;
-      if (!values) continue;
-      const pixels = width * height;
-      for (let index = 0; index < pixels; index += 1) {
-        const value = Number(
-          layout === "band-separate"
-            ? values[index]
-            : values[index * bandCount + band],
-        );
-        if (!Number.isFinite(value)) continue;
-        if (mask !== null && mask[index] === 0) continue;
-        if (nodata !== null && value === nodata) continue;
-        if (value < minimum) minimum = value;
-        if (value > maximum) maximum = value;
-      }
+          ? values[index]
+          : values[index * bandCount + band],
+      );
+      if (!Number.isFinite(value)) continue;
+      if (mask !== null && mask[index] === 0) continue;
+      if (nodata !== null && value === nodata) continue;
+      if (value < minimum) minimum = value;
+      if (value > maximum) maximum = value;
     }
   }
   if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return [0, 1];

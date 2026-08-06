@@ -93,7 +93,7 @@ export function CogOverlay({
   );
   const layers = useMemo(
     () =>
-      prepared
+      prepared?.key === preparedKey
         ? buildCogLayers(
             asset,
             prepared.source,
@@ -102,7 +102,7 @@ export function CogOverlay({
             prepared.rescale,
           )
         : [],
-    [asset, onError, onLoad, prepared],
+    [asset, onError, onLoad, prepared, preparedKey],
   );
   useEffect(() => {
     const map = maps.current?.getMap();

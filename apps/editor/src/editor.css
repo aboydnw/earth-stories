@@ -927,7 +927,7 @@ nav {
     display: none;
   }
   .data-list__row {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
   .data-list__row > span:nth-child(3),
   .data-list__row > span:nth-child(4) {

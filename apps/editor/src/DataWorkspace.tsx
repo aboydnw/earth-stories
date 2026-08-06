@@ -79,21 +79,28 @@ export function DataWorkspace({
     let active = true;
     setLoading(true);
     setError(null);
-    Promise.all(
+    Promise.allSettled(
       projects
         .filter((item) => !item.invalidReason)
         .map((item) => openProject(item.id)),
     )
-      .then((items) => {
-        if (active) setLoadedProjects(items);
-      })
-      .catch((cause: unknown) => {
-        if (active)
+      .then((results) => {
+        if (!active) return;
+        const loaded = results.flatMap((result) =>
+          result.status === "fulfilled" ? [result.value] : [],
+        );
+        setLoadedProjects(loaded);
+        if (results.length > 0 && loaded.length === 0) {
+          const failure = results.find(
+            (result): result is PromiseRejectedResult =>
+              result.status === "rejected",
+          );
           setError(
-            cause instanceof Error
-              ? cause.message
+            failure?.reason instanceof Error
+              ? failure.reason.message
               : "Couldn’t load the data library.",
           );
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -177,7 +184,7 @@ export function DataWorkspace({
             <span>{error}</span>
           </div>
         ) : items.length ? (
-          <div className="data-list" role="list">
+          <div className="data-list">
             <div className="data-list__header" aria-hidden="true">
               <span>Name</span>
               <span>Type</span>
@@ -190,6 +197,7 @@ export function DataWorkspace({
                 key={item.key}
                 type="button"
                 className="data-list__row"
+                aria-label={`${item.source.label}, ${item.source.kind}, ${item.source.delivery}, used in ${item.usedBy} ${item.usedBy === 1 ? "chapter" : "chapters"}`}
                 onClick={() => setSelectedKey(item.key)}
               >
                 <span className="data-list__name">
@@ -245,24 +253,35 @@ function DataMapViewer({
     (sourceChapter.type === "map" || sourceChapter.type === "scrolly")
       ? sourceChapter.camera
       : defaultCamera;
-  const manifest = useMemo(
-    () =>
-      compileProject({
-        ...item.project,
-        chapters: [
-          {
-            id: `data-view-${item.source.id}`,
-            type: "map",
-            title: item.source.label,
-            narrative: "",
-            sourceId: item.source.id,
-            camera,
-          },
-        ],
-      }),
-    [item, camera],
-  );
-  const baseAsset = manifest.assets.find(
+  const compiled = useMemo(() => {
+    try {
+      return {
+        manifest: compileProject({
+          ...item.project,
+          chapters: [
+            {
+              id: `data-view-${item.source.id}`,
+              type: "map",
+              title: item.source.label,
+              narrative: "",
+              sourceId: item.source.id,
+              camera,
+            },
+          ],
+        }),
+        error: null,
+      };
+    } catch (cause) {
+      return {
+        manifest: null,
+        error:
+          cause instanceof Error
+            ? cause.message
+            : "This source could not be prepared for the map viewer.",
+      };
+    }
+  }, [item, camera]);
+  const baseAsset = compiled.manifest?.assets.find(
     (asset) => asset.id === item.source.id,
   );
   const [opacity, setOpacity] = useState(
@@ -381,7 +400,8 @@ function DataMapViewer({
             </Suspense>
           ) : (
             <div className="data-workspace__state data-workspace__state--error">
-              This source could not be prepared for the map viewer.
+              {compiled.error ??
+                "This source could not be prepared for the map viewer."}
             </div>
           )}
         </section>
