@@ -71,8 +71,12 @@ export function CogOverlay({
           tile.array.layout === "band-separate"
             ? tile.array.bands[band]?.[pixel]
             : tile.array.data[pixel * tile.array.count + band];
+        const valid =
+          value !== undefined &&
+          (tile.array.mask === null || tile.array.mask[pixel] !== 0) &&
+          (tile.array.nodata === null || value !== tile.array.nodata);
         setInspection(
-          `Band ${band + 1}: ${value === undefined ? "no data" : Number(value).toLocaleString()}`,
+          `Band ${band + 1}: ${valid ? Number(value).toLocaleString() : "no data"}`,
         );
       } catch (cause) {
         onError(

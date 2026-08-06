@@ -1,4 +1,38 @@
+import { zipSync } from "fflate";
+
 const MAP_READY_TIMEOUT_MS = 10_000;
+
+function safeProjectTitle(projectTitle: string) {
+  return (
+    projectTitle
+      .normalize("NFKC")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "earth-story"
+  );
+}
+
+function downloadArchive(
+  filename: string,
+  files: Record<string, Uint8Array>,
+): number {
+  const names = Object.keys(files);
+  if (!names.length) return 0;
+  const href = URL.createObjectURL(
+    new Blob([zipSync(files)], { type: "application/zip" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(href), 1_000);
+  return names.length;
+}
+
+function decodeDataUrl(dataUrl: string): Uint8Array {
+  const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  return Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+}
 
 async function waitForMap(map: HTMLElement): Promise<void> {
   if (map.dataset.mapReady === "true") return;
@@ -56,7 +90,8 @@ export async function captureMapSnapshots(
         map
           ?.querySelector<HTMLElement>(".maplibregl-ctrl-attrib")
           ?.innerText.trim() ?? "";
-      const footerHeight = attribution ? 32 : 0;
+      const ratio = first.width / (first.clientWidth || first.width);
+      const footerHeight = attribution ? Math.round(32 * ratio) : 0;
       output.height = first.height + footerHeight;
       const context = output.getContext("2d");
       if (!context) continue;
@@ -66,13 +101,13 @@ export async function captureMapSnapshots(
         context.fillStyle = "rgba(255,255,255,.92)";
         context.fillRect(0, first.height, output.width, footerHeight);
         context.fillStyle = "#443f3f";
-        context.font = "12px system-ui, sans-serif";
+        context.font = `${Math.round(12 * ratio)}px system-ui, sans-serif`;
         context.textBaseline = "middle";
         context.fillText(
           attribution.slice(0, 180),
-          12,
+          Math.round(12 * ratio),
           first.height + footerHeight / 2,
-          output.width - 24,
+          output.width - Math.round(24 * ratio),
         );
       }
       snapshots[id] = output.toDataURL("image/png");
@@ -88,22 +123,20 @@ export async function downloadMapSnapshots(
   root: ParentNode = document,
 ): Promise<number> {
   const snapshots = await captureMapSnapshots(root);
-  const safeTitle =
-    projectTitle
-      .normalize("NFKC")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "earth-story";
-  for (const [chapterId, dataUrl] of Object.entries(snapshots)) {
-    const anchor = document.createElement("a");
-    anchor.href = dataUrl;
-    anchor.download = `${safeTitle}-${chapterId}.png`;
-    anchor.click();
-  }
-  return Object.keys(snapshots).length;
+  const safeTitle = safeProjectTitle(projectTitle);
+  return downloadArchive(
+    `${safeTitle}-map-images.zip`,
+    Object.fromEntries(
+      Object.entries(snapshots).map(([chapterId, dataUrl]) => [
+        `${safeTitle}-${chapterId}.png`,
+        decodeDataUrl(dataUrl),
+      ]),
+    ),
+  );
 }
 
 function captureMimeType() {
+  if (typeof MediaRecorder === "undefined") return undefined;
   return [
     "video/mp4;codecs=avc1",
     "video/mp4",
@@ -117,22 +150,19 @@ export async function downloadAnimatedMapCaptures(
   durationMs = 6_000,
   root: ParentNode = document,
 ): Promise<{ count: number; format: "mp4" | "webm" }> {
+  if (typeof HTMLCanvasElement.prototype.captureStream !== "function")
+    throw new Error("This browser cannot record animated map captures.");
   const mimeType = captureMimeType();
-  if (!mimeType || typeof MediaRecorder === "undefined")
+  if (!mimeType)
     throw new Error("This browser cannot record animated map captures.");
   const format = mimeType.includes("mp4") ? "mp4" : "webm";
-  const safeTitle =
-    projectTitle
-      .normalize("NFKC")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "earth-story";
+  const safeTitle = safeProjectTitle(projectTitle);
   const sections = [
     ...root.querySelectorAll<HTMLElement>(
       ".story-chapter--map, .story-chapter--scrolly, .story-chapter--flyover",
     ),
   ];
-  let count = 0;
+  const captures: Record<string, Uint8Array> = {};
   for (const section of sections) {
     const map = section.querySelector<HTMLElement>(".story-map");
     if (map) await waitForMap(map);
@@ -155,23 +185,28 @@ export async function downloadAnimatedMapCaptures(
         reject(new Error("Animated map recording failed."));
       recorder.onstop = () => resolve();
     });
-    section
-      .querySelectorAll<HTMLButtonElement>(".story-map__time button")
-      .forEach((button) => {
-        if (button.textContent?.trim() === "Play") button.click();
-      });
-    recorder.start(250);
-    await new Promise((resolve) => window.setTimeout(resolve, durationMs));
-    recorder.stop();
-    await stopped;
-    stream.getTracks().forEach((track) => track.stop());
-    const href = URL.createObjectURL(new Blob(chunks, { type: mimeType }));
-    const anchor = document.createElement("a");
-    anchor.href = href;
-    anchor.download = `${safeTitle}-${chapterId}.${format}`;
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(href), 1_000);
-    count += 1;
+    try {
+      section
+        .querySelectorAll<HTMLButtonElement>(".story-map__time button")
+        .forEach((button) => {
+          if (button.textContent?.trim() === "Play") button.click();
+        });
+      recorder.start(250);
+      await new Promise((resolve) => window.setTimeout(resolve, durationMs));
+      if (recorder.state !== "inactive") recorder.stop();
+      await stopped;
+    } finally {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    if (!chunks.length) continue;
+    const blob = new Blob(chunks, { type: mimeType });
+    if (!blob.size) continue;
+    captures[`${safeTitle}-${chapterId}.${format}`] = new Uint8Array(
+      await blob.arrayBuffer(),
+    );
   }
-  return { count, format };
+  return {
+    count: downloadArchive(`${safeTitle}-animated-maps.zip`, captures),
+    format,
+  };
 }

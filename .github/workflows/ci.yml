@@ -25,6 +25,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -38,6 +40,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -49,11 +53,15 @@ jobs:
         run: node scripts/install-pixi.mjs
       - name: Load every native conversion capability
         run: yarn conversion:smoke
+      - name: Convert a GPX trajectory end to end
+        run: node scripts/smoke-gpx-conversion.mjs
 
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22

@@ -208,6 +208,27 @@ describe("ProjectStore", () => {
     ).rejects.toThrow("changed on disk");
   });
 
+  it("does not allow simultaneous saves to overwrite each other", async () => {
+    const store = await createStore();
+    const opened = await store.create({ title: "Simultaneous edits" });
+    const results = await Promise.allSettled([
+      store.save(opened.id, {
+        ...opened,
+        metadata: { ...opened.metadata, title: "First editor" },
+      }),
+      store.save(opened.id, {
+        ...opened,
+        metadata: { ...opened.metadata, title: "Second editor" },
+      }),
+    ]);
+    expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(
+      1,
+    );
+    expect(results.filter(({ status }) => status === "rejected")).toHaveLength(
+      1,
+    );
+  });
+
   it("recovers an abandoned write lock", async () => {
     const store = await createStore();
     const project = await store.create({ title: "Recovered story" });

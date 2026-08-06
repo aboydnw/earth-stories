@@ -104,7 +104,10 @@ Raw files are inspected, prepared, and verified by a local worker through the
 versioned `conversion/v1` JSON Schema contract. TypeScript and Pydantic models
 are generated from that single source and tested on both sides. The loopback
 service owns job state and path containment; the worker receives no general
-filesystem or network authority.
+network inputs from the job protocol and only receives validated project-owned
+input and output paths. The worker currently runs with the host process's OS
+permissions; OS-level filesystem sandboxing and network denial are not yet
+enforced.
 
 Pixi provisions capability environments lazily: core, vector, raster,
 multidimensional raster, and point cloud. DuckDB Spatial is the primary vector

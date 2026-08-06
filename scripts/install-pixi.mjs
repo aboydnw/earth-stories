@@ -21,10 +21,6 @@ const artifacts = {
     "pixi-x86_64-apple-darwin.tar.gz",
     "4959ceeeb2580948445109da6b656e34f450e19566b3d9f6d28c55ce33fce6ce",
   ],
-  "linux-arm64": [
-    "pixi-aarch64-unknown-linux-musl.tar.gz",
-    "e7c9d7f128fe02d20b212c0ba9b8ab445907b415155b72ca93f3120e63a8fbb3",
-  ],
   "linux-x64": [
     "pixi-x86_64-unknown-linux-musl.tar.gz",
     "8e2ab7630f5bc1e8aa38d236842e20f565f7aa0834687e53670b7c86ba54c90f",

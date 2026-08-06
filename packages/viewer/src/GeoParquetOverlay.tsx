@@ -141,16 +141,17 @@ export function GeoParquetOverlay({
   const layers = useMemo<DeckLayer[]>(() => {
     if (!data) return [];
     const presentation = asset.presentation;
-    const filtered = presentation.filterProperty
-      ? {
-          ...data,
-          features: data.features.filter(
-            (feature) =>
-              String(feature.properties[presentation.filterProperty!]) ===
-              presentation.filterValue,
-          ),
-        }
-      : data;
+    const filtered =
+      presentation.filterProperty && presentation.filterValue !== null
+        ? {
+            ...data,
+            features: data.features.filter(
+              (feature) =>
+                String(feature.properties[presentation.filterProperty!]) ===
+                presentation.filterValue,
+            ),
+          }
+        : data;
     const featureColor = (feature: (typeof data.features)[number]) => {
       const property = presentation.symbolProperty;
       const category = property

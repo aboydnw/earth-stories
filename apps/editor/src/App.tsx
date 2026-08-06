@@ -122,6 +122,9 @@ export function App() {
   const [multidimChoices, setMultidimChoices] = useState<
     Record<string, MultidimChoice>
   >({});
+  const [categoryColorsDraft, setCategoryColorsDraft] = useState<string | null>(
+    null,
+  );
   const chapterAddRef = useRef<HTMLDivElement>(null);
 
   const refreshProjects = async () => setProjects(await listProjects());
@@ -228,6 +231,7 @@ export function App() {
           (source) => source.id === selectedChapter.sourceId,
         )
       : null;
+  useEffect(() => setCategoryColorsDraft(null), [selectedSource?.id]);
   const selectedPresentation = {
     ...presentation,
     ...selectedSource?.presentation,
@@ -381,6 +385,11 @@ export function App() {
     }
     changeProject((current) => ({
       ...current,
+      dataAssets: current.dataAssets.map((item) =>
+        item.preparedSourceId === source.id
+          ? { ...item, preparedSourceId: null }
+          : item,
+      ),
       sources: current.sources.filter((item) => item.id !== source.id),
     }));
   }
@@ -732,10 +741,24 @@ export function App() {
       });
       setConversionJobs((current) => ({ ...current, [asset.id]: started }));
       let job = started;
-      while (job.status === "queued" || job.status === "running") {
-        await new Promise((resolveWait) => setTimeout(resolveWait, 750));
-        job = await getConversionJob(job.id);
-        setConversionJobs((current) => ({ ...current, [asset.id]: job }));
+      const deadline = Date.now() + 30 * 60 * 1_000;
+      try {
+        while (job.status === "queued" || job.status === "running") {
+          if (Date.now() >= deadline)
+            throw new Error(
+              "The conversion is still running. Try preparing this source again later.",
+            );
+          await new Promise((resolveWait) => setTimeout(resolveWait, 750));
+          job = await getConversionJob(job.id);
+          setConversionJobs((current) => ({ ...current, [asset.id]: job }));
+        }
+      } catch (cause) {
+        setConversionJobs((current) => {
+          const next = { ...current };
+          delete next[asset.id];
+          return next;
+        });
+        throw cause;
       }
       const failure = [...job.events]
         .reverse()
@@ -831,11 +854,7 @@ export function App() {
       sizeBytes: null,
       delivery: "connected" as const,
     };
-    const discoveredKind = connectionDiscovery?.kind;
-    const resolvedKind =
-      discoveredKind && discoveredKind !== "unknown"
-        ? discoveredKind
-        : connectedKind;
+    const resolvedKind = connectedKind;
     const discoveredVariable = connectionDiscovery?.details.variables?.[0];
     const discoveredTimeDimension = discoveredVariable?.dimensions.find(
       (dimension) => dimension.toLowerCase() === "time",
@@ -2848,13 +2867,18 @@ export function App() {
                         <label>
                           Category colors
                           <input
-                            value={Object.entries(
-                              selectedPresentation.categoryColors,
-                            )
-                              .map(([value, color]) => `${value}=${color}`)
-                              .join(", ")}
+                            value={
+                              categoryColorsDraft ??
+                              Object.entries(
+                                selectedPresentation.categoryColors,
+                              )
+                                .map(([value, color]) => `${value}=${color}`)
+                                .join(", ")
+                            }
                             placeholder="forest=#2f7d32, water=#2878b5"
-                            onChange={(event) =>
+                            onBlur={() => setCategoryColorsDraft(null)}
+                            onChange={(event) => {
+                              setCategoryColorsDraft(event.target.value);
                               updateSelectedSource((source) => ({
                                 ...source,
                                 presentation: {
@@ -2878,8 +2902,8 @@ export function App() {
                                       }),
                                   ),
                                 },
-                              }))
-                            }
+                              }));
+                            }}
                           />
                           <small>
                             Use value=#rrggbb pairs separated by commas.
@@ -3012,13 +3036,18 @@ export function App() {
                         <label>
                           Raster category colors
                           <input
-                            value={Object.entries(
-                              selectedPresentation.categoryColors,
-                            )
-                              .map(([value, color]) => `${value}=${color}`)
-                              .join(", ")}
+                            value={
+                              categoryColorsDraft ??
+                              Object.entries(
+                                selectedPresentation.categoryColors,
+                              )
+                                .map(([value, color]) => `${value}=${color}`)
+                                .join(", ")
+                            }
                             placeholder="0=#2878b5, 1=#2f7d32"
-                            onChange={(event) =>
+                            onBlur={() => setCategoryColorsDraft(null)}
+                            onChange={(event) => {
+                              setCategoryColorsDraft(event.target.value);
                               updateSelectedSource((source) => ({
                                 ...source,
                                 presentation: {
@@ -3042,8 +3071,8 @@ export function App() {
                                       }),
                                   ),
                                 },
-                              }))
-                            }
+                              }));
+                            }}
                           />
                           <small>
                             Requires a rescale range. Use value=#rrggbb pairs.

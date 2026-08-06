@@ -225,22 +225,22 @@ export class ProjectStore {
   async save(id: string, value: unknown): Promise<StoryProject> {
     const project = storyProjectSchema.parse(value);
     if (project.id !== id) throw new Error("Project ID cannot be changed");
-    const current = await this.read(id);
-    if (project.metadata.updated !== current.metadata.updated) {
-      throw new Error(
-        "This story changed on disk after you opened it. Reopen the story before saving so those changes are not overwritten.",
-      );
-    }
-    const updated = storyProjectSchema.parse({
-      ...project,
-      metadata: {
-        ...project.metadata,
-        created: current.metadata.created,
-        updated: new Date().toISOString(),
-      },
+    return this.writeAtomicWithCheck(id, true, async () => {
+      const current = await this.read(id);
+      if (project.metadata.updated !== current.metadata.updated) {
+        throw new Error(
+          "This story changed on disk after you opened it. Reopen the story before saving so those changes are not overwritten.",
+        );
+      }
+      return storyProjectSchema.parse({
+        ...project,
+        metadata: {
+          ...project.metadata,
+          created: current.metadata.created,
+          updated: new Date().toISOString(),
+        },
+      });
     });
-    await this.writeAtomic(id, updated, true);
-    return updated;
   }
 
   async archive(id: string): Promise<void> {
@@ -389,6 +389,14 @@ export class ProjectStore {
     project: StoryProject,
     createBackup: boolean,
   ): Promise<void> {
+    await this.writeAtomicWithCheck(id, createBackup, async () => project);
+  }
+
+  private async writeAtomicWithCheck(
+    id: string,
+    createBackup: boolean,
+    projectFactory: () => Promise<StoryProject>,
+  ): Promise<StoryProject> {
     const projectDirectory = this.directory(id);
     const storyPath = join(projectDirectory, STORY_FILENAME);
     const lockPath = join(projectDirectory, ".earth-stories-write.lock");
@@ -399,6 +407,7 @@ export class ProjectStore {
     const lock = await this.acquireWriteLock(lockPath);
 
     try {
+      const project = await projectFactory();
       if (createBackup) {
         const backupDirectory = join(
           projectDirectory,
@@ -429,6 +438,7 @@ export class ProjectStore {
         await file.close();
       }
       await retryFileOperation(() => rename(temporaryPath, storyPath));
+      return project;
     } finally {
       await lock.close();
       await unlink(lockPath).catch(() => undefined);

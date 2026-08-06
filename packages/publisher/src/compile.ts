@@ -459,6 +459,7 @@ export function compileProject(input: unknown): PublicationManifest {
       (source.kind === "local-geojson" ||
         source.kind === "image" ||
         source.kind === "csv" ||
+        (source.kind === "copc" && !/^https?:\/\//i.test(source.locator)) ||
         (source.kind === "trajectory" &&
           !/^https?:\/\//i.test(source.locator))) &&
       source.delivery === "connected"

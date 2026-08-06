@@ -132,6 +132,7 @@ export class ConversionRuntime {
       conversionJobRequestSchema.parse(input);
     await this.provision(request.capability, request.requestId, onEvent);
     let buffered = "";
+    let parseFailure: unknown;
     await this.#run({
       executable: this.#pixi,
       args: [
@@ -145,16 +146,29 @@ export class ConversionRuntime {
       ],
       input: `${JSON.stringify(request)}\n`,
       onStdout: (chunk) => {
+        if (parseFailure) return;
         buffered += chunk;
         const lines = buffered.split("\n");
         buffered = lines.pop() ?? "";
-        for (const line of lines) {
-          if (line.trim())
-            onEvent(conversionJobEventSchema.parse(JSON.parse(line)));
+        try {
+          for (const line of lines) {
+            if (line.trim())
+              onEvent(conversionJobEventSchema.parse(JSON.parse(line)));
+          }
+        } catch (cause) {
+          parseFailure = cause;
         }
       },
     });
-    if (buffered.trim())
-      onEvent(conversionJobEventSchema.parse(JSON.parse(buffered)));
+    if (parseFailure) throw parseFailure;
+    if (buffered.trim()) {
+      try {
+        onEvent(conversionJobEventSchema.parse(JSON.parse(buffered)));
+      } catch (cause) {
+        throw new Error("The conversion worker returned an invalid event.", {
+          cause,
+        });
+      }
+    }
   }
 }

@@ -59,4 +59,17 @@ describe("ConversionRuntime", () => {
     });
     expect(events.filter((event) => event.type === "result")).toHaveLength(2);
   });
+
+  it("rejects malformed worker events instead of throwing from stdout", async () => {
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      repositoryRoot: "/repo",
+      ensureExecutable: async () => undefined,
+      run: async (command) => {
+        if (command.args[0] === "run") command.onStdout?.("not-json\n");
+      },
+    });
+
+    await expect(runtime.execute(request, () => undefined)).rejects.toThrow();
+  });
 });

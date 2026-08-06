@@ -35,6 +35,52 @@ export interface RemoteSourceDiscovery {
 }
 
 type RemoteFetcher = (input: string, init?: RequestInit) => Promise<Response>;
+const DISCOVERY_TIMEOUT_MS = 15_000;
+const MAX_METADATA_BYTES = 8 * 1024 * 1024;
+
+async function withDiscoveryTimeout<T>(
+  fetcher: RemoteFetcher,
+  input: string,
+  init: RequestInit,
+  consume: (response: Response) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DISCOVERY_TIMEOUT_MS);
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, controller.signal])
+    : controller.signal;
+  try {
+    return await consume(await fetcher(input, { ...init, signal }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readBounded(response: Response, maxBytes: number) {
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes)
+        throw new Error("Remote discovery response exceeded the size limit.");
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+  const output = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
 
 class AuthorizedPmtilesSource implements Source {
   constructor(
@@ -45,17 +91,22 @@ class AuthorizedPmtilesSource implements Source {
     return this.url;
   }
   async getBytes(offset: number, length: number) {
-    const response = await this.fetcher(this.url, {
-      headers: { range: `bytes=${offset}-${offset + length - 1}` },
-    });
-    if (!response.ok)
-      throw new Error(`PMTiles range request failed (${response.status}).`);
-    return {
-      data: await response.arrayBuffer(),
-      etag: response.headers.get("etag") ?? undefined,
-      expires: response.headers.get("expires") ?? undefined,
-      cacheControl: response.headers.get("cache-control") ?? undefined,
-    };
+    return withDiscoveryTimeout(
+      this.fetcher,
+      this.url,
+      { headers: { range: `bytes=${offset}-${offset + length - 1}` } },
+      async (response) => {
+        if (!response.ok)
+          throw new Error(`PMTiles range request failed (${response.status}).`);
+        const data = await readBounded(response, Math.max(length, 65_536));
+        return {
+          data: data.buffer as ArrayBuffer,
+          etag: response.headers.get("etag") ?? undefined,
+          expires: response.headers.get("expires") ?? undefined,
+          cacheControl: response.headers.get("cache-control") ?? undefined,
+        };
+      },
+    );
   }
 }
 
@@ -79,11 +130,19 @@ async function discoverPmtiles(url: string, fetcher: RemoteFetcher) {
 
 async function discoverZarr(url: URL, fetcher: RemoteFetcher) {
   const base = url.href.endsWith("/") ? url.href : `${url.href}/`;
-  const response = await fetcher(new URL(".zmetadata", base).href);
-  if (!response.ok) return { variables: [] };
-  const consolidated = (await response.json()) as {
-    metadata?: Record<string, unknown>;
-  };
+  const consolidated = await withDiscoveryTimeout(
+    fetcher,
+    new URL(".zmetadata", base).href,
+    {},
+    async (response) => {
+      if (!response.ok) return null;
+      const bytes = await readBounded(response, MAX_METADATA_BYTES);
+      return JSON.parse(new TextDecoder().decode(bytes)) as {
+        metadata?: Record<string, unknown>;
+      };
+    },
+  );
+  if (!consolidated) return { variables: [] };
   const metadata = consolidated.metadata ?? {};
   const variables = Object.entries(metadata).flatMap(([key, value]) => {
     if (!key.endsWith("/.zarray") || !value || typeof value !== "object")
@@ -148,16 +207,22 @@ export async function discoverRemoteSource(
       issues: [],
       details: {},
     };
-  const response = await fetcher(url.href, {
-    headers: { range: "bytes=0-16383", origin: "http://127.0.0.1:5173" },
-  });
-  await response.body?.cancel();
+  const response = await withDiscoveryTimeout(
+    fetcher,
+    url.href,
+    { headers: { range: "bytes=0-16383", origin: "http://127.0.0.1:5173" } },
+    async (value) => {
+      await value.body?.cancel();
+      return value;
+    },
+  );
   const contentType = response.headers.get("content-type");
   const detectedKind = detectKind(url, contentType);
   const contentRange = response.headers.get("content-range");
   const rangeSize = contentRange?.match(/\/(\d+)$/)?.[1];
   const contentLength = response.headers.get("content-length");
-  const sizeBytes = Number(rangeSize ?? contentLength);
+  const rawSize = rangeSize ?? contentLength;
+  const sizeBytes = rawSize === null ? Number.NaN : Number(rawSize);
   const corsHeader = response.headers.get("access-control-allow-origin");
   const cors = corsHeader === "*" || corsHeader?.includes("127.0.0.1") === true;
   const byteRanges =

@@ -36,6 +36,34 @@ describe("remote source discovery", () => {
     expect(result.details).toEqual({});
   });
 
+  it("reports an unknown size when no size headers are available", async () => {
+    const result = await discoverRemoteSource(
+      "https://data.example/image.tif",
+      async () =>
+        new Response(null, {
+          status: 206,
+          headers: { "access-control-allow-origin": "*" },
+        }),
+    );
+    expect(result.sizeBytes).toBeNull();
+  });
+
+  it("rejects oversized Zarr metadata", async () => {
+    await expect(
+      discoverRemoteSource("https://data.example/climate.zarr", async (url) =>
+        String(url).endsWith(".zmetadata")
+          ? new Response(new Uint8Array(8 * 1024 * 1024 + 1), { status: 200 })
+          : new Response(null, {
+              status: 200,
+              headers: { "access-control-allow-origin": "*" },
+            }),
+      ),
+    ).resolves.toMatchObject({
+      issues: expect.arrayContaining(["Zarr metadata could not be read."]),
+      details: {},
+    });
+  });
+
   it("discovers consolidated Zarr variables and dimensions", async () => {
     const result = await discoverRemoteSource(
       "https://data.example/climate.zarr",

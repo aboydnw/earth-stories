@@ -11,6 +11,27 @@ from typing import Any
 from models import EarthStoriesConversionProtocolV1
 
 PROTOCOL = "earth-stories/conversion/v1"
+VERSION_TIMEOUT_SECONDS = 60
+TOOL_TIMEOUT_SECONDS = 900
+
+
+class ToolTimeoutError(RuntimeError):
+    pass
+
+
+def capture_tool(
+    command: list[str], *, check: bool = False, timeout: int = TOOL_TIMEOUT_SECONDS
+) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            command,
+            check=check,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise ToolTimeoutError(f"Timed out running {command[0]}") from error
 
 
 def emit(value: dict[str, Any]) -> None:
@@ -18,7 +39,7 @@ def emit(value: dict[str, Any]) -> None:
 
 
 def tool_version(command: list[str]) -> str:
-    result = subprocess.run(command, check=True, capture_output=True, text=True)
+    result = capture_tool(command, check=True, timeout=VERSION_TIMEOUT_SECONDS)
     lines = [
         line.strip()
         for line in (result.stdout or result.stderr).splitlines()
@@ -28,7 +49,7 @@ def tool_version(command: list[str]) -> str:
 
 
 def run_tool(command: list[str]) -> None:
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = capture_tool(command)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         raise RuntimeError(detail or f"Tool exited with status {result.returncode}")
@@ -70,9 +91,7 @@ def inspect_csv(path: Path) -> dict[str, Any]:
 
 
 def inspect_gdal(path: Path) -> tuple[dict[str, Any], list[dict[str, str]]]:
-    result = subprocess.run(
-        ["gdalinfo", "-json", str(path)], capture_output=True, text=True
-    )
+    result = capture_tool(["gdalinfo", "-json", str(path)])
     if result.returncode == 0:
         info = json.loads(result.stdout)
         return (
@@ -91,13 +110,11 @@ def inspect_gdal(path: Path) -> tuple[dict[str, Any], list[dict[str, str]]]:
                 "coordinateSystem": info.get("coordinateSystem"),
                 "metadata": info.get("metadata", {}),
             },
-            [{"name": "GDAL", "version": tool_version(["gdalinfo", "--version"]) }],
+            [{"name": "GDAL", "version": tool_version(["gdalinfo", "--version"])}],
         )
-    vector = subprocess.run(
+    vector = capture_tool(
         ["ogrinfo", "-ro", "-so", "-al", "-json", str(path)],
         check=True,
-        capture_output=True,
-        text=True,
     )
     info = json.loads(vector.stdout)
     return (
@@ -106,7 +123,7 @@ def inspect_gdal(path: Path) -> tuple[dict[str, Any], list[dict[str, str]]]:
             "driver": info.get("driverShortName"),
             "layers": info.get("layers", []),
         },
-        [{"name": "GDAL", "version": tool_version(["ogrinfo", "--version"]) }],
+        [{"name": "GDAL", "version": tool_version(["ogrinfo", "--version"])}],
     )
 
 
@@ -174,7 +191,9 @@ def prepare_multidim(
             dimension_names[-2] if len(dimension_names) >= 2 else None,
         )
         if not x_dimension or not y_dimension or x_dimension == y_dimension:
-            raise ValueError("The selected variable does not have two spatial dimensions")
+            raise ValueError(
+                "The selected variable does not have two spatial dimensions"
+            )
         indexes = {
             dimension: int(selections.get(dimension, 0))
             for dimension in dimension_names
@@ -182,9 +201,7 @@ def prepare_multidim(
         }
         for dimension, index in indexes.items():
             if index < 0 or index >= data.sizes[dimension]:
-                raise ValueError(
-                    f"Selection {index} is outside dimension {dimension}"
-                )
+                raise ValueError(f"Selection {index} is outside dimension {dimension}")
         data = data.isel(indexes).squeeze(drop=True).transpose(y_dimension, x_dimension)
         values = np.asarray(data.values)
         if values.ndim != 2:
@@ -226,9 +243,7 @@ def prepare_multidim(
         ) as destination:
             destination.write(values, 1)
             destination.set_band_description(1, variable_name)
-        run_tool(
-            ["rio", "cogeo", "create", str(temporary), str(output), "--quiet"]
-        )
+        run_tool(["rio", "cogeo", "create", str(temporary), str(output), "--quiet"])
         run_tool(["rio", "cogeo", "validate", str(output)])
     finally:
         dataset.close()
@@ -243,7 +258,9 @@ def prepare_multidim(
 def prepare_raster(path: Path, output: Path) -> list[dict[str, str]]:
     run_tool(["rio", "cogeo", "create", str(path), str(output), "--quiet"])
     run_tool(["rio", "cogeo", "validate", str(output)])
-    return [{"name": "rio-cogeo", "version": tool_version(["rio", "cogeo", "--version"])}]
+    return [
+        {"name": "rio-cogeo", "version": tool_version(["rio", "cogeo", "--version"])}
+    ]
 
 
 def prepare_vector(
@@ -273,15 +290,17 @@ def prepare_vector(
             track["path"].append([geometry.GetX(), geometry.GetY()])
             timestamp = feature.GetField("time")
             if timestamp:
-                normalized = (
-                    str(timestamp).replace("/", "-").replace("Z", "+00:00")
-                )
+                normalized = str(timestamp).replace("/", "-").replace("Z", "+00:00")
                 if normalized.endswith(("+00", "-00")):
                     normalized = f"{normalized}:00"
-                track["timestamps"].append(datetime.fromisoformat(normalized).timestamp())
+                track["timestamps"].append(
+                    datetime.fromisoformat(normalized).timestamp()
+                )
             else:
                 track["timestamps"].append(float(len(track["path"]) - 1))
-        prepared_tracks = [track for track in tracks.values() if len(track["path"]) >= 2]
+        prepared_tracks = [
+            track for track in tracks.values() if len(track["path"]) >= 2
+        ]
         if not prepared_tracks:
             raise ValueError("The GPX file has no track with at least two points")
         output.write_text(json.dumps({"tracks": prepared_tracks}), encoding="utf-8")
@@ -345,11 +364,16 @@ def prepare_vector(
                 )
             finally:
                 connection.close()
-            return ([{"name": "DuckDB Spatial", "version": duckdb.__version__}], warnings)
+            return (
+                [{"name": "DuckDB Spatial", "version": duckdb.__version__}],
+                warnings,
+            )
         except ValueError:
             raise
         except Exception as error:
-            warnings.append(f"DuckDB Spatial could not prepare this file; GDAL fallback was used ({error}).")
+            warnings.append(
+                f"DuckDB Spatial could not prepare this file; GDAL fallback was used ({error})."
+            )
 
     command = ["ogr2ogr", "-f", "Parquet", str(output), str(path), "-makevalid"]
     encoding = options.get("encoding")
@@ -376,14 +400,11 @@ def prepare_vector(
 
 
 def prepare_pointcloud(path: Path, output: Path) -> list[dict[str, str]]:
-    run_tool(
-        ["pdal", "translate", str(path), str(output), "-w", "writers.copc"]
-    )
+    run_tool(["pdal", "translate", str(path), str(output), "-w", "writers.copc"])
     return [{"name": "PDAL", "version": tool_version(["pdal", "--version"])}]
 
 
-def main() -> None:
-    raw = json.loads(sys.stdin.readline())
+def main(raw: dict[str, Any]) -> None:
     request = EarthStoriesConversionProtocolV1.model_validate(raw).root
     request_id = request.requestId
     path = Path(request.input.path)
@@ -434,12 +455,19 @@ def main() -> None:
         elif request.capability.value == "multidim":
             tools = prepare_multidim(path, output_path, options)
         else:
-            raise ValueError(f"Prepare is not implemented for {request.capability.value}")
+            raise ValueError(
+                f"Prepare is not implemented for {request.capability.value}"
+            )
         output = {"path": str(output_path), "sizeBytes": output_path.stat().st_size}
     else:
         if request.capability.value == "raster":
             run_tool(["rio", "cogeo", "validate", str(path)])
-            tools = [{"name": "rio-cogeo", "version": tool_version(["rio", "cogeo", "--version"])}]
+            tools = [
+                {
+                    "name": "rio-cogeo",
+                    "version": tool_version(["rio", "cogeo", "--version"]),
+                }
+            ]
         elif not path.is_file() or path.stat().st_size == 0:
             raise ValueError("Prepared output is missing or empty")
         output = {"valid": True, "sizeBytes": path.stat().st_size}
@@ -458,14 +486,27 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    raw: dict[str, Any] = {}
     try:
-        main()
+        raw = json.loads(sys.stdin.readline())
     except Exception as error:
-        request_id = "unknown"
-        try:
-            request_id = str(raw.get("requestId", "unknown"))
-        except Exception:
-            pass
+        emit(
+            {
+                "protocol": PROTOCOL,
+                "requestId": "unknown",
+                "type": "failure",
+                "status": "failed",
+                "code": "invalid-request",
+                "message": str(error),
+                "retryable": False,
+                "details": {},
+            }
+        )
+        raise SystemExit(1) from error
+    try:
+        main(raw)
+    except Exception as error:
+        request_id = str(raw.get("requestId") or "unknown")
         emit(
             {
                 "protocol": PROTOCOL,
@@ -474,8 +515,8 @@ if __name__ == "__main__":
                 "status": "failed",
                 "code": "worker-error",
                 "message": str(error),
-                "retryable": False,
+                "retryable": isinstance(error, ToolTimeoutError),
                 "details": {},
             }
         )
-        raise SystemExit(1)
+        raise SystemExit(1) from error
