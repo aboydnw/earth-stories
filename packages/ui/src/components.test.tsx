@@ -55,6 +55,25 @@ describe("shared product controls", () => {
     expect(screen.getByText("The address is not valid.")).toBeTruthy();
   });
 
+  it("passes native field state through without discarding caller semantics", () => {
+    product(
+      <FormField label="Dataset URL" hint="Use HTTPS." required>
+        <TextInput
+          aria-describedby="external-help"
+          aria-invalid
+          data-testid="dataset-url"
+        />
+      </FormField>,
+    );
+    const input = screen.getByTestId("dataset-url");
+    expect(input.getAttribute("required")).not.toBeNull();
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")?.split(" ")).toEqual([
+      "external-help",
+      `${input.id}-hint`,
+    ]);
+  });
+
   it("gives icon-only actions an accessible name", () => {
     product(<IconButton label="Remove source">×</IconButton>);
     expect(screen.getByRole("button", { name: "Remove source" })).toBeTruthy();

@@ -417,7 +417,7 @@ export function PublishPanel({
             <ProgressPresentation
               stage="verifying"
               title={busyLabel}
-              detail="The previous publication remains available until this build succeeds."
+              detail="The last successful publication remains available while this operation runs."
             />
           </div>
         ) : null}

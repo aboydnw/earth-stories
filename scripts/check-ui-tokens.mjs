@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
-import { extname, join, relative } from "node:path";
+import { extname, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const root = new URL("../", import.meta.url);
 const exceptions = JSON.parse(
@@ -7,7 +8,7 @@ const exceptions = JSON.parse(
 );
 
 async function filesUnder(path) {
-  const absolute = new URL(`${path}/`, root).pathname;
+  const absolute = fileURLToPath(new URL(`${path}/`, root));
   const output = [];
   async function visit(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -29,7 +30,9 @@ const productFiles = [
 const violations = [];
 for (const path of productFiles) {
   const source = await readFile(path, "utf8");
-  const file = relative(new URL(".", root).pathname, path);
+  const file = relative(fileURLToPath(new URL(".", root)), path)
+    .split(sep)
+    .join("/");
   for (const value of source.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/gi) ?? []) {
     const allowed = exceptions.some(
       (entry) =>
@@ -39,7 +42,11 @@ for (const path of productFiles) {
     if (!allowed)
       violations.push(`${file}: unapproved interface color ${value}`);
   }
-  if (/z-index:\s*-?\d+/i.test(source))
+  if (
+    /(?:z-index\s*:\s*-?\d+|\bzIndex\s*(?:=|:)\s*(?:\{\s*)?["']?-?\d+)/i.test(
+      source,
+    )
+  )
     violations.push(`${file}: use the documented z-index variables`);
 }
 

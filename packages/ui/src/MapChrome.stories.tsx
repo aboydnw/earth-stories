@@ -42,8 +42,12 @@ export const WithoutLiveMap: Story = {
         </Text>
       </Box>
       <Stack position="absolute" right="4" top="4" zIndex="mapControl" gap="2">
-        <Button variant="surface">+</Button>
-        <Button variant="surface">−</Button>
+        <Button variant="surface" aria-label="Zoom in">
+          +
+        </Button>
+        <Button variant="surface" aria-label="Zoom out">
+          −
+        </Button>
       </Stack>
       <Flex
         position="absolute"

@@ -14,6 +14,7 @@ type FieldControl = ReactElement<{
   id?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
+  required?: boolean;
 }>;
 
 export function FormField({
@@ -33,14 +34,18 @@ export function FormField({
   const controlId = children.props.id ?? generatedId;
   const hintId = hint ? `${controlId}-hint` : undefined;
   const errorId = error ? `${controlId}-error` : undefined;
+  const describedBy = [children.props["aria-describedby"], hintId, errorId]
+    .filter(Boolean)
+    .join(" ");
   return (
     <Field.Root required={required} invalid={Boolean(error)}>
       <Field.Label htmlFor={controlId}>{label}</Field.Label>
       {cloneElement(children, {
         id: controlId,
-        "aria-invalid": Boolean(error) || undefined,
-        "aria-describedby":
-          [hintId, errorId].filter(Boolean).join(" ") || undefined,
+        required: required || children.props.required || undefined,
+        "aria-invalid":
+          Boolean(error) || children.props["aria-invalid"] || undefined,
+        "aria-describedby": describedBy || undefined,
       })}
       {hint ? <Field.HelperText id={hintId}>{hint}</Field.HelperText> : null}
       {error ? <Field.ErrorText id={errorId}>{error}</Field.ErrorText> : null}
@@ -109,7 +114,8 @@ export function CheckboxField({
   label: ReactNode;
   hint?: ReactNode;
 }) {
-  const id = props.id ?? useId();
+  const generatedId = useId();
+  const id = props.id ?? generatedId;
   return (
     <label className="es-checkbox" htmlFor={id}>
       <input {...props} id={id} type="checkbox" />
