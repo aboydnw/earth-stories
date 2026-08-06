@@ -40,6 +40,10 @@ export const publicationAssetSchema = z.object({
     colormap: z.enum(["viridis", "magma", "terrain", "grayscale"]),
     legendTitle: z.string(),
     legendVisible: z.boolean(),
+    symbolProperty: z.string().nullable(),
+    categoryColors: z.record(z.string(), z.string().regex(/^#[0-9a-f]{6}$/i)),
+    filterProperty: z.string().nullable(),
+    filterValue: z.string().nullable(),
   }),
   zarr: z
     .object({

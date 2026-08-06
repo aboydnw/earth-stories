@@ -17,7 +17,11 @@ import {
   type ExportFormat,
   type PublicationPreflight,
 } from "./api";
-import { captureMapSnapshots } from "./captureSnapshots";
+import {
+  captureMapSnapshots,
+  downloadAnimatedMapCaptures,
+  downloadMapSnapshots,
+} from "./captureSnapshots";
 
 interface Props {
   open: boolean;
@@ -79,6 +83,9 @@ export function PublishPanel({
   const [result, setResult] = useState<string | null>(null);
   const [snippet, setSnippet] = useState("");
   const [publicationUrl, setPublicationUrl] = useState("");
+  const [busyLabel, setBusyLabel] = useState(
+    "Building and validating the latest publication…",
+  );
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -137,6 +144,7 @@ export function PublishPanel({
     setLoading(true);
     setError(null);
     setResult(null);
+    setBusyLabel("Building and validating the latest publication…");
     try {
       const saved = await onBeforeExport();
       if (!saved) return;
@@ -302,6 +310,66 @@ export function PublishPanel({
             </ActionButton>
           ))}
         </div>
+        <ActionButton
+          variant="surface"
+          className="chapter-image-export"
+          disabled={loading}
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            setResult(null);
+            setBusyLabel("Capturing attributed chapter images…");
+            void downloadMapSnapshots(project.metadata.title)
+              .then((count) =>
+                setResult(
+                  count
+                    ? `Downloaded ${count} attributed chapter image${count === 1 ? "" : "s"}`
+                    : "No ready map chapters could be captured.",
+                ),
+              )
+              .catch((cause: unknown) =>
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Chapter images could not be captured.",
+                ),
+              )
+              .finally(() => setLoading(false));
+          }}
+        >
+          <DownloadSimple size={18} /> Download attributed chapter images
+        </ActionButton>
+        <ActionButton
+          variant="surface"
+          className="chapter-image-export"
+          disabled={loading}
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            setResult(null);
+            setBusyLabel(
+              "Recording animated map chapters. This takes a few seconds for each chapter…",
+            );
+            void downloadAnimatedMapCaptures(project.metadata.title)
+              .then(({ count, format }) =>
+                setResult(
+                  count
+                    ? `Downloaded ${count} animated ${format.toUpperCase()} chapter capture${count === 1 ? "" : "s"}.`
+                    : "No ready map chapters could be recorded.",
+                ),
+              )
+              .catch((cause: unknown) =>
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Animated chapter captures could not be recorded.",
+                ),
+              )
+              .finally(() => setLoading(false));
+          }}
+        >
+          <DownloadSimple size={18} /> Record animated map chapters
+        </ActionButton>
         <label className="publication-url">
           Deployed publication URL{" "}
           <input
@@ -337,7 +405,7 @@ export function PublishPanel({
         ) : null}
         {loading ? (
           <div className="publish-progress">
-            <span /> Building and validating the latest publication…
+            <span /> {busyLabel}
           </div>
         ) : null}
       </section>

@@ -130,10 +130,27 @@ const config = defineConfig({
           subtle: { value: "rgba(207,63,2,.18)" },
         },
         status: {
-          success: { fg: { value: "#236637" }, subtle: { value: "#EAF5ED" } },
-          warning: { fg: { value: "#79551A" }, subtle: { value: "#FFF4D8" } },
-          danger: { fg: { value: "#A12E0A" }, subtle: { value: "#FFF0EA" } },
-          info: { fg: { value: "#315F75" }, subtle: { value: "#EAF4F8" } },
+          success: {
+            fg: { value: "#236637" },
+            subtle: { value: "#EAF5ED" },
+            border: { value: "#B8DCC1" },
+          },
+          warning: {
+            fg: { value: "#79551A" },
+            subtle: { value: "#FFF4D8" },
+            border: { value: "#E8CE91" },
+          },
+          danger: {
+            fg: { value: "#A12E0A" },
+            subtle: { value: "#FFF0EA" },
+            border: { value: "#E4B59F" },
+            hover: { value: "#842306" },
+          },
+          info: {
+            fg: { value: "#315F75" },
+            subtle: { value: "#EAF4F8" },
+            border: { value: "#B9D7E4" },
+          },
         },
       },
     },

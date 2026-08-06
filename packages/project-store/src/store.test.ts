@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, readdir } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -59,6 +66,7 @@ describe("ProjectStore", () => {
     expect((await store.create({ title: "Example Antakya" })).id).toBe(
       "story-example-antakya",
     );
+    expect((await store.create({ title: "CON" })).id).toBe("con-story");
   });
 
   it("archives a project outside the active workspace", async () => {
@@ -123,10 +131,117 @@ describe("ProjectStore", () => {
       "field notes.csv",
       new TextEncoder().encode("label,value\nb,3\n"),
     );
+    const reserved = await store.importAsset(
+      project.id,
+      "NUL.geojson",
+      new TextEncoder().encode('{"type":"FeatureCollection","features":[]}'),
+    );
+    const trailing = await store.importAsset(
+      project.id,
+      "field-notes.",
+      new TextEncoder().encode("notes"),
+    );
     expect(first.path).toBe("assets/field-notes.csv");
     expect(second.path).toBe("assets/field-notes-2.csv");
+    expect(reserved.path).toBe("assets/NUL-file.geojson");
+    expect(trailing.path).toBe("assets/field-notes");
     expect(
       await readFile(store.assetPath(project.id, first.path), "utf8"),
     ).toContain("a,2");
+  });
+
+  it("streams large imports and removes partial files after a limit failure", async () => {
+    const store = await createStore();
+    const project = await store.create({ title: "Streaming assets" });
+    async function* chunks() {
+      yield new Uint8Array([1, 2, 3]);
+      yield new Uint8Array([4, 5, 6]);
+    }
+
+    await expect(
+      store.importAssetStream(project.id, "too-large.laz", chunks(), 5),
+    ).rejects.toThrow("local import limit");
+    expect(await readdir(join(store.root, project.id, "assets"))).toEqual([]);
+
+    const imported = await store.importAssetStream(
+      project.id,
+      "points.laz",
+      chunks(),
+      10,
+    );
+    expect(imported).toMatchObject({
+      path: "assets/points.laz",
+      sizeBytes: 6,
+    });
+  });
+
+  it("surfaces invalid project files in the workspace", async () => {
+    const store = await createStore();
+    const directory = join(store.root, "older-project");
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, "story.json"),
+      JSON.stringify({ schema: "earth-stories/project/v99" }),
+    );
+
+    expect(await store.list()).toContainEqual(
+      expect.objectContaining({
+        id: "older-project",
+        invalidReason: expect.stringContaining("Unsupported"),
+      }),
+    );
+  });
+
+  it("rejects stale editor state instead of overwriting a newer save", async () => {
+    const store = await createStore();
+    const opened = await store.create({ title: "Concurrent edits" });
+    await store.save(opened.id, {
+      ...opened,
+      metadata: { ...opened.metadata, title: "First save" },
+    });
+
+    await expect(
+      store.save(opened.id, {
+        ...opened,
+        metadata: { ...opened.metadata, title: "Stale save" },
+      }),
+    ).rejects.toThrow("changed on disk");
+  });
+
+  it("does not allow simultaneous saves to overwrite each other", async () => {
+    const store = await createStore();
+    const opened = await store.create({ title: "Simultaneous edits" });
+    const results = await Promise.allSettled([
+      store.save(opened.id, {
+        ...opened,
+        metadata: { ...opened.metadata, title: "First editor" },
+      }),
+      store.save(opened.id, {
+        ...opened,
+        metadata: { ...opened.metadata, title: "Second editor" },
+      }),
+    ]);
+    expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(
+      1,
+    );
+    expect(results.filter(({ status }) => status === "rejected")).toHaveLength(
+      1,
+    );
+  });
+
+  it("recovers an abandoned write lock", async () => {
+    const store = await createStore();
+    const project = await store.create({ title: "Recovered story" });
+    const lockPath = join(store.root, project.id, ".earth-stories-write.lock");
+    await writeFile(lockPath, "abandoned\n");
+    const old = new Date(Date.now() - 5 * 60 * 1000);
+    await utimes(lockPath, old, old);
+
+    await expect(
+      store.save(project.id, {
+        ...project,
+        metadata: { ...project.metadata, title: "Recovered" },
+      }),
+    ).resolves.toMatchObject({ metadata: { title: "Recovered" } });
   });
 });

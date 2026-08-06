@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { PublicationManifest } from "@earth-stories/story-schema";
 import "./viewer.css";
@@ -25,12 +25,43 @@ export function StoryViewer({
   embed = false,
   theme,
 }: StoryViewerProps) {
+  const [readingProgress, setReadingProgress] = useState(0);
   const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
+  useEffect(() => {
+    if (embed) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const available =
+        document.documentElement.scrollHeight - window.innerHeight;
+      setReadingProgress(
+        available > 0
+          ? Math.min(1, Math.max(0, window.scrollY / available))
+          : 0,
+      );
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [embed]);
 
   return (
     <main
       className={`story-publication story-publication--${theme ?? manifest.publication.theme}${embed ? " story-publication--embed" : ""}`}
     >
+      {!embed ? (
+        <div className="story-reading-progress" aria-hidden="true">
+          <span style={{ transform: `scaleX(${readingProgress})` }} />
+        </div>
+      ) : null}
       {!embed ? (
         <header className="story-masthead">
           <p className="story-kicker">A geospatial field story</p>

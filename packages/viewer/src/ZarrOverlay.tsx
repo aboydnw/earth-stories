@@ -18,6 +18,7 @@ export function ZarrOverlay({
     zarr.Group<zarr.Readable> | zarr.Array<zarr.DataType, zarr.Readable> | null
   >(null);
   const [timeIndex, setTimeIndex] = useState(0);
+  const [playing, setPlaying] = useState(false);
   useEffect(
     () => setTimeIndex(0),
     [asset.id, asset.href, asset.zarr?.timesteps.length],
@@ -44,6 +45,17 @@ export function ZarrOverlay({
       active = false;
     };
   }, [asset.href, onError]);
+  useEffect(() => {
+    if (!playing || !asset.zarr || asset.zarr.timesteps.length < 2) return;
+    const timer = window.setInterval(
+      () =>
+        setTimeIndex((current) =>
+          current + 1 >= asset.zarr!.timesteps.length ? 0 : current + 1,
+        ),
+      650,
+    );
+    return () => window.clearInterval(timer);
+  }, [asset.zarr, playing]);
   const layers = useMemo(() => {
     if (!node || !asset.zarr) return [];
     const selection: Record<string, SliceInput> = { ...asset.zarr.selection };
@@ -95,7 +107,13 @@ export function ZarrOverlay({
         renderTile: (data) => ({
           renderPipeline: [
             { module: CreateTexture, props: { textureName: data.texture } },
-            { module: colorize(asset.presentation.colormap) },
+            {
+              module: colorize(
+                asset.presentation.colormap,
+                asset.presentation.categoryColors,
+                asset.presentation.rescale,
+              ),
+            },
           ],
         }),
         onError: (cause: unknown) =>
@@ -122,6 +140,9 @@ export function ZarrOverlay({
               onChange={(event) => setTimeIndex(Number(event.target.value))}
             />
           </label>
+          <button type="button" onClick={() => setPlaying((value) => !value)}>
+            {playing ? "Pause" : "Play"}
+          </button>
         </div>
       ) : null}
     </>

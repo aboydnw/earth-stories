@@ -643,6 +643,7 @@ __metadata:
     "@types/react": "npm:^19.1.10"
     "@types/react-dom": "npm:^19.1.7"
     "@vitejs/plugin-react": "npm:^5.0.2"
+    fflate: "npm:^0.8.2"
     react: "npm:^19.1.1"
     react-dom: "npm:^19.1.1"
     riffrec: "npm:^2.1.1"
@@ -676,6 +677,7 @@ __metadata:
   resolution: "@earth-stories/publisher@workspace:packages/publisher"
   dependencies:
     "@earth-stories/story-schema": "workspace:*"
+    pmtiles: "npm:^4.3.0"
     tsx: "npm:^4.20.5"
     undici: "npm:^7.16.0"
   languageName: unknown
@@ -733,7 +735,9 @@ __metadata:
     "@developmentseed/deck.gl-geotiff": "npm:^0.7.0"
     "@developmentseed/deck.gl-raster": "npm:^0.7.0"
     "@developmentseed/deck.gl-zarr": "npm:^0.7.0"
+    "@developmentseed/geotiff": "npm:^0.7.0"
     "@developmentseed/morecantile": "npm:^0.7.0"
+    "@developmentseed/proj": "npm:^0.7.0"
     "@duckdb/duckdb-wasm": "npm:^1.29.0"
     "@earth-stories/story-schema": "workspace:*"
     "@loaders.gl/core": "npm:^4.3.4"
@@ -746,6 +750,7 @@ __metadata:
     maplibre-gl: "npm:^5.7.1"
     maplibre-gl-lidar: "npm:^0.16.2"
     pmtiles: "npm:^4.4.1"
+    proj4: "npm:^2.19.10"
     react: "npm:^19.1.1"
     react-dom: "npm:^19.1.1"
     react-map-gl: "npm:^8.0.4"
@@ -6521,7 +6526,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"pmtiles@npm:^4.4.1":
+"pmtiles@npm:^4.3.0, pmtiles@npm:^4.4.1":
   version: 4.4.1
   resolution: "pmtiles@npm:4.4.1"
   dependencies:
@@ -6582,7 +6587,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"proj4@npm:>=2.20.8, proj4@npm:^2.20.8":
+"proj4@npm:>=2.20.8, proj4@npm:^2.19.10, proj4@npm:^2.20.8":
   version: 2.21.0
   resolution: "proj4@npm:2.21.0"
   dependencies:

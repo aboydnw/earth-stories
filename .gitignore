@@ -3,6 +3,9 @@ node_modules/
 dist/
 earth-stories-projects/
 .vite/
+.pixi/
+/.earth-stories/
+__pycache__/
 coverage/
 .feedback/
 storybook-static/

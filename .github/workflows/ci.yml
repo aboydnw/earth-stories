@@ -9,15 +9,71 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
+  conversion-lock:
+    name: Conversion lock (${{ matrix.platform }})
+    strategy:
+      matrix:
+        include:
+          - platform: linux-x64
+            runner: ubuntu-latest
+          - platform: macos-x64
+            runner: macos-15-intel
+          - platform: macos-arm64
+            runner: macos-14
+          - platform: windows-x64
+            runner: windows-latest
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install checksum-verified Pixi
+        run: node scripts/install-pixi.mjs
+      - name: Validate conversion lock
+        run: node scripts/check-conversion-lock.mjs
+
+  windows-verify:
+    name: Windows runtime and conversion tools
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: corepack enable
       - run: yarn install --immutable
+      - run: yarn typecheck
+      - run: yarn test
+      - name: Install checksum-verified Pixi
+        run: node scripts/install-pixi.mjs
+      - name: Load every native conversion capability
+        run: yarn conversion:smoke
+      - name: Convert a GPX trajectory end to end
+        run: node scripts/smoke-gpx-conversion.mjs
+
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - name: Verify generated conversion contracts
+        run: |
+          node scripts/install-pixi.mjs .earth-stories/bin/pixi
+          yarn contract:generate
+          .earth-stories/bin/pixi install -e contracts
+          .earth-stories/bin/pixi run -e contracts datamodel-codegen --input conversion/schema/conversion-v1.schema.json --input-file-type jsonschema --output conversion/worker/models.py --output-model-type pydantic_v2.BaseModel --target-python-version 3.12 --use-standard-collections --use-union-operator --disable-timestamp
+          git diff --exit-code -- conversion/schema/conversion-v1.schema.json conversion/worker/models.py
       - run: yarn check:independence
       - run: yarn check:ui
       - run: yarn format:check

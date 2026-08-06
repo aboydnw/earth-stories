@@ -126,6 +126,7 @@ const antakya: StoryProject = {
   },
   basemap,
   publication: { profile: "connected", theme: "cng" },
+  dataAssets: [],
   sources: [
     {
       id: "antakya-cog",
@@ -146,6 +147,10 @@ const antakya: StoryProject = {
         colormap: "viridis",
         legendTitle: "Aerial imagery",
         legendVisible: false,
+        symbolProperty: null,
+        categoryColors: {},
+        filterProperty: null,
+        filterValue: null,
       },
     },
   ],
@@ -188,6 +193,7 @@ const boundaries: StoryProject = {
   },
   basemap,
   publication: { profile: "connected", theme: "editorial" },
+  dataAssets: [],
   sources: [
     {
       id: "countries",
@@ -209,6 +215,10 @@ const boundaries: StoryProject = {
         colormap: "terrain",
         legendTitle: "Country boundaries",
         legendVisible: true,
+        symbolProperty: null,
+        categoryColors: {},
+        filterProperty: null,
+        filterValue: null,
       },
     },
   ],
@@ -253,6 +263,7 @@ const pointCloud: StoryProject = {
   },
   basemap,
   publication: { profile: "connected", theme: "cng" },
+  dataAssets: [],
   sources: [
     {
       id: "autzen",
@@ -276,6 +287,10 @@ const pointCloud: StoryProject = {
           colormap: "terrain" as const,
           legendTitle: "Lidar returns",
           legendVisible: false,
+          symbolProperty: null,
+          categoryColors: {},
+          filterProperty: null,
+          filterValue: null,
         },
       },
     },
@@ -333,6 +348,7 @@ const temporalFields: StoryProject = {
   },
   basemap,
   publication: { profile: "connected", theme: "cng" },
+  dataAssets: [],
   sources: [
     {
       id: "fields",
@@ -366,6 +382,10 @@ const temporalFields: StoryProject = {
         colormap: "terrain",
         legendTitle: "Field prediction",
         legendVisible: true,
+        symbolProperty: null,
+        categoryColors: {},
+        filterProperty: null,
+        filterValue: null,
       },
     },
   ],
@@ -401,6 +421,7 @@ const richMedia: StoryProject = {
   },
   basemap,
   publication: { profile: "connected", theme: "editorial" },
+  dataAssets: [],
   sources: [
     ...boundaries.sources,
     {
@@ -423,6 +444,10 @@ const richMedia: StoryProject = {
         colormap: "terrain",
         legendTitle: "States and provinces",
         legendVisible: true,
+        symbolProperty: null,
+        categoryColors: {},
+        filterProperty: null,
+        filterValue: null,
       },
     },
   ],

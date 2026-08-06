@@ -57,6 +57,35 @@ const hexOpacity = (hex: string, opacity: number) => {
   return `${hex}${alpha}`;
 };
 
+function categoryColor(
+  presentation: PublicationAsset["presentation"],
+): string | unknown[] {
+  if (!presentation.symbolProperty) return presentation.color;
+  const stops = Object.entries(presentation.categoryColors).flatMap(
+    ([value, color]) => [value, color],
+  );
+  return stops.length
+    ? [
+        "match",
+        ["to-string", ["get", presentation.symbolProperty]],
+        ...stops,
+        presentation.color,
+      ]
+    : presentation.color;
+}
+
+function featureFilter(
+  presentation: PublicationAsset["presentation"],
+): unknown[] | undefined {
+  return presentation.filterProperty && presentation.filterValue !== null
+    ? [
+        "==",
+        ["to-string", ["get", presentation.filterProperty]],
+        presentation.filterValue,
+      ]
+    : undefined;
+}
+
 function AssetLayer({
   asset,
   onError,
@@ -68,7 +97,10 @@ function AssetLayer({
   const [trajectory, setTrajectory] =
     useState<GeoJSON.FeatureCollection | null>(null);
   const [trajectoryProgress, setTrajectoryProgress] = useState(1);
+  const [trajectoryPlaying, setTrajectoryPlaying] = useState(false);
   const presentation = asset.presentation;
+  const dataColor = categoryColor(presentation);
+  const dataFilter = featureFilter(presentation);
   const assetUrl = useMemo(() => absoluteAssetUrl(asset.href), [asset.href]);
   useEffect(() => {
     let active = true;
@@ -152,6 +184,17 @@ function AssetLayer({
       }
     };
   }, [asset.kind, assetUrl, onError]);
+  useEffect(() => {
+    if (!trajectoryPlaying || asset.kind !== "trajectory") return;
+    const timer = window.setInterval(
+      () =>
+        setTrajectoryProgress((current) =>
+          current >= 1 ? 0.02 : Math.min(1, current + 0.01),
+        ),
+      50,
+    );
+    return () => window.clearInterval(timer);
+  }, [asset.kind, trajectoryPlaying]);
   const vectorSourceLayers = presentation.sourceLayer
     ? [presentation.sourceLayer]
     : pmtilesLayers;
@@ -225,16 +268,18 @@ function AssetLayer({
           <Layer
             id={`${asset.id}-fill`}
             type="fill"
+            filter={dataFilter as never}
             paint={{
-              "fill-color": presentation.color,
+              "fill-color": dataColor as never,
               "fill-opacity": presentation.opacity * 0.45,
             }}
           />
           <Layer
             id={`${asset.id}-line`}
             type="line"
+            filter={dataFilter as never}
             paint={{
-              "line-color": presentation.color,
+              "line-color": dataColor as never,
               "line-opacity": presentation.opacity,
               "line-width": asset.kind === "trajectory" ? 4 : 2,
             }}
@@ -242,9 +287,10 @@ function AssetLayer({
           <Layer
             id={`${asset.id}-points`}
             type="circle"
+            filter={dataFilter as never}
             paint={{
               "circle-radius": presentation.radius,
-              "circle-color": presentation.color,
+              "circle-color": dataColor as never,
               "circle-opacity": presentation.opacity,
               "circle-stroke-color": presentation.strokeColor,
               "circle-stroke-width": 1.5,
@@ -266,6 +312,12 @@ function AssetLayer({
                 }
               />
             </label>
+            <button
+              type="button"
+              onClick={() => setTrajectoryPlaying((playing) => !playing)}
+            >
+              {trajectoryPlaying ? "Pause" : "Play"}
+            </button>
           </div>
         ) : null}
       </>
@@ -300,8 +352,9 @@ function AssetLayer({
             id={`${asset.id}-${sourceLayer}-fill`}
             source-layer={sourceLayer}
             type="fill"
+            filter={dataFilter as never}
             paint={{
-              "fill-color": presentation.color,
+              "fill-color": dataColor as never,
               "fill-opacity": presentation.opacity * 0.45,
             }}
           />,
@@ -310,8 +363,9 @@ function AssetLayer({
             id={`${asset.id}-${sourceLayer}-line`}
             source-layer={sourceLayer}
             type="line"
+            filter={dataFilter as never}
             paint={{
-              "line-color": presentation.strokeColor,
+              "line-color": dataColor as never,
               "line-opacity": presentation.opacity,
               "line-width": 1.5,
             }}
@@ -321,9 +375,10 @@ function AssetLayer({
             id={`${asset.id}-${sourceLayer}-point`}
             source-layer={sourceLayer}
             type="circle"
+            filter={dataFilter as never}
             paint={{
               "circle-radius": presentation.radius,
-              "circle-color": presentation.color,
+              "circle-color": dataColor as never,
               "circle-opacity": presentation.opacity,
               "circle-stroke-color": presentation.strokeColor,
             }}
@@ -442,10 +497,26 @@ export function MapChapter({
       ) : null}
       {asset?.presentation.legendVisible ? (
         <aside className="story-map__legend" aria-label="Map legend">
-          <span
-            style={{ background: hexOpacity(asset.presentation.color, 0.9) }}
-          />
-          {asset.presentation.legendTitle || asset.label}
+          <strong>{asset.presentation.legendTitle || asset.label}</strong>
+          {Object.keys(asset.presentation.categoryColors).length ? (
+            Object.entries(asset.presentation.categoryColors).map(
+              ([value, color]) => (
+                <span className="story-map__legend-item" key={value}>
+                  <i style={{ background: hexOpacity(color, 0.9) }} />
+                  {value}
+                </span>
+              ),
+            )
+          ) : (
+            <span className="story-map__legend-item">
+              <i
+                style={{
+                  background: hexOpacity(asset.presentation.color, 0.9),
+                }}
+              />
+              Data
+            </span>
+          )}
         </aside>
       ) : null}
       {error ? (

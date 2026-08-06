@@ -4,7 +4,6 @@ import {
   Copy,
   ArrowDown,
   ArrowUp,
-  ArrowClockwise,
   BookOpen,
   CaretDown,
   Database,
@@ -23,30 +22,42 @@ import {
 } from "@phosphor-icons/react";
 import { compileProject } from "@earth-stories/publisher/compile";
 import type {
+  ConversionCapability,
+  ProjectDataAsset,
   ProjectChapter,
   ProjectSource,
   StoryProject,
 } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
-import { ActionButton } from "@earth-stories/ui";
+import { ActionButton, BrandSpinner } from "@earth-stories/ui";
 import { reorderChapters } from "./chapterOrder";
 import {
   createProject,
   createExampleStory,
+  discoverSource,
   getExamples,
+  getConversionJob,
   importAsset,
   listProjects,
   openProject,
   saveProject,
+  startConversion,
   deleteProject,
   type ProjectSummary,
   type ExampleCatalog,
   type ExampleConnection,
+  type ConversionJobSnapshot,
+  type RemoteSourceDiscovery,
 } from "./api";
 import { PublishPanel } from "./PublishPanel";
+import { WorkspaceScreen } from "./WorkspaceScreen";
 
 type SaveState = "saved" | "changed" | "saving" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
+interface MultidimChoice {
+  variable: string;
+  selection: Record<string, number>;
+}
 const camera = {
   center: [0, 20] as [number, number],
   zoom: 1.5,
@@ -64,6 +75,10 @@ const presentation = {
   colormap: "viridis" as const,
   legendTitle: "",
   legendVisible: true,
+  symbolProperty: null,
+  categoryColors: {},
+  filterProperty: null,
+  filterValue: null,
 };
 const sourcePath = (source: ProjectSource) =>
   source.kind === "local-geojson" ||
@@ -88,6 +103,9 @@ export function App() {
   const [connectedKind, setConnectedKind] = useState<
     "cog" | "pmtiles" | "geoparquet" | "xyz" | "zarr" | "trajectory" | "copc"
   >("cog");
+  const [connectionDiscovery, setConnectionDiscovery] =
+    useState<RemoteSourceDiscovery | null>(null);
+  const [discoveringConnection, setDiscoveringConnection] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,6 +113,18 @@ export function App() {
   const [examples, setExamples] = useState<ExampleCatalog | null>(null);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("chapter");
   const [addChapterOpen, setAddChapterOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [conversionJobs, setConversionJobs] = useState<
+    Record<string, ConversionJobSnapshot>
+  >({});
+  const [multidimChoices, setMultidimChoices] = useState<
+    Record<string, MultidimChoice>
+  >({});
+  const [categoryColorsDraft, setCategoryColorsDraft] = useState<string | null>(
+    null,
+  );
   const chapterAddRef = useRef<HTMLDivElement>(null);
 
   const refreshProjects = async () => setProjects(await listProjects());
@@ -124,6 +154,15 @@ export function App() {
       document.removeEventListener("keydown", dismiss);
     };
   }, [addChapterOpen]);
+  useEffect(() => {
+    if (saveState !== "changed") return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [saveState]);
   function showError(cause: unknown) {
     setError(
       cause instanceof Error
@@ -192,6 +231,7 @@ export function App() {
           (source) => source.id === selectedChapter.sourceId,
         )
       : null;
+  useEffect(() => setCategoryColorsDraft(null), [selectedSource?.id]);
   const selectedPresentation = {
     ...presentation,
     ...selectedSource?.presentation,
@@ -239,18 +279,23 @@ export function App() {
       showError(cause);
     }
   }
-  async function handleDelete(item: ProjectSummary) {
-    if (
-      !window.confirm(
-        `Remove “${item.title}” from this workspace? It will be kept in Earth Stories’ local trash folder.`,
-      )
-    )
-      return;
+  function handleDelete(item: ProjectSummary) {
+    setDeleteTarget(item);
+    setDeleteError(null);
+  }
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeletePending(true);
     try {
-      await deleteProject(item.id);
+      await deleteProject(deleteTarget.id);
+      setDeleteTarget(null);
       await refreshProjects();
     } catch (cause) {
-      showError(cause);
+      setDeleteError(
+        cause instanceof Error ? cause.message : "Could not remove the story.",
+      );
+    } finally {
+      setDeletePending(false);
     }
   }
   async function handleExampleStory(id: string) {
@@ -288,6 +333,65 @@ export function App() {
     setActiveChapter(chapter.id);
     setInspectorMode("chapter");
     setAddChapterOpen(false);
+  }
+  function addChapterFromSource(source: ProjectSource) {
+    const id = crypto.randomUUID();
+    const title = source.label.replace(/\.[^.]+$/, "") || "New chapter";
+    const chapter: ProjectChapter =
+      source.kind === "image"
+        ? {
+            id,
+            type: "image",
+            title,
+            narrative: "",
+            sourceId: source.id,
+            alt: "",
+            caption: "",
+          }
+        : source.kind === "csv"
+          ? {
+              id,
+              type: "chart",
+              title,
+              narrative: "",
+              sourceId: source.id,
+              chartType: "bar",
+              xColumn: "label",
+              yColumn: "value",
+            }
+          : {
+              id,
+              type: "map",
+              title,
+              narrative: "",
+              sourceId: source.id,
+              camera,
+            };
+    addChapter(chapter);
+  }
+  function removeSource(source: ProjectSource) {
+    if (!project) return;
+    const usedBy = project.chapters.filter(
+      (chapter) =>
+        ("sourceId" in chapter && chapter.sourceId === source.id) ||
+        ("overlaySourceIds" in chapter &&
+          chapter.overlaySourceIds?.includes(source.id)),
+    );
+    if (usedBy.length) {
+      showError(
+        `“${source.label}” is used by ${usedBy.length} chapter${usedBy.length === 1 ? "" : "s"}. Remove it from those chapters first.`,
+      );
+      return;
+    }
+    changeProject((current) => ({
+      ...current,
+      dataAssets: current.dataAssets.map((item) =>
+        item.preparedSourceId === source.id
+          ? { ...item, preparedSourceId: null }
+          : item,
+      ),
+      sources: current.sources.filter((item) => item.id !== source.id),
+    }));
   }
   function addProse() {
     addChapter({
@@ -395,6 +499,38 @@ export function App() {
       const uploaded = await importAsset(project.id, file);
       const id = crypto.randomUUID();
       const extension = uploaded.filename.split(".").pop()?.toLowerCase();
+      const rawFormat: ProjectDataAsset["format"] | null =
+        extension === "tif" || extension === "tiff"
+          ? "geotiff"
+          : extension === "zip"
+            ? "shapefile-zip"
+            : extension === "nc" || extension === "netcdf"
+              ? "netcdf"
+              : extension === "h5" || extension === "hdf5"
+                ? "hdf5"
+                : extension === "las"
+                  ? "las"
+                  : extension === "laz"
+                    ? "laz"
+                    : extension === "gpx"
+                      ? "gpx"
+                      : null;
+      if (rawFormat) {
+        const dataAsset: ProjectDataAsset = {
+          id,
+          label: file.name,
+          path: uploaded.path,
+          format: rawFormat,
+          sizeBytes: uploaded.sizeBytes,
+          createdAt: new Date().toISOString(),
+          preparedSourceId: null,
+        };
+        changeProject((current) => ({
+          ...current,
+          dataAssets: [...current.dataAssets, dataAsset],
+        }));
+        return;
+      }
       let source: ProjectSource;
       let chapter: ProjectChapter;
       if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension ?? "")) {
@@ -510,34 +646,189 @@ export function App() {
           sourceId: id,
           camera,
         };
-      } else if (extension === "tif" || extension === "tiff") {
-        source = {
-          id,
-          kind: "cog",
-          label: file.name,
-          locator: uploaded.path,
-          attribution: null,
-          sizeBytes: uploaded.sizeBytes,
-          delivery: "included",
-        };
-        chapter = {
-          id: crypto.randomUUID(),
-          type: "map",
-          title: file.name.replace(/\.[^.]+$/, ""),
-          narrative: "",
-          sourceId: id,
-          camera,
-        };
       } else
         throw new Error(
-          "Use COG, GeoJSON, PMTiles, GeoParquet, CSV, PNG, JPEG, WebP, or GIF files.",
+          "Use GeoTIFF, zipped Shapefile, NetCDF, HDF5, LAS/LAZ, GPX, GeoJSON, PMTiles, GeoParquet, CSV, PNG, JPEG, WebP, or GIF files.",
         );
       changeProject((current) => ({
         ...current,
         sources: [...current.sources, source],
+        dataAssets:
+          source.kind === "csv" || source.kind === "local-geojson"
+            ? [
+                ...current.dataAssets,
+                {
+                  id: crypto.randomUUID(),
+                  label: file.name,
+                  path: uploaded.path,
+                  format: source.kind === "csv" ? "csv" : "geojson",
+                  sizeBytes: uploaded.sizeBytes,
+                  createdAt: new Date().toISOString(),
+                  preparedSourceId: null,
+                },
+              ]
+            : current.dataAssets,
         chapters: [...current.chapters, chapter],
       }));
       setActiveChapter(chapter.id);
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  async function runDataAssetJob(
+    asset: ProjectDataAsset,
+    operation: "inspect" | "prepare",
+  ) {
+    if (!project) return;
+    const capability: ConversionCapability =
+      asset.format === "geotiff"
+        ? "raster"
+        : asset.format === "netcdf" || asset.format === "hdf5"
+          ? "multidim"
+          : asset.format === "las" || asset.format === "laz"
+            ? "pointcloud"
+            : "vector";
+    try {
+      const inspection = conversionJobs[asset.id]?.events
+        .slice()
+        .reverse()
+        .find((event) => event.type === "result");
+      const longitudeColumn =
+        inspection?.type === "result" &&
+        typeof inspection.output.suggestedLongitudeColumn === "string"
+          ? inspection.output.suggestedLongitudeColumn
+          : undefined;
+      const latitudeColumn =
+        inspection?.type === "result" &&
+        typeof inspection.output.suggestedLatitudeColumn === "string"
+          ? inspection.output.suggestedLatitudeColumn
+          : undefined;
+      if (
+        operation === "prepare" &&
+        asset.format === "csv" &&
+        (!longitudeColumn || !latitudeColumn)
+      ) {
+        throw new Error(
+          "Inspect this CSV first. Earth Stories will detect common longitude and latitude column names before preparing it.",
+        );
+      }
+      if (
+        operation === "prepare" &&
+        capability === "multidim" &&
+        !multidimChoices[asset.id]?.variable
+      )
+        throw new Error(
+          "Inspect this file first, then choose the variable and dimension slice to prepare.",
+        );
+      const started = await startConversion(project.id, {
+        operation,
+        capability,
+        assetPath: asset.path,
+        options:
+          capability === "vector"
+            ? {
+                target: asset.format === "gpx" ? "trajectory" : "geoparquet",
+                ...(longitudeColumn && latitudeColumn
+                  ? { longitudeColumn, latitudeColumn, crs: "EPSG:4326" }
+                  : {}),
+              }
+            : capability === "multidim"
+              ? {
+                  variable: multidimChoices[asset.id]?.variable,
+                  selection: multidimChoices[asset.id]?.selection ?? {},
+                }
+              : undefined,
+      });
+      setConversionJobs((current) => ({ ...current, [asset.id]: started }));
+      let job = started;
+      const deadline = Date.now() + 30 * 60 * 1_000;
+      try {
+        while (job.status === "queued" || job.status === "running") {
+          if (Date.now() >= deadline)
+            throw new Error(
+              "The conversion is still running. Try preparing this source again later.",
+            );
+          await new Promise((resolveWait) => setTimeout(resolveWait, 750));
+          job = await getConversionJob(job.id);
+          setConversionJobs((current) => ({ ...current, [asset.id]: job }));
+        }
+      } catch (cause) {
+        setConversionJobs((current) => {
+          const next = { ...current };
+          delete next[asset.id];
+          return next;
+        });
+        throw cause;
+      }
+      const failure = [...job.events]
+        .reverse()
+        .find((event) => event.type === "failure");
+      if (failure?.type === "failure") throw new Error(failure.message);
+      if (operation !== "prepare") {
+        if (capability === "multidim") {
+          const result = [...job.events]
+            .reverse()
+            .find((event) => event.type === "result");
+          const variables =
+            result?.type === "result" && Array.isArray(result.output.variables)
+              ? result.output.variables
+              : [];
+          const firstVariable = variables.find(
+            (variable) =>
+              variable &&
+              typeof variable === "object" &&
+              typeof (variable as { name?: unknown }).name === "string" &&
+              Array.isArray((variable as { dimensions?: unknown }).dimensions),
+          ) as { name: string } | undefined;
+          if (firstVariable)
+            setMultidimChoices((current) => ({
+              ...current,
+              [asset.id]: current[asset.id] ?? {
+                variable: firstVariable.name,
+                selection: {},
+              },
+            }));
+        }
+        return;
+      }
+      const result = [...job.events]
+        .reverse()
+        .find((event) => event.type === "result");
+      if (result?.type !== "result" || typeof result.output.path !== "string")
+        throw new Error("The prepared data path was not returned");
+      const path = result.output.path;
+      const sourceId = crypto.randomUUID();
+      const common = {
+        id: sourceId,
+        label: asset.label.replace(/\.[^.]+$/, ""),
+        locator: path,
+        attribution: null,
+        sizeBytes:
+          typeof result.output.sizeBytes === "number"
+            ? result.output.sizeBytes
+            : null,
+        delivery: "included" as const,
+      };
+      const source: ProjectSource =
+        capability === "raster" || capability === "multidim"
+          ? { ...common, kind: "cog" }
+          : capability === "pointcloud"
+            ? {
+                ...common,
+                kind: "copc",
+                colorMode: "elevation",
+                pointSize: 2,
+              }
+            : asset.format === "gpx"
+              ? { ...common, kind: "trajectory", trailLength: 600 }
+              : { ...common, kind: "geoparquet" };
+      changeProject((current) => ({
+        ...current,
+        dataAssets: current.dataAssets.map((item) =>
+          item.id === asset.id ? { ...item, preparedSourceId: sourceId } : item,
+        ),
+        sources: [...current.sources, source],
+      }));
     } catch (cause) {
       showError(cause);
     }
@@ -563,29 +854,45 @@ export function App() {
       sizeBytes: null,
       delivery: "connected" as const,
     };
+    const resolvedKind = connectedKind;
+    const discoveredVariable = connectionDiscovery?.details.variables?.[0];
+    const discoveredTimeDimension = discoveredVariable?.dimensions.find(
+      (dimension) => dimension.toLowerCase() === "time",
+    );
     const source: ProjectSource =
-      connectedKind === "pmtiles"
-        ? { ...common, kind: "pmtiles", tileType: "vector" }
-        : connectedKind === "zarr"
+      resolvedKind === "pmtiles"
+        ? {
+            ...common,
+            kind: "pmtiles",
+            tileType: "vector",
+            presentation: {
+              ...presentation,
+              sourceLayer:
+                connectionDiscovery?.details.sourceLayers?.length === 1
+                  ? connectionDiscovery.details.sourceLayers[0]
+                  : null,
+            },
+          }
+        : resolvedKind === "zarr"
           ? {
               ...common,
               kind: "zarr",
-              variable: "data",
+              variable: discoveredVariable?.name ?? "data",
               selection: {},
-              timeDimension: null,
+              timeDimension: discoveredTimeDimension ?? null,
               timesteps: [],
               geozarr: null,
             }
-          : connectedKind === "trajectory"
+          : resolvedKind === "trajectory"
             ? { ...common, kind: "trajectory", trailLength: 600 }
-            : connectedKind === "copc"
+            : resolvedKind === "copc"
               ? {
                   ...common,
                   kind: "copc",
                   colorMode: "elevation",
                   pointSize: 2,
                 }
-              : { ...common, kind: connectedKind };
+              : { ...common, kind: resolvedKind };
     const chapter: ProjectChapter = {
       id: crypto.randomUUID(),
       type: "map",
@@ -601,6 +908,21 @@ export function App() {
     }));
     setActiveChapter(chapter.id);
     setConnectedUrl("");
+    setConnectionDiscovery(null);
+  }
+
+  async function inspectConnection() {
+    if (!connectedUrl.trim()) return;
+    try {
+      setDiscoveringConnection(true);
+      const discovery = await discoverSource(connectedUrl.trim());
+      setConnectionDiscovery(discovery);
+      if (discovery.kind !== "unknown") setConnectedKind(discovery.kind);
+    } catch (cause) {
+      showError(cause);
+    } finally {
+      setDiscoveringConnection(false);
+    }
   }
 
   function leaveProject() {
@@ -686,154 +1008,29 @@ export function App() {
   if (loading)
     return (
       <main className="workspace-screen workspace-screen--loading">
-        <MapTrifold size={32} weight="duotone" />
+        <BrandSpinner size="lg" label="Opening your local workspace" />
         <p>Opening your local workspace…</p>
       </main>
     );
   if (!project)
     return (
-      <div className="workspace-screen">
-        <header className="workspace-topbar">
-          <div className="workspace-brand">
-            <MapTrifold size={23} weight="duotone" />
-            <span>Earth Stories</span>
-            <small>local</small>
-          </div>
-          <span>Your stories stay on this computer until you publish</span>
-        </header>
-        <main className="workspace-main">
-          <section className="workspace-intro">
-            <div>
-              <p>Your workspace</p>
-              <h1>Stories, ready when you are.</h1>
-              <span>
-                Return to a recent story, start a new one, or explore an
-                editable example.
-              </span>
-            </div>
-            <form className="workspace-create" onSubmit={handleCreate}>
-              <label htmlFor="story-title">New story title (optional)</label>
-              <div>
-                <input
-                  id="story-title"
-                  value={newTitle}
-                  onChange={(event) => setNewTitle(event.target.value)}
-                  placeholder="Untitled story"
-                />
-                <ActionButton className="button button--primary" type="submit">
-                  <Plus size={17} /> Create story
-                </ActionButton>
-              </div>
-            </form>
-          </section>
-          {error ? (
-            <div className="start-error" role="alert">
-              <p className="error-message">{error}</p>
-              <button onClick={() => window.location.reload()}>
-                <ArrowClockwise size={16} /> Retry connection
-              </button>
-            </div>
-          ) : null}
-          <section
-            className="workspace-projects"
-            aria-labelledby="stories-heading"
-          >
-            <header>
-              <div>
-                <p>On this computer</p>
-                <h2 id="stories-heading">Your stories</h2>
-              </div>
-              <span>
-                {projects.length} {projects.length === 1 ? "story" : "stories"}
-              </span>
-            </header>
-            {projects.length || examples?.stories.length ? (
-              <div className="project-list">
-                {projects.map((item) => (
-                  <div className="project-list__row" key={item.id}>
-                    <button
-                      className="project-list__open"
-                      onClick={() => void handleOpen(item.id)}
-                    >
-                      <span className="project-list__number">
-                        {String(item.chapterCount).padStart(2, "0")}
-                      </span>
-                      <span>
-                        <strong>
-                          {item.title}
-                          {item.isExample ? (
-                            <mark className="project-list__tag">Example</mark>
-                          ) : null}
-                        </strong>
-                        <small>
-                          {item.description || "No description yet"}
-                        </small>
-                      </span>
-                      <em>
-                        {item.chapterCount}{" "}
-                        {item.chapterCount === 1 ? "chapter" : "chapters"}
-                      </em>
-                      <CaretDown size={18} className="project-list__arrow" />
-                    </button>
-                    <div className="project-list__actions">
-                      <button
-                        type="button"
-                        aria-label={`Rename ${item.title}`}
-                        onClick={() => void handleRename(item)}
-                      >
-                        <PencilSimple size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Remove ${item.title}`}
-                        onClick={() => void handleDelete(item)}
-                      >
-                        <Trash size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {examples?.stories
-                  .filter(
-                    (story) =>
-                      !projects.some(
-                        (project) => project.id === `example-${story.id}`,
-                      ),
-                  )
-                  .map((story) => (
-                    <button
-                      key={`example-${story.id}`}
-                      onClick={() => void handleExampleStory(story.id)}
-                    >
-                      <span className="project-list__number">
-                        {String(story.chapterCount).padStart(2, "0")}
-                      </span>
-                      <span>
-                        <strong>
-                          {story.title}
-                          <mark className="project-list__tag">Example</mark>
-                        </strong>
-                        <small>{story.description}</small>
-                      </span>
-                      <em>{story.formats.join(" + ")}</em>
-                      <CaretDown size={18} className="project-list__arrow" />
-                    </button>
-                  ))}
-              </div>
-            ) : (
-              <div className="workspace-empty">
-                <MapTrifold size={28} weight="duotone" />
-                <strong>Create your first story</strong>
-                <span>Name it above. You can change everything later.</span>
-              </div>
-            )}
-          </section>
-        </main>
-        <footer className="workspace-footer">
-          <span>Built for portable geospatial storytelling</span>
-          <span>No account required</span>
-        </footer>
-      </div>
+      <WorkspaceScreen
+        projects={projects}
+        examples={examples}
+        newTitle={newTitle}
+        error={error}
+        deleteTarget={deleteTarget}
+        deletePending={deletePending}
+        deleteError={deleteError}
+        onNewTitleChange={setNewTitle}
+        onCreate={handleCreate}
+        onOpen={(id) => void handleOpen(id)}
+        onRename={(item) => void handleRename(item)}
+        onRequestDelete={handleDelete}
+        onConfirmDelete={() => void confirmDelete()}
+        onDismissDelete={() => setDeleteTarget(null)}
+        onOpenExample={(id) => void handleExampleStory(id)}
+      />
     );
 
   return (
@@ -853,7 +1050,11 @@ export function App() {
           <small>local</small>
         </button>
         <div className="editor-status">
-          <Check size={14} weight="bold" />{" "}
+          {saveState === "saved" ? (
+            <Check size={14} weight="bold" />
+          ) : (
+            <FloppyDisk size={14} weight="bold" />
+          )}{" "}
           {saveState === "saving"
             ? "Saving…"
             : saveState === "exporting"
@@ -990,14 +1191,14 @@ export function App() {
             <div className="chapter-add__menu">
               <p>Choose a chapter type</p>
               <button type="button" onClick={addProse}>
-                <VideoCamera size={17} />
+                <TextT size={17} />
                 <span>
                   <strong>Text</strong>
                   <small>Prose, headings and links</small>
                 </span>
               </button>
               <button type="button" onClick={addVideo}>
-                <TextT size={17} />
+                <VideoCamera size={17} />
                 <span>
                   <strong>Video</strong>
                   <small>YouTube or Vimeo</small>
@@ -1062,16 +1263,281 @@ export function App() {
           {inspectorMode === "data" ? (
             <div className="data-panel">
               <section>
+                <h3>Project data library</h3>
+                <p>
+                  Prepare or connect data once, then reuse it across chapters in
+                  this story project.
+                </p>
+                {project.dataAssets.length ? (
+                  <div className="project-data-list project-data-list--raw">
+                    {project.dataAssets.map((asset) => {
+                      const job = conversionJobs[asset.id];
+                      const progress = job
+                        ? [...job.events]
+                            .reverse()
+                            .find((event) => event.type === "progress")
+                        : undefined;
+                      const inspection = job
+                        ? [...job.events]
+                            .reverse()
+                            .find((event) => event.type === "result")
+                        : undefined;
+                      const detectedColumns =
+                        inspection?.type === "result" &&
+                        Array.isArray(inspection.output.columns)
+                          ? inspection.output.columns
+                              .filter(
+                                (column): column is string =>
+                                  typeof column === "string",
+                              )
+                              .join(", ")
+                          : "";
+                      const multidimVariables =
+                        inspection?.type === "result" &&
+                        Array.isArray(inspection.output.variables)
+                          ? inspection.output.variables.flatMap((variable) => {
+                              if (!variable || typeof variable !== "object")
+                                return [];
+                              const candidate = variable as {
+                                name?: unknown;
+                                dimensions?: unknown;
+                                shape?: unknown;
+                              };
+                              return typeof candidate.name === "string" &&
+                                Array.isArray(candidate.dimensions) &&
+                                candidate.dimensions.every(
+                                  (dimension) => typeof dimension === "string",
+                                ) &&
+                                Array.isArray(candidate.shape) &&
+                                candidate.shape.every(
+                                  (size) => typeof size === "number",
+                                )
+                                ? [
+                                    {
+                                      name: candidate.name,
+                                      dimensions:
+                                        candidate.dimensions as string[],
+                                      shape: candidate.shape as number[],
+                                    },
+                                  ]
+                                : [];
+                            })
+                          : [];
+                      const multidimChoice = multidimChoices[asset.id];
+                      const selectedVariable =
+                        multidimVariables.find(
+                          (variable) =>
+                            variable.name === multidimChoice?.variable,
+                        ) ?? multidimVariables[0];
+                      const spatialDimensions = selectedVariable
+                        ? selectedVariable.dimensions.filter((dimension) =>
+                            [
+                              "x",
+                              "y",
+                              "lon",
+                              "lat",
+                              "longitude",
+                              "latitude",
+                              "easting",
+                              "northing",
+                            ].includes(dimension.toLowerCase()),
+                          )
+                        : [];
+                      const sliceDimensions = selectedVariable
+                        ? selectedVariable.dimensions.filter(
+                            (dimension, index) =>
+                              spatialDimensions.length >= 2
+                                ? !spatialDimensions.includes(dimension)
+                                : index <
+                                  selectedVariable.dimensions.length - 2,
+                          )
+                        : [];
+                      const isMultidim =
+                        asset.format === "netcdf" || asset.format === "hdf5";
+                      return (
+                        <article
+                          key={asset.id}
+                          className={
+                            isMultidim && multidimVariables.length
+                              ? "project-data-item project-data-item--configurable"
+                              : "project-data-item"
+                          }
+                        >
+                          <div>
+                            <span>{asset.format} · source file</span>
+                            <strong>{asset.label}</strong>
+                            <small>
+                              {asset.preparedSourceId
+                                ? "Prepared and ready to use"
+                                : progress?.type === "progress"
+                                  ? progress.message
+                                  : detectedColumns
+                                    ? `Columns: ${detectedColumns}`
+                                    : "Stored in this project"}
+                            </small>
+                          </div>
+                          <div className="project-data-item__actions">
+                            <button
+                              type="button"
+                              disabled={
+                                job?.status === "queued" ||
+                                job?.status === "running"
+                              }
+                              onClick={() =>
+                                void runDataAssetJob(asset, "inspect")
+                              }
+                            >
+                              Inspect
+                            </button>
+                            {!asset.preparedSourceId ? (
+                              <button
+                                type="button"
+                                disabled={
+                                  job?.status === "queued" ||
+                                  job?.status === "running"
+                                }
+                                onClick={() =>
+                                  void runDataAssetJob(asset, "prepare")
+                                }
+                              >
+                                Prepare
+                              </button>
+                            ) : null}
+                          </div>
+                          {isMultidim && multidimVariables.length ? (
+                            <div className="multidim-controls">
+                              <label>
+                                Variable
+                                <select
+                                  value={selectedVariable?.name ?? ""}
+                                  onChange={(event) =>
+                                    setMultidimChoices((current) => ({
+                                      ...current,
+                                      [asset.id]: {
+                                        variable: event.target.value,
+                                        selection: {},
+                                      },
+                                    }))
+                                  }
+                                >
+                                  {multidimVariables.map((variable) => (
+                                    <option
+                                      key={variable.name}
+                                      value={variable.name}
+                                    >
+                                      {variable.name} (
+                                      {variable.dimensions.join(" × ")})
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              {sliceDimensions.map((dimension) => {
+                                const dimensionIndex =
+                                  selectedVariable.dimensions.indexOf(
+                                    dimension,
+                                  );
+                                const maximum =
+                                  selectedVariable.shape[dimensionIndex] - 1;
+                                return (
+                                  <label key={dimension}>
+                                    {dimension} index
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={maximum}
+                                      value={
+                                        multidimChoice?.selection[dimension] ??
+                                        0
+                                      }
+                                      onChange={(event) =>
+                                        setMultidimChoices((current) => ({
+                                          ...current,
+                                          [asset.id]: {
+                                            variable: selectedVariable.name,
+                                            selection: {
+                                              ...(current[asset.id]
+                                                ?.selection ?? {}),
+                                              [dimension]: Math.max(
+                                                0,
+                                                Math.min(
+                                                  maximum,
+                                                  Number(event.target.value),
+                                                ),
+                                              ),
+                                            },
+                                          },
+                                        }))
+                                      }
+                                    />
+                                    <small>0–{maximum}</small>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {project.sources.length ? (
+                  <div className="project-data-list">
+                    {project.sources.map((source) => {
+                      const chapterCount = project.chapters.filter(
+                        (chapter) =>
+                          ("sourceId" in chapter &&
+                            chapter.sourceId === source.id) ||
+                          ("overlaySourceIds" in chapter &&
+                            chapter.overlaySourceIds?.includes(source.id)),
+                      ).length;
+                      return (
+                        <article key={source.id} className="project-data-item">
+                          <div>
+                            <span>{source.kind}</span>
+                            <strong>{source.label}</strong>
+                            <small>
+                              {source.delivery} · used by {chapterCount} chapter
+                              {chapterCount === 1 ? "" : "s"}
+                            </small>
+                          </div>
+                          <div className="project-data-item__actions">
+                            <button
+                              type="button"
+                              onClick={() => addChapterFromSource(source)}
+                            >
+                              <Plus size={14} /> Add to story
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeSource(source)}
+                              disabled={chapterCount > 0}
+                              aria-label={`Remove ${source.label} from the project data library`}
+                            >
+                              <Trash size={14} />
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : project.dataAssets.length === 0 ? (
+                  <p className="data-library-empty">
+                    No project data yet. Import a file or add a connection
+                    below.
+                  </p>
+                ) : null}
+              </section>
+              <section>
                 <h3>Import from this computer</h3>
                 <p>
-                  The file becomes an included story asset and creates a
-                  matching chapter.
+                  The file becomes an included project asset and is also added
+                  to the current story.
                 </p>
                 <label className="file-import">
                   <FileArrowUp size={18} /> Choose a file
                   <input
                     type="file"
-                    accept=".tif,.tiff,.geojson,.json,.pmtiles,.parquet,.csv,.png,.jpg,.jpeg,.webp,.gif"
+                    accept=".tif,.tiff,.zip,.nc,.netcdf,.h5,.hdf5,.las,.laz,.gpx,.geojson,.json,.pmtiles,.parquet,.csv,.png,.jpg,.jpeg,.webp,.gif"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) void handleFile(file);
@@ -1080,8 +1546,9 @@ export function App() {
                   />
                 </label>
                 <small>
-                  COG, GeoJSON, PMTiles, GeoParquet, CSV, images, or
-                  browser-ready <code>*.trips.json</code>.
+                  GeoTIFF, zipped Shapefile, NetCDF, HDF5, LAS/LAZ, GPX,
+                  GeoJSON, PMTiles, GeoParquet, CSV, images, or browser-ready{" "}
+                  <code>*.trips.json</code>.
                 </small>
               </section>
               <section>
@@ -1113,11 +1580,83 @@ export function App() {
                       type="url"
                       required
                       value={connectedUrl}
-                      onChange={(event) => setConnectedUrl(event.target.value)}
+                      onChange={(event) => {
+                        setConnectedUrl(event.target.value);
+                        setConnectionDiscovery(null);
+                      }}
                       placeholder="https://…"
                     />
                   </label>
-                  <button type="submit">
+                  <button
+                    type="button"
+                    disabled={discoveringConnection || !connectedUrl.trim()}
+                    onClick={() => void inspectConnection()}
+                  >
+                    {discoveringConnection
+                      ? "Inspecting connection…"
+                      : "Inspect connection"}
+                  </button>
+                  {connectionDiscovery ? (
+                    <div
+                      className={
+                        connectionDiscovery.issues.length
+                          ? "connection-report connection-report--warning"
+                          : "connection-report"
+                      }
+                    >
+                      <strong>
+                        {connectionDiscovery.kind === "unknown"
+                          ? "Format not identified"
+                          : `${connectionDiscovery.kind} detected`}
+                      </strong>
+                      <span>
+                        {connectionDiscovery.sizeBytes !== null
+                          ? `${(connectionDiscovery.sizeBytes / 1_000_000).toFixed(1)} MB · `
+                          : ""}
+                        {connectionDiscovery.cors
+                          ? "browser access confirmed"
+                          : "browser access unconfirmed"}
+                        {connectionDiscovery.byteRanges
+                          ? " · byte ranges confirmed"
+                          : ""}
+                      </span>
+                      {connectionDiscovery.issues.map((issue) => (
+                        <small key={issue}>{issue}</small>
+                      ))}
+                      {connectionDiscovery.details.sourceLayers?.length ? (
+                        <small>
+                          Layers:{" "}
+                          {connectionDiscovery.details.sourceLayers.join(", ")}
+                        </small>
+                      ) : null}
+                      {connectionDiscovery.details.variables?.length ? (
+                        <small>
+                          Variables:{" "}
+                          {connectionDiscovery.details.variables
+                            .map(
+                              (variable) =>
+                                `${variable.name} (${variable.dimensions.join(" × ") || variable.shape.join(" × ")})`,
+                            )
+                            .join(", ")}
+                        </small>
+                      ) : null}
+                      {connectionDiscovery.details.minZoom !== undefined ? (
+                        <small>
+                          Zooms {connectionDiscovery.details.minZoom}–
+                          {connectionDiscovery.details.maxZoom}
+                        </small>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  <button
+                    type="submit"
+                    disabled={
+                      connectionDiscovery?.reachable === false ||
+                      connectionDiscovery?.issues.some((issue) =>
+                        issue.startsWith("The server returned"),
+                      )
+                    }
+                  >
                     <Link size={16} /> Connect and add chapter
                   </button>
                 </form>
@@ -2304,6 +2843,106 @@ export function App() {
                         }
                       />
                     </label>
+                    {(selectedSource.kind === "local-geojson" ||
+                      selectedSource.kind === "geoparquet" ||
+                      (selectedSource.kind === "pmtiles" &&
+                        selectedSource.tileType === "vector")) && (
+                      <>
+                        <label>
+                          Color by property
+                          <input
+                            value={selectedPresentation.symbolProperty ?? ""}
+                            placeholder="e.g. category"
+                            onChange={(event) =>
+                              updateSelectedSource((source) => ({
+                                ...source,
+                                presentation: {
+                                  ...selectedPresentation,
+                                  symbolProperty: event.target.value || null,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Category colors
+                          <input
+                            value={
+                              categoryColorsDraft ??
+                              Object.entries(
+                                selectedPresentation.categoryColors,
+                              )
+                                .map(([value, color]) => `${value}=${color}`)
+                                .join(", ")
+                            }
+                            placeholder="forest=#2f7d32, water=#2878b5"
+                            onBlur={() => setCategoryColorsDraft(null)}
+                            onChange={(event) => {
+                              setCategoryColorsDraft(event.target.value);
+                              updateSelectedSource((source) => ({
+                                ...source,
+                                presentation: {
+                                  ...selectedPresentation,
+                                  categoryColors: Object.fromEntries(
+                                    event.target.value
+                                      .split(",")
+                                      .flatMap((part) => {
+                                        const separator = part.lastIndexOf("=");
+                                        if (separator < 1) return [];
+                                        const value = part
+                                          .slice(0, separator)
+                                          .trim();
+                                        const color = part
+                                          .slice(separator + 1)
+                                          .trim();
+                                        return value &&
+                                          /^#[0-9a-f]{6}$/i.test(color)
+                                          ? [[value, color]]
+                                          : [];
+                                      }),
+                                  ),
+                                },
+                              }));
+                            }}
+                          />
+                          <small>
+                            Use value=#rrggbb pairs separated by commas.
+                          </small>
+                        </label>
+                        <label>
+                          Filter property
+                          <input
+                            value={selectedPresentation.filterProperty ?? ""}
+                            placeholder="e.g. status"
+                            onChange={(event) =>
+                              updateSelectedSource((source) => ({
+                                ...source,
+                                presentation: {
+                                  ...selectedPresentation,
+                                  filterProperty: event.target.value || null,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Filter value
+                          <input
+                            value={selectedPresentation.filterValue ?? ""}
+                            placeholder="Exact value"
+                            onChange={(event) =>
+                              updateSelectedSource((source) => ({
+                                ...source,
+                                presentation: {
+                                  ...selectedPresentation,
+                                  filterValue: event.target.value || null,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
+                      </>
+                    )}
                     {selectedSource.kind === "cog" ? (
                       <>
                         <label>
@@ -2393,6 +3032,51 @@ export function App() {
                               }));
                             }}
                           />
+                        </label>
+                        <label>
+                          Raster category colors
+                          <input
+                            value={
+                              categoryColorsDraft ??
+                              Object.entries(
+                                selectedPresentation.categoryColors,
+                              )
+                                .map(([value, color]) => `${value}=${color}`)
+                                .join(", ")
+                            }
+                            placeholder="0=#2878b5, 1=#2f7d32"
+                            onBlur={() => setCategoryColorsDraft(null)}
+                            onChange={(event) => {
+                              setCategoryColorsDraft(event.target.value);
+                              updateSelectedSource((source) => ({
+                                ...source,
+                                presentation: {
+                                  ...selectedPresentation,
+                                  categoryColors: Object.fromEntries(
+                                    event.target.value
+                                      .split(",")
+                                      .flatMap((part) => {
+                                        const separator = part.lastIndexOf("=");
+                                        const value = part
+                                          .slice(0, separator)
+                                          .trim();
+                                        const color = part
+                                          .slice(separator + 1)
+                                          .trim();
+                                        return separator > 0 &&
+                                          Number.isFinite(Number(value)) &&
+                                          /^#[0-9a-f]{6}$/i.test(color)
+                                          ? [[value, color]]
+                                          : [];
+                                      }),
+                                  ),
+                                },
+                              }));
+                            }}
+                          />
+                          <small>
+                            Requires a rescale range. Use value=#rrggbb pairs.
+                          </small>
                         </label>
                       </>
                     ) : null}

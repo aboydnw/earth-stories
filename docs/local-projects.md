@@ -11,6 +11,12 @@ my-story/
 Local data and media may live anywhere below that directory, conventionally in
 `assets/`. Connected web sources remain URLs in `story.json`.
 
+Imported raw data is recorded in the project-local data library. Prepared
+outputs are written beneath the same project and can be reused by multiple
+chapters without being imported again. Example data is seeded separately and
+cannot be renamed, edited, or removed; adding an example story creates an
+independent editable project copy.
+
 The application opens on a workspace that lists local projects and bundled
 example stories. Opening a project enters a three-part visual editor: chapter
 structure on the left, the shared publication renderer in the center, and
@@ -44,6 +50,9 @@ The editor uses a private loopback API:
 - `DELETE /api/projects/:id` moves one into the workspace's local trash.
 - `GET /api/projects/:id/assets/*` serves a file contained by that project.
 - `POST /api/projects/:id/assets?filename=…` imports a file into the project.
+- `POST /api/projects/:id/conversions` starts an inspect/prepare/verify job.
+- `GET /api/projects/:id/conversions/:jobId` returns typed progress and results.
+- `POST /api/discover` inspects a public connection before it is committed.
 - `GET /api/projects/:id/export/preflight` validates publication readiness.
 - `POST /api/projects/:id/export?format=folder|zip|archive|embed` replaces the
   latest release and returns the requested representation.

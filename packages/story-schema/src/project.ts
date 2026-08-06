@@ -46,6 +46,12 @@ const sourceBaseSchema = z.object({
         .default("viridis"),
       legendTitle: z.string().default(""),
       legendVisible: z.boolean().default(true),
+      symbolProperty: z.string().nullable().default(null),
+      categoryColors: z
+        .record(z.string(), z.string().regex(/^#[0-9a-f]{6}$/i))
+        .default({}),
+      filterProperty: z.string().nullable().default(null),
+      filterValue: z.string().nullable().default(null),
     })
     .optional(),
 });
@@ -118,13 +124,33 @@ export const projectSourceSchema = z.discriminatedUnion("kind", [
   }),
   sourceBaseSchema.extend({
     kind: z.literal("copc"),
-    locator: httpUrlSchema,
+    locator: z.string().min(1),
     colorMode: z
       .enum(["elevation", "intensity", "classification", "rgb"])
       .default("elevation"),
     pointSize: z.number().min(1).max(10).default(2),
   }),
 ]);
+
+export const projectDataAssetSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  path: z.string().min(1),
+  format: z.enum([
+    "geotiff",
+    "shapefile-zip",
+    "geojson",
+    "csv",
+    "netcdf",
+    "hdf5",
+    "las",
+    "laz",
+    "gpx",
+  ]),
+  sizeBytes: z.number().int().nonnegative(),
+  createdAt: z.string().datetime(),
+  preparedSourceId: z.string().min(1).nullable().default(null),
+});
 
 const chapterBaseSchema = z.object({
   id: z.string().min(1),
@@ -210,11 +236,40 @@ export const storyProjectSchema = z
       })
       .default({ profile: "connected", theme: "cng" }),
     sources: z.array(projectSourceSchema),
+    dataAssets: z.array(projectDataAssetSchema).default([]),
     chapters: z.array(projectChapterSchema).min(1),
   })
   .strict();
 
+export class UnsupportedProjectSchemaError extends Error {
+  constructor(schema: unknown) {
+    super(
+      `Unsupported Earth Stories project schema: ${typeof schema === "string" ? schema : "missing schema identifier"}`,
+    );
+    this.name = "UnsupportedProjectSchemaError";
+  }
+}
+
+/**
+ * Single entry point for reading persisted projects. Future schema versions
+ * migrate here before validation so storage callers never silently lose a
+ * project merely because its on-disk contract is older.
+ */
+export function parseStoryProject(value: unknown): StoryProject {
+  if (!value || typeof value !== "object") {
+    throw new UnsupportedProjectSchemaError(undefined);
+  }
+  const schema = (value as { schema?: unknown }).schema;
+  switch (schema) {
+    case "earth-stories/project/v1":
+      return storyProjectSchema.parse(value);
+    default:
+      throw new UnsupportedProjectSchemaError(schema);
+  }
+}
+
 export type Camera = z.infer<typeof cameraSchema>;
 export type ProjectSource = z.infer<typeof projectSourceSchema>;
+export type ProjectDataAsset = z.infer<typeof projectDataAssetSchema>;
 export type ProjectChapter = z.infer<typeof projectChapterSchema>;
 export type StoryProject = z.infer<typeof storyProjectSchema>;

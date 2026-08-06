@@ -1,0 +1,156 @@
+import { stat } from "node:fs/promises";
+import { basename, extname, relative, resolve } from "node:path";
+import {
+  CONVERSION_PROTOCOL_VERSION,
+  conversionCapabilitySchema,
+  conversionOperationSchema,
+  type ConversionJobEvent,
+} from "@earth-stories/story-schema";
+import type { ProjectStore } from "@earth-stories/project-store";
+import { ConversionRuntime } from "./conversion-runtime.js";
+
+export type ConversionJobStatus = "queued" | "running" | "succeeded" | "failed";
+
+export interface ConversionJobSnapshot {
+  id: string;
+  projectId: string;
+  status: ConversionJobStatus;
+  events: ConversionJobEvent[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+const outputExtension = (capability: string, target?: unknown): string => {
+  if (capability === "raster") return ".cog.tif";
+  if (capability === "multidim") return ".cog.tif";
+  if (capability === "pointcloud") return ".copc.laz";
+  if (capability === "vector" && target === "trajectory") return ".trips.json";
+  if (capability === "vector" && target === "pmtiles") return ".pmtiles";
+  return ".parquet";
+};
+
+export class ConversionJobs {
+  readonly #jobs = new Map<string, ConversionJobSnapshot>();
+  readonly #runtime: ConversionRuntime;
+  readonly #store: ProjectStore;
+
+  constructor(store: ProjectStore, runtime: ConversionRuntime) {
+    this.#store = store;
+    this.#runtime = runtime;
+  }
+
+  get(id: string): ConversionJobSnapshot | null {
+    return this.#jobs.get(id) ?? null;
+  }
+
+  async create(
+    projectId: string,
+    input: {
+      operation?: unknown;
+      capability?: unknown;
+      assetPath?: unknown;
+      options?: unknown;
+    },
+  ): Promise<ConversionJobSnapshot> {
+    await this.#store.read(projectId);
+    const operation = conversionOperationSchema.parse(input.operation);
+    const capability = conversionCapabilitySchema.parse(input.capability);
+    if (typeof input.assetPath !== "string" || !input.assetPath)
+      throw new Error("Choose a project asset to convert");
+    const absoluteInput = this.#store.assetPath(projectId, input.assetPath);
+    const inputInfo = await stat(absoluteInput);
+    if (!inputInfo.isFile()) throw new Error("Conversion input is not a file");
+    const options =
+      input.options && typeof input.options === "object"
+        ? { ...(input.options as Record<string, unknown>) }
+        : {};
+    if (operation === "prepare") {
+      const stem = basename(input.assetPath, extname(input.assetPath));
+      const filename = `${stem}${outputExtension(capability, options.target)}`;
+      options.outputPath = this.#store.assetPath(
+        projectId,
+        `assets/prepared/${filename}`,
+      );
+      options.runtimeDirectory = this.#store.assetPath(
+        projectId,
+        ".earth-stories/conversion-runtime",
+      );
+    } else {
+      delete options.outputPath;
+      delete options.runtimeDirectory;
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const snapshot: ConversionJobSnapshot = {
+      id,
+      projectId,
+      status: "queued",
+      events: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.#jobs.set(id, snapshot);
+    const request = {
+      protocol: CONVERSION_PROTOCOL_VERSION,
+      requestId: id,
+      projectId,
+      operation,
+      capability,
+      input: {
+        path: resolve(absoluteInput),
+        filename: basename(input.assetPath),
+        sizeBytes: inputInfo.size,
+        mediaType: null,
+      },
+      options,
+    };
+    void this.#run(snapshot, request);
+    return snapshot;
+  }
+
+  async #run(
+    snapshot: ConversionJobSnapshot,
+    request: Record<string, unknown>,
+  ): Promise<void> {
+    snapshot.status = "running";
+    snapshot.updatedAt = new Date().toISOString();
+    try {
+      await this.#runtime.execute(request, (event) => {
+        const publicEvent =
+          event.type === "result" && typeof event.output.path === "string"
+            ? {
+                ...event,
+                output: {
+                  ...event.output,
+                  path: relative(
+                    this.#store.projectPath(snapshot.projectId),
+                    event.output.path,
+                  ).replaceAll("\\", "/"),
+                },
+              }
+            : event;
+        snapshot.events.push(publicEvent);
+        snapshot.updatedAt = new Date().toISOString();
+        if (event.type === "result") snapshot.status = "succeeded";
+        if (event.type === "failure") snapshot.status = "failed";
+      });
+      if (snapshot.status === "running") snapshot.status = "succeeded";
+    } catch (cause) {
+      snapshot.status = "failed";
+      snapshot.events.push({
+        protocol: CONVERSION_PROTOCOL_VERSION,
+        requestId: snapshot.id,
+        type: "failure",
+        status: "failed",
+        code: "runtime-error",
+        message:
+          cause instanceof Error ? cause.message : "Conversion runtime failed",
+        retryable: true,
+        details: {},
+      });
+    } finally {
+      snapshot.updatedAt = new Date().toISOString();
+    }
+  }
+}

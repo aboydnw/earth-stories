@@ -684,6 +684,12 @@ nav {
   overflow: hidden;
   white-space: normal;
 }
+.chapter-image-export {
+  width: 100%;
+  min-height: 42px;
+  margin: -10px 0 22px;
+  justify-content: center;
+}
 .publish-formats button:hover:not(:disabled) {
   transform: translateY(-2px);
   border-color: var(--es-border-emphasized);
@@ -943,6 +949,17 @@ nav {
   }
   .example-story-list {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-screen *,
+  .editor-shell *,
+  .publish-backdrop * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
@@ -1602,6 +1619,103 @@ nav {
   font-size: 9px;
   line-height: 1.45;
 }
+.project-data-list {
+  display: grid;
+  gap: 7px;
+}
+.project-data-item {
+  padding: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+  background: var(--es-bg-raised);
+}
+.project-data-item--configurable {
+  flex-wrap: wrap;
+}
+.project-data-item > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.project-data-item span {
+  color: var(--es-action);
+  font: 500 9px var(--es-font-mono);
+  text-transform: uppercase;
+}
+.project-data-item strong {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-data-item small,
+.data-library-empty {
+  color: var(--es-fg-muted);
+  font-size: 9px;
+}
+.project-data-item__actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 5px;
+}
+.project-data-item__actions button {
+  min-height: 30px;
+  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+  background: var(--es-bg-subtle);
+  color: var(--es-fg);
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.project-data-item__actions button:hover:not(:disabled) {
+  border-color: var(--es-border-emphasized);
+  background: var(--es-bg-emphasized);
+}
+.project-data-item__actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.multidim-controls {
+  flex: 1 0 100%;
+  padding-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, minmax(70px, 0.35fr));
+  gap: 8px;
+  border-top: 1px solid var(--es-border);
+}
+.multidim-controls label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: var(--es-fg-muted);
+  font-size: 9px;
+  font-weight: 600;
+}
+.multidim-controls select,
+.multidim-controls input {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+  background-color: var(--es-bg-subtle);
+  color: var(--es-fg);
+  font-size: 10px;
+}
+.multidim-controls small {
+  margin: 0;
+  font-size: 8px;
+  font-weight: 400;
+}
 .data-connect {
   display: grid;
   gap: 12px;
@@ -1622,6 +1736,29 @@ nav {
 }
 .data-connect button {
   color: var(--es-action);
+}
+.connection-report {
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+  border-left: 3px solid var(--es-success);
+  background: var(--es-success-bg);
+  color: var(--es-success);
+  font-size: 10px;
+}
+.connection-report--warning {
+  border-left-color: var(--es-warning);
+  background: var(--es-warning-bg);
+  color: var(--es-warning);
+}
+.connection-report strong,
+.connection-report span,
+.connection-report small {
+  display: block;
+}
+.connection-report small {
+  color: inherit;
+  font-size: 9px;
 }
 .example-data-list {
   display: grid;

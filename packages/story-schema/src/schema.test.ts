@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { storyProjectSchema } from "./project.js";
+import { parseStoryProject, storyProjectSchema } from "./project.js";
 
 describe("storyProjectSchema", () => {
   it("accepts the representative project", async () => {
@@ -28,5 +28,11 @@ describe("storyProjectSchema", () => {
         chapters: [],
       }),
     ).toThrow();
+  });
+
+  it("reports unsupported persisted schema versions explicitly", () => {
+    expect(() =>
+      parseStoryProject({ schema: "earth-stories/project/v99" }),
+    ).toThrow("Unsupported Earth Stories project schema");
   });
 });

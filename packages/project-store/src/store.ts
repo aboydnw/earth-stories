@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as wait } from "node:timers/promises";
 import {
   copyFile,
   mkdir,
@@ -12,6 +13,7 @@ import {
 } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import {
+  parseStoryProject,
   storyProjectSchema,
   type StoryProject,
 } from "@earth-stories/story-schema";
@@ -31,6 +33,31 @@ export interface ProjectSummary {
   updated: string;
   chapterCount: number;
   isExample: boolean;
+  invalidReason?: string;
+}
+
+const STALE_LOCK_MS = 2 * 60 * 1000;
+const MAX_BACKUPS = 20;
+const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+function nextUpdated(previous: string): string {
+  return new Date(Math.max(Date.now(), Date.parse(previous) + 1)).toISOString();
+}
+
+async function retryFileOperation(operation: () => Promise<void>) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await operation();
+      return;
+    } catch (cause) {
+      const retryable =
+        cause instanceof Error &&
+        "code" in cause &&
+        ["EACCES", "EBUSY", "EPERM"].includes(String(cause.code));
+      if (!retryable || attempt >= 4) throw cause;
+      await wait(50 * 2 ** attempt);
+    }
+  }
 }
 
 export interface CreateProjectInput {
@@ -46,13 +73,14 @@ export interface ImportedAsset {
 }
 
 function slugify(value: string): string {
-  return value
+  const slug = value
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
+  return WINDOWS_RESERVED_NAME.test(slug) ? `${slug}-story` : slug;
 }
 
 function assertSafeId(id: string): void {
@@ -100,8 +128,25 @@ export class ProjectStore {
             chapterCount: project.chapters.length,
             isExample: project.id.startsWith("example-"),
           });
-        } catch {
-          // A directory is not a project unless its story file validates.
+        } catch (cause) {
+          const storyPath = join(this.root, entry.name, STORY_FILENAME);
+          try {
+            const info = await stat(storyPath);
+            projects.push({
+              id: entry.name,
+              title: entry.name,
+              description: "This project could not be opened.",
+              updated: info.mtime.toISOString(),
+              chapterCount: 0,
+              isExample: entry.name.startsWith("example-"),
+              invalidReason:
+                cause instanceof Error
+                  ? cause.message
+                  : "The project file is invalid.",
+            });
+          } catch {
+            // Directories without story.json are not Earth Stories projects.
+          }
         }
       }),
     );
@@ -138,6 +183,7 @@ export class ProjectStore {
       },
       basemap: DEFAULT_BASEMAP,
       sources: [],
+      dataAssets: [],
       chapters: [
         {
           id: randomUUID(),
@@ -177,23 +223,28 @@ export class ProjectStore {
       join(this.directory(id), STORY_FILENAME),
       "utf8",
     );
-    return storyProjectSchema.parse(JSON.parse(contents) as unknown);
+    return parseStoryProject(JSON.parse(contents) as unknown);
   }
 
   async save(id: string, value: unknown): Promise<StoryProject> {
     const project = storyProjectSchema.parse(value);
     if (project.id !== id) throw new Error("Project ID cannot be changed");
-    const current = await this.read(id);
-    const updated = storyProjectSchema.parse({
-      ...project,
-      metadata: {
-        ...project.metadata,
-        created: current.metadata.created,
-        updated: new Date().toISOString(),
-      },
+    return this.writeAtomicWithCheck(id, true, async () => {
+      const current = await this.read(id);
+      if (project.metadata.updated !== current.metadata.updated) {
+        throw new Error(
+          "This story changed on disk after you opened it. Reopen the story before saving so those changes are not overwritten.",
+        );
+      }
+      return storyProjectSchema.parse({
+        ...project,
+        metadata: {
+          ...project.metadata,
+          created: current.metadata.created,
+          updated: nextUpdated(current.metadata.updated),
+        },
+      });
     });
-    await this.writeAtomic(id, updated, true);
-    return updated;
   }
 
   async archive(id: string): Promise<void> {
@@ -201,7 +252,9 @@ export class ProjectStore {
     const trash = join(this.root, ".trash");
     await mkdir(trash, { recursive: true });
     const archivedAt = new Date().toISOString().replace(/[:.]/g, "-");
-    await rename(this.directory(id), join(trash, `${id}-${archivedAt}`));
+    await retryFileOperation(() =>
+      rename(this.directory(id), join(trash, `${id}-${archivedAt}`)),
+    );
   }
 
   assetPath(id: string, requestedPath: string): string {
@@ -226,12 +279,74 @@ export class ProjectStore {
     contents: Uint8Array,
   ): Promise<ImportedAsset> {
     await this.read(id);
-    const safeName = filename
+    const { assetsDirectory, candidate } = await this.allocateAssetPath(
+      id,
+      filename,
+    );
+    await writeFile(join(assetsDirectory, candidate), contents, { flag: "wx" });
+    return {
+      path: `assets/${candidate}`,
+      filename: candidate,
+      sizeBytes: contents.byteLength,
+    };
+  }
+
+  async importAssetStream(
+    id: string,
+    filename: string,
+    chunks: AsyncIterable<Uint8Array>,
+    maxBytes: number,
+  ): Promise<ImportedAsset> {
+    await this.read(id);
+    const { assetsDirectory, candidate } = await this.allocateAssetPath(
+      id,
+      filename,
+    );
+    const destination = join(assetsDirectory, candidate);
+    const handle = await open(destination, "wx", 0o600);
+    let sizeBytes = 0;
+    try {
+      for await (const chunk of chunks) {
+        sizeBytes += chunk.byteLength;
+        if (sizeBytes > maxBytes)
+          throw new Error(
+            `Asset exceeds the ${Math.floor(maxBytes / 1024 / 1024)} MB local import limit`,
+          );
+        await handle.write(chunk);
+      }
+      await handle.sync();
+    } catch (cause) {
+      await handle.close();
+      await unlink(destination).catch(() => undefined);
+      throw cause;
+    }
+    await handle.close();
+    return {
+      path: `assets/${candidate}`,
+      filename: candidate,
+      sizeBytes,
+    };
+  }
+
+  private async allocateAssetPath(
+    id: string,
+    filename: string,
+  ): Promise<{ assetsDirectory: string; candidate: string }> {
+    let safeName = filename
       .normalize("NFKC")
       .replace(/[^a-zA-Z0-9._-]+/g, "-")
-      .replace(/^-+/, "");
+      .replace(/^-+/, "")
+      .replace(/[. ]+$/, "");
     if (!safeName || safeName === "." || safeName === "..")
       throw new Error("Asset filename is invalid");
+    const safeDot = safeName.lastIndexOf(".");
+    const safeStem = safeDot > 0 ? safeName.slice(0, safeDot) : safeName;
+    if (WINDOWS_RESERVED_NAME.test(safeStem)) {
+      safeName =
+        safeDot > 0
+          ? `${safeStem}-file${safeName.slice(safeDot)}`
+          : `${safeStem}-file`;
+    }
     const assetsDirectory = join(this.directory(id), "assets");
     await mkdir(assetsDirectory, { recursive: true });
     let candidate = safeName;
@@ -243,12 +358,7 @@ export class ProjectStore {
       candidate = `${stem}-${suffix}${extension}`;
       suffix += 1;
     }
-    await writeFile(join(assetsDirectory, candidate), contents, { flag: "wx" });
-    return {
-      path: `assets/${candidate}`,
-      filename: candidate,
-      sizeBytes: contents.byteLength,
-    };
+    return { assetsDirectory, candidate };
   }
 
   private async existsAsset(path: string): Promise<boolean> {
@@ -283,6 +393,14 @@ export class ProjectStore {
     project: StoryProject,
     createBackup: boolean,
   ): Promise<void> {
+    await this.writeAtomicWithCheck(id, createBackup, async () => project);
+  }
+
+  private async writeAtomicWithCheck(
+    id: string,
+    createBackup: boolean,
+    projectFactory: () => Promise<StoryProject>,
+  ): Promise<StoryProject> {
     const projectDirectory = this.directory(id);
     const storyPath = join(projectDirectory, STORY_FILENAME);
     const lockPath = join(projectDirectory, ".earth-stories-write.lock");
@@ -290,9 +408,10 @@ export class ProjectStore {
       projectDirectory,
       `${STORY_FILENAME}.${randomUUID()}.tmp`,
     );
-    const lock = await open(lockPath, "wx");
+    const lock = await this.acquireWriteLock(lockPath);
 
     try {
+      const project = await projectFactory();
       if (createBackup) {
         const backupDirectory = join(
           projectDirectory,
@@ -302,6 +421,17 @@ export class ProjectStore {
         await mkdir(backupDirectory, { recursive: true });
         const stamp = new Date().toISOString().replace(/[:.]/g, "-");
         await copyFile(storyPath, join(backupDirectory, `${stamp}.json`));
+        const backups = (await readdir(backupDirectory))
+          .filter((name) => name.endsWith(".json"))
+          .sort()
+          .reverse();
+        await Promise.all(
+          backups
+            .slice(MAX_BACKUPS)
+            .map((name) =>
+              unlink(join(backupDirectory, name)).catch(() => undefined),
+            ),
+        );
       }
 
       const file = await open(temporaryPath, "wx");
@@ -311,11 +441,45 @@ export class ProjectStore {
       } finally {
         await file.close();
       }
-      await rename(temporaryPath, storyPath);
+      await retryFileOperation(() => rename(temporaryPath, storyPath));
+      return project;
     } finally {
       await lock.close();
       await unlink(lockPath).catch(() => undefined);
       await unlink(temporaryPath).catch(() => undefined);
+    }
+  }
+
+  private async acquireWriteLock(lockPath: string) {
+    try {
+      const lock = await open(lockPath, "wx");
+      await lock.writeFile(
+        `${JSON.stringify({ pid: process.pid, created: new Date().toISOString() })}\n`,
+        "utf8",
+      );
+      await lock.sync();
+      return lock;
+    } catch (cause) {
+      if (!(
+        cause instanceof Error &&
+        "code" in cause &&
+        cause.code === "EEXIST"
+      ))
+        throw cause;
+      const info = await stat(lockPath).catch(() => null);
+      if (!info || Date.now() - info.mtimeMs <= STALE_LOCK_MS) {
+        throw new Error(
+          "This story is already being saved. Wait a moment and try again.",
+        );
+      }
+      await unlink(lockPath);
+      const lock = await open(lockPath, "wx");
+      await lock.writeFile(
+        `${JSON.stringify({ pid: process.pid, created: new Date().toISOString(), recovered: true })}\n`,
+        "utf8",
+      );
+      await lock.sync();
+      return lock;
     }
   }
 }

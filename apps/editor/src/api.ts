@@ -1,5 +1,9 @@
 import {
+  conversionJobEventSchema,
   storyProjectSchema,
+  type ConversionCapability,
+  type ConversionJobEvent,
+  type ConversionOperation,
   type StoryProject,
 } from "@earth-stories/story-schema";
 
@@ -10,6 +14,7 @@ export interface ProjectSummary {
   updated: string;
   chapterCount: number;
   isExample: boolean;
+  invalidReason?: string;
 }
 
 export interface ImportedAsset {
@@ -63,6 +68,44 @@ export interface ExampleCatalog {
   connections: ExampleConnection[];
 }
 
+export interface ConversionJobSnapshot {
+  id: string;
+  projectId: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  events: ConversionJobEvent[];
+  createdAt: string;
+  updatedAt: string;
+}
+export interface RemoteSourceDiscovery {
+  url: string;
+  kind:
+    | "cog"
+    | "pmtiles"
+    | "geoparquet"
+    | "xyz"
+    | "zarr"
+    | "trajectory"
+    | "copc"
+    | "unknown";
+  contentType: string | null;
+  sizeBytes: number | null;
+  cors: boolean;
+  byteRanges: boolean;
+  reachable: boolean;
+  issues: string[];
+  details: {
+    minZoom?: number;
+    maxZoom?: number;
+    sourceLayers?: string[];
+    variables?: Array<{
+      name: string;
+      dimensions: string[];
+      shape: number[];
+      dataType?: string;
+    }>;
+  };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -86,6 +129,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getExamples(): Promise<ExampleCatalog> {
   return request("/api/examples");
+}
+
+export function discoverSource(url: string): Promise<RemoteSourceDiscovery> {
+  return request("/api/discover", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
 }
 
 export async function createExampleStory(id: string): Promise<StoryProject> {
@@ -157,6 +208,49 @@ export async function importAsset(
       "error" in value && value.error ? value.error : "Could not import asset",
     );
   return value as ImportedAsset;
+}
+
+function parseConversionJob(value: unknown): ConversionJobSnapshot {
+  if (!value || typeof value !== "object")
+    throw new Error("The conversion service returned an invalid job");
+  const job = value as Omit<ConversionJobSnapshot, "events"> & {
+    events?: unknown[];
+  };
+  return {
+    ...job,
+    events: (job.events ?? []).map((event) =>
+      conversionJobEventSchema.parse(event),
+    ),
+  };
+}
+
+export async function startConversion(
+  projectId: string,
+  input: {
+    operation: ConversionOperation;
+    capability: ConversionCapability;
+    assetPath: string;
+    options?: Record<string, unknown>;
+  },
+): Promise<ConversionJobSnapshot> {
+  return parseConversionJob(
+    await request<unknown>(
+      `/api/projects/${encodeURIComponent(projectId)}/conversions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    ),
+  );
+}
+
+export async function getConversionJob(
+  id: string,
+): Promise<ConversionJobSnapshot> {
+  return parseConversionJob(
+    await request<unknown>(`/api/conversion-jobs/${encodeURIComponent(id)}`),
+  );
 }
 
 export async function getPublicationPreflight(

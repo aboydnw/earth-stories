@@ -4,3 +4,4 @@ export * from "./archive.js";
 export * from "./embed.js";
 export * from "./preflight.js";
 export * from "./verify.js";
+export * from "./discover.js";

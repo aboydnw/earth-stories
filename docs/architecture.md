@@ -98,5 +98,22 @@ uses those formats. Map presentation is schema data, not editor-only state, so
 the same opacity, colors, camera, legend, and attribution survive every
 interactive output and archival map capture.
 
-Conversion jobs remain deliberately outside the MVP. Earth Stories accepts
-publication-ready formats instead of reproducing the CNG ingestion stack.
+## Local conversion boundary
+
+Raw files are inspected, prepared, and verified by a local worker through the
+versioned `conversion/v1` JSON Schema contract. TypeScript and Pydantic models
+are generated from that single source and tested on both sides. The loopback
+service owns job state and path containment; the worker receives no general
+network inputs from the job protocol and only receives validated project-owned
+input and output paths. The worker currently runs with the host process's OS
+permissions; OS-level filesystem sandboxing and network denial are not yet
+enforced.
+
+Pixi provisions capability environments lazily: core, vector, raster,
+multidimensional raster, and point cloud. DuckDB Spatial is the primary vector
+preparation engine with GDAL as its compatibility fallback; rio-cogeo creates
+and validates COGs; xarray selects one author-chosen 2D multidimensional slice;
+PDAL writes COPC; and the standard-library GPX path writes trajectory sidecars.
+Exact bootstrap versions, checksums, platform lockfiles, tool credits, download
+disclosure, progress events, retry, and visible failure states are part of the
+runtime contract rather than installation polish.
