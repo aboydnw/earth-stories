@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as wait } from "node:timers/promises";
 import {
   copyFile,
   mkdir,
@@ -37,6 +38,23 @@ export interface ProjectSummary {
 
 const STALE_LOCK_MS = 2 * 60 * 1000;
 const MAX_BACKUPS = 20;
+const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+async function retryFileOperation(operation: () => Promise<void>) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await operation();
+      return;
+    } catch (cause) {
+      const retryable =
+        cause instanceof Error &&
+        "code" in cause &&
+        ["EACCES", "EBUSY", "EPERM"].includes(String(cause.code));
+      if (!retryable || attempt >= 4) throw cause;
+      await wait(50 * 2 ** attempt);
+    }
+  }
+}
 
 export interface CreateProjectInput {
   title: string;
@@ -51,13 +69,14 @@ export interface ImportedAsset {
 }
 
 function slugify(value: string): string {
-  return value
+  const slug = value
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
+  return WINDOWS_RESERVED_NAME.test(slug) ? `${slug}-story` : slug;
 }
 
 function assertSafeId(id: string): void {
@@ -229,7 +248,9 @@ export class ProjectStore {
     const trash = join(this.root, ".trash");
     await mkdir(trash, { recursive: true });
     const archivedAt = new Date().toISOString().replace(/[:.]/g, "-");
-    await rename(this.directory(id), join(trash, `${id}-${archivedAt}`));
+    await retryFileOperation(() =>
+      rename(this.directory(id), join(trash, `${id}-${archivedAt}`)),
+    );
   }
 
   assetPath(id: string, requestedPath: string): string {
@@ -307,12 +328,21 @@ export class ProjectStore {
     id: string,
     filename: string,
   ): Promise<{ assetsDirectory: string; candidate: string }> {
-    const safeName = filename
+    let safeName = filename
       .normalize("NFKC")
       .replace(/[^a-zA-Z0-9._-]+/g, "-")
-      .replace(/^-+/, "");
+      .replace(/^-+/, "")
+      .replace(/[. ]+$/, "");
     if (!safeName || safeName === "." || safeName === "..")
       throw new Error("Asset filename is invalid");
+    const safeDot = safeName.lastIndexOf(".");
+    const safeStem = safeDot > 0 ? safeName.slice(0, safeDot) : safeName;
+    if (WINDOWS_RESERVED_NAME.test(safeStem)) {
+      safeName =
+        safeDot > 0
+          ? `${safeStem}-file${safeName.slice(safeDot)}`
+          : `${safeStem}-file`;
+    }
     const assetsDirectory = join(this.directory(id), "assets");
     await mkdir(assetsDirectory, { recursive: true });
     let candidate = safeName;
@@ -398,7 +428,7 @@ export class ProjectStore {
       } finally {
         await file.close();
       }
-      await rename(temporaryPath, storyPath);
+      await retryFileOperation(() => rename(temporaryPath, storyPath));
     } finally {
       await lock.close();
       await unlink(lockPath).catch(() => undefined);

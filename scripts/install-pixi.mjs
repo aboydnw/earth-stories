@@ -6,7 +6,12 @@ import { spawn } from "node:child_process";
 
 const VERSION = "0.76.1";
 const RELEASE = `https://github.com/prefix-dev/pixi/releases/download/v${VERSION}`;
-const TARGET = resolve(process.argv[2] ?? ".earth-stories/bin/pixi");
+const TARGET = resolve(
+  process.argv[2] ??
+    (platform() === "win32"
+      ? ".earth-stories/bin/pixi.exe"
+      : ".earth-stories/bin/pixi"),
+);
 const artifacts = {
   "darwin-arm64": [
     "pixi-aarch64-apple-darwin.tar.gz",
@@ -23,6 +28,10 @@ const artifacts = {
   "linux-x64": [
     "pixi-x86_64-unknown-linux-musl.tar.gz",
     "8e2ab7630f5bc1e8aa38d236842e20f565f7aa0834687e53670b7c86ba54c90f",
+  ],
+  "win32-x64": [
+    "pixi-x86_64-pc-windows-msvc.zip",
+    "ca64d56112cbebd96b4ec76ff220d59436ad5b6428a0e97242b3e549d65a39be",
   ],
 };
 
@@ -47,9 +56,18 @@ await mkdir(temporaryDirectory, { recursive: true });
 await mkdir(dirname(TARGET), { recursive: true });
 await writeFile(archive, bytes, { mode: 0o600 });
 await new Promise((resolvePromise, rejectPromise) => {
-  const child = spawn("tar", ["-xzf", archive, "-C", temporaryDirectory], {
-    stdio: "inherit",
-  });
+  const child = spawn(
+    "tar",
+    [
+      filename.endsWith(".zip") ? "-xf" : "-xzf",
+      archive,
+      "-C",
+      temporaryDirectory,
+    ],
+    {
+      stdio: "inherit",
+    },
+  );
   child.once("error", rejectPromise);
   child.once("exit", (code) =>
     code === 0
@@ -57,7 +75,10 @@ await new Promise((resolvePromise, rejectPromise) => {
       : rejectPromise(new Error(`Could not unpack Pixi (exit ${code})`)),
   );
 });
-await rename(join(temporaryDirectory, "pixi"), TARGET);
-await chmod(TARGET, 0o755);
+await rename(
+  join(temporaryDirectory, platform() === "win32" ? "pixi.exe" : "pixi"),
+  TARGET,
+);
+if (platform() !== "win32") await chmod(TARGET, 0o755);
 await rm(temporaryDirectory, { recursive: true, force: true });
 process.stdout.write(`${TARGET}\n`);

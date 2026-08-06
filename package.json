@@ -15,6 +15,7 @@
     "check:independence": "node scripts/check-independence.mjs",
     "check:ui": "node scripts/check-ui-tokens.mjs",
     "contract:generate": "node --import tsx scripts/generate-conversion-contract.ts",
+    "conversion:smoke": "node scripts/smoke-conversion-tools.mjs",
     "clean:types": "tsc --build --clean",
     "test": "vitest run",
     "typecheck": "tsc --build",

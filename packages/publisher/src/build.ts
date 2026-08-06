@@ -8,6 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { setTimeout as wait } from "node:timers/promises";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
@@ -30,6 +31,22 @@ import { verifyPublication } from "./verify.js";
 
 const MAX_REMOTE_ASSET_BYTES = 2 * 1024 * 1024 * 1024;
 const REMOTE_ASSET_TIMEOUT_MS = 5 * 60 * 1000;
+
+async function retryFileOperation(operation: () => Promise<void>) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await operation();
+      return;
+    } catch (cause) {
+      const retryable =
+        cause instanceof Error &&
+        "code" in cause &&
+        ["EACCES", "EBUSY", "EPERM"].includes(String(cause.code));
+      if (!retryable || attempt >= 4) throw cause;
+      await wait(50 * 2 ** attempt);
+    }
+  }
+}
 
 export interface BuildPublicationOptions {
   projectDirectory: string;
@@ -149,7 +166,7 @@ async function copyIncludedAssets(
           limit,
           createWriteStream(temporaryPath),
         );
-        await rename(temporaryPath, destinationPath);
+        await retryFileOperation(() => rename(temporaryPath, destinationPath));
       } finally {
         clearTimeout(timeout);
         await rm(temporaryPath, { force: true });
@@ -202,7 +219,12 @@ export async function buildPublication({
   );
   const manifest = compileProject(project);
 
-  await rm(outputDirectory, { recursive: true, force: true });
+  await rm(outputDirectory, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 75,
+  });
   await mkdir(outputDirectory, { recursive: true });
   await copyIncludedAssets(project, projectDirectory, outputDirectory);
 
@@ -319,9 +341,14 @@ async function buildLatestPublicationUnlocked(
       if (measuredBytes === totalBytes) break;
       totalBytes = measuredBytes;
     }
-    await rm(previous, { recursive: true, force: true });
+    await rm(previous, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 75,
+    });
     try {
-      await rename(target, previous);
+      await retryFileOperation(() => rename(target, previous));
     } catch (error) {
       if (!(
         error instanceof Error &&
@@ -331,18 +358,28 @@ async function buildLatestPublicationUnlocked(
         throw error;
     }
     try {
-      await rename(temporary, target);
+      await retryFileOperation(() => rename(temporary, target));
     } catch (error) {
       try {
-        await rename(previous, target);
+        await retryFileOperation(() => rename(previous, target));
       } catch {
         /* Preserve the original failure. */
       }
       throw error;
     }
-    await rm(previous, { recursive: true, force: true });
+    await rm(previous, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 75,
+    });
     return { manifest, preflight, directory: target, totalBytes, builtAt };
   } finally {
-    await rm(temporary, { recursive: true, force: true });
+    await rm(temporary, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 75,
+    });
   }
 }

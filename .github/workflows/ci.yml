@@ -20,6 +20,8 @@ jobs:
             runner: macos-15-intel
           - platform: macos-arm64
             runner: macos-14
+          - platform: windows-x64
+            runner: windows-latest
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -27,9 +29,26 @@ jobs:
         with:
           node-version: 22
       - name: Install checksum-verified Pixi
-        run: node scripts/install-pixi.mjs .earth-stories/bin/pixi
+        run: node scripts/install-pixi.mjs
       - name: Validate conversion lock
-        run: .earth-stories/bin/pixi lock --check
+        run: node scripts/check-conversion-lock.mjs
+
+  windows-verify:
+    name: Windows runtime and conversion tools
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn typecheck
+      - run: yarn test
+      - name: Install checksum-verified Pixi
+        run: node scripts/install-pixi.mjs
+      - name: Load every native conversion capability
+        run: yarn conversion:smoke
 
   verify:
     runs-on: ubuntu-latest

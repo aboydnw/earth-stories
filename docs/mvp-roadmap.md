@@ -66,7 +66,7 @@
 - Raw GeoTIFF, Shapefile, GeoJSON, CSV, NetCDF, HDF5, LAS/LAZ, and GPX intake
 - DuckDB Spatial vector preparation, GDAL PMTiles, rio-cogeo COG validation,
   xarray 2D slice selection, PDAL COPC, and trajectory sidecars
-- Lazily provisioned, pinned Pixi capability environments for macOS and Linux
+- Lazily provisioned, pinned Pixi capability environments for macOS, Linux, and Windows x64
 - Versioned JSON Schema job protocol with generated TypeScript/Pydantic models
 - Progress, size disclosure, retry, verification, and explicit tool credits
 

@@ -6,6 +6,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { extname, join, relative, resolve } from "node:path";
+import { platform } from "node:os";
 import { ProjectStore } from "@earth-stories/project-store";
 import {
   buildLatestPublication,
@@ -33,7 +34,10 @@ const VIEWER_DIRECTORY = resolve(
 );
 const REPOSITORY_DIRECTORY = resolve(".");
 const PIXI_EXECUTABLE = resolve(
-  process.env.EARTH_STORIES_PIXI ?? ".earth-stories/bin/pixi",
+  process.env.EARTH_STORIES_PIXI ??
+    (platform() === "win32"
+      ? ".earth-stories/bin/pixi.exe"
+      : ".earth-stories/bin/pixi"),
 );
 
 const contentTypes: Record<string, string> = {

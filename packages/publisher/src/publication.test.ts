@@ -129,41 +129,47 @@ describe("publication hardening", () => {
     );
   });
 
-  it("rejects an included symlink that resolves outside the project", async () => {
-    const { root, project } = await setup();
-    const outside = join(root, "outside.geojson");
-    await writeFile(outside, '{"type":"FeatureCollection","features":[]}');
-    await symlink(outside, join(project, "data", "linked.geojson"));
-    const story = await readProject(project);
-    story.sources[0].path = "data/linked.geojson";
-    await writeFile(join(project, "story.json"), JSON.stringify(story));
-    const result = await preflightPublication(project);
-    expect(result.ready).toBe(false);
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({
-        id: "escape-survey-sites",
-        severity: "error",
-      }),
-    );
-  });
+  it.skipIf(process.platform === "win32")(
+    "rejects an included symlink that resolves outside the project",
+    async () => {
+      const { root, project } = await setup();
+      const outside = join(root, "outside.geojson");
+      await writeFile(outside, '{"type":"FeatureCollection","features":[]}');
+      await symlink(outside, join(project, "data", "linked.geojson"));
+      const story = await readProject(project);
+      story.sources[0].path = "data/linked.geojson";
+      await writeFile(join(project, "story.json"), JSON.stringify(story));
+      const result = await preflightPublication(project);
+      expect(result.ready).toBe(false);
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          id: "escape-survey-sites",
+          severity: "error",
+        }),
+      );
+    },
+  );
 
-  it("rejects viewer symlinks that escape the release", async () => {
-    const { root, project } = await setup();
-    const outside = join(root, "outside.geojson");
-    await writeFile(outside, '{"type":"FeatureCollection","features":[]}');
-    const output = join(root, "output");
-    const story = await readProject(project);
-    const manifest = compileProject(story);
-    await buildPublication({
-      projectDirectory: project,
-      outputDirectory: output,
-    });
-    await rm(join(output, "assets", "survey-sites.geojson"));
-    await symlink(outside, join(output, "assets", "survey-sites.geojson"));
-    await expect(verifyPublication(output, manifest)).rejects.toThrow(
-      "links outside the release folder",
-    );
-  });
+  it.skipIf(process.platform === "win32")(
+    "rejects viewer symlinks that escape the release",
+    async () => {
+      const { root, project } = await setup();
+      const outside = join(root, "outside.geojson");
+      await writeFile(outside, '{"type":"FeatureCollection","features":[]}');
+      const output = join(root, "output");
+      const story = await readProject(project);
+      const manifest = compileProject(story);
+      await buildPublication({
+        projectDirectory: project,
+        outputDirectory: output,
+      });
+      await rm(join(output, "assets", "survey-sites.geojson"));
+      await symlink(outside, join(output, "assets", "survey-sites.geojson"));
+      await expect(verifyPublication(output, manifest)).rejects.toThrow(
+        "links outside the release folder",
+      );
+    },
+  );
 
   it("escapes report values and omits embed artifacts without a viewer", async () => {
     const { root, project } = await setup();

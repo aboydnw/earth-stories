@@ -44,7 +44,7 @@ must be rejected explicitly rather than silently changed during export.
 | Chapter PNG export     | Included   | Map canvases with visible attribution footer                      |
 | Animated map export    | Included   | MP4 where supported, otherwise explicit WebM fallback             |
 | macOS / Linux runtime  | Included   | Locked lazy Pixi environments; no separate GDAL installation      |
-| Windows runtime        | Deferred   | Feasible GDAL-only PMTiles path; packaging and CI remain          |
+| Windows x64 runtime    | Included   | Native Pixi bootstrap, locked tools, and Windows CI validation    |
 
 Portable does not mean offline. Zarr stores remain connected because they are
 multi-object stores. Basemaps, XYZ tiles, the current GeoParquet WASM

@@ -66,6 +66,7 @@ describe("ProjectStore", () => {
     expect((await store.create({ title: "Example Antakya" })).id).toBe(
       "story-example-antakya",
     );
+    expect((await store.create({ title: "CON" })).id).toBe("con-story");
   });
 
   it("archives a project outside the active workspace", async () => {
@@ -130,8 +131,20 @@ describe("ProjectStore", () => {
       "field notes.csv",
       new TextEncoder().encode("label,value\nb,3\n"),
     );
+    const reserved = await store.importAsset(
+      project.id,
+      "NUL.geojson",
+      new TextEncoder().encode('{"type":"FeatureCollection","features":[]}'),
+    );
+    const trailing = await store.importAsset(
+      project.id,
+      "field-notes.",
+      new TextEncoder().encode("notes"),
+    );
     expect(first.path).toBe("assets/field-notes.csv");
     expect(second.path).toBe("assets/field-notes-2.csv");
+    expect(reserved.path).toBe("assets/NUL-file.geojson");
+    expect(trailing.path).toBe("assets/field-notes");
     expect(
       await readFile(store.assetPath(project.id, first.path), "utf8"),
     ).toContain("a,2");

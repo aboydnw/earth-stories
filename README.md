@@ -41,8 +41,9 @@ and AI features remain intentionally outside scope.
 
 ## Develop
 
-Prerequisites: Node.js 22+ and Corepack. Data preparation bootstraps pinned Pixi
-environments on first use, so authors do not install GDAL or PDAL separately.
+Prerequisites: Node.js 22+ and Corepack on macOS, Linux, or Windows x64. Data
+preparation bootstraps pinned Pixi environments on first use, so authors do not
+install GDAL or PDAL separately.
 
 ```bash
 corepack enable
