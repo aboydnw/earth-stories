@@ -726,6 +726,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@earth-stories/viewer@workspace:packages/viewer"
   dependencies:
+    "@cogeotiff/core": "npm:^9.5.0"
     "@deck.gl/core": "npm:^9.3.6"
     "@deck.gl/extensions": "npm:^9.3.6"
     "@deck.gl/geo-layers": "npm:^9.3.6"

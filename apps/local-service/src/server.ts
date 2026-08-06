@@ -5,8 +5,9 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import { extname, join, relative, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { platform } from "node:os";
+import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { ProjectStore } from "@earth-stories/project-store";
 import {
@@ -35,15 +36,22 @@ const PROJECTS_DIRECTORY = resolve(
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_ASSET_BYTES = 5 * 1024 * 1024 * 1024;
 const MAX_EXPORT_BODY_BYTES = 50 * 1024 * 1024;
-const VIEWER_DIRECTORY = resolve(
-  process.env.EARTH_STORIES_VIEWER_DIR ?? "./dist/viewer",
+const REPOSITORY_DIRECTORY = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../..",
 );
-const REPOSITORY_DIRECTORY = resolve(".");
+const VIEWER_DIRECTORY = resolve(
+  process.env.EARTH_STORIES_VIEWER_DIR ??
+    join(REPOSITORY_DIRECTORY, "dist/viewer"),
+);
 const PIXI_EXECUTABLE = resolve(
   process.env.EARTH_STORIES_PIXI ??
-    (platform() === "win32"
-      ? ".earth-stories/bin/pixi.exe"
-      : ".earth-stories/bin/pixi"),
+    join(
+      REPOSITORY_DIRECTORY,
+      platform() === "win32"
+        ? ".earth-stories/bin/pixi.exe"
+        : ".earth-stories/bin/pixi",
+    ),
 );
 
 const contentTypes: Record<string, string> = {

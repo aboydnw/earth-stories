@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PublicationAsset } from "@earth-stories/story-schema";
-import type { GeoTIFF } from "@developmentseed/geotiff";
+import { GeoTIFF } from "@developmentseed/geotiff";
 import type { ProjectionDefinition } from "@developmentseed/proj";
 import proj4 from "proj4";
 import { useMap } from "react-map-gl/maplibre";
 import { buildCogLayers } from "./CogLayer.js";
+import { deriveCogRescale, supportsInferredPipeline } from "./cogPipeline.js";
 import { DeckOverlay } from "./DeckOverlay.js";
 
 export function CogOverlay({
   asset,
   url,
   onError,
+  onBounds,
 }: {
   asset: PublicationAsset;
   url: string;
   onError: (message: string) => void;
+  onBounds?: (bounds: [number, number, number, number]) => void;
 }) {
   const maps = useMap();
   const raster = useRef<{
@@ -22,15 +25,84 @@ export function CogOverlay({
     projection: ProjectionDefinition;
   } | null>(null);
   const [inspection, setInspection] = useState<string | null>(null);
+  const [prepared, setPrepared] = useState<{
+    key: string;
+    source: GeoTIFF;
+    rescale: [number, number] | null;
+  } | null>(null);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const [rescaleMin, rescaleMax] = asset.presentation.rescale ?? [null, null];
+  const preparedKey = `${url}|${asset.presentation.rasterBand}|${rescaleMin}|${rescaleMax}`;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const absoluteUrl = new URL(url, window.location.href).toString();
+        const source = await GeoTIFF.fromUrl(absoluteUrl);
+        let rescale: [number, number] | null =
+          rescaleMin !== null && rescaleMax !== null
+            ? [rescaleMin, rescaleMax]
+            : null;
+        if (!rescale && !supportsInferredPipeline(source)) {
+          rescale = await deriveCogRescale(
+            source,
+            asset.presentation.rasterBand,
+          );
+        }
+        if (!cancelled) setPrepared({ key: preparedKey, source, rescale });
+      } catch (cause) {
+        if (!cancelled)
+          onErrorRef.current(
+            cause instanceof Error
+              ? cause.message
+              : "The COG could not be opened.",
+          );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // preparedKey encodes every input that should trigger a re-open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preparedKey]);
   const onLoad = useCallback(
     (geotiff: GeoTIFF, projection: ProjectionDefinition) => {
       raster.current = { geotiff, projection };
+      if (onBounds) {
+        try {
+          const projectionName = `EARTH_STORIES_BOUNDS:${asset.id}`;
+          proj4.defs(projectionName, projection as never);
+          const [minX, minY, maxX, maxY] = geotiff.bbox;
+          const corners = [
+            proj4(projectionName, "EPSG:4326", [minX, minY]),
+            proj4(projectionName, "EPSG:4326", [maxX, maxY]),
+          ];
+          onBounds([
+            Math.min(corners[0][0], corners[1][0]),
+            Math.min(corners[0][1], corners[1][1]),
+            Math.max(corners[0][0], corners[1][0]),
+            Math.max(corners[0][1], corners[1][1]),
+          ]);
+        } catch {
+          // The chapter camera remains available when source bounds cannot be projected.
+        }
+      }
     },
-    [],
+    [asset.id, onBounds],
   );
   const layers = useMemo(
-    () => buildCogLayers(asset, url, onError, onLoad),
-    [asset, onError, onLoad, url],
+    () =>
+      prepared
+        ? buildCogLayers(
+            asset,
+            prepared.source,
+            onError,
+            onLoad,
+            prepared.rescale,
+          )
+        : [],
+    [asset, onError, onLoad, prepared],
   );
   useEffect(() => {
     const map = maps.current?.getMap();

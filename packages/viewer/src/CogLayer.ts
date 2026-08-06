@@ -76,16 +76,17 @@ export function colorize(
 
 export function buildCogLayers(
   asset: PublicationAsset,
-  url: string,
+  source: GeoTIFF | string,
   onError: (message: string) => void,
   onLoad?: (geotiff: GeoTIFF, projection: ProjectionDefinition) => void,
+  rescale: [number, number] | null = asset.presentation.rescale,
 ): Layer[] {
   const { presentation } = asset;
-  if (!presentation.rescale)
+  if (!rescale)
     return [
       new COGLayer({
         id: `${asset.id}-cog`,
-        geotiff: url,
+        geotiff: source,
         opacity: presentation.opacity,
         maxError: 0.03,
         onGeoTIFFLoad: (geotiff, options) =>
@@ -99,7 +100,7 @@ export function buildCogLayers(
       }),
     ];
 
-  const [minimum, maximum] = presentation.rescale;
+  const [minimum, maximum] = rescale;
   const range = maximum - minimum || 1;
   type CogTile = { texture: Texture; width: number; height: number };
   const getTileData: COGLayerProps<CogTile>["getTileData"] = async (
@@ -153,7 +154,7 @@ export function buildCogLayers(
         module: colorize(
           presentation.colormap,
           presentation.categoryColors,
-          presentation.rescale,
+          rescale,
         ),
       },
     ],
@@ -161,7 +162,7 @@ export function buildCogLayers(
   return [
     new COGLayer({
       id: `${asset.id}-cog`,
-      geotiff: url,
+      geotiff: source,
       opacity: presentation.opacity,
       getTileData,
       renderTile,

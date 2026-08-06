@@ -32,8 +32,20 @@ function pinnedAgent(url: URL, authorized: AuthorizedAddress): Agent {
   if (existing) return existing;
   const agent = new Agent({
     connect: {
-      lookup: (_hostname, _options, callback) =>
-        callback(null, authorized.address, authorized.family),
+      lookup: (_hostname, options, callback) => {
+        const respond = callback as (
+          error: NodeJS.ErrnoException | null,
+          address: string | { address: string; family: number }[],
+          family?: number,
+        ) => void;
+        if ((options as { all?: boolean }).all) {
+          respond(null, [
+            { address: authorized.address, family: authorized.family },
+          ]);
+        } else {
+          respond(null, authorized.address, authorized.family);
+        }
+      },
     },
   });
   pinnedAgents.set(key, agent);
