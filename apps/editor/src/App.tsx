@@ -1,27 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check,
   Copy,
   ArrowDown,
   ArrowUp,
   BookOpen,
-  CaretDown,
   Database,
   Export,
   FileArrowUp,
   FloppyDisk,
-  ChartLine,
-  Image,
   Link,
   MapTrifold,
-  Path,
   GearSix,
   House,
   Plus,
   PencilSimple,
   Trash,
-  TextT,
-  VideoCamera,
 } from "@phosphor-icons/react";
 import { compileProject } from "@earth-stories/publisher/compile";
 import type {
@@ -32,7 +25,7 @@ import type {
   StoryProject,
 } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
-import { ActionButton, BrandSpinner } from "@earth-stories/ui";
+import { ActionButton, BrandSpinner, SaveStatus } from "@earth-stories/ui";
 import { reorderChapters } from "./chapterOrder";
 import {
   createProject,
@@ -54,8 +47,9 @@ import {
 } from "./api";
 import { PublishPanel } from "./PublishPanel";
 import { WorkspaceScreen } from "./WorkspaceScreen";
+import { ChapterAddMenu } from "./ChapterAddMenu";
 
-type SaveState = "saved" | "changed" | "saving" | "exporting";
+type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
 interface MultidimChoice {
   variable: string;
@@ -161,7 +155,7 @@ export function App() {
     };
   }, [addChapterOpen]);
   useEffect(() => {
-    if (saveState !== "changed") return;
+    if (saveState !== "changed" && saveState !== "save-error") return;
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
@@ -352,7 +346,7 @@ export function App() {
       await refreshProjects();
       return saved;
     } catch (cause) {
-      setSaveState("changed");
+      setSaveState("save-error");
       showError(cause);
       return null;
     }
@@ -1025,7 +1019,11 @@ export function App() {
 
   function leaveProject() {
     void (async () => {
-      if (saveState === "changed" && !(await persist())) return;
+      if (
+        (saveState === "changed" || saveState === "save-error") &&
+        !(await persist())
+      )
+        return;
       setProject(null);
       setError(null);
       setAddChapterOpen(false);
@@ -1159,23 +1157,22 @@ export function App() {
           <small>local</small>
         </button>
         <div className="editor-status">
-          {saveState === "saved" ? (
-            <Check size={14} weight="bold" />
-          ) : (
-            <FloppyDisk size={14} weight="bold" />
-          )}{" "}
-          {saveState === "saving"
-            ? "Saving…"
-            : saveState === "exporting"
-              ? "Building publication…"
-              : saveState === "changed"
-                ? "Changes not saved"
-                : "Saved locally"}
+          <SaveStatus
+            state={
+              saveState === "changed"
+                ? "dirty"
+                : saveState === "save-error"
+                  ? "service-error"
+                  : saveState === "exporting"
+                    ? "exporting"
+                    : saveState
+            }
+          />
         </div>
         <ActionButton
           variant="surface"
           className="button button--save"
-          disabled={saveState !== "changed"}
+          disabled={saveState !== "changed" && saveState !== "save-error"}
           onClick={() => void persist()}
         >
           <FloppyDisk size={17} /> Save
@@ -1287,69 +1284,23 @@ export function App() {
           ))}
         </nav>
         <div className="chapter-add" ref={chapterAddRef}>
-          <button
-            className="chapter-add__trigger"
-            type="button"
-            onClick={() => setAddChapterOpen((open) => !open)}
-            aria-haspopup="menu"
-            aria-expanded={addChapterOpen}
-          >
-            <Plus size={16} /> Add chapter <CaretDown size={14} />
-          </button>
-          {addChapterOpen ? (
-            <div className="chapter-add__menu">
-              <p>Choose a chapter type</p>
-              <button type="button" onClick={addProse}>
-                <TextT size={17} />
-                <span>
-                  <strong>Text</strong>
-                  <small>Prose, headings and links</small>
-                </span>
-              </button>
-              <button type="button" onClick={() => addMapChapter("scrolly")}>
-                <Path size={17} />
-                <span>
-                  <strong>Guided tour</strong>
-                  <small>Scroll through a locked map scene</small>
-                </span>
-              </button>
-              <button type="button" onClick={() => addMapChapter("map")}>
-                <MapTrifold size={17} />
-                <span>
-                  <strong>Map</strong>
-                  <small>Interactive map and data</small>
-                </span>
-              </button>
-              <button type="button" onClick={addImage}>
-                <Image size={17} />
-                <span>
-                  <strong>Image</strong>
-                  <small>Imported image with caption</small>
-                </span>
-              </button>
-              <button type="button" onClick={addVideo}>
-                <VideoCamera size={17} />
-                <span>
-                  <strong>Video</strong>
-                  <small>YouTube or Vimeo</small>
-                </span>
-              </button>
-              <button type="button" onClick={addChart}>
-                <ChartLine size={17} />
-                <span>
-                  <strong>Chart</strong>
-                  <small>Visualize imported CSV data</small>
-                </span>
-              </button>
-              <button type="button" onClick={addFlyover}>
-                <MapTrifold size={17} />
-                <span>
-                  <strong>Flyover</strong>
-                  <small>Animate between map views</small>
-                </span>
-              </button>
-            </div>
-          ) : null}
+          <ChapterAddMenu
+            open={addChapterOpen}
+            canAddImage={project.sources.some(
+              (source) => source.kind === "image",
+            )}
+            canAddChart={project.sources.some(
+              (source) => source.kind === "csv",
+            )}
+            onToggle={() => setAddChapterOpen((open) => !open)}
+            onAddProse={addProse}
+            onAddScrolly={() => addMapChapter("scrolly")}
+            onAddMap={() => addMapChapter("map")}
+            onAddImage={addImage}
+            onAddVideo={addVideo}
+            onAddChart={addChart}
+            onAddFlyover={addFlyover}
+          />
         </div>
         <button
           className={
@@ -3511,7 +3462,7 @@ export function App() {
             await refreshProjects();
             return saved;
           } catch (cause) {
-            setSaveState("changed");
+            setSaveState("save-error");
             showError(cause);
             return null;
           }

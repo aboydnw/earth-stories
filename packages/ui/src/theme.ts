@@ -4,6 +4,7 @@ import {
   defineConfig,
   defineRecipe,
 } from "@chakra-ui/react";
+import { productCssVariables, productTokens } from "./tokens.js";
 
 const transition = {
   transitionProperty:
@@ -63,42 +64,49 @@ const buttonRecipe = defineRecipe({
 
 const config = defineConfig({
   globalCss: {
+    ":root": productCssVariables,
     "html, body": { bg: "bg", color: "fg", fontFamily: "body" },
     "*:focus-visible": { outlineColor: "focus.ring" },
   },
   theme: {
     tokens: {
       fonts: {
-        body: { value: '"Satoshi", "Satoshi Variable", "Inter", sans-serif' },
+        body: { value: productTokens.fonts.body },
         heading: {
-          value: '"Satoshi", "Satoshi Variable", "Inter", sans-serif',
+          value: productTokens.fonts.body,
         },
-        mono: { value: '"DM Mono", ui-monospace, monospace' },
+        mono: { value: productTokens.fonts.mono },
       },
       radii: {
-        control: { value: "8px" },
-        panel: { value: "12px" },
+        control: { value: productTokens.radii.control },
+        panel: { value: productTokens.radii.panel },
       },
       shadows: {
-        xs: { value: "0 1px 2px rgba(68,63,63,.05)" },
-        sm: { value: "0 2px 8px rgba(68,63,63,.07)" },
-        md: { value: "0 10px 28px rgba(68,63,63,.1)" },
-        lg: { value: "0 18px 48px rgba(68,63,63,.14)" },
+        xs: { value: productTokens.shadows.xs },
+        sm: { value: productTokens.shadows.sm },
+        md: { value: productTokens.shadows.md },
+        lg: { value: productTokens.shadows.lg },
       },
       durations: {
-        fast: { value: "180ms" },
-        moderate: { value: "240ms" },
-        slow: { value: "340ms" },
+        fast: { value: productTokens.motion.fast },
+        moderate: { value: productTokens.motion.moderate },
+        slow: { value: productTokens.motion.slow },
       },
-      easings: { out: { value: "cubic-bezier(.32,.72,0,1)" } },
+      easings: { out: { value: productTokens.motion.easing } },
+      zIndex: Object.fromEntries(
+        Object.entries(productTokens.zIndex).map(([name, value]) => [
+          name,
+          { value },
+        ]),
+      ),
       colors: {
         brand: {
-          orange: { value: "#CF3F02" },
-          orangeHover: { value: "#B83800" },
-          brown: { value: "#443F3F" },
-          bgSubtle: { value: "#F5F3F0" },
-          border: { value: "#E8E5E0" },
-          textSecondary: { value: "#716B68" },
+          orange: { value: productTokens.colors.action },
+          orangeHover: { value: productTokens.colors.actionHover },
+          brown: { value: productTokens.colors.text },
+          bgSubtle: { value: productTokens.colors.canvas },
+          border: { value: productTokens.colors.border },
+          textSecondary: { value: productTokens.colors.textMuted },
         },
       },
     },
@@ -106,50 +114,57 @@ const config = defineConfig({
       colors: {
         bg: {
           value: "{colors.brand.bgSubtle}",
-          subtle: { value: "#FCFBF9" },
-          raised: { value: "#FFFFFF" },
-          emphasized: { value: "#EFEBE6" },
-          muted: { value: "#E5E0DA" },
+          subtle: { value: productTokens.colors.subtle },
+          raised: { value: productTokens.colors.raised },
+          emphasized: { value: productTokens.colors.emphasized },
+          muted: { value: productTokens.colors.mutedSurface },
         },
         fg: {
           value: "{colors.brand.brown}",
           muted: { value: "{colors.brand.textSecondary}" },
-          placeholder: { value: "#98918D" },
+          placeholder: { value: productTokens.colors.textPlaceholder },
+          disabled: { value: productTokens.colors.textDisabled },
         },
         border: {
           value: "{colors.brand.border}",
-          emphasized: { value: "#CFC9C2" },
+          emphasized: { value: productTokens.colors.borderEmphasized },
         },
         action: {
           primary: { value: "{colors.brand.orange}" },
           primaryHover: { value: "{colors.brand.orangeHover}" },
-          onPrimary: { value: "#FFFFFF" },
+          onPrimary: { value: productTokens.colors.raised },
+        },
+        selection: { value: productTokens.colors.selection },
+        overlay: { value: productTokens.colors.overlay },
+        disabled: { value: productTokens.colors.disabled },
+        map: {
+          chrome: { value: productTokens.colors.mapChrome },
         },
         focus: {
           ring: { value: "{colors.brand.orange}" },
-          subtle: { value: "rgba(207,63,2,.18)" },
+          subtle: { value: productTokens.colors.focusSubtle },
         },
         status: {
           success: {
-            fg: { value: "#236637" },
-            subtle: { value: "#EAF5ED" },
-            border: { value: "#B8DCC1" },
+            fg: { value: productTokens.colors.success },
+            subtle: { value: productTokens.colors.successBg },
+            border: { value: productTokens.colors.successBorder },
           },
           warning: {
-            fg: { value: "#79551A" },
-            subtle: { value: "#FFF4D8" },
-            border: { value: "#E8CE91" },
+            fg: { value: productTokens.colors.warning },
+            subtle: { value: productTokens.colors.warningBg },
+            border: { value: productTokens.colors.warningBorder },
           },
           danger: {
-            fg: { value: "#A12E0A" },
-            subtle: { value: "#FFF0EA" },
-            border: { value: "#E4B59F" },
-            hover: { value: "#842306" },
+            fg: { value: productTokens.colors.danger },
+            subtle: { value: productTokens.colors.dangerBg },
+            border: { value: productTokens.colors.dangerBorder },
+            hover: { value: productTokens.colors.dangerHover },
           },
           info: {
-            fg: { value: "#315F75" },
-            subtle: { value: "#EAF4F8" },
-            border: { value: "#B9D7E4" },
+            fg: { value: productTokens.colors.info },
+            subtle: { value: productTokens.colors.infoBg },
+            border: { value: productTokens.colors.infoBorder },
           },
         },
       },

@@ -1,12 +1,14 @@
 import type { FormEvent } from "react";
+import { MapTrifold, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import {
-  CaretDown,
-  MapTrifold,
-  PencilSimple,
-  Plus,
-  Trash,
-} from "@phosphor-icons/react";
-import { ActionButton, ConfirmDialog, StatePanel } from "@earth-stories/ui";
+  ActionButton,
+  ConfirmDialog,
+  FormField,
+  IconButton,
+  StatePanel,
+  TextInput,
+  WorkspaceRow,
+} from "@earth-stories/ui";
 import type { ExampleCatalog, ProjectSummary } from "./api";
 import { DataWorkspace } from "./DataWorkspace";
 
@@ -93,14 +95,15 @@ export function WorkspaceScreen({
               </span>
             </div>
             <form className="workspace-create" onSubmit={onCreate}>
-              <label htmlFor="story-title">New story title (optional)</label>
-              <div>
-                <input
-                  id="story-title"
-                  value={newTitle}
-                  onChange={(event) => onNewTitleChange(event.target.value)}
-                  placeholder="Untitled story"
-                />
+              <div className="workspace-create__controls">
+                <FormField label="New story title (optional)">
+                  <TextInput
+                    id="story-title"
+                    value={newTitle}
+                    onChange={(event) => onNewTitleChange(event.target.value)}
+                    placeholder="Untitled story"
+                  />
+                </FormField>
                 <ActionButton className="button button--primary" type="submit">
                   <Plus size={17} /> Create story
                 </ActionButton>
@@ -132,51 +135,44 @@ export function WorkspaceScreen({
             {projects.length || examples?.stories.length ? (
               <div className="project-list">
                 {projects.map((item) => (
-                  <div className="project-list__row" key={item.id}>
-                    <button
-                      className="project-list__open"
-                      disabled={Boolean(item.invalidReason)}
-                      onClick={() => onOpen(item.id)}
-                    >
-                      <span className="project-list__number">
-                        {String(item.chapterCount).padStart(2, "0")}
-                      </span>
-                      <span>
-                        <strong>
-                          {item.title}
-                          {item.isExample ? (
-                            <mark className="project-list__tag">Example</mark>
-                          ) : null}
-                        </strong>
-                        <small>
-                          {item.invalidReason ??
-                            (item.description || "No description yet")}
-                        </small>
-                      </span>
-                      <em>
-                        {item.chapterCount}{" "}
-                        {item.chapterCount === 1 ? "chapter" : "chapters"}
-                      </em>
-                      <CaretDown size={18} className="project-list__arrow" />
-                    </button>
-                    <div className="project-list__actions">
-                      <button
-                        type="button"
-                        disabled={Boolean(item.invalidReason)}
-                        aria-label={`Rename ${item.title}`}
-                        onClick={() => onRename(item)}
-                      >
-                        <PencilSimple size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`Remove ${item.title}`}
-                        onClick={() => onRequestDelete(item)}
-                      >
-                        <Trash size={16} />
-                      </button>
-                    </div>
-                  </div>
+                  <WorkspaceRow
+                    key={item.id}
+                    number={String(item.chapterCount).padStart(2, "0")}
+                    title={item.title}
+                    description={
+                      item.invalidReason ??
+                      (item.description || "No description yet")
+                    }
+                    meta={`${item.chapterCount} ${item.chapterCount === 1 ? "chapter" : "chapters"}`}
+                    badge={
+                      item.isExample ? (
+                        <mark className="project-list__tag">Example</mark>
+                      ) : undefined
+                    }
+                    disabled={Boolean(item.invalidReason)}
+                    onOpen={() => onOpen(item.id)}
+                    actions={
+                      <>
+                        <IconButton
+                          size="sm"
+                          variant="ghost"
+                          disabled={Boolean(item.invalidReason)}
+                          label={`Rename ${item.title}`}
+                          onClick={() => onRename(item)}
+                        >
+                          <PencilSimple size={16} />
+                        </IconButton>
+                        <IconButton
+                          size="sm"
+                          variant="ghost"
+                          label={`Remove ${item.title}`}
+                          onClick={() => onRequestDelete(item)}
+                        >
+                          <Trash size={16} />
+                        </IconButton>
+                      </>
+                    }
+                  />
                 ))}
                 {examples?.stories
                   .filter(
@@ -186,23 +182,15 @@ export function WorkspaceScreen({
                       ),
                   )
                   .map((story) => (
-                    <button
+                    <WorkspaceRow
                       key={`example-${story.id}`}
-                      onClick={() => onOpenExample(story.id)}
-                    >
-                      <span className="project-list__number">
-                        {String(story.chapterCount).padStart(2, "0")}
-                      </span>
-                      <span>
-                        <strong>
-                          {story.title}
-                          <mark className="project-list__tag">Example</mark>
-                        </strong>
-                        <small>{story.description}</small>
-                      </span>
-                      <em>{story.formats.join(" + ")}</em>
-                      <CaretDown size={18} className="project-list__arrow" />
-                    </button>
+                      number={String(story.chapterCount).padStart(2, "0")}
+                      title={story.title}
+                      description={story.description}
+                      meta={story.formats.join(" + ")}
+                      badge={<mark className="project-list__tag">Example</mark>}
+                      onOpen={() => onOpenExample(story.id)}
+                    />
                   ))}
               </div>
             ) : (

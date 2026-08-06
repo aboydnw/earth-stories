@@ -1,5 +1,13 @@
-@import "https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700&display=swap";
-@import "https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap";
+@import "@fontsource/dm-mono/400.css";
+@import "@fontsource/dm-mono/500.css";
+
+@font-face {
+  font-family: "Satoshi Variable";
+  src: url("./fonts/Satoshi-Variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+}
 
 .story-publication {
   --story-ink: #443f3f;
@@ -12,7 +20,7 @@
 
   color: var(--story-ink);
   background: var(--story-canvas);
-  font-family: Satoshi, "Satoshi Variable", Inter, system-ui, sans-serif;
+  font-family: "Satoshi Variable", Satoshi, system-ui, sans-serif;
   font-synthesis: none;
 }
 .story-publication--cng {

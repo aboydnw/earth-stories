@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
-  CaretRight,
   CloudArrowDown,
   Database,
   MapTrifold,
@@ -12,7 +11,13 @@ import type {
   ProjectSource,
   StoryProject,
 } from "@earth-stories/story-schema";
-import { BrandSpinner } from "@earth-stories/ui";
+import {
+  BrandSpinner,
+  DataSourceRow,
+  FormField,
+  SelectInput,
+  StatePanel,
+} from "@earth-stories/ui";
 import {
   openProject,
   type ExampleCatalog,
@@ -74,11 +79,13 @@ export function DataWorkspace({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
+    setWarning(null);
     Promise.allSettled(
       projects
         .filter((item) => !item.invalidReason)
@@ -90,6 +97,11 @@ export function DataWorkspace({
           result.status === "fulfilled" ? [result.value] : [],
         );
         setLoadedProjects(loaded);
+        const failed = results.length - loaded.length;
+        if (failed > 0 && loaded.length > 0)
+          setWarning(
+            `${failed} project${failed === 1 ? "" : "s"} could not be opened. Available datasets remain usable.`,
+          );
         if (results.length > 0 && loaded.length === 0) {
           const failure = results.find(
             (result): result is PromiseRejectedResult =>
@@ -179,48 +191,52 @@ export function DataWorkspace({
             <span>Loading data library…</span>
           </div>
         ) : error ? (
-          <div className="data-workspace__state data-workspace__state--error">
-            <strong>Couldn’t load your data</strong>
-            <span>{error}</span>
-          </div>
+          <StatePanel
+            tone="danger"
+            title="Couldn’t load your data"
+            description={error}
+          />
         ) : items.length ? (
-          <div className="data-list">
-            <div className="data-list__header" aria-hidden="true">
-              <span>Name</span>
-              <span>Type</span>
-              <span>Source</span>
-              <span>Used in</span>
-              <span />
+          <>
+            {warning ? (
+              <StatePanel
+                compact
+                tone="warning"
+                title="Some project data is unavailable"
+                description={warning}
+              />
+            ) : null}
+            <div className="data-list">
+              <div className="data-list__header" aria-hidden="true">
+                <span>Name</span>
+                <span>Type</span>
+                <span>Source</span>
+                <span>Used in</span>
+                <span />
+              </div>
+              {items.map((item) => (
+                <DataSourceRow
+                  key={item.key}
+                  label={item.source.label}
+                  kind={item.source.kind}
+                  leading={<MapTrifold size={18} />}
+                  badge={item.example ? <mark>Example</mark> : undefined}
+                  delivery={
+                    <>
+                      {item.source.delivery === "connected" ? (
+                        <CloudArrowDown size={15} />
+                      ) : (
+                        <Database size={15} />
+                      )}
+                      {item.source.delivery}
+                    </>
+                  }
+                  usage={`${item.usedBy} ${item.usedBy === 1 ? "chapter" : "chapters"}`}
+                  onOpen={() => setSelectedKey(item.key)}
+                />
+              ))}
             </div>
-            {items.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className="data-list__row"
-                aria-label={`${item.source.label}, ${item.source.kind}, ${item.source.delivery}, used in ${item.usedBy} ${item.usedBy === 1 ? "chapter" : "chapters"}`}
-                onClick={() => setSelectedKey(item.key)}
-              >
-                <span className="data-list__name">
-                  <MapTrifold size={18} />
-                  <strong>{item.source.label}</strong>
-                  {item.example ? <mark>Example</mark> : null}
-                </span>
-                <span className="data-list__type">{item.source.kind}</span>
-                <span>
-                  {item.source.delivery === "connected" ? (
-                    <CloudArrowDown size={15} />
-                  ) : (
-                    <Database size={15} />
-                  )}
-                  {item.source.delivery}
-                </span>
-                <span>
-                  {item.usedBy} {item.usedBy === 1 ? "chapter" : "chapters"}
-                </span>
-                <CaretRight size={18} />
-              </button>
-            ))}
-          </div>
+          </>
         ) : (
           <div className="workspace-empty">
             <Database size={28} weight="duotone" />
@@ -317,8 +333,11 @@ function DataMapViewer({
         <div>
           <strong>{item.source.label}</strong>
           <span>
-            {item.source.kind} · {item.source.delivery} ·{" "}
-            {item.project.metadata.title}
+            {item.source.kind} · {item.source.delivery}
+            {item.source.delivery === "connected"
+              ? " · network required"
+              : ""}{" "}
+            · {item.project.metadata.title}
           </span>
         </div>
         {onOpenStory ? (
@@ -360,9 +379,8 @@ function DataMapViewer({
             <small>{Math.round(opacity * 100)}%</small>
           </label>
           {item.source.kind === "cog" ? (
-            <label>
-              Color ramp
-              <select
+            <FormField label="Color ramp">
+              <SelectInput
                 value={colormap}
                 onChange={(event) =>
                   setColormap(event.target.value as typeof colormap)
@@ -372,8 +390,8 @@ function DataMapViewer({
                 <option value="magma">Magma</option>
                 <option value="terrain">Terrain</option>
                 <option value="grayscale">Grayscale</option>
-              </select>
-            </label>
+              </SelectInput>
+            </FormField>
           ) : null}
           {item.source.attribution ? (
             <small className="data-map-viewer__attribution">
