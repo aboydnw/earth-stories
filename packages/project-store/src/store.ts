@@ -40,6 +40,10 @@ const STALE_LOCK_MS = 2 * 60 * 1000;
 const MAX_BACKUPS = 20;
 const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
+function nextUpdated(previous: string): string {
+  return new Date(Math.max(Date.now(), Date.parse(previous) + 1)).toISOString();
+}
+
 async function retryFileOperation(operation: () => Promise<void>) {
   for (let attempt = 0; ; attempt += 1) {
     try {
@@ -237,7 +241,7 @@ export class ProjectStore {
         metadata: {
           ...project.metadata,
           created: current.metadata.created,
-          updated: new Date().toISOString(),
+          updated: nextUpdated(current.metadata.updated),
         },
       });
     });

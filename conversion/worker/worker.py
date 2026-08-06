@@ -4,7 +4,7 @@ import csv
 import json
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -293,9 +293,10 @@ def prepare_vector(
                 normalized = str(timestamp).replace("/", "-").replace("Z", "+00:00")
                 if normalized.endswith(("+00", "-00")):
                     normalized = f"{normalized}:00"
-                track["timestamps"].append(
-                    datetime.fromisoformat(normalized).timestamp()
-                )
+                parsed = datetime.fromisoformat(normalized)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                track["timestamps"].append(parsed.timestamp())
             else:
                 track["timestamps"].append(float(len(track["path"]) - 1))
         prepared_tracks = [

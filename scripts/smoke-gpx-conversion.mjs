@@ -45,7 +45,7 @@ try {
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => (value += chunk));
     child.once("error", rejectRun);
-    child.once("exit", (code) =>
+    child.once("close", (code) =>
       code === 0
         ? resolveRun(value)
         : rejectRun(new Error(`GPX conversion exited with status ${code}`)),
