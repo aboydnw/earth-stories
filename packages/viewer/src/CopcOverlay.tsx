@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { LidarControl } from "maplibre-gl-lidar";
+import { LidarControl, type PointCloudInfo } from "maplibre-gl-lidar";
 import "maplibre-gl-lidar/style.css";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 
@@ -26,14 +26,18 @@ export function CopcOverlay({
       pointSize: asset.copc?.pointSize ?? 2,
       copcLoadingMode: "dynamic",
       streamingPointBudget: 2_000_000,
-      autoZoom: autoFit,
+      autoZoom: false,
       shareUrl: false,
       restoreFromUrl: false,
     });
     map.addControl(control);
     control
       .loadPointCloudStreaming(asset.href)
-      .then(() => active && onReady?.())
+      .then((pointCloud: PointCloudInfo) => {
+        if (!active) return;
+        if (autoFit) control.flyToPointCloud(pointCloud.id);
+        onReady?.();
+      })
       .catch(
         (cause: unknown) =>
           active &&

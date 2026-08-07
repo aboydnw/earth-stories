@@ -362,7 +362,7 @@ function AssetLayer({
             {...filterProps}
             paint={{
               "fill-color": dataColor as never,
-              "fill-opacity": presentation.opacity * 0.45,
+              "fill-opacity": 0,
             }}
           />,
           <Layer

@@ -515,8 +515,8 @@ const richMedia: StoryProject = {
       narrative:
         "Video chapters keep their original source link in archival exports.",
       provider: "youtube",
-      videoId: "v6QMEf5p4qM",
-      originalUrl: "https://www.youtube.com/watch?v=v6QMEf5p4qM",
+      videoId: "4E6yQLoGO2o",
+      originalUrl: "https://www.youtube.com/watch?v=4E6yQLoGO2o",
     },
     {
       id: "media-overlay",
