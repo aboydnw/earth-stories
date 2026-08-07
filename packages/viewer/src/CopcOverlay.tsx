@@ -19,6 +19,7 @@ export function CopcOverlay({
 }) {
   useEffect(() => {
     let active = true;
+    let moveEndHandler: (() => void) | null = null;
     if (!map || asset.kind !== "copc") return;
     const control = new LidarControl({
       collapsed: true,
@@ -34,21 +35,35 @@ export function CopcOverlay({
     control
       .loadPointCloudStreaming(asset.href)
       .then((pointCloud: PointCloudInfo) => {
-        if (!active) return;
-        if (autoFit) control.flyToPointCloud(pointCloud.id);
-        onReady?.();
+        if (!active) {
+          control.unloadPointCloud(pointCloud.id);
+          return;
+        }
+        if (!autoFit) {
+          onReady?.();
+          return;
+        }
+        moveEndHandler = () => {
+          moveEndHandler = null;
+          if (active) onReady?.();
+        };
+        map.once("moveend", moveEndHandler);
+        control.flyToPointCloud(pointCloud.id);
       })
-      .catch(
-        (cause: unknown) =>
-          active &&
-          onError(
-            cause instanceof Error
-              ? cause.message
-              : "The point cloud could not be opened.",
-          ),
-      );
+      .catch((cause: unknown) => {
+        if (!active) {
+          control.unloadPointCloud();
+          return;
+        }
+        onError(
+          cause instanceof Error
+            ? cause.message
+            : "The point cloud could not be opened.",
+        );
+      });
     return () => {
       active = false;
+      if (moveEndHandler) map.off("moveend", moveEndHandler);
       control.unloadPointCloud();
       map.removeControl(control);
     };
