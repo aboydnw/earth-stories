@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { GeoTIFF } from "@developmentseed/geotiff";
 import {
@@ -8,10 +9,9 @@ import {
 } from "./cogPipeline.js";
 import { Photometric, SampleFormat } from "@cogeotiff/core";
 
-const FLOAT_COG = new URL(
-  "../../../fixtures/float32-dem.cog.tif",
-  import.meta.url,
-).pathname;
+const FLOAT_COG = fileURLToPath(
+  new URL("../../../fixtures/float32-dem.cog.tif", import.meta.url),
+);
 
 class EmptyMetadataDocument {
   documentElement = {
