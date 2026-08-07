@@ -35,6 +35,16 @@ function shaderColor(hex: string) {
   );
 }
 
+function shaderFloat(value: number) {
+  if (!Number.isFinite(value)) return "0.0";
+  const literal = String(value);
+  return /[.eE]/.test(literal) ? literal : `${literal}.0`;
+}
+
+function shaderVector(values: readonly number[]) {
+  return values.map(shaderFloat).join(",");
+}
+
 export function colorize(
   name: keyof typeof ramps,
   categoryColors: Record<string, string> = {},
@@ -47,7 +57,7 @@ export function colorize(
           const value = Number(raw);
           return Number.isFinite(value)
             ? [
-                `if (abs(rawValue - ${value}) < 0.00001) mapped = vec3(${shaderColor(hex).join(",")});`,
+                `if (abs(rawValue - ${shaderFloat(value)}) < 0.00001) mapped = vec3(${shaderVector(shaderColor(hex))});`,
               ]
             : [];
         })
@@ -60,13 +70,13 @@ export function colorize(
       "fs:DECKGL_FILTER_COLOR": `
         float encoded = color.r;
         float value = max(0.0, (encoded * 255.0 - 1.0) / 254.0);
-        vec3 low = vec3(${low.join(",")});
-        vec3 middle = vec3(${middle.join(",")});
-        vec3 high = vec3(${high.join(",")});
+        vec3 low = vec3(${shaderVector(low)});
+        vec3 middle = vec3(${shaderVector(middle)});
+        vec3 high = vec3(${shaderVector(high)});
         vec3 mapped = value < 0.5
           ? mix(low, middle, value * 2.0)
           : mix(middle, high, (value - 0.5) * 2.0);
-        float rawValue = ${minimum} + value * ${maximum - minimum || 1};
+        float rawValue = ${shaderFloat(minimum)} + value * ${shaderFloat(maximum - minimum || 1)};
         ${categoryShader}
         color = vec4(mapped, encoded <= 0.0 ? 0.0 : 1.0);
       `,
