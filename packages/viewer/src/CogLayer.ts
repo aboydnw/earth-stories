@@ -76,20 +76,30 @@ export function colorize(
 
 export function buildCogLayers(
   asset: PublicationAsset,
-  url: string,
+  source: GeoTIFF | string,
   onError: (message: string) => void,
-  onLoad?: (geotiff: GeoTIFF, projection: ProjectionDefinition) => void,
+  onLoad?: (
+    geotiff: GeoTIFF,
+    projection: ProjectionDefinition,
+    geographicBounds: {
+      west: number;
+      south: number;
+      east: number;
+      north: number;
+    },
+  ) => void,
+  rescale: [number, number] | null = asset.presentation.rescale,
 ): Layer[] {
   const { presentation } = asset;
-  if (!presentation.rescale)
+  if (!rescale)
     return [
       new COGLayer({
         id: `${asset.id}-cog`,
-        geotiff: url,
+        geotiff: source,
         opacity: presentation.opacity,
         maxError: 0.03,
         onGeoTIFFLoad: (geotiff, options) =>
-          onLoad?.(geotiff, options.projection),
+          onLoad?.(geotiff, options.projection, options.geographicBounds),
         onError: (cause: unknown) =>
           onError(
             cause instanceof Error
@@ -99,7 +109,7 @@ export function buildCogLayers(
       }),
     ];
 
-  const [minimum, maximum] = presentation.rescale;
+  const [minimum, maximum] = rescale;
   const range = maximum - minimum || 1;
   type CogTile = { texture: Texture; width: number; height: number };
   const getTileData: COGLayerProps<CogTile>["getTileData"] = async (
@@ -153,7 +163,7 @@ export function buildCogLayers(
         module: colorize(
           presentation.colormap,
           presentation.categoryColors,
-          presentation.rescale,
+          rescale,
         ),
       },
     ],
@@ -161,13 +171,13 @@ export function buildCogLayers(
   return [
     new COGLayer({
       id: `${asset.id}-cog`,
-      geotiff: url,
+      geotiff: source,
       opacity: presentation.opacity,
       getTileData,
       renderTile,
       maxError: 0.03,
       onGeoTIFFLoad: (geotiff, options) =>
-        onLoad?.(geotiff, options.projection),
+        onLoad?.(geotiff, options.projection, options.geographicBounds),
       onError: (cause: unknown) =>
         onError(
           cause instanceof Error

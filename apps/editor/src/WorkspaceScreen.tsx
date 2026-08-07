@@ -1,13 +1,16 @@
 import type { FormEvent } from "react";
+import { MapTrifold, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
 import {
-  CaretDown,
-  MapTrifold,
-  PencilSimple,
-  Plus,
-  Trash,
-} from "@phosphor-icons/react";
-import { ActionButton, ConfirmDialog, StatePanel } from "@earth-stories/ui";
+  ActionButton,
+  ConfirmDialog,
+  FormField,
+  IconButton,
+  StatePanel,
+  TextInput,
+  WorkspaceRow,
+} from "@earth-stories/ui";
 import type { ExampleCatalog, ProjectSummary } from "./api";
+import { DataWorkspace } from "./DataWorkspace";
 
 export function WorkspaceScreen({
   projects,
@@ -25,6 +28,8 @@ export function WorkspaceScreen({
   onConfirmDelete,
   onDismissDelete,
   onOpenExample,
+  view,
+  onViewChange,
 }: {
   projects: ProjectSummary[];
   examples: ExampleCatalog | null;
@@ -41,6 +46,8 @@ export function WorkspaceScreen({
   onConfirmDelete: () => void;
   onDismissDelete: () => void;
   onOpenExample: (id: string) => void;
+  view: "stories" | "data";
+  onViewChange: (view: "stories" | "data") => void;
 }) {
   return (
     <div className="workspace-screen">
@@ -50,140 +57,152 @@ export function WorkspaceScreen({
           <span>Earth Stories</span>
           <small>local</small>
         </div>
+        <nav className="workspace-tabs" aria-label="Workspace sections">
+          <button
+            type="button"
+            className={view === "stories" ? "is-active" : ""}
+            aria-current={view === "stories" ? "page" : undefined}
+            onClick={() => onViewChange("stories")}
+          >
+            Stories
+          </button>
+          <button
+            type="button"
+            className={view === "data" ? "is-active" : ""}
+            aria-current={view === "data" ? "page" : undefined}
+            onClick={() => onViewChange("data")}
+          >
+            Data
+          </button>
+        </nav>
         <span>Your stories stay on this computer until you publish</span>
       </header>
-      <main className="workspace-main">
-        <section className="workspace-intro">
-          <div>
-            <p>Your workspace</p>
-            <h1>Stories, ready when you are.</h1>
-            <span>
-              Return to a recent story, start a new one, or explore an editable
-              example.
-            </span>
-          </div>
-          <form className="workspace-create" onSubmit={onCreate}>
-            <label htmlFor="story-title">New story title (optional)</label>
+      {view === "data" ? (
+        <DataWorkspace
+          projects={projects}
+          examples={examples}
+          onOpenStory={onOpen}
+        />
+      ) : (
+        <main className="workspace-main">
+          <section className="workspace-intro">
             <div>
-              <input
-                id="story-title"
-                value={newTitle}
-                onChange={(event) => onNewTitleChange(event.target.value)}
-                placeholder="Untitled story"
-              />
-              <ActionButton className="button button--primary" type="submit">
-                <Plus size={17} /> Create story
-              </ActionButton>
+              <p>Your workspace</p>
+              <h1>Stories, ready when you are.</h1>
+              <span>
+                Return to a recent story, start a new one, or explore an
+                editable example.
+              </span>
             </div>
-          </form>
-        </section>
-        {error ? (
-          <StatePanel
-            tone="danger"
-            title="Couldn’t open the local workspace"
-            description={error}
-            actionLabel="Retry connection"
-            onAction={() => window.location.reload()}
-          />
-        ) : null}
-        <section
-          className="workspace-projects"
-          aria-labelledby="stories-heading"
-        >
-          <header>
-            <div>
-              <p>On this computer</p>
-              <h2 id="stories-heading">Your stories</h2>
-            </div>
-            <span>
-              {projects.length} {projects.length === 1 ? "story" : "stories"}
-            </span>
-          </header>
-          {projects.length || examples?.stories.length ? (
-            <div className="project-list">
-              {projects.map((item) => (
-                <div className="project-list__row" key={item.id}>
-                  <button
-                    className="project-list__open"
-                    disabled={Boolean(item.invalidReason)}
-                    onClick={() => onOpen(item.id)}
-                  >
-                    <span className="project-list__number">
-                      {String(item.chapterCount).padStart(2, "0")}
-                    </span>
-                    <span>
-                      <strong>
-                        {item.title}
-                        {item.isExample ? (
-                          <mark className="project-list__tag">Example</mark>
-                        ) : null}
-                      </strong>
-                      <small>
-                        {item.invalidReason ??
-                          (item.description || "No description yet")}
-                      </small>
-                    </span>
-                    <em>
-                      {item.chapterCount}{" "}
-                      {item.chapterCount === 1 ? "chapter" : "chapters"}
-                    </em>
-                    <CaretDown size={18} className="project-list__arrow" />
-                  </button>
-                  <div className="project-list__actions">
-                    <button
-                      type="button"
-                      disabled={Boolean(item.invalidReason)}
-                      aria-label={`Rename ${item.title}`}
-                      onClick={() => onRename(item)}
-                    >
-                      <PencilSimple size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${item.title}`}
-                      onClick={() => onRequestDelete(item)}
-                    >
-                      <Trash size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {examples?.stories
-                .filter(
-                  (story) =>
-                    !projects.some(
-                      (project) => project.id === `example-${story.id}`,
-                    ),
-                )
-                .map((story) => (
-                  <button
-                    key={`example-${story.id}`}
-                    onClick={() => onOpenExample(story.id)}
-                  >
-                    <span className="project-list__number">
-                      {String(story.chapterCount).padStart(2, "0")}
-                    </span>
-                    <span>
-                      <strong>
-                        {story.title}
+            <form className="workspace-create" onSubmit={onCreate}>
+              <div className="workspace-create__controls">
+                <FormField label="New story title (optional)">
+                  <TextInput
+                    id="story-title"
+                    value={newTitle}
+                    onChange={(event) => onNewTitleChange(event.target.value)}
+                    placeholder="Untitled story"
+                  />
+                </FormField>
+                <ActionButton className="button button--primary" type="submit">
+                  <Plus size={17} /> Create story
+                </ActionButton>
+              </div>
+            </form>
+          </section>
+          {error ? (
+            <StatePanel
+              tone="danger"
+              title="Couldn’t open the local workspace"
+              description={error}
+              actionLabel="Retry connection"
+              onAction={() => window.location.reload()}
+            />
+          ) : null}
+          <section
+            className="workspace-projects"
+            aria-labelledby="stories-heading"
+          >
+            <header>
+              <div>
+                <p>On this computer</p>
+                <h2 id="stories-heading">Your stories</h2>
+              </div>
+              <span>
+                {projects.length} {projects.length === 1 ? "story" : "stories"}
+              </span>
+            </header>
+            {projects.length || examples?.stories.length ? (
+              <div className="project-list">
+                {projects.map((item) => (
+                  <WorkspaceRow
+                    key={item.id}
+                    number={String(item.chapterCount).padStart(2, "0")}
+                    title={item.title}
+                    description={
+                      item.invalidReason ??
+                      (item.description || "No description yet")
+                    }
+                    meta={`${item.chapterCount} ${item.chapterCount === 1 ? "chapter" : "chapters"}`}
+                    badge={
+                      item.isExample ? (
                         <mark className="project-list__tag">Example</mark>
-                      </strong>
-                      <small>{story.description}</small>
-                    </span>
-                    <em>{story.formats.join(" + ")}</em>
-                    <CaretDown size={18} className="project-list__arrow" />
-                  </button>
+                      ) : undefined
+                    }
+                    disabled={Boolean(item.invalidReason)}
+                    onOpen={() => onOpen(item.id)}
+                    actions={
+                      <>
+                        <IconButton
+                          size="sm"
+                          variant="ghost"
+                          disabled={Boolean(item.invalidReason)}
+                          label={`Rename ${item.title}`}
+                          onClick={() => onRename(item)}
+                        >
+                          <PencilSimple size={16} />
+                        </IconButton>
+                        <IconButton
+                          size="sm"
+                          variant="ghost"
+                          label={`Remove ${item.title}`}
+                          onClick={() => onRequestDelete(item)}
+                        >
+                          <Trash size={16} />
+                        </IconButton>
+                      </>
+                    }
+                  />
                 ))}
-            </div>
-          ) : (
-            <div className="workspace-empty">
-              <MapTrifold size={28} weight="duotone" />
-              <strong>Create your first story</strong>
-              <span>Name it above. You can change everything later.</span>
-            </div>
-          )}
-        </section>
-      </main>
+                {examples?.stories
+                  .filter(
+                    (story) =>
+                      !projects.some(
+                        (project) => project.id === `example-${story.id}`,
+                      ),
+                  )
+                  .map((story) => (
+                    <WorkspaceRow
+                      key={`example-${story.id}`}
+                      number={String(story.chapterCount).padStart(2, "0")}
+                      title={story.title}
+                      description={story.description}
+                      meta={story.formats.join(" + ")}
+                      badge={<mark className="project-list__tag">Example</mark>}
+                      onOpen={() => onOpenExample(story.id)}
+                    />
+                  ))}
+              </div>
+            ) : (
+              <div className="workspace-empty">
+                <MapTrifold size={28} weight="duotone" />
+                <strong>Create your first story</strong>
+                <span>Name it above. You can change everything later.</span>
+              </div>
+            )}
+          </section>
+        </main>
+      )}
       <footer className="workspace-footer">
         <span>Built for portable geospatial storytelling</span>
         <span>No account required</span>

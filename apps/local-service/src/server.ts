@@ -5,18 +5,26 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
-import { extname, join, relative, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { platform } from "node:os";
+import { fileURLToPath } from "node:url";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { ProjectStore } from "@earth-stories/project-store";
 import {
   buildLatestPublication,
+  authorizedFetch,
   createEmbedSnippet,
   discoverRemoteSource,
   preflightPublication,
 } from "@earth-stories/publisher";
 import { Zip, ZipDeflate } from "fflate";
 import { parseByteRange } from "./range.js";
-import { exampleCatalog, findExampleStory } from "./examples.js";
+import {
+  exampleCatalog,
+  exampleConnections,
+  findExampleStory,
+} from "./examples.js";
 import { isTrustedMutationOrigin } from "./security.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { ConversionJobs } from "./conversion-jobs.js";
@@ -29,15 +37,22 @@ const PROJECTS_DIRECTORY = resolve(
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_ASSET_BYTES = 5 * 1024 * 1024 * 1024;
 const MAX_EXPORT_BODY_BYTES = 50 * 1024 * 1024;
-const VIEWER_DIRECTORY = resolve(
-  process.env.EARTH_STORIES_VIEWER_DIR ?? "./dist/viewer",
+const REPOSITORY_DIRECTORY = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../..",
 );
-const REPOSITORY_DIRECTORY = resolve(".");
+const VIEWER_DIRECTORY = resolve(
+  process.env.EARTH_STORIES_VIEWER_DIR ??
+    join(REPOSITORY_DIRECTORY, "dist/viewer"),
+);
 const PIXI_EXECUTABLE = resolve(
   process.env.EARTH_STORIES_PIXI ??
-    (platform() === "win32"
-      ? ".earth-stories/bin/pixi.exe"
-      : ".earth-stories/bin/pixi"),
+    join(
+      REPOSITORY_DIRECTORY,
+      platform() === "win32"
+        ? ".earth-stories/bin/pixi.exe"
+        : ".earth-stories/bin/pixi",
+    ),
 );
 
 const contentTypes: Record<string, string> = {
@@ -90,6 +105,58 @@ async function readBody(
     chunks.push(buffer);
   }
   return Buffer.concat(chunks);
+}
+
+async function proxyRemoteSource(
+  remoteValue: string,
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<void> {
+  const headers: Record<string, string> = {
+    "accept-encoding": "identity",
+  };
+  if (request.headers.range) headers.range = request.headers.range;
+  const upstream = await authorizedFetch(remoteValue, {
+    method: request.method === "HEAD" ? "HEAD" : "GET",
+    headers,
+  });
+  if (!upstream.ok && upstream.status !== 206) {
+    await upstream.body?.cancel();
+    json(response, 502, {
+      error: `The connected source returned ${upstream.status}`,
+    });
+    return;
+  }
+  const responseHeaders: Record<string, string> = {
+    "content-type":
+      upstream.headers.get("content-type") ?? "application/octet-stream",
+    "cache-control": "private, max-age=300",
+    ...(upstream.headers.get("accept-ranges")
+      ? { "accept-ranges": upstream.headers.get("accept-ranges")! }
+      : {}),
+  };
+  const contentEncoding = upstream.headers.get("content-encoding");
+  for (const name of ["content-range", "etag"]) {
+    const value = upstream.headers.get(name);
+    if (value) responseHeaders[name] = value;
+  }
+  if (!contentEncoding || contentEncoding === "identity") {
+    const contentLength = upstream.headers.get("content-length");
+    if (contentLength) responseHeaders["content-length"] = contentLength;
+  }
+  response.writeHead(upstream.status, responseHeaders);
+  if (request.method === "HEAD" || !upstream.body) {
+    await upstream.body?.cancel();
+    response.end();
+    return;
+  }
+  const stream = Readable.fromWeb(upstream.body as never);
+  try {
+    await pipeline(stream, response);
+  } catch (cause) {
+    if (!response.destroyed)
+      response.destroy(cause instanceof Error ? cause : undefined);
+  }
 }
 
 async function collectFilePaths(
@@ -247,6 +314,25 @@ export function createLocalServer(
         return;
       }
 
+      const exampleConnectionContentMatch = url.pathname.match(
+        /^\/api\/examples\/connections\/([^/]+)\/content$/,
+      );
+      if (
+        exampleConnectionContentMatch &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
+        const example = exampleConnections.find(
+          (item) =>
+            item.id === decodeURIComponent(exampleConnectionContentMatch[1]),
+        );
+        if (!example) {
+          json(response, 404, { error: "Example connection not found" });
+          return;
+        }
+        await proxyRemoteSource(example.locator, request, response);
+        return;
+      }
+
       const exampleStoryMatch = url.pathname.match(
         /^\/api\/examples\/stories\/([^/]+)$/,
       );
@@ -279,6 +365,28 @@ export function createLocalServer(
       }
 
       const route = projectRoute(url.pathname);
+      const connectedSourceMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/sources\/([^/]+)\/content$/,
+      );
+      if (
+        connectedSourceMatch &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
+        const projectId = decodeURIComponent(connectedSourceMatch[1]);
+        const sourceId = decodeURIComponent(connectedSourceMatch[2]);
+        const project = await store.read(projectId);
+        const source = project.sources.find((item) => item.id === sourceId);
+        if (
+          !source ||
+          !("locator" in source) ||
+          source.delivery !== "connected"
+        ) {
+          json(response, 404, { error: "Connected source not found" });
+          return;
+        }
+        await proxyRemoteSource(source.locator, request, response);
+        return;
+      }
       const conversionCollectionMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/conversions$/,
       );

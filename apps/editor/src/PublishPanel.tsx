@@ -10,7 +10,12 @@ import {
   X,
 } from "@phosphor-icons/react";
 import type { StoryProject } from "@earth-stories/story-schema";
-import { ActionButton, StatusNotice } from "@earth-stories/ui";
+import {
+  ActionButton,
+  ProgressPresentation,
+  PublicationFinding,
+  StatusNotice,
+} from "@earth-stories/ui";
 import {
   exportProject,
   getPublicationPreflight,
@@ -276,10 +281,12 @@ export function PublishPanel({
               <Warning weight="fill" /> Fix before exporting
             </h3>
             {errors.map((issue) => (
-              <p key={issue.id}>
-                {issue.message}
-                <small>{issue.resolution}</small>
-              </p>
+              <PublicationFinding
+                key={issue.id}
+                severity="error"
+                message={issue.message}
+                resolution={issue.resolution}
+              />
             ))}
           </div>
         ) : null}
@@ -289,10 +296,12 @@ export function PublishPanel({
               <Warning /> Review before sharing
             </h3>
             {warnings.map((issue) => (
-              <p key={issue.id}>
-                {issue.message}
-                <small>{issue.resolution}</small>
-              </p>
+              <PublicationFinding
+                key={issue.id}
+                severity="warning"
+                message={issue.message}
+                resolution={issue.resolution}
+              />
             ))}
           </div>
         ) : null}
@@ -405,7 +414,11 @@ export function PublishPanel({
         ) : null}
         {loading ? (
           <div className="publish-progress">
-            <span /> {busyLabel}
+            <ProgressPresentation
+              stage="verifying"
+              title={busyLabel}
+              detail="The last successful publication remains available while this operation runs."
+            />
           </div>
         ) : null}
       </section>

@@ -89,7 +89,7 @@ export function StoryViewer({
               : [];
           return (
             <section
-              className={`story-chapter story-chapter--${chapter.type}`}
+              className={`story-chapter story-chapter--${chapter.type}${chapter.type === "scrolly" ? ` story-chapter--overlay-${chapter.overlayPosition ?? "left"}` : ""}`}
               key={chapter.id}
               id={chapter.id}
               data-chapter-id={chapter.id}
@@ -115,6 +115,7 @@ export function StoryViewer({
                     asset={asset}
                     overlayAssets={overlayAssets}
                     basemapStyle={manifest.basemap.styleUrl}
+                    controlled={chapter.type === "scrolly"}
                   />
                 </Suspense>
               ) : null}

@@ -33,6 +33,28 @@ export interface ExampleStorySummary {
 
 export const exampleConnections: ExampleConnection[] = [
   {
+    id: "hatay-defne-cog",
+    title: "Defne aerial imagery",
+    description:
+      "Ultra-high-resolution aerial imagery after the 2023 Türkiye earthquakes.",
+    kind: "cog",
+    locator:
+      "https://oin-hotosm-temp.s3.amazonaws.com/63eb7815ca43600005f4d91e/0/63eb7815ca43600005f4d91f.tif",
+    attribution: "OpenAerialMap contributors, CC BY 4.0",
+    camera: { center: [36.15, 36.24], zoom: 14, bearing: 0, pitch: 0 },
+  },
+  {
+    id: "hatay-turinclu-cog",
+    title: "Turinclu aerial imagery",
+    description:
+      "High-resolution aerial imagery of Akdeniz and Armutlu after the 2023 earthquakes.",
+    kind: "cog",
+    locator:
+      "https://oin-hotosm-temp.s3.amazonaws.com/63eb8222ca43600005f4d925/0/63eb8222ca43600005f4d926.tif",
+    attribution: "OpenAerialMap contributors, CC BY 4.0",
+    camera: { center: [36.12, 36.21], zoom: 14, bearing: 0, pitch: 0 },
+  },
+  {
     id: "antakya-aerial-cog",
     title: "Antakya aerial imagery",
     description: "A public cloud-optimized GeoTIFF of earthquake imagery.",
@@ -88,6 +110,40 @@ export const exampleConnections: ExampleConnection[] = [
       },
     },
     camera: { center: [0, 15], zoom: 1.4, bearing: 0, pitch: 0 },
+  },
+  {
+    id: "imerg-precipitation-zarr",
+    title: "IMERG Final Precipitation",
+    description:
+      "Global satellite precipitation estimates in a temporal Zarr store.",
+    kind: "zarr",
+    locator: "https://data.source.coop/bkr/imerg/imerg_final.zarr",
+    attribution: "NASA GPM IMERG / Source Cooperative",
+    config: {
+      variable: "precipitation",
+      selection: {},
+      timeDimension: "time",
+      timesteps: [],
+      geozarr: {
+        dimensions: ["latitude", "longitude"],
+        transform: [0.1, 0, -180, 0, 0.1, -90],
+        shape: [1800, 3600],
+        crs: "EPSG:4326",
+      },
+    },
+    camera: { center: [0, 10], zoom: 1.2, bearing: 0, pitch: 0 },
+  },
+  {
+    id: "global-buildings-pmtiles",
+    title: "Global building footprints",
+    description:
+      "Combined Google, Microsoft, and OpenStreetMap building footprints.",
+    kind: "pmtiles",
+    locator:
+      "https://data.source.coop/vida/google-microsoft-osm-open-buildings/pmtiles/goog_msft_osm.pmtiles",
+    tileType: "vector",
+    attribution: "VIDA / Google / Microsoft / OpenStreetMap",
+    camera: { center: [36.82, -1.29], zoom: 12, bearing: 0, pitch: 0 },
   },
   {
     id: "autzen-copc",

@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check,
   Copy,
   ArrowDown,
   ArrowUp,
   BookOpen,
-  CaretDown,
   Database,
   Export,
   FileArrowUp,
@@ -17,8 +15,6 @@ import {
   Plus,
   PencilSimple,
   Trash,
-  TextT,
-  VideoCamera,
 } from "@phosphor-icons/react";
 import { compileProject } from "@earth-stories/publisher/compile";
 import type {
@@ -29,7 +25,7 @@ import type {
   StoryProject,
 } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
-import { ActionButton, BrandSpinner } from "@earth-stories/ui";
+import { ActionButton, BrandSpinner, SaveStatus } from "@earth-stories/ui";
 import { reorderChapters } from "./chapterOrder";
 import {
   createProject,
@@ -51,8 +47,9 @@ import {
 } from "./api";
 import { PublishPanel } from "./PublishPanel";
 import { WorkspaceScreen } from "./WorkspaceScreen";
+import { ChapterAddMenu } from "./ChapterAddMenu";
 
-type SaveState = "saved" | "changed" | "saving" | "exporting";
+type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
 interface MultidimChoice {
   variable: string;
@@ -96,6 +93,9 @@ const sourcePath = (source: ProjectSource) =>
 export function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StoryProject | null>(null);
+  const [workspaceView, setWorkspaceView] = useState<"stories" | "data">(() =>
+    window.location.hash === "#data" ? "data" : "stories",
+  );
   const [activeChapter, setActiveChapter] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [connectedUrl, setConnectedUrl] = useState("");
@@ -155,7 +155,7 @@ export function App() {
     };
   }, [addChapterOpen]);
   useEffect(() => {
-    if (saveState !== "changed") return;
+    if (saveState !== "changed" && saveState !== "save-error") return;
     const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
@@ -209,6 +209,16 @@ export function App() {
         assets: compiled.assets.map((asset) => {
           const source = sources.get(asset.id);
           const path = source ? sourcePath(source) : null;
+          if (
+            asset.delivery === "connected" &&
+            source &&
+            source.kind !== "zarr" &&
+            source.kind !== "xyz"
+          )
+            return {
+              ...asset,
+              href: `/api/projects/${encodeURIComponent(project.id)}/sources/${encodeURIComponent(source.id)}/content`,
+            };
           return asset.delivery === "included" && path
             ? {
                 ...asset,
@@ -244,6 +254,23 @@ export function App() {
       ...current,
       sources: current.sources.map((source) =>
         source.id === selectedSource.id ? update(source) : source,
+      ),
+    }));
+  }
+  function assignSourceToChapter(chapterId: string, sourceId: string) {
+    changeProject((current) => ({
+      ...current,
+      chapters: current.chapters.map((chapter) =>
+        chapter.id === chapterId &&
+        (chapter.type === "map" || chapter.type === "scrolly")
+          ? {
+              ...chapter,
+              sourceId,
+              overlaySourceIds: (chapter.overlaySourceIds ?? []).filter(
+                (id) => id !== sourceId,
+              ),
+            }
+          : chapter,
       ),
     }));
   }
@@ -319,7 +346,7 @@ export function App() {
       await refreshProjects();
       return saved;
     } catch (cause) {
-      setSaveState("changed");
+      setSaveState("save-error");
       showError(cause);
       return null;
     }
@@ -400,6 +427,46 @@ export function App() {
       title: "New chapter",
       narrative: "",
     });
+  }
+  function addMapChapter(type: "map" | "scrolly") {
+    if (!project) return;
+    const source = project.sources.find(
+      (item) => item.kind !== "image" && item.kind !== "csv",
+    );
+    if (!source) {
+      showError("Add or connect map data before creating a map chapter.");
+      return;
+    }
+    addChapter({
+      id: crypto.randomUUID(),
+      type,
+      title: type === "scrolly" ? "Guided tour" : "Map",
+      narrative: "",
+      sourceId: source.id,
+      overlaySourceIds: [],
+      camera,
+      ...(type === "scrolly"
+        ? { transition: "fly-to" as const, overlayPosition: "left" as const }
+        : {}),
+    });
+  }
+  function addImage() {
+    if (!project) return;
+    const source = project.sources.find((item) => item.kind === "image");
+    if (!source) {
+      showError("Import an image before creating an image chapter.");
+      return;
+    }
+    addChapterFromSource(source);
+  }
+  function addChart() {
+    if (!project) return;
+    const source = project.sources.find((item) => item.kind === "csv");
+    if (!source) {
+      showError("Import a CSV before creating a chart chapter.");
+      return;
+    }
+    addChapterFromSource(source);
   }
   function addVideo() {
     addChapter({
@@ -493,7 +560,7 @@ export function App() {
     });
     setActiveChapter(next?.id ?? "");
   }
-  async function handleFile(file: File) {
+  async function handleFile(file: File, targetChapterId?: string) {
     if (!project) return;
     try {
       const uploaded = await importAsset(project.id, file);
@@ -668,9 +735,18 @@ export function App() {
                 },
               ]
             : current.dataAssets,
-        chapters: [...current.chapters, chapter],
+        chapters: targetChapterId
+          ? current.chapters.map((item) =>
+              item.id === targetChapterId &&
+              (item.type === "map" || item.type === "scrolly") &&
+              source.kind !== "image" &&
+              source.kind !== "csv"
+                ? { ...item, sourceId: source.id }
+                : item,
+            )
+          : [...current.chapters, chapter],
       }));
-      setActiveChapter(chapter.id);
+      if (!targetChapterId) setActiveChapter(chapter.id);
     } catch (cause) {
       showError(cause);
     }
@@ -678,6 +754,7 @@ export function App() {
   async function runDataAssetJob(
     asset: ProjectDataAsset,
     operation: "inspect" | "prepare",
+    targetChapterId?: string,
   ) {
     if (!project) return;
     const capability: ConversionCapability =
@@ -828,12 +905,20 @@ export function App() {
           item.id === asset.id ? { ...item, preparedSourceId: sourceId } : item,
         ),
         sources: [...current.sources, source],
+        chapters: targetChapterId
+          ? current.chapters.map((chapter) =>
+              chapter.id === targetChapterId &&
+              (chapter.type === "map" || chapter.type === "scrolly")
+                ? { ...chapter, sourceId }
+                : chapter,
+            )
+          : current.chapters,
       }));
     } catch (cause) {
       showError(cause);
     }
   }
-  function addConnected(event: React.FormEvent) {
+  function addConnected(event: React.FormEvent, targetChapterId?: string) {
     event.preventDefault();
     if (!project || !connectedUrl.trim()) return;
     let url: URL;
@@ -904,9 +989,16 @@ export function App() {
     changeProject((current) => ({
       ...current,
       sources: [...current.sources, source],
-      chapters: [...current.chapters, chapter],
+      chapters: targetChapterId
+        ? current.chapters.map((item) =>
+            item.id === targetChapterId &&
+            (item.type === "map" || item.type === "scrolly")
+              ? { ...item, sourceId: source.id }
+              : item,
+          )
+        : [...current.chapters, chapter],
     }));
-    setActiveChapter(chapter.id);
+    if (!targetChapterId) setActiveChapter(chapter.id);
     setConnectedUrl("");
     setConnectionDiscovery(null);
   }
@@ -927,7 +1019,11 @@ export function App() {
 
   function leaveProject() {
     void (async () => {
-      if (saveState === "changed" && !(await persist())) return;
+      if (
+        (saveState === "changed" || saveState === "save-error") &&
+        !(await persist())
+      )
+        return;
       setProject(null);
       setError(null);
       setAddChapterOpen(false);
@@ -1030,6 +1126,17 @@ export function App() {
         onConfirmDelete={() => void confirmDelete()}
         onDismissDelete={() => setDeleteTarget(null)}
         onOpenExample={(id) => void handleExampleStory(id)}
+        view={workspaceView}
+        onViewChange={(view) => {
+          setWorkspaceView(view);
+          window.history.replaceState(
+            null,
+            "",
+            view === "data"
+              ? "#data"
+              : `${window.location.pathname}${window.location.search}`,
+          );
+        }}
       />
     );
 
@@ -1050,23 +1157,22 @@ export function App() {
           <small>local</small>
         </button>
         <div className="editor-status">
-          {saveState === "saved" ? (
-            <Check size={14} weight="bold" />
-          ) : (
-            <FloppyDisk size={14} weight="bold" />
-          )}{" "}
-          {saveState === "saving"
-            ? "Saving…"
-            : saveState === "exporting"
-              ? "Building publication…"
-              : saveState === "changed"
-                ? "Changes not saved"
-                : "Saved locally"}
+          <SaveStatus
+            state={
+              saveState === "changed"
+                ? "dirty"
+                : saveState === "save-error"
+                  ? "service-error"
+                  : saveState === "exporting"
+                    ? "exporting"
+                    : saveState
+            }
+          />
         </div>
         <ActionButton
           variant="surface"
           className="button button--save"
-          disabled={saveState !== "changed"}
+          disabled={saveState !== "changed" && saveState !== "save-error"}
           onClick={() => void persist()}
         >
           <FloppyDisk size={17} /> Save
@@ -1178,41 +1284,23 @@ export function App() {
           ))}
         </nav>
         <div className="chapter-add" ref={chapterAddRef}>
-          <button
-            className="chapter-add__trigger"
-            type="button"
-            onClick={() => setAddChapterOpen((open) => !open)}
-            aria-haspopup="menu"
-            aria-expanded={addChapterOpen}
-          >
-            <Plus size={16} /> Add chapter <CaretDown size={14} />
-          </button>
-          {addChapterOpen ? (
-            <div className="chapter-add__menu">
-              <p>Choose a chapter type</p>
-              <button type="button" onClick={addProse}>
-                <TextT size={17} />
-                <span>
-                  <strong>Text</strong>
-                  <small>Prose, headings and links</small>
-                </span>
-              </button>
-              <button type="button" onClick={addVideo}>
-                <VideoCamera size={17} />
-                <span>
-                  <strong>Video</strong>
-                  <small>YouTube or Vimeo</small>
-                </span>
-              </button>
-              <button type="button" onClick={addFlyover}>
-                <MapTrifold size={17} />
-                <span>
-                  <strong>Flyover</strong>
-                  <small>Animate between map views</small>
-                </span>
-              </button>
-            </div>
-          ) : null}
+          <ChapterAddMenu
+            open={addChapterOpen}
+            canAddImage={project.sources.some(
+              (source) => source.kind === "image",
+            )}
+            canAddChart={project.sources.some(
+              (source) => source.kind === "csv",
+            )}
+            onToggle={() => setAddChapterOpen((open) => !open)}
+            onAddProse={addProse}
+            onAddScrolly={() => addMapChapter("scrolly")}
+            onAddMap={() => addMapChapter("map")}
+            onAddImage={addImage}
+            onAddVideo={addVideo}
+            onAddChart={addChart}
+            onAddFlyover={addFlyover}
+          />
         </div>
         <button
           className={
@@ -2310,6 +2398,185 @@ export function App() {
               {selectedChapter.type === "map" ||
               selectedChapter.type === "scrolly" ? (
                 <div className="field-row">
+                  <section className="chapter-data-config">
+                    <div className="chapter-data-config__heading">
+                      <div>
+                        <strong>Dataset</strong>
+                        <small>
+                          Choose, import, or connect data for this map.
+                        </small>
+                      </div>
+                    </div>
+                    <label>
+                      Active dataset
+                      <select
+                        value={selectedChapter.sourceId}
+                        onChange={(event) =>
+                          assignSourceToChapter(
+                            selectedChapter.id,
+                            event.target.value,
+                          )
+                        }
+                      >
+                        {!project.sources.some(
+                          (source) =>
+                            source.id === selectedChapter.sourceId &&
+                            source.kind !== "image" &&
+                            source.kind !== "csv",
+                        ) ? (
+                          <option value={selectedChapter.sourceId} disabled>
+                            Dataset unavailable
+                          </option>
+                        ) : null}
+                        {project.sources
+                          .filter(
+                            (source) =>
+                              source.kind !== "image" && source.kind !== "csv",
+                          )
+                          .map((source) => (
+                            <option key={source.id} value={source.id}>
+                              {source.label} · {source.kind}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label className="file-import">
+                      <FileArrowUp size={16} /> Import map data
+                      <input
+                        type="file"
+                        accept=".tif,.tiff,.zip,.nc,.netcdf,.h5,.hdf5,.las,.laz,.gpx,.geojson,.json,.pmtiles,.parquet"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void handleFile(file, selectedChapter.id);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {project.dataAssets.some(
+                      (asset) => !asset.preparedSourceId,
+                    ) ? (
+                      <div className="chapter-data-assets">
+                        <small>Files that need preparation</small>
+                        {project.dataAssets
+                          .filter((asset) => !asset.preparedSourceId)
+                          .map((asset) => {
+                            const job = conversionJobs[asset.id];
+                            const jobRunning =
+                              job?.status === "queued" ||
+                              job?.status === "running";
+                            return (
+                              <div key={asset.id}>
+                                <span>{asset.label}</span>
+                                <button
+                                  type="button"
+                                  disabled={jobRunning}
+                                  onClick={() =>
+                                    void runDataAssetJob(asset, "inspect")
+                                  }
+                                >
+                                  Inspect
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={jobRunning}
+                                  onClick={() =>
+                                    void runDataAssetJob(
+                                      asset,
+                                      "prepare",
+                                      selectedChapter.id,
+                                    )
+                                  }
+                                >
+                                  Prepare &amp; use
+                                </button>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    ) : null}
+                    <details className="chapter-data-connect">
+                      <summary>Connect a public dataset</summary>
+                      <form
+                        className="data-connect"
+                        onSubmit={(event) =>
+                          addConnected(event, selectedChapter.id)
+                        }
+                      >
+                        <label>
+                          Data format
+                          <select
+                            value={connectedKind}
+                            onChange={(event) =>
+                              setConnectedKind(
+                                event.target.value as typeof connectedKind,
+                              )
+                            }
+                          >
+                            <option value="cog">COG</option>
+                            <option value="pmtiles">PMTiles</option>
+                            <option value="geoparquet">GeoParquet</option>
+                            <option value="xyz">XYZ tiles</option>
+                            <option value="zarr">Zarr</option>
+                            <option value="trajectory">Trajectory JSON</option>
+                            <option value="copc">COPC point cloud</option>
+                          </select>
+                        </label>
+                        <label>
+                          Public data URL
+                          <input
+                            type="url"
+                            required
+                            value={connectedUrl}
+                            onChange={(event) => {
+                              setConnectedUrl(event.target.value);
+                              setConnectionDiscovery(null);
+                            }}
+                            placeholder="https://…/data.tif"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          disabled={
+                            discoveringConnection || !connectedUrl.trim()
+                          }
+                          onClick={() => void inspectConnection()}
+                        >
+                          {discoveringConnection
+                            ? "Inspecting…"
+                            : "Inspect connection"}
+                        </button>
+                        {connectionDiscovery ? (
+                          <div
+                            className={
+                              connectionDiscovery.issues.length
+                                ? "connection-report connection-report--warning"
+                                : "connection-report"
+                            }
+                          >
+                            <strong>
+                              {connectionDiscovery.kind === "unknown"
+                                ? "Format not identified"
+                                : `${connectionDiscovery.kind} detected`}
+                            </strong>
+                            {connectionDiscovery.issues.map((issue) => (
+                              <small key={issue}>{issue}</small>
+                            ))}
+                          </div>
+                        ) : null}
+                        <button
+                          type="submit"
+                          disabled={
+                            connectionDiscovery?.reachable === false ||
+                            connectionDiscovery?.issues.some((issue) =>
+                              issue.startsWith("The server returned"),
+                            )
+                          }
+                        >
+                          <Link size={16} /> Connect &amp; use dataset
+                        </button>
+                      </form>
+                    </details>
+                  </section>
                   <label>
                     Presentation
                     <select
@@ -3195,7 +3462,7 @@ export function App() {
             await refreshProjects();
             return saved;
           } catch (cause) {
-            setSaveState("changed");
+            setSaveState("save-error");
             showError(cause);
             return null;
           }

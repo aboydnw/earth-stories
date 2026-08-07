@@ -1,0 +1,58 @@
+[
+  {
+    "file": "apps/editor/src/App.tsx",
+    "value": "#cf3f02",
+    "context": "color: \"#cf3f02\"",
+    "domain": "authored-data",
+    "reason": "Default map layer fill passed to the publication schema."
+  },
+  {
+    "file": "apps/editor/src/App.tsx",
+    "value": "#443f3f",
+    "context": "strokeColor: \"#443f3f\"",
+    "domain": "authored-data",
+    "reason": "Default map layer stroke passed to the publication schema."
+  },
+  {
+    "file": "apps/editor/src/App.tsx",
+    "value": "#2f7d32",
+    "context": "placeholder=\"forest=#2f7d32, water=#2878b5\"",
+    "domain": "authored-data",
+    "reason": "Example syntax inside category-color input placeholders."
+  },
+  {
+    "file": "apps/editor/src/App.tsx",
+    "value": "#2878b5",
+    "context": "placeholder=\"forest=#2f7d32, water=#2878b5\"",
+    "domain": "authored-data",
+    "reason": "Example syntax inside category-color input placeholders."
+  },
+  {
+    "file": "apps/editor/src/App.tsx",
+    "value": "#2f7d32",
+    "context": "placeholder=\"0=#2878b5, 1=#2f7d32\"",
+    "domain": "authored-data",
+    "reason": "Example syntax inside category-color input placeholders."
+  },
+  {
+    "file": "apps/editor/src/App.tsx",
+    "value": "#2878b5",
+    "context": "placeholder=\"0=#2878b5, 1=#2f7d32\"",
+    "domain": "authored-data",
+    "reason": "Example syntax inside category-color input placeholders."
+  },
+  {
+    "file": "apps/editor/src/captureSnapshots.ts",
+    "value": "#443f3f",
+    "context": "context.fillStyle = \"#443f3f\"",
+    "domain": "rendering-boundary",
+    "reason": "Concrete canvas fallback text color for generated snapshots."
+  },
+  {
+    "file": "apps/editor/src/captureSnapshots.ts",
+    "value": "rgba(255,255,255,.92)",
+    "context": "context.fillStyle = \"rgba(255,255,255,.92)\"",
+    "domain": "rendering-boundary",
+    "reason": "Concrete canvas overlay color for generated snapshots."
+  }
+]

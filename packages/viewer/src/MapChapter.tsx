@@ -4,10 +4,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import maplibregl from "maplibre-gl";
-import Map, { Layer, Source } from "react-map-gl/maplibre";
+import Map, { Layer, Source, type MapRef } from "react-map-gl/maplibre";
 import { PMTiles, Protocol } from "pmtiles";
 import type {
   PublicationAsset,
@@ -35,6 +36,7 @@ interface MapChapterProps {
   overlayAssets?: PublicationAsset[];
   basemapStyle: string;
   controlled?: boolean;
+  autoFit?: boolean;
 }
 
 let protocol: Protocol | null = null;
@@ -89,9 +91,11 @@ function featureFilter(
 function AssetLayer({
   asset,
   onError,
+  onBounds,
 }: {
   asset: PublicationAsset;
   onError: (message: string) => void;
+  onBounds?: (bounds: [number, number, number, number]) => void;
 }) {
   const [pmtilesLayers, setPmtilesLayers] = useState<string[]>([]);
   const [trajectory, setTrajectory] =
@@ -111,16 +115,22 @@ function AssetLayer({
       const archive = new PMTiles(assetUrl);
       registeredArchive = archive;
       protocol?.add(archive);
-      archive
-        .getMetadata()
-        .then((raw) => {
+      Promise.all([archive.getMetadata(), archive.getHeader()])
+        .then(([raw, header]) => {
           const metadata = raw as { vector_layers?: Array<{ id?: unknown }> };
-          if (active)
+          if (active) {
             setPmtilesLayers(
               (metadata.vector_layers ?? []).flatMap((layer) =>
                 typeof layer.id === "string" ? [layer.id] : [],
               ),
             );
+            onBounds?.([
+              header.minLon,
+              header.minLat,
+              header.maxLon,
+              header.maxLat,
+            ]);
+          }
         })
         .catch(
           (cause: unknown) =>
@@ -183,7 +193,7 @@ function AssetLayer({
           protocol.tiles.delete(key);
       }
     };
-  }, [asset.kind, assetUrl, onError]);
+  }, [asset.kind, assetUrl, onBounds, onError]);
   useEffect(() => {
     if (!trajectoryPlaying || asset.kind !== "trajectory") return;
     const timer = window.setInterval(
@@ -233,7 +243,12 @@ function AssetLayer({
   if (asset.kind === "cog")
     return (
       <Suspense fallback={null}>
-        <CogOverlay asset={asset} url={assetUrl} onError={onError} />
+        <CogOverlay
+          asset={asset}
+          url={assetUrl}
+          onError={onError}
+          onBounds={onBounds}
+        />
       </Suspense>
     );
   if (asset.kind === "geoparquet")
@@ -395,10 +410,36 @@ export function MapChapter({
   overlayAssets = [],
   basemapStyle,
   controlled = false,
+  autoFit = false,
 }: MapChapterProps) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reportError = useCallback((message: string) => setError(message), []);
+  const mapRef = useRef<MapRef | null>(null);
+  const fittedAssetRef = useRef<string | null>(null);
+  const activeAssetIdRef = useRef(asset?.id);
+  activeAssetIdRef.current = asset?.id;
+  const fitToBounds = useCallback(
+    (bounds: [number, number, number, number]) => {
+      if (
+        !autoFit ||
+        activeAssetIdRef.current !== asset?.id ||
+        fittedAssetRef.current === asset?.id
+      )
+        return;
+      const map = mapRef.current;
+      if (!map) return;
+      fittedAssetRef.current = asset?.id ?? null;
+      map.fitBounds(
+        [
+          [bounds[0], bounds[1]],
+          [bounds[2], bounds[3]],
+        ],
+        { padding: 64, duration: 0, maxZoom: 16 },
+      );
+    },
+    [asset?.id, autoFit],
+  );
   const overlayKey = overlayAssets
     .map(({ id, href }) => `${id}:${href}`)
     .join("|");
@@ -406,6 +447,9 @@ export function MapChapter({
     () => setError(null),
     [asset?.id, asset?.href, basemapStyle, overlayKey],
   );
+  useEffect(() => {
+    fittedAssetRef.current = null;
+  }, [asset?.id]);
   const initialViewState = useMemo(
     () => ({
       longitude: chapter.camera.center[0],
@@ -425,10 +469,12 @@ export function MapChapter({
       data-map-ready={ready ? "true" : "false"}
     >
       <Map
+        ref={mapRef}
         {...(controlled
           ? { viewState: initialViewState }
           : { initialViewState })}
         mapStyle={basemapStyle}
+        interactive={!controlled}
         projection={chapter.camera.globe ? { type: "globe" } : undefined}
         terrain={
           chapter.camera.terrain?.enabled
@@ -482,6 +528,7 @@ export function MapChapter({
             key={mapAsset.id}
             asset={mapAsset}
             onError={reportError}
+            onBounds={mapAsset.id === asset?.id ? fitToBounds : undefined}
           />
         ))}
       </Map>
