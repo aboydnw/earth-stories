@@ -5,6 +5,7 @@ import * as duckdb from "@duckdb/duckdb-wasm";
 import type { Table } from "apache-arrow";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { DeckOverlay } from "./DeckOverlay.js";
+import { geoJsonBounds, type GeographicBounds } from "./geoBounds.js";
 
 const FEATURE_CAP = 100_000;
 let databasePromise: Promise<{
@@ -74,9 +75,11 @@ function hexColor(value: string): [number, number, number, number] {
 export function GeoParquetOverlay({
   asset,
   onError,
+  onBounds,
 }: {
   asset: PublicationAsset;
   onError: (message: string) => void;
+  onBounds?: (bounds: GeographicBounds) => void;
 }) {
   const [data, setData] = useState<ReturnType<typeof rowsToGeoJson> | null>(
     null,
@@ -124,7 +127,12 @@ export function GeoParquetOverlay({
           asset.href,
         )) as unknown as Table;
         await featuresStatement.close();
-        if (active) setData(rowsToGeoJson(table));
+        if (active) {
+          const next = rowsToGeoJson(table);
+          setData(next);
+          const bounds = geoJsonBounds(next);
+          if (bounds) onBounds?.(bounds);
+        }
       })
       .catch((cause: unknown) => {
         if (active)
@@ -137,7 +145,7 @@ export function GeoParquetOverlay({
     return () => {
       active = false;
     };
-  }, [asset.href, onError]);
+  }, [asset.href, onBounds, onError]);
   const layers = useMemo<DeckLayer[]>(() => {
     if (!data) return [];
     const presentation = asset.presentation;

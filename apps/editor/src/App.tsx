@@ -48,6 +48,7 @@ import {
 import { PublishPanel } from "./PublishPanel";
 import { WorkspaceScreen } from "./WorkspaceScreen";
 import { ChapterAddMenu } from "./ChapterAddMenu";
+import { MarkdownToolbar } from "./MarkdownToolbar";
 
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
@@ -91,6 +92,7 @@ const sourcePath = (source: ProjectSource) =>
       : null;
 
 export function App() {
+  const narrativeRef = useRef<HTMLTextAreaElement>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StoryProject | null>(null);
   const [workspaceView, setWorkspaceView] = useState<"stories" | "data">(() =>
@@ -1916,7 +1918,22 @@ export function App() {
               </label>
               <label>
                 Narrative
+                <MarkdownToolbar
+                  textareaRef={narrativeRef}
+                  value={selectedChapter.narrative}
+                  onChange={(narrative) =>
+                    changeProject((current) => ({
+                      ...current,
+                      chapters: current.chapters.map((chapter) =>
+                        chapter.id === selectedChapter.id
+                          ? { ...chapter, narrative }
+                          : chapter,
+                      ),
+                    }))
+                  }
+                />
                 <textarea
+                  ref={narrativeRef}
                   rows={5}
                   value={selectedChapter.narrative}
                   onChange={(event) =>
@@ -2773,6 +2790,12 @@ export function App() {
                   <label>
                     <input
                       type="checkbox"
+                      disabled={
+                        selectedSource?.kind === "cog" ||
+                        selectedSource?.kind === "geoparquet" ||
+                        selectedSource?.kind === "copc" ||
+                        selectedSource?.kind === "zarr"
+                      }
                       checked={selectedChapter.camera.terrain?.enabled ?? false}
                       onChange={(event) =>
                         changeProject((current) => ({
@@ -2799,6 +2822,15 @@ export function App() {
                       }
                     />{" "}
                     Terrain
+                    {selectedSource?.kind === "cog" ||
+                    selectedSource?.kind === "geoparquet" ||
+                    selectedSource?.kind === "copc" ||
+                    selectedSource?.kind === "zarr" ? (
+                      <small>
+                        Terrain is off for this dataset renderer because its
+                        data cannot drape over elevation yet.
+                      </small>
+                    ) : null}
                   </label>
                   <label>
                     <input
