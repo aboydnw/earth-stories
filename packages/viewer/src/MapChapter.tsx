@@ -16,11 +16,20 @@ import Map, {
 } from "react-map-gl/maplibre";
 import { PMTiles, Protocol } from "pmtiles";
 import type {
+  Camera,
   PublicationAsset,
   PublicationChapter,
 } from "@earth-stories/story-schema";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { geoJsonBounds } from "./geoBounds.js";
+import { useMapCamera } from "./useMapCamera.js";
+import { TemporalControls } from "./TemporalControls.js";
+import {
+  formatTemporalTimestamp,
+  timestampAtPosition,
+  timestepIndex,
+} from "./temporal.js";
+import { useTemporalPlayback } from "./useTemporalPlayback.js";
 
 const CogOverlay = lazy(async () => ({
   default: (await import("./CogOverlay.js")).CogOverlay,
@@ -35,6 +44,9 @@ const CopcOverlay = lazy(async () => ({
 const ZarrOverlay = lazy(async () => ({
   default: (await import("./ZarrOverlay.js")).ZarrOverlay,
 }));
+const TrajectoryOverlay = lazy(async () => ({
+  default: (await import("./TrajectoryOverlay.js")).TrajectoryOverlay,
+}));
 
 interface MapChapterProps {
   chapter: Extract<PublicationChapter, { type: "map" | "scrolly" }>;
@@ -43,6 +55,10 @@ interface MapChapterProps {
   basemapStyle: string;
   controlled?: boolean;
   autoFit?: boolean;
+  snapshotMode?: boolean;
+  onMapReady?: (map: maplibregl.Map | null) => void;
+  onCameraChange?: (camera: Camera) => void;
+  onReady?: () => void;
 }
 
 let protocol: Protocol | null = null;
@@ -100,21 +116,32 @@ const terrainCompatible = (asset: PublicationAsset) =>
   asset.kind === "trajectory" ||
   asset.kind === "xyz";
 
+const ignoreTimeBounds = () => undefined;
+
 function AssetLayer({
   asset,
   onError,
   onBounds,
+  map,
+  onReady,
+  autoFit,
+  temporalPosition,
+  onTimeBounds,
 }: {
   asset: PublicationAsset;
   onError: (message: string) => void;
   onBounds?: (bounds: [number, number, number, number]) => void;
+  map?: maplibregl.Map | null;
+  onReady?: () => void;
+  autoFit?: boolean;
+  temporalPosition: number;
+  onTimeBounds: (bounds: [number, number] | null) => void;
 }) {
   const [pmtilesLayers, setPmtilesLayers] = useState<string[]>([]);
-  const [trajectory, setTrajectory] =
-    useState<GeoJSON.FeatureCollection | null>(null);
   const [geojson, setGeojson] = useState<GeoJSON.GeoJSON | null>(null);
-  const [trajectoryProgress, setTrajectoryProgress] = useState(1);
-  const [trajectoryPlaying, setTrajectoryPlaying] = useState(false);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  const reportReady = useCallback(() => onReadyRef.current?.(), []);
   const presentation = asset.presentation;
   const dataColor = categoryColor(presentation);
   const dataFilter = featureFilter(presentation);
@@ -144,6 +171,7 @@ function AssetLayer({
               header.maxLon,
               header.maxLat,
             ]);
+            reportReady();
           }
         })
         .catch(
@@ -156,51 +184,7 @@ function AssetLayer({
             ),
         );
     }
-    if (asset.kind === "trajectory") {
-      setTrajectory(null);
-      setTrajectoryProgress(1);
-      fetch(assetUrl, { signal: controller.signal })
-        .then((response) => {
-          if (!response.ok)
-            throw new Error(
-              `The trajectory source returned ${response.status}.`,
-            );
-          return response.json();
-        })
-        .then(
-          (data: {
-            tracks?: Array<{
-              path?: [number, number][];
-              timestamps?: number[];
-            }>;
-          }) => {
-            if (!active) return;
-            const next = {
-              type: "FeatureCollection",
-              features: (data.tracks ?? []).map((track, index) => ({
-                type: "Feature",
-                id: index,
-                properties: { timestamps: track.timestamps ?? [] },
-                geometry: { type: "LineString", coordinates: track.path ?? [] },
-              })),
-            } as GeoJSON.FeatureCollection;
-            setTrajectory(next);
-            const bounds = geoJsonBounds(next);
-            if (bounds) onBounds?.(bounds);
-          },
-        )
-        .catch(
-          (cause: unknown) =>
-            active &&
-            cause instanceof Error &&
-            cause.name !== "AbortError" &&
-            onError(
-              cause instanceof Error
-                ? cause.message
-                : "The trajectory could not be opened.",
-            ),
-        );
-    }
+    if (asset.kind === "xyz") reportReady();
     if (asset.kind === "geojson") {
       setGeojson(null);
       fetch(assetUrl, { signal: controller.signal })
@@ -212,6 +196,7 @@ function AssetLayer({
         .then((data: GeoJSON.GeoJSON) => {
           if (!active) return;
           setGeojson(data);
+          reportReady();
           const bounds = geoJsonBounds(data);
           if (bounds) onBounds?.(bounds);
         })
@@ -229,52 +214,13 @@ function AssetLayer({
           protocol.tiles.delete(key);
       }
     };
-  }, [asset.kind, assetUrl, onBounds, onError]);
-  useEffect(() => {
-    if (!trajectoryPlaying || asset.kind !== "trajectory") return;
-    const timer = window.setInterval(
-      () =>
-        setTrajectoryProgress((current) =>
-          current >= 1 ? 0.02 : Math.min(1, current + 0.01),
-        ),
-      50,
-    );
-    return () => window.clearInterval(timer);
-  }, [asset.kind, trajectoryPlaying]);
+  }, [asset.kind, assetUrl, onBounds, onError, reportReady]);
   const vectorSourceLayers = presentation.sourceLayer
     ? [presentation.sourceLayer]
     : pmtilesLayers;
   const resolvedAsset = useMemo(
     () => ({ ...asset, href: assetUrl }),
     [asset, assetUrl],
-  );
-  const displayedTrajectory = useMemo(
-    () =>
-      trajectory
-        ? {
-            ...trajectory,
-            features: trajectory.features.map((feature) => ({
-              ...feature,
-              geometry:
-                feature.geometry.type === "LineString"
-                  ? {
-                      ...feature.geometry,
-                      coordinates: feature.geometry.coordinates.slice(
-                        0,
-                        Math.max(
-                          2,
-                          Math.ceil(
-                            feature.geometry.coordinates.length *
-                              trajectoryProgress,
-                          ),
-                        ),
-                      ),
-                    }
-                  : feature.geometry,
-            })),
-          }
-        : null,
-    [trajectory, trajectoryProgress],
   );
   if (asset.kind === "cog")
     return (
@@ -284,6 +230,7 @@ function AssetLayer({
           url={assetUrl}
           onError={onError}
           onBounds={onBounds}
+          onReady={reportReady}
         />
       </Suspense>
     );
@@ -294,32 +241,50 @@ function AssetLayer({
           asset={resolvedAsset}
           onError={onError}
           onBounds={onBounds}
+          onReady={reportReady}
         />
       </Suspense>
     );
   if (asset.kind === "copc")
     return (
       <Suspense fallback={null}>
-        <CopcOverlay asset={resolvedAsset} onError={onError} />
+        <CopcOverlay
+          asset={resolvedAsset}
+          map={map ?? null}
+          onError={onError}
+          onReady={reportReady}
+          autoFit={autoFit}
+        />
       </Suspense>
     );
   if (asset.kind === "zarr")
     return (
       <Suspense fallback={null}>
-        <ZarrOverlay asset={resolvedAsset} onError={onError} />
+        <ZarrOverlay
+          asset={resolvedAsset}
+          onError={onError}
+          onReady={reportReady}
+          position={temporalPosition}
+        />
       </Suspense>
     );
-  if (
-    (asset.kind === "geojson" && geojson) ||
-    (asset.kind === "trajectory" && displayedTrajectory)
-  ) {
+  if (asset.kind === "trajectory")
+    return (
+      <Suspense fallback={null}>
+        <TrajectoryOverlay
+          asset={resolvedAsset}
+          position={temporalPosition}
+          onError={onError}
+          onBounds={onBounds}
+          onTimeBounds={onTimeBounds}
+          onReady={reportReady}
+        />
+      </Suspense>
+    );
+  if (asset.kind === "geojson" && geojson) {
     return (
       <>
-        <Source
-          id={asset.id}
-          type="geojson"
-          data={asset.kind === "trajectory" ? displayedTrajectory! : geojson!}
-        >
+        <Source id={asset.id} type="geojson" data={geojson}>
           <Layer
             id={`${asset.id}-fill`}
             type="fill"
@@ -336,7 +301,7 @@ function AssetLayer({
             paint={{
               "line-color": dataColor as never,
               "line-opacity": presentation.opacity,
-              "line-width": asset.kind === "trajectory" ? 4 : 2,
+              "line-width": 2,
             }}
           />
           <Layer
@@ -352,29 +317,6 @@ function AssetLayer({
             }}
           />
         </Source>
-        {asset.kind === "trajectory" ? (
-          <div className="story-map__time">
-            <label>
-              Journey: {Math.round(trajectoryProgress * 100)}%
-              <input
-                type="range"
-                min="0.02"
-                max="1"
-                step="0.01"
-                value={trajectoryProgress}
-                onChange={(event) =>
-                  setTrajectoryProgress(Number(event.target.value))
-                }
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => setTrajectoryPlaying((playing) => !playing)}
-            >
-              {trajectoryPlaying ? "Pause" : "Play"}
-            </button>
-          </div>
-        ) : null}
       </>
     );
   }
@@ -410,7 +352,7 @@ function AssetLayer({
             {...filterProps}
             paint={{
               "fill-color": dataColor as never,
-              "fill-opacity": presentation.opacity * 0.45,
+              "fill-opacity": 0,
             }}
           />,
           <Layer
@@ -451,12 +393,24 @@ export function MapChapter({
   basemapStyle,
   controlled = false,
   autoFit = false,
+  snapshotMode = false,
+  onMapReady,
+  onCameraChange,
+  onReady,
 }: MapChapterProps) {
   const [ready, setReady] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
+  const [readyAssets, setReadyAssets] = useState(() => new Set<string>());
   const [showBuildingHint, setShowBuildingHint] = useState(
     chapter.camera.zoom < 14,
   );
   const [error, setError] = useState<string | null>(null);
+  const [trajectoryTimeBounds, setTrajectoryTimeBounds] = useState<
+    [number, number] | null
+  >(null);
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
   const reportError = useCallback((message: string) => setError(message), []);
   const mapRef = useRef<MapRef | null>(null);
   const fittedAssetRef = useRef<string | null>(null);
@@ -507,20 +461,61 @@ export function MapChapter({
     [chapter.camera],
   );
   const mapAssets = asset ? [asset, ...overlayAssets] : overlayAssets;
+  const zarrStepCount =
+    asset?.kind === "zarr" ? (asset.zarr?.timesteps.length ?? 0) : 0;
+  const temporal = useTemporalPlayback({
+    assetId:
+      asset && (asset.kind === "trajectory" || zarrStepCount > 1)
+        ? asset.id
+        : null,
+    chapterId: chapter.id,
+    authoredPosition: chapter.temporalPosition,
+    stepCount: zarrStepCount || undefined,
+    enabled:
+      (asset?.kind === "trajectory" && !!trajectoryTimeBounds) ||
+      zarrStepCount > 1,
+  });
+  const temporalLabel =
+    asset?.kind === "zarr"
+      ? (asset.zarr?.timesteps[timestepIndex(temporal.position, zarrStepCount)]
+          ?.label ?? "Time")
+      : asset?.kind === "trajectory" && trajectoryTimeBounds
+        ? formatTemporalTimestamp(
+            timestampAtPosition(
+              temporal.position,
+              trajectoryTimeBounds[0],
+              trajectoryTimeBounds[1],
+            ),
+          )
+        : "";
+  const mapAssetKey = mapAssets
+    .map(({ id, href }) => `${id}:${href}`)
+    .join("|");
+  useEffect(() => setReadyAssets(new Set()), [mapAssetKey]);
+  const dataReady = mapAssets.every((item) => readyAssets.has(item.id));
   const terrainEnabled =
     !!chapter.camera.terrain?.enabled && mapAssets.every(terrainCompatible);
+  const programmaticCamera = useMapCamera({
+    map: mapInstance,
+    camera: chapter.camera,
+    transition: chapter.transition,
+    enabled: controlled,
+  });
+
+  useEffect(() => () => onMapReady?.(null), [onMapReady]);
+  useEffect(() => {
+    if (ready && dataReady) onReadyRef.current?.();
+  }, [dataReady, ready]);
 
   return (
     <div
       className="story-map"
       aria-label={`Map for ${chapter.title}`}
-      data-map-ready={ready ? "true" : "false"}
+      data-map-ready={ready && dataReady ? "true" : "false"}
     >
       <Map
         ref={mapRef}
-        {...(controlled
-          ? { viewState: initialViewState }
-          : { initialViewState })}
+        initialViewState={initialViewState}
         mapStyle={basemapStyle}
         interactive={!controlled}
         projection={chapter.camera.globe ? { type: "globe" } : undefined}
@@ -532,14 +527,34 @@ export function MapChapter({
               }
             : undefined
         }
-        preserveDrawingBuffer
+        preserveDrawingBuffer={snapshotMode}
+        onLoad={() => {
+          const next = mapRef.current?.getMap() ?? null;
+          setMapLoaded(true);
+          setMapInstance(next);
+          onMapReady?.(next);
+        }}
         onIdle={() => setReady(true)}
-        {...(!controlled && chapter.camera.buildings
-          ? {
-              onMove: (event: { viewState: { zoom: number } }) =>
-                setShowBuildingHint(event.viewState.zoom < 14),
-            }
-          : {})}
+        onMove={(event: {
+          viewState: {
+            longitude: number;
+            latitude: number;
+            zoom: number;
+            bearing: number;
+            pitch: number;
+          };
+        }) => {
+          if (!controlled && chapter.camera.buildings)
+            setShowBuildingHint(event.viewState.zoom < 14);
+          if (!controlled && !programmaticCamera.current && onCameraChange)
+            onCameraChange({
+              ...chapter.camera,
+              center: [event.viewState.longitude, event.viewState.latitude],
+              zoom: event.viewState.zoom,
+              bearing: event.viewState.bearing,
+              pitch: event.viewState.pitch,
+            });
+        }}
         onError={(event: { error: Error }) => setError(event.error.message)}
       >
         {!controlled ? (
@@ -589,6 +604,22 @@ export function MapChapter({
             asset={mapAsset}
             onError={reportError}
             onBounds={mapAsset.id === asset?.id ? fitToBounds : undefined}
+            map={mapLoaded ? (mapRef.current?.getMap() ?? null) : null}
+            onReady={() =>
+              setReadyAssets((current) => {
+                if (current.has(mapAsset.id)) return current;
+                const next = new Set(current);
+                next.add(mapAsset.id);
+                return next;
+              })
+            }
+            autoFit={autoFit}
+            temporalPosition={mapAsset.id === asset?.id ? temporal.position : 0}
+            onTimeBounds={
+              mapAsset.id === asset?.id
+                ? setTrajectoryTimeBounds
+                : ignoreTimeBounds
+            }
           />
         ))}
       </Map>
@@ -626,6 +657,20 @@ export function MapChapter({
           )}
         </aside>
       ) : null}
+      {(zarrStepCount > 1 ||
+        (asset?.kind === "trajectory" && trajectoryTimeBounds)) && (
+        <TemporalControls
+          position={temporal.position}
+          label={temporalLabel}
+          playing={temporal.playing}
+          speed={temporal.speed}
+          stepCount={zarrStepCount || undefined}
+          onScrub={temporal.scrub}
+          onStep={temporal.step}
+          onToggle={temporal.toggle}
+          onSpeed={temporal.setSpeed}
+        />
+      )}
       {!controlled && chapter.camera.buildings && showBuildingHint ? (
         <div className="story-map__hint" role="status">
           Zoom in to street level to see 3D buildings.
@@ -639,7 +684,11 @@ export function MapChapter({
       {error ? (
         <div className="story-map__error" role="alert">
           <strong>Map source unavailable</strong>
-          <span>{error}</span>
+          <span>
+            {snapshotMode
+              ? error
+              : "This dataset could not be displayed. The rest of the story is still available."}
+          </span>
           {asset ? (
             <a href={asset.href} target="_blank" rel="noreferrer">
               Open source

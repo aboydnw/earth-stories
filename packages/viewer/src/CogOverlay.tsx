@@ -13,11 +13,13 @@ export function CogOverlay({
   url,
   onError,
   onBounds,
+  onReady,
 }: {
   asset: PublicationAsset;
   url: string;
   onError: (message: string) => void;
   onBounds?: (bounds: [number, number, number, number]) => void;
+  onReady?: () => void;
 }) {
   const maps = useMap();
   const raster = useRef<{
@@ -84,15 +86,16 @@ export function CogOverlay({
         geographicBounds.east,
         geographicBounds.north,
       ]);
+      onReady?.();
     },
-    [onBounds],
+    [onBounds, onReady],
   );
   const layers = useMemo(
     () =>
       prepared?.key === preparedKey
         ? buildCogLayers(
             asset,
-            prepared.source,
+            prepared.rescale ? prepared.source : url,
             onError,
             onLoad,
             prepared.rescale,

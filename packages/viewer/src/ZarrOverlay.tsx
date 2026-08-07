@@ -6,32 +6,33 @@ import * as zarr from "zarrita";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { colorize } from "./CogLayer.js";
 import { DeckOverlay } from "./DeckOverlay.js";
+import { openZarrVariable, type OpenedZarrNode } from "./zarrNode.js";
+import { timestepIndex } from "./temporal.js";
 
 export function ZarrOverlay({
   asset,
   onError,
+  onReady,
+  position,
 }: {
   asset: PublicationAsset;
   onError: (message: string) => void;
+  onReady?: () => void;
+  position: number;
 }) {
-  const [node, setNode] = useState<
-    zarr.Group<zarr.Readable> | zarr.Array<zarr.DataType, zarr.Readable> | null
-  >(null);
-  const [timeIndex, setTimeIndex] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  useEffect(
-    () => setTimeIndex(0),
-    [asset.id, asset.href, asset.zarr?.timesteps.length],
-  );
+  const [opened, setOpened] = useState<OpenedZarrNode | null>(null);
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const store = await zarr.withMaybeConsolidatedMetadata(
-          new zarr.FetchStore(asset.href),
+        const result = await openZarrVariable(
+          asset.href,
+          asset.zarr?.variable ?? "",
         );
-        const root = await zarr.open(store);
-        if (active) setNode(root);
+        if (active) {
+          setOpened(result);
+          onReady?.();
+        }
       } catch (cause) {
         if (active)
           onError(
@@ -44,20 +45,10 @@ export function ZarrOverlay({
     return () => {
       active = false;
     };
-  }, [asset.href, onError]);
-  useEffect(() => {
-    if (!playing || !asset.zarr || asset.zarr.timesteps.length < 2) return;
-    const timer = window.setInterval(
-      () =>
-        setTimeIndex((current) =>
-          current + 1 >= asset.zarr!.timesteps.length ? 0 : current + 1,
-        ),
-      650,
-    );
-    return () => window.clearInterval(timer);
-  }, [asset.zarr, playing]);
+  }, [asset.href, asset.zarr?.variable, onError, onReady]);
+  const timeIndex = timestepIndex(position, asset.zarr?.timesteps.length ?? 0);
   const layers = useMemo(() => {
-    if (!node || !asset.zarr) return [];
+    if (!opened || !asset.zarr) return [];
     const selection: Record<string, SliceInput> = { ...asset.zarr.selection };
     const timestep = asset.zarr.timesteps[timeIndex];
     if (asset.zarr.timeDimension && timestep)
@@ -66,19 +57,21 @@ export function ZarrOverlay({
     const range = maximum - minimum || 1;
     return [
       new ZarrLayer({
-        id: `${asset.id}-zarr-${timeIndex}`,
-        node,
-        variable: asset.zarr.variable,
+        id: `${asset.id}-zarr`,
+        node: opened.node,
+        variable: opened.variable,
         selection,
         opacity: asset.presentation.opacity,
-        metadata: asset.zarr.geozarr
-          ? {
-              "spatial:dimensions": asset.zarr.geozarr.dimensions,
-              "spatial:transform": asset.zarr.geozarr.transform,
-              "spatial:shape": asset.zarr.geozarr.shape,
-              "proj:code": asset.zarr.geozarr.crs,
-            }
-          : undefined,
+        metadata:
+          opened.metadata ??
+          (asset.zarr.geozarr
+            ? {
+                "spatial:dimensions": asset.zarr.geozarr.dimensions,
+                "spatial:transform": asset.zarr.geozarr.transform,
+                "spatial:shape": asset.zarr.geozarr.shape,
+                "proj:code": asset.zarr.geozarr.crs,
+              }
+            : undefined),
         getTileData: async (array, options) => {
           const chunk = (await zarr.get(array, options.sliceSpec)) as {
             data: ArrayLike<number>;
@@ -124,27 +117,6 @@ export function ZarrOverlay({
           ),
       }),
     ];
-  }, [asset, node, onError, timeIndex]);
-  return (
-    <>
-      <DeckOverlay layers={layers} />
-      {asset.zarr && asset.zarr.timesteps.length > 1 ? (
-        <div className="story-map__time">
-          <label>
-            Time: {asset.zarr.timesteps[timeIndex]?.label}
-            <input
-              type="range"
-              min="0"
-              max={asset.zarr.timesteps.length - 1}
-              value={timeIndex}
-              onChange={(event) => setTimeIndex(Number(event.target.value))}
-            />
-          </label>
-          <button type="button" onClick={() => setPlaying((value) => !value)}>
-            {playing ? "Pause" : "Play"}
-          </button>
-        </div>
-      ) : null}
-    </>
-  );
+  }, [asset, opened, onError, timeIndex]);
+  return <DeckOverlay layers={layers} />;
 }

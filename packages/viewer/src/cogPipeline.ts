@@ -29,12 +29,12 @@ export function supportsInferredPipeline(geotiff: GeoTIFF): boolean {
   const tags = geotiff.cachedTags;
   const sampleFormats = tags.sampleFormat;
   const bits = tags.bitsPerSample;
-  if (!sampleFormats || bits.length === 0) return false;
-  const firstFormat = sampleFormats[0] ?? SampleFormat.Uint;
+  if (bits.length === 0) return false;
+  const firstFormat = sampleFormats?.[0] ?? SampleFormat.Uint;
   const firstBits = bits[0] ?? 8;
   if (
     firstFormat !== SampleFormat.Uint ||
-    sampleFormats.some((format) => format !== firstFormat) ||
+    (sampleFormats?.some((format) => format !== firstFormat) ?? false) ||
     bits.some((value) => value !== firstBits)
   )
     return false;

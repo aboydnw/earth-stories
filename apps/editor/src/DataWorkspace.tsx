@@ -70,13 +70,16 @@ export function DataWorkspace({
   projects,
   examples,
   onOpenStory,
+  selectedDatasetId,
+  onDatasetChange,
 }: {
   projects: ProjectSummary[];
   examples: ExampleCatalog | null;
   onOpenStory: (id: string) => void;
+  selectedDatasetId: string | null;
+  onDatasetChange: (id: string | null) => void;
 }) {
   const [loadedProjects, setLoadedProjects] = useState<StoryProject[]>([]);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -147,13 +150,14 @@ export function DataWorkspace({
       .map(exampleDataItem);
     return [...projectItems, ...exampleItems];
   }, [examples, loadedProjects]);
-  const selected = items.find((item) => item.key === selectedKey) ?? null;
+  const selected =
+    items.find((item) => item.key === selectedDatasetId) ?? null;
 
   if (selected)
     return (
       <DataMapViewer
         item={selected}
-        onBack={() => setSelectedKey(null)}
+        onBack={() => onDatasetChange(null)}
         onOpenStory={
           selected.example ? undefined : () => onOpenStory(selected.project.id)
         }
@@ -240,7 +244,7 @@ export function DataWorkspace({
                     </>
                   }
                   usage={`${item.usedBy} ${item.usedBy === 1 ? "chapter" : "chapters"}`}
-                  onOpen={() => setSelectedKey(item.key)}
+                  onOpen={() => onDatasetChange(item.key)}
                 />
               ))}
             </div>

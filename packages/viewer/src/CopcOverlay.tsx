@@ -1,20 +1,24 @@
 import { useEffect } from "react";
-import { useMap } from "react-map-gl/maplibre";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import { LidarControl } from "maplibre-gl-lidar";
 import "maplibre-gl-lidar/style.css";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 
 export function CopcOverlay({
   asset,
+  map,
   onError,
+  onReady,
+  autoFit = false,
 }: {
   asset: PublicationAsset;
+  map: MapLibreMap | null;
   onError: (message: string) => void;
+  onReady?: () => void;
+  autoFit?: boolean;
 }) {
-  const maps = useMap();
   useEffect(() => {
     let active = true;
-    const map = maps.current?.getMap();
     if (!map || asset.kind !== "copc") return;
     const control = new LidarControl({
       collapsed: true,
@@ -22,13 +26,14 @@ export function CopcOverlay({
       pointSize: asset.copc?.pointSize ?? 2,
       copcLoadingMode: "dynamic",
       streamingPointBudget: 2_000_000,
-      autoZoom: false,
+      autoZoom: autoFit,
       shareUrl: false,
       restoreFromUrl: false,
     });
     map.addControl(control);
     control
       .loadPointCloudStreaming(asset.href)
+      .then(() => active && onReady?.())
       .catch(
         (cause: unknown) =>
           active &&
@@ -48,8 +53,10 @@ export function CopcOverlay({
     asset.kind,
     asset.copc?.colorMode,
     asset.copc?.pointSize,
-    maps,
+    map,
     onError,
+    onReady,
+    autoFit,
   ]);
   return null;
 }
