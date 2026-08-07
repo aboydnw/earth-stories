@@ -1,4 +1,4 @@
-import { Photometric, SampleFormat } from "@cogeotiff/core";
+import { SampleFormat } from "@cogeotiff/core";
 import type { GeoTIFF, Overview } from "@developmentseed/geotiff";
 
 const MAX_RESCALE_SAMPLE_TILES = 4;
@@ -20,20 +20,27 @@ export function selectSampleTiles(
 /**
  * Report whether the library's inferred render pipeline can display this
  * raster. Inference only understands unsigned-integer rasters that read as
- * imagery (8-bit grayscale, RGB, palette). Anything else — float or signed
- * data, or high-bit-depth single-band rasters such as DEMs — needs the
+ * imagery with one to four channels of consistent 8- or 16-bit samples.
+ * Anything else — float, signed, packed-bit, or wider integer data — needs the
  * explicit rescale-and-colormap pipeline or COGLayer throws before the first
  * tile renders.
  */
 export function supportsInferredPipeline(geotiff: GeoTIFF): boolean {
   const tags = geotiff.cachedTags;
-  if ((tags.sampleFormat[0] ?? SampleFormat.Uint) !== SampleFormat.Uint)
+  const sampleFormats = tags.sampleFormat;
+  const bits = tags.bitsPerSample;
+  if (!sampleFormats || bits.length === 0) return false;
+  const firstFormat = sampleFormats[0] ?? SampleFormat.Uint;
+  const firstBits = bits[0] ?? 8;
+  if (
+    firstFormat !== SampleFormat.Uint ||
+    sampleFormats.some((format) => format !== firstFormat) ||
+    bits.some((value) => value !== firstBits)
+  )
     return false;
-  return (
-    (tags.bitsPerSample[0] ?? 8) <= 8 ||
-    tags.samplesPerPixel >= 3 ||
-    tags.photometric === Photometric.Palette
-  );
+  if (tags.samplesPerPixel < 1 || tags.samplesPerPixel > 4) return false;
+  if (firstBits !== 8 && firstBits !== 16) return false;
+  return true;
 }
 
 /**

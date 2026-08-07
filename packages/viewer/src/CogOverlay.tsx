@@ -67,29 +67,25 @@ export function CogOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preparedKey]);
   const onLoad = useCallback(
-    (geotiff: GeoTIFF, projection: ProjectionDefinition) => {
+    (
+      geotiff: GeoTIFF,
+      projection: ProjectionDefinition,
+      geographicBounds: {
+        west: number;
+        south: number;
+        east: number;
+        north: number;
+      },
+    ) => {
       raster.current = { geotiff, projection };
-      if (onBounds) {
-        try {
-          const projectionName = `EARTH_STORIES_BOUNDS:${asset.id}`;
-          proj4.defs(projectionName, projection as never);
-          const [minX, minY, maxX, maxY] = geotiff.bbox;
-          const corners = [
-            proj4(projectionName, "EPSG:4326", [minX, minY]),
-            proj4(projectionName, "EPSG:4326", [maxX, maxY]),
-          ];
-          onBounds([
-            Math.min(corners[0][0], corners[1][0]),
-            Math.min(corners[0][1], corners[1][1]),
-            Math.max(corners[0][0], corners[1][0]),
-            Math.max(corners[0][1], corners[1][1]),
-          ]);
-        } catch {
-          // The chapter camera remains available when source bounds cannot be projected.
-        }
-      }
+      onBounds?.([
+        geographicBounds.west,
+        geographicBounds.south,
+        geographicBounds.east,
+        geographicBounds.north,
+      ]);
     },
-    [asset.id, onBounds],
+    [onBounds],
   );
   const layers = useMemo(
     () =>

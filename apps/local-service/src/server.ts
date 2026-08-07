@@ -9,6 +9,7 @@ import { dirname, extname, join, relative, resolve } from "node:path";
 import { platform } from "node:os";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { ProjectStore } from "@earth-stories/project-store";
 import {
   buildLatestPublication,
@@ -111,28 +112,22 @@ async function proxyRemoteSource(
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> {
+  const headers: Record<string, string> = {
+    "accept-encoding": "identity",
+  };
+  if (request.headers.range) headers.range = request.headers.range;
   const upstream = await authorizedFetch(remoteValue, {
-    headers: request.headers.range
-      ? { range: request.headers.range }
-      : undefined,
+    method: request.method === "HEAD" ? "HEAD" : "GET",
+    headers,
   });
-  if (
-    request.headers.range &&
-    (upstream.status !== 206 || !upstream.headers.get("content-range"))
-  ) {
-    await upstream.body?.cancel();
-    json(response, 502, {
-      error: "The connected source does not support valid byte-range responses",
-    });
-    return;
-  }
   if (!upstream.ok && upstream.status !== 206) {
+    await upstream.body?.cancel();
     json(response, 502, {
       error: `The connected source returned ${upstream.status}`,
     });
     return;
   }
-  const headers: Record<string, string> = {
+  const responseHeaders: Record<string, string> = {
     "content-type":
       upstream.headers.get("content-type") ?? "application/octet-stream",
     "cache-control": "private, max-age=300",
@@ -140,18 +135,28 @@ async function proxyRemoteSource(
       ? { "accept-ranges": upstream.headers.get("accept-ranges")! }
       : {}),
   };
-  for (const name of ["content-length", "content-range", "etag"]) {
+  const contentEncoding = upstream.headers.get("content-encoding");
+  for (const name of ["content-range", "etag"]) {
     const value = upstream.headers.get(name);
-    if (value) headers[name] = value;
+    if (value) responseHeaders[name] = value;
   }
-  response.writeHead(upstream.status, headers);
-  if (!upstream.body) {
+  if (!contentEncoding || contentEncoding === "identity") {
+    const contentLength = upstream.headers.get("content-length");
+    if (contentLength) responseHeaders["content-length"] = contentLength;
+  }
+  response.writeHead(upstream.status, responseHeaders);
+  if (request.method === "HEAD" || !upstream.body) {
+    await upstream.body?.cancel();
     response.end();
     return;
   }
   const stream = Readable.fromWeb(upstream.body as never);
-  stream.on("error", (cause) => response.destroy(cause));
-  stream.pipe(response);
+  try {
+    await pipeline(stream, response);
+  } catch (cause) {
+    if (!response.destroyed)
+      response.destroy(cause instanceof Error ? cause : undefined);
+  }
 }
 
 async function collectFilePaths(
@@ -312,7 +317,10 @@ export function createLocalServer(
       const exampleConnectionContentMatch = url.pathname.match(
         /^\/api\/examples\/connections\/([^/]+)\/content$/,
       );
-      if (exampleConnectionContentMatch && request.method === "GET") {
+      if (
+        exampleConnectionContentMatch &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
         const example = exampleConnections.find(
           (item) =>
             item.id === decodeURIComponent(exampleConnectionContentMatch[1]),
@@ -360,7 +368,10 @@ export function createLocalServer(
       const connectedSourceMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/sources\/([^/]+)\/content$/,
       );
-      if (connectedSourceMatch && request.method === "GET") {
+      if (
+        connectedSourceMatch &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
         const projectId = decodeURIComponent(connectedSourceMatch[1]);
         const sourceId = decodeURIComponent(connectedSourceMatch[2]);
         const project = await store.read(projectId);

@@ -78,7 +78,16 @@ export function buildCogLayers(
   asset: PublicationAsset,
   source: GeoTIFF | string,
   onError: (message: string) => void,
-  onLoad?: (geotiff: GeoTIFF, projection: ProjectionDefinition) => void,
+  onLoad?: (
+    geotiff: GeoTIFF,
+    projection: ProjectionDefinition,
+    geographicBounds: {
+      west: number;
+      south: number;
+      east: number;
+      north: number;
+    },
+  ) => void,
   rescale: [number, number] | null = asset.presentation.rescale,
 ): Layer[] {
   const { presentation } = asset;
@@ -90,7 +99,7 @@ export function buildCogLayers(
         opacity: presentation.opacity,
         maxError: 0.03,
         onGeoTIFFLoad: (geotiff, options) =>
-          onLoad?.(geotiff, options.projection),
+          onLoad?.(geotiff, options.projection, options.geographicBounds),
         onError: (cause: unknown) =>
           onError(
             cause instanceof Error
@@ -168,7 +177,7 @@ export function buildCogLayers(
       renderTile,
       maxError: 0.03,
       onGeoTIFFLoad: (geotiff, options) =>
-        onLoad?.(geotiff, options.projection),
+        onLoad?.(geotiff, options.projection, options.geographicBounds),
       onError: (cause: unknown) =>
         onError(
           cause instanceof Error

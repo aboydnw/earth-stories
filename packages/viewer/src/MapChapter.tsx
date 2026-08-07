@@ -417,9 +417,16 @@ export function MapChapter({
   const reportError = useCallback((message: string) => setError(message), []);
   const mapRef = useRef<MapRef | null>(null);
   const fittedAssetRef = useRef<string | null>(null);
+  const activeAssetIdRef = useRef(asset?.id);
+  activeAssetIdRef.current = asset?.id;
   const fitToBounds = useCallback(
     (bounds: [number, number, number, number]) => {
-      if (!autoFit || fittedAssetRef.current === asset?.id) return;
+      if (
+        !autoFit ||
+        activeAssetIdRef.current !== asset?.id ||
+        fittedAssetRef.current === asset?.id
+      )
+        return;
       const map = mapRef.current;
       if (!map) return;
       fittedAssetRef.current = asset?.id ?? null;

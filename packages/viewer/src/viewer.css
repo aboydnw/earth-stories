@@ -291,7 +291,6 @@
   top: 16px;
   grid-row: 1;
   grid-column: 1 / -1;
-  pointer-events: none;
 }
 .story-image,
 .story-chart {
@@ -515,7 +514,8 @@
     top: auto;
     grid-row: auto;
   }
-  .story-chapter--scrolly .story-copy {
+  .story-chapter--scrolly .story-copy,
+  .story-chapter--scrolly.story-chapter--overlay-right .story-copy {
     grid-column: 2;
   }
   .story-masthead h1 {

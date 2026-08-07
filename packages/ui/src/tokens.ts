@@ -84,6 +84,7 @@ export const productCssVariables = {
   "--es-border-emphasized": productTokens.colors.borderEmphasized,
   "--es-action": productTokens.colors.action,
   "--es-action-hover": productTokens.colors.actionHover,
+  "--es-action-fg": productTokens.colors.raised,
   "--es-focus-subtle": productTokens.colors.focusSubtle,
   "--es-selection": productTokens.colors.selection,
   "--es-selection-subtle": productTokens.colors.selectionSubtle,

@@ -1,12 +1,12 @@
 import { readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GeoTIFF } from "@developmentseed/geotiff";
 import {
   deriveCogRescale,
   selectSampleTiles,
   supportsInferredPipeline,
 } from "./cogPipeline.js";
-import { SampleFormat } from "@cogeotiff/core";
+import { Photometric, SampleFormat } from "@cogeotiff/core";
 
 const FLOAT_COG = new URL(
   "../../../fixtures/float32-dem.cog.tif",
@@ -41,6 +41,43 @@ describe("cogPipeline", () => {
     const geotiff = await openFixture();
     expect(geotiff.cachedTags.sampleFormat[0]).toBe(SampleFormat.Float);
     expect(supportsInferredPipeline(geotiff)).toBe(false);
+  });
+
+  it("accepts supported imagery and rejects unsupported channel and bit layouts", () => {
+    const raster = (
+      samplesPerPixel: number,
+      bitsPerSample: number[],
+      sampleFormat = [SampleFormat.Uint],
+    ) =>
+      ({
+        cachedTags: {
+          samplesPerPixel,
+          bitsPerSample,
+          sampleFormat,
+          photometric: Photometric.Rgb,
+        },
+      }) as unknown as GeoTIFF;
+
+    expect(supportsInferredPipeline(raster(3, [8, 8, 8]))).toBe(true);
+    expect(supportsInferredPipeline(raster(5, [8, 8, 8, 8, 8]))).toBe(false);
+    expect(supportsInferredPipeline(raster(1, [4]))).toBe(false);
+    expect(supportsInferredPipeline(raster(3, [32, 32, 32]))).toBe(false);
+  });
+
+  it("uses GDAL statistics before reading raster tiles", async () => {
+    const fetchTile = vi.fn();
+    const geotiff = {
+      gdalMetadata: {
+        bandStatistics: new Map([
+          [1, { min: -12.5, max: 88.25, mean: null, stdDev: null }],
+        ]),
+      },
+      overviews: [],
+      fetchTile,
+    } as unknown as GeoTIFF;
+
+    await expect(deriveCogRescale(geotiff, 1)).resolves.toEqual([-12.5, 88.25]);
+    expect(fetchTile).not.toHaveBeenCalled();
   });
 
   it("derives a finite rescale range from the raster data", async () => {

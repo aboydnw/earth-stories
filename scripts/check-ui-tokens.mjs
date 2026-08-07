@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import colorNames from "color-name";
 
 const root = new URL("../", import.meta.url);
 const exceptions = JSON.parse(
@@ -41,6 +42,40 @@ for (const path of productFiles) {
     );
     if (!allowed)
       violations.push(`${file}: unapproved interface color ${value}`);
+  }
+  for (const match of source.matchAll(/\bhsla?\([^)]*\)/gi)) {
+    const allowed = exceptions.some(
+      (entry) =>
+        entry.file === file &&
+        entry.value.toLowerCase() === match[0].toLowerCase(),
+    );
+    if (!allowed)
+      violations.push(`${file}: unapproved interface color ${match[0]}`);
+  }
+  const namedColorPattern = file.endsWith(".css")
+    ? /(?:^|[;{]\s*)(?:background(?:-color)?|color|border(?:-[a-z-]+)?-color|outline-color|fill|stroke)\s*:\s*([a-z]+)\s*(?=[;}!])/gim
+    : /\b(?:background(?:Color)?|color|borderColor|outlineColor|fill|stroke)\s*:\s*["']([a-z]+)["']/gim;
+  for (const match of source.matchAll(namedColorPattern)) {
+    const value = match[1].toLowerCase();
+    const allowed = exceptions.some(
+      (entry) =>
+        entry.file === file &&
+        entry.value.toLowerCase() === value.toLowerCase(),
+    );
+    if (
+      !allowed &&
+      value in colorNames &&
+      ![
+        "inherit",
+        "initial",
+        "none",
+        "revert",
+        "revert-layer",
+        "transparent",
+        "unset",
+      ].includes(value)
+    )
+      violations.push(`${file}: unapproved named interface color ${match[1]}`);
   }
   if (
     /(?:z-index\s*:\s*-?\d+|\bzIndex\s*(?:=|:)\s*(?:\{\s*)?["']?-?\d+)/i.test(

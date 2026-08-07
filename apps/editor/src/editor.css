@@ -134,7 +134,7 @@ textarea:focus-visible {
 .button--primary {
   margin-right: 16px;
   background: var(--es-action);
-  color: white;
+  color: var(--es-action-fg);
 }
 .button--primary:hover:not(:disabled) {
   background: var(--es-action-hover);
