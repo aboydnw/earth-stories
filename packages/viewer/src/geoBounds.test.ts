@@ -28,4 +28,16 @@ describe("geoJsonBounds", () => {
       geoJsonBounds({ type: "FeatureCollection", features: [] }),
     ).toBeNull();
   });
+
+  it("ignores non-finite coordinates", () => {
+    expect(
+      geoJsonBounds({
+        type: "MultiPoint",
+        coordinates: [
+          [10, Infinity],
+          [NaN, 4],
+        ],
+      }),
+    ).toBeNull();
+  });
 });

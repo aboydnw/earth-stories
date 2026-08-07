@@ -10,7 +10,9 @@ export function geoJsonBounds(value: unknown): GeographicBounds | null {
     if (
       node.length >= 2 &&
       typeof node[0] === "number" &&
-      typeof node[1] === "number"
+      typeof node[1] === "number" &&
+      Number.isFinite(node[0]) &&
+      Number.isFinite(node[1])
     ) {
       west = Math.min(west, node[0]);
       south = Math.min(south, node[1]);
@@ -29,5 +31,10 @@ export function geoJsonBounds(value: unknown): GeographicBounds | null {
     if (Array.isArray(record.geometries)) record.geometries.forEach(collect);
   };
   collect(value);
-  return Number.isFinite(west) ? [west, south, east, north] : null;
+  return Number.isFinite(west) &&
+    Number.isFinite(south) &&
+    Number.isFinite(east) &&
+    Number.isFinite(north)
+    ? [west, south, east, north]
+    : null;
 }

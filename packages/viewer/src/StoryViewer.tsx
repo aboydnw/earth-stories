@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { PublicationManifest } from "@earth-stories/story-schema";
 import { groupChaptersIntoBlocks } from "./chapterBlocks.js";
@@ -30,8 +30,14 @@ export function StoryViewer({
   theme,
 }: StoryViewerProps) {
   const [readingProgress, setReadingProgress] = useState(0);
-  const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
-  const chapterBlocks = groupChaptersIntoBlocks(manifest.chapters);
+  const assets = useMemo(
+    () => new Map(manifest.assets.map((asset) => [asset.id, asset])),
+    [manifest.assets],
+  );
+  const chapterBlocks = useMemo(
+    () => groupChaptersIntoBlocks(manifest.chapters),
+    [manifest.chapters],
+  );
   useEffect(() => {
     if (embed) return;
     let frame = 0;

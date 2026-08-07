@@ -25,6 +25,42 @@ describe("MarkdownToolbar", () => {
     expect(onChange).toHaveBeenCalledWith("A paragraph\n\n- List item");
   });
 
+  it("separates a list inserted before an existing paragraph", () => {
+    const ref = createRef<HTMLTextAreaElement>();
+    const onChange = vi.fn();
+    render(
+      <>
+        <MarkdownToolbar
+          textareaRef={ref}
+          value="A paragraph"
+          onChange={onChange}
+        />
+        <textarea ref={ref} defaultValue="A paragraph" />
+      </>,
+    );
+    ref.current?.setSelectionRange(0, 0);
+    fireEvent.click(screen.getByRole("button", { name: "Bulleted list" }));
+    expect(onChange).toHaveBeenCalledWith("- List item\n\nA paragraph");
+  });
+
+  it("separates a list inserted within a paragraph", () => {
+    const ref = createRef<HTMLTextAreaElement>();
+    const onChange = vi.fn();
+    render(
+      <>
+        <MarkdownToolbar
+          textareaRef={ref}
+          value="BeforeAfter"
+          onChange={onChange}
+        />
+        <textarea ref={ref} defaultValue="BeforeAfter" />
+      </>,
+    );
+    ref.current?.setSelectionRange(6, 6);
+    fireEvent.click(screen.getByRole("button", { name: "Numbered list" }));
+    expect(onChange).toHaveBeenCalledWith("Before\n\n1. List item\n\nAfter");
+  });
+
   it("wraps selected text with emphasis syntax", () => {
     const ref = createRef<HTMLTextAreaElement>();
     const onChange = vi.fn();

@@ -260,21 +260,38 @@ export function App() {
     }));
   }
   function assignSourceToChapter(chapterId: string, sourceId: string) {
-    changeProject((current) => ({
-      ...current,
-      chapters: current.chapters.map((chapter) =>
-        chapter.id === chapterId &&
-        (chapter.type === "map" || chapter.type === "scrolly")
-          ? {
-              ...chapter,
-              sourceId,
-              overlaySourceIds: (chapter.overlaySourceIds ?? []).filter(
-                (id) => id !== sourceId,
-              ),
-            }
-          : chapter,
-      ),
-    }));
+    changeProject((current) => {
+      const source = current.sources.find((item) => item.id === sourceId);
+      const terrainUnsupported =
+        source?.kind === "cog" ||
+        source?.kind === "geoparquet" ||
+        source?.kind === "copc" ||
+        source?.kind === "zarr";
+      return {
+        ...current,
+        chapters: current.chapters.map((chapter) =>
+          chapter.id === chapterId &&
+          (chapter.type === "map" || chapter.type === "scrolly")
+            ? {
+                ...chapter,
+                sourceId,
+                overlaySourceIds: (chapter.overlaySourceIds ?? []).filter(
+                  (id) => id !== sourceId,
+                ),
+                camera: terrainUnsupported
+                  ? {
+                      ...chapter.camera,
+                      terrain: {
+                        enabled: false,
+                        exaggeration: chapter.camera.terrain?.exaggeration ?? 1,
+                      },
+                    }
+                  : chapter.camera,
+              }
+            : chapter,
+        ),
+      };
+    });
   }
 
   async function handleCreate(event: React.FormEvent) {
@@ -1916,38 +1933,37 @@ export function App() {
                   }
                 />
               </label>
-              <label>
-                Narrative
-                <MarkdownToolbar
-                  textareaRef={narrativeRef}
-                  value={selectedChapter.narrative}
-                  onChange={(narrative) =>
-                    changeProject((current) => ({
-                      ...current,
-                      chapters: current.chapters.map((chapter) =>
-                        chapter.id === selectedChapter.id
-                          ? { ...chapter, narrative }
-                          : chapter,
-                      ),
-                    }))
-                  }
-                />
-                <textarea
-                  ref={narrativeRef}
-                  rows={5}
-                  value={selectedChapter.narrative}
-                  onChange={(event) =>
-                    changeProject((current) => ({
-                      ...current,
-                      chapters: current.chapters.map((chapter) =>
-                        chapter.id === selectedChapter.id
-                          ? { ...chapter, narrative: event.target.value }
-                          : chapter,
-                      ),
-                    }))
-                  }
-                />
-              </label>
+              <label htmlFor="chapter-narrative">Narrative</label>
+              <MarkdownToolbar
+                textareaRef={narrativeRef}
+                value={selectedChapter.narrative}
+                onChange={(narrative) =>
+                  changeProject((current) => ({
+                    ...current,
+                    chapters: current.chapters.map((chapter) =>
+                      chapter.id === selectedChapter.id
+                        ? { ...chapter, narrative }
+                        : chapter,
+                    ),
+                  }))
+                }
+              />
+              <textarea
+                id="chapter-narrative"
+                ref={narrativeRef}
+                rows={5}
+                value={selectedChapter.narrative}
+                onChange={(event) =>
+                  changeProject((current) => ({
+                    ...current,
+                    chapters: current.chapters.map((chapter) =>
+                      chapter.id === selectedChapter.id
+                        ? { ...chapter, narrative: event.target.value }
+                        : chapter,
+                    ),
+                  }))
+                }
+              />
               {selectedChapter.type === "video" ? (
                 <div className="field-row">
                   <label>

@@ -112,6 +112,7 @@ function AssetLayer({
   const [pmtilesLayers, setPmtilesLayers] = useState<string[]>([]);
   const [trajectory, setTrajectory] =
     useState<GeoJSON.FeatureCollection | null>(null);
+  const [geojson, setGeojson] = useState<GeoJSON.GeoJSON | null>(null);
   const [trajectoryProgress, setTrajectoryProgress] = useState(1);
   const [trajectoryPlaying, setTrajectoryPlaying] = useState(false);
   const presentation = asset.presentation;
@@ -201,15 +202,18 @@ function AssetLayer({
         );
     }
     if (asset.kind === "geojson") {
+      setGeojson(null);
       fetch(assetUrl, { signal: controller.signal })
         .then((response) => {
           if (!response.ok)
             throw new Error(`The GeoJSON source returned ${response.status}.`);
           return response.json();
         })
-        .then((data: unknown) => {
+        .then((data: GeoJSON.GeoJSON) => {
+          if (!active) return;
+          setGeojson(data);
           const bounds = geoJsonBounds(data);
-          if (active && bounds) onBounds?.(bounds);
+          if (bounds) onBounds?.(bounds);
         })
         .catch((cause: unknown) => {
           if (active && cause instanceof Error && cause.name !== "AbortError")
@@ -306,7 +310,7 @@ function AssetLayer({
       </Suspense>
     );
   if (
-    asset.kind === "geojson" ||
+    (asset.kind === "geojson" && geojson) ||
     (asset.kind === "trajectory" && displayedTrajectory)
   ) {
     return (
@@ -314,7 +318,7 @@ function AssetLayer({
         <Source
           id={asset.id}
           type="geojson"
-          data={asset.kind === "trajectory" ? displayedTrajectory! : assetUrl}
+          data={asset.kind === "trajectory" ? displayedTrajectory! : geojson!}
         >
           <Layer
             id={`${asset.id}-fill`}
@@ -449,13 +453,18 @@ export function MapChapter({
   autoFit = false,
 }: MapChapterProps) {
   const [ready, setReady] = useState(false);
-  const [currentZoom, setCurrentZoom] = useState(chapter.camera.zoom);
+  const [showBuildingHint, setShowBuildingHint] = useState(
+    chapter.camera.zoom < 14,
+  );
   const [error, setError] = useState<string | null>(null);
   const reportError = useCallback((message: string) => setError(message), []);
   const mapRef = useRef<MapRef | null>(null);
   const fittedAssetRef = useRef<string | null>(null);
   const activeAssetIdRef = useRef(asset?.id);
   activeAssetIdRef.current = asset?.id;
+  useEffect(() => {
+    setShowBuildingHint(chapter.camera.zoom < 14);
+  }, [chapter.camera.zoom, chapter.id]);
   const fitToBounds = useCallback(
     (bounds: [number, number, number, number]) => {
       if (
@@ -525,9 +534,12 @@ export function MapChapter({
         }
         preserveDrawingBuffer
         onIdle={() => setReady(true)}
-        onMove={(event: { viewState: { zoom: number } }) =>
-          setCurrentZoom(event.viewState.zoom)
-        }
+        {...(!controlled && chapter.camera.buildings
+          ? {
+              onMove: (event: { viewState: { zoom: number } }) =>
+                setShowBuildingHint(event.viewState.zoom < 14),
+            }
+          : {})}
         onError={(event: { error: Error }) => setError(event.error.message)}
       >
         {!controlled ? (
@@ -614,7 +626,7 @@ export function MapChapter({
           )}
         </aside>
       ) : null}
-      {!controlled && chapter.camera.buildings && currentZoom < 14 ? (
+      {!controlled && chapter.camera.buildings && showBuildingHint ? (
         <div className="story-map__hint" role="status">
           Zoom in to street level to see 3D buildings.
         </div>

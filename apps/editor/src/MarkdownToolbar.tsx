@@ -46,7 +46,9 @@ function insertList(
     .split("\n")
     .map((line, index) => `${ordered ? `${index + 1}.` : "-"} ${line}`);
   const needsBreak = start > 0 && !value.slice(0, start).endsWith("\n\n");
-  const insertion = `${needsBreak ? "\n\n" : ""}${items.join("\n")}`;
+  const needsTrailingBreak =
+    end < value.length && !value.slice(end).startsWith("\n\n");
+  const insertion = `${needsBreak ? "\n\n" : ""}${items.join("\n")}${needsTrailingBreak ? "\n\n" : ""}`;
   onChange(`${value.slice(0, start)}${insertion}${value.slice(end)}`);
   requestAnimationFrame(() => {
     textarea.focus();
