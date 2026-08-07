@@ -495,7 +495,7 @@ export function MapChapter({
   );
   useEffect(() => {
     fittedAssetRef.current = null;
-  }, [asset?.id]);
+  }, [asset?.id, asset?.href]);
   const initialViewState = useMemo(
     () => ({
       longitude: chapter.camera.center[0],
