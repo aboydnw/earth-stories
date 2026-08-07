@@ -62,7 +62,7 @@ export const exampleConnections: ExampleConnection[] = [
     locator:
       "https://oin-hotosm-temp.s3.amazonaws.com/63f21def525f0700077ed4e2/0/63f21def525f0700077ed4e3.tif",
     attribution: "OpenAerialMap / HOT",
-    camera: { center: [36.155, 36.205], zoom: 13, bearing: 0, pitch: 0 },
+    camera: { center: [36.1995, 36.229], zoom: 15, bearing: 0, pitch: 0 },
   },
   {
     id: "countries-pmtiles",
@@ -123,7 +123,7 @@ export const exampleConnections: ExampleConnection[] = [
       variable: "precipitation",
       selection: {},
       timeDimension: "time",
-      timesteps: [],
+      timesteps: [{ label: "First available", index: 0 }],
       geozarr: {
         dimensions: ["latitude", "longitude"],
         transform: [0.1, 0, -180, 0, 0.1, -90],
@@ -225,7 +225,7 @@ const antakya: StoryProject = {
       narrative:
         "This chapter reads the cloud-optimized GeoTIFF directly from its public source. Pan and zoom to inspect the captured landscape without a tile server.",
       sourceId: "antakya-cog",
-      camera: { center: [36.155, 36.205], zoom: 14, bearing: 0, pitch: 22 },
+      camera: { center: [36.1995, 36.229], zoom: 15, bearing: 0, pitch: 22 },
     },
     {
       id: "antakya-method",

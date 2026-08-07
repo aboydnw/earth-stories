@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as zarr from "zarrita";
-import { openZarrVariable } from "./zarrNode.js";
+import {
+  completeZarrSelection,
+  openZarrVariable,
+  selectMultiscaleDataset,
+} from "./zarrNode.js";
 
 vi.mock("zarrita", () => ({
   FetchStore: class FetchStore {
@@ -107,5 +111,37 @@ describe("openZarrVariable", () => {
     ).resolves.toEqual({ node: array });
     expect(multiscaleRoot.resolve).toHaveBeenNthCalledWith(1, "16x/variables");
     expect(multiscaleRoot.resolve).toHaveBeenNthCalledWith(2, "variables");
+  });
+});
+
+describe("selectMultiscaleDataset", () => {
+  const datasets = [
+    { path: ".", "spatial:shape": [16_000, 32_000] },
+    { path: "32x", "spatial:shape": [500, 1_000] },
+    { path: "16x", "spatial:shape": [1_000, 2_000] },
+    { path: "64x", "spatial:shape": [250, 500] },
+  ];
+
+  it("chooses the smallest overview that satisfies the viewport width", () => {
+    expect(selectMultiscaleDataset(datasets, 1_200)?.path).toBe("16x");
+    expect(selectMultiscaleDataset(datasets, 400)?.path).toBe("64x");
+  });
+
+  it("caps at the most detailed available overview", () => {
+    expect(selectMultiscaleDataset(datasets, 8_000)?.path).toBe("16x");
+  });
+});
+
+describe("completeZarrSelection", () => {
+  it("pins omitted non-spatial dimensions and preserves explicit choices", () => {
+    expect(
+      completeZarrSelection(
+        { band: 2 },
+        ["time", "band", "latitude", "longitude"],
+        ["latitude", "longitude"],
+        "time",
+        7,
+      ),
+    ).toEqual({ time: 7, band: 2 });
   });
 });

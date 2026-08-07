@@ -1,9 +1,19 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   ArrowLeft,
   CloudArrowDown,
   Database,
+  FileArrowUp,
+  Link,
   MapTrifold,
+  Plus,
 } from "@phosphor-icons/react";
 import { compileProject } from "@earth-stories/publisher/compile";
 import type {
@@ -13,17 +23,29 @@ import type {
 } from "@earth-stories/story-schema";
 import {
   BrandSpinner,
+  ActionButton,
   DataSourceRow,
+  FileInput,
   FormField,
+  PanelShell,
   SelectInput,
   StatePanel,
+  TextInput,
 } from "@earth-stories/ui";
 import {
+  discoverSource,
+  importAsset,
   openProject,
+  saveProject,
   type ExampleCatalog,
   type ExampleConnection,
   type ProjectSummary,
 } from "./api";
+import {
+  connectedSource,
+  uploadedSource,
+  type ConnectableKind,
+} from "./workspaceData";
 
 interface DataItem {
   key: string;
@@ -83,6 +105,18 @@ export function DataWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addMode, setAddMode] = useState<"upload" | "connect">("upload");
+  const [targetProjectId, setTargetProjectId] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [connectedUrl, setConnectedUrl] = useState("");
+  const [connectedKind, setConnectedKind] = useState<ConnectableKind>("cog");
+  const [connectionDiscovery, setConnectionDiscovery] = useState<Awaited<
+    ReturnType<typeof discoverSource>
+  > | null>(null);
+  const [addPending, setAddPending] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addNotice, setAddNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -150,8 +184,74 @@ export function DataWorkspace({
       .map(exampleDataItem);
     return [...projectItems, ...exampleItems];
   }, [examples, loadedProjects]);
-  const selected =
-    items.find((item) => item.key === selectedDatasetId) ?? null;
+  const selected = items.find((item) => item.key === selectedDatasetId) ?? null;
+
+  const eligibleProjects = projects.filter((item) => !item.invalidReason);
+  function openAddPanel(mode: "upload" | "connect") {
+    setAddMode(mode);
+    setTargetProjectId((current) => current || eligibleProjects[0]?.id || "");
+    setAddError(null);
+    setAddOpen(true);
+  }
+  async function inspectConnectedSource() {
+    try {
+      setAddPending(true);
+      setAddError(null);
+      const discovery = await discoverSource(connectedUrl.trim());
+      setConnectionDiscovery(discovery);
+      if (discovery.kind !== "unknown") setConnectedKind(discovery.kind);
+    } catch (cause) {
+      setAddError(
+        cause instanceof Error
+          ? cause.message
+          : "Could not inspect this source.",
+      );
+    } finally {
+      setAddPending(false);
+    }
+  }
+  async function addWorkspaceData(event: FormEvent) {
+    event.preventDefault();
+    if (!targetProjectId) return;
+    if (addMode === "upload" && !uploadFile) return;
+    try {
+      setAddPending(true);
+      setAddError(null);
+      const target = await openProject(targetProjectId);
+      let source: ProjectSource;
+      if (addMode === "upload") {
+        const file = uploadFile;
+        if (!file) return;
+        source = uploadedSource(file, await importAsset(targetProjectId, file));
+      } else {
+        source = connectedSource(
+          connectedUrl.trim(),
+          connectedKind,
+          connectionDiscovery,
+        );
+      }
+      const saved = await saveProject({
+        ...target,
+        metadata: { ...target.metadata, updated: new Date().toISOString() },
+        sources: [...target.sources, source],
+      });
+      setLoadedProjects((current) => [
+        ...current.filter((item) => item.id !== saved.id),
+        saved,
+      ]);
+      setAddNotice(`${source.label} was added to ${saved.metadata.title}.`);
+      setAddOpen(false);
+      setUploadFile(null);
+      setConnectedUrl("");
+      setConnectionDiscovery(null);
+    } catch (cause) {
+      setAddError(
+        cause instanceof Error ? cause.message : "Could not add this dataset.",
+      );
+    } finally {
+      setAddPending(false);
+    }
+  }
 
   if (selected)
     return (
@@ -165,99 +265,265 @@ export function DataWorkspace({
     );
 
   return (
-    <main className="workspace-main data-workspace" id="main-content">
-      <header className="data-workspace__intro">
-        <div>
-          <p>Your workspace</p>
-          <h1>Data</h1>
-          <span>
-            Open uploaded datasets and connected sources on a map before using
-            them in a story.
-          </span>
-        </div>
-        <div className="data-workspace__count">
-          <Database size={20} />
-          <strong>{items.length}</strong>
-          <span>{items.length === 1 ? "source" : "sources"}</span>
-        </div>
-      </header>
-      <section className="workspace-projects" aria-labelledby="data-heading">
-        <header>
+    <>
+      <main className="workspace-main data-workspace" id="main-content">
+        <header className="data-workspace__intro">
           <div>
-            <p>Datasets and connections</p>
-            <h2 id="data-heading">Your data</h2>
+            <p>Your workspace</p>
+            <h1>Data</h1>
+            <span>
+              Open uploaded datasets and connected sources on a map before using
+              them in a story.
+            </span>
           </div>
-          <span>Select a source to inspect it on an interactive map.</span>
-        </header>
-        {loading ? (
-          <div className="data-workspace__state">
-            <BrandSpinner size="md" label="Loading data library" />
-            <span>Loading data library…</span>
-          </div>
-        ) : error && !items.length ? (
-          <StatePanel
-            tone="danger"
-            title="Couldn’t load your data"
-            description={error}
-          />
-        ) : items.length ? (
-          <>
-            {error ? (
-              <StatePanel
-                compact
-                tone="danger"
-                title="Local project data is unavailable"
-                description={`${error} Example datasets remain usable.`}
-              />
-            ) : null}
-            {warning ? (
-              <StatePanel
-                compact
-                tone="warning"
-                title="Some project data is unavailable"
-                description={warning}
-              />
-            ) : null}
-            <div className="data-list">
-              <div className="data-list__header" aria-hidden="true">
-                <span>Name</span>
-                <span>Type</span>
-                <span>Source</span>
-                <span>Used in</span>
-                <span />
-              </div>
-              {items.map((item) => (
-                <DataSourceRow
-                  key={item.key}
-                  label={item.source.label}
-                  kind={item.source.kind}
-                  leading={<MapTrifold size={18} />}
-                  badge={item.example ? <mark>Example</mark> : undefined}
-                  delivery={
-                    <>
-                      {item.source.delivery === "connected" ? (
-                        <CloudArrowDown size={15} />
-                      ) : (
-                        <Database size={15} />
-                      )}
-                      {item.source.delivery}
-                    </>
-                  }
-                  usage={`${item.usedBy} ${item.usedBy === 1 ? "chapter" : "chapters"}`}
-                  onOpen={() => onDatasetChange(item.key)}
-                />
-              ))}
+          <div className="data-workspace__actions">
+            <div className="data-workspace__count">
+              <Database size={20} />
+              <strong>{items.length}</strong>
+              <span>{items.length === 1 ? "source" : "sources"}</span>
             </div>
-          </>
-        ) : (
-          <div className="workspace-empty">
-            <Database size={28} weight="duotone" />
-            <strong>Your data library is empty</strong>
-            <span>Import or connect data from a story’s map chapter.</span>
+            <div className="data-workspace__add">
+              <ActionButton
+                className="button button--primary"
+                type="button"
+                disabled={!eligibleProjects.length}
+                onClick={() => openAddPanel("upload")}
+              >
+                <Plus size={17} /> Add data
+              </ActionButton>
+            </div>
           </div>
-        )}
-      </section>
-    </main>
+        </header>
+        {addNotice ? (
+          <StatePanel
+            compact
+            tone="success"
+            title="Dataset added"
+            description={addNotice}
+          />
+        ) : null}
+        {!eligibleProjects.length ? (
+          <StatePanel
+            compact
+            tone="info"
+            title="Create a story before adding data"
+            description="Datasets are stored in a story’s reusable data library."
+          />
+        ) : null}
+        <section className="workspace-projects" aria-labelledby="data-heading">
+          <header>
+            <div>
+              <p>Datasets and connections</p>
+              <h2 id="data-heading">Your data</h2>
+            </div>
+            <span>Select a source to inspect it on an interactive map.</span>
+          </header>
+          {loading ? (
+            <div className="data-workspace__state">
+              <BrandSpinner size="md" label="Loading data library" />
+              <span>Loading data library…</span>
+            </div>
+          ) : error && !items.length ? (
+            <StatePanel
+              tone="danger"
+              title="Couldn’t load your data"
+              description={error}
+            />
+          ) : items.length ? (
+            <>
+              {error ? (
+                <StatePanel
+                  compact
+                  tone="danger"
+                  title="Local project data is unavailable"
+                  description={`${error} Example datasets remain usable.`}
+                />
+              ) : null}
+              {warning ? (
+                <StatePanel
+                  compact
+                  tone="warning"
+                  title="Some project data is unavailable"
+                  description={warning}
+                />
+              ) : null}
+              <div className="data-list">
+                <div className="data-list__header" aria-hidden="true">
+                  <span>Name</span>
+                  <span>Type</span>
+                  <span>Source</span>
+                  <span>Used in</span>
+                  <span />
+                </div>
+                {items.map((item) => (
+                  <DataSourceRow
+                    key={item.key}
+                    label={item.source.label}
+                    kind={item.source.kind}
+                    leading={<MapTrifold size={18} />}
+                    badge={item.example ? <mark>Example</mark> : undefined}
+                    delivery={
+                      <>
+                        {item.source.delivery === "connected" ? (
+                          <CloudArrowDown size={15} />
+                        ) : (
+                          <Database size={15} />
+                        )}
+                        {item.source.delivery}
+                      </>
+                    }
+                    usage={`${item.usedBy} ${item.usedBy === 1 ? "chapter" : "chapters"}`}
+                    onOpen={() => onDatasetChange(item.key)}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="workspace-empty">
+              <Database size={28} weight="duotone" />
+              <strong>Your data library is empty</strong>
+              <span>Import or connect data from a story’s map chapter.</span>
+            </div>
+          )}
+        </section>
+      </main>
+      <PanelShell
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        eyebrow="Data library"
+        title={
+          addMode === "upload" ? "Upload local data" : "Connect a public source"
+        }
+      >
+        <form className="workspace-data-form" onSubmit={addWorkspaceData}>
+          <div
+            className="workspace-data-form__modes"
+            aria-label="Data source type"
+          >
+            <button
+              type="button"
+              className={addMode === "upload" ? "is-active" : ""}
+              onClick={() => setAddMode("upload")}
+            >
+              <FileArrowUp size={16} /> Upload local file
+            </button>
+            <button
+              type="button"
+              className={addMode === "connect" ? "is-active" : ""}
+              onClick={() => setAddMode("connect")}
+            >
+              <Link size={16} /> Connect source
+            </button>
+          </div>
+          <FormField label="Destination story" required>
+            <SelectInput
+              value={targetProjectId}
+              onChange={(event) => setTargetProjectId(event.target.value)}
+            >
+              {eligibleProjects.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+          {addMode === "upload" ? (
+            <FormField
+              label="Local dataset"
+              hint="GeoTIFF, GeoJSON, PMTiles, or GeoParquet"
+              required
+            >
+              <FileInput
+                accept=".tif,.tiff,.geojson,.json,.pmtiles,.parquet"
+                onChange={(event) =>
+                  setUploadFile(event.target.files?.[0] ?? null)
+                }
+              />
+            </FormField>
+          ) : (
+            <>
+              <FormField label="Public URL" required>
+                <TextInput
+                  type="url"
+                  value={connectedUrl}
+                  placeholder="https://example.com/data.pmtiles"
+                  onChange={(event) => {
+                    setConnectedUrl(event.target.value);
+                    setConnectionDiscovery(null);
+                  }}
+                />
+              </FormField>
+              <div className="workspace-data-form__connection">
+                <FormField label="Format">
+                  <SelectInput
+                    value={connectedKind}
+                    onChange={(event) =>
+                      setConnectedKind(event.target.value as ConnectableKind)
+                    }
+                  >
+                    <option value="cog">Cloud-optimized GeoTIFF</option>
+                    <option value="pmtiles">PMTiles</option>
+                    <option value="geoparquet">GeoParquet</option>
+                    <option value="xyz">XYZ tiles</option>
+                    <option value="zarr">Zarr</option>
+                    <option value="trajectory">Trajectory JSON</option>
+                    <option value="copc">COPC point cloud</option>
+                  </SelectInput>
+                </FormField>
+                <button
+                  type="button"
+                  disabled={addPending || !connectedUrl.trim()}
+                  onClick={() => void inspectConnectedSource()}
+                >
+                  {addPending ? "Inspecting…" : "Inspect connection"}
+                </button>
+              </div>
+              {connectionDiscovery ? (
+                <StatePanel
+                  compact
+                  tone={
+                    connectionDiscovery.issues.length ? "warning" : "success"
+                  }
+                  title={
+                    connectionDiscovery.kind === "unknown"
+                      ? "Format needs confirmation"
+                      : `${connectionDiscovery.kind} detected`
+                  }
+                  description={
+                    connectionDiscovery.issues.join(" ") ||
+                    "The source is reachable and ready to add."
+                  }
+                />
+              ) : null}
+            </>
+          )}
+          {addError ? (
+            <StatePanel
+              compact
+              tone="danger"
+              title="Couldn’t add data"
+              description={addError}
+            />
+          ) : null}
+          <div className="workspace-data-form__submit">
+            <button type="button" onClick={() => setAddOpen(false)}>
+              Cancel
+            </button>
+            <ActionButton
+              className="button button--primary"
+              type="submit"
+              disabled={
+                addPending ||
+                !targetProjectId ||
+                (addMode === "upload" ? !uploadFile : !connectedUrl.trim())
+              }
+            >
+              {addPending ? "Adding…" : "Add to story"}
+            </ActionButton>
+          </div>
+        </form>
+      </PanelShell>
+    </>
   );
 }
 

@@ -3,10 +3,15 @@ import { ZarrLayer, type SliceInput } from "@developmentseed/deck.gl-zarr";
 import { CreateTexture } from "@developmentseed/deck.gl-raster/gpu-modules";
 import type { Texture } from "@luma.gl/core";
 import * as zarr from "zarrita";
+import { useMap } from "react-map-gl/maplibre";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { colorize } from "./CogLayer.js";
 import { DeckOverlay } from "./DeckOverlay.js";
-import { openZarrVariable, type OpenedZarrNode } from "./zarrNode.js";
+import {
+  completeZarrSelection,
+  openZarrVariable,
+  type OpenedZarrNode,
+} from "./zarrNode.js";
 import { timestepIndex } from "./temporal.js";
 
 export function ZarrOverlay({
@@ -20,7 +25,22 @@ export function ZarrOverlay({
   onReady?: () => void;
   position: number;
 }) {
+  const maps = useMap();
+  const [targetWidth, setTargetWidth] = useState(512);
   const [opened, setOpened] = useState<OpenedZarrNode | null>(null);
+  useEffect(() => {
+    const map = maps.current?.getMap();
+    if (!map) return;
+    const updateTarget = () =>
+      setTargetWidth(
+        Math.min(8192, Math.max(512, 256 * 2 ** Math.floor(map.getZoom()))),
+      );
+    updateTarget();
+    map.on("zoomend", updateTarget);
+    return () => {
+      map.off("zoomend", updateTarget);
+    };
+  }, [maps]);
   useEffect(() => {
     let active = true;
     setOpened(null);
@@ -29,6 +49,7 @@ export function ZarrOverlay({
         const result = await openZarrVariable(
           asset.href,
           asset.zarr?.variable ?? "",
+          targetWidth,
         );
         if (active) {
           setOpened(result);
@@ -46,14 +67,22 @@ export function ZarrOverlay({
     return () => {
       active = false;
     };
-  }, [asset.href, asset.zarr?.variable, onError, onReady]);
+  }, [asset.href, asset.zarr?.variable, onError, onReady, targetWidth]);
   const timeIndex = timestepIndex(position, asset.zarr?.timesteps.length ?? 0);
   const layers = useMemo(() => {
     if (!opened || !asset.zarr) return [];
-    const selection: Record<string, SliceInput> = { ...asset.zarr.selection };
+    const spatialDimensions =
+      (opened.metadata?.["spatial:dimensions"] as string[] | undefined) ??
+      asset.zarr.geozarr?.dimensions ??
+      [];
     const timestep = asset.zarr.timesteps[timeIndex];
-    if (asset.zarr.timeDimension && timestep)
-      selection[asset.zarr.timeDimension] = timestep.index;
+    const selection: Record<string, SliceInput> = completeZarrSelection(
+      asset.zarr.selection,
+      opened.dimensions ?? [],
+      spatialDimensions,
+      asset.zarr.timeDimension,
+      timestep?.index ?? 0,
+    );
     const [minimum, maximum] = asset.presentation.rescale ?? [0, 1];
     const range = maximum - minimum || 1;
     return [
