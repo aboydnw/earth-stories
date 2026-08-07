@@ -498,17 +498,18 @@
   transform: translateX(-50%);
   z-index: 5;
   width: min(480px, calc(100% - 24px));
-  padding: 10px 12px;
+  padding: 10px 14px 8px;
   border: 1px solid var(--story-border);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--story-paper) 94%, transparent);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  background: var(--story-paper, #fff);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   font-size: 11px;
 }
 .story-map__time-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 10px;
 }
 .story-map__time button {
   padding: 4px 8px;
@@ -524,27 +525,84 @@
   opacity: 0.4;
 }
 .story-map__time-play {
-  min-width: 52px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: var(--story-accent) !important;
+  color: #fff !important;
 }
-.story-map__time-label {
+.story-map__time-transport,
+.story-map__time-speeds {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.story-map__time-speeds button {
+  padding: 2px 5px;
+  font-size: 9px;
+}
+.story-map__time-speeds button.is-active {
+  border-color: var(--story-accent);
+  background: color-mix(in srgb, var(--story-accent) 10%, white);
+  color: var(--story-accent);
+  font-weight: 700;
+}
+.story-map__time-calendar {
+  position: relative;
   min-width: 0;
-  flex: 1;
+}
+.story-map__time-date {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  border-color: transparent !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+.story-map__time-date span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
-.story-map__time select {
+.story-map__time-dates {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  z-index: 10;
+  display: grid;
+  width: max-content;
+  min-width: 190px;
+  max-height: 240px;
+  padding: 6px;
+  overflow-y: auto;
   border: 1px solid var(--story-border);
-  border-radius: 4px;
-  background: var(--story-paper);
-  color: var(--story-ink);
-  font: inherit;
+  border-radius: 8px;
+  background: var(--story-paper, #fff);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+}
+.story-map__time-dates button {
+  border-color: transparent;
+  text-align: left;
+}
+.story-map__time-dates button.is-active {
+  background: var(--story-accent);
+  color: #fff;
 }
 .story-map__time > input[type="range"] {
   width: 100%;
   margin-top: 8px;
   accent-color: var(--story-accent);
+}
+.story-map__time-count {
+  display: block;
+  margin-top: 1px;
+  color: color-mix(in srgb, var(--story-ink) 62%, transparent);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .story-map__pixel {

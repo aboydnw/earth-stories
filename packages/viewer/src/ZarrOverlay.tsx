@@ -5,7 +5,7 @@ import type { Texture } from "@luma.gl/core";
 import * as zarr from "zarrita";
 import { useMap } from "react-map-gl/maplibre";
 import type { PublicationAsset } from "@earth-stories/story-schema";
-import { colorize } from "./CogLayer.js";
+import { Colormap, createColormapTexture } from "./colormapTexture.js";
 import { DeckOverlay } from "./DeckOverlay.js";
 import {
   completeZarrSelection,
@@ -85,9 +85,10 @@ export function ZarrOverlay({
     );
     const [minimum, maximum] = asset.presentation.rescale ?? [0, 1];
     const range = maximum - minimum || 1;
+    const colormapTextures = new WeakMap<object, Texture>();
     return [
       new ZarrLayer({
-        id: `${asset.id}-zarr`,
+        id: `${asset.id}-zarr-${timeIndex}`,
         node: opened.node,
         variable: opened.variable,
         selection,
@@ -116,6 +117,14 @@ export function ZarrOverlay({
                 )
               : 0;
           }
+          let lutTexture = colormapTextures.get(options.device as object);
+          if (!lutTexture) {
+            lutTexture = createColormapTexture(
+              options.device,
+              asset.presentation.colormap,
+            );
+            colormapTextures.set(options.device as object, lutTexture);
+          }
           return {
             texture: options.device.createTexture({
               data: normalized,
@@ -123,6 +132,7 @@ export function ZarrOverlay({
               width: options.width,
               height: options.height,
             }) as Texture,
+            lutTexture,
             width: options.width,
             height: options.height,
           };
@@ -130,13 +140,7 @@ export function ZarrOverlay({
         renderTile: (data) => ({
           renderPipeline: [
             { module: CreateTexture, props: { textureName: data.texture } },
-            {
-              module: colorize(
-                asset.presentation.colormap,
-                asset.presentation.categoryColors,
-                asset.presentation.rescale,
-              ),
-            },
+            { module: Colormap, props: { colormapTexture: data.lutTexture } },
           ],
         }),
         onError: (cause: unknown) =>

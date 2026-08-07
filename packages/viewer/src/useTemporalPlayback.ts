@@ -69,6 +69,24 @@ export function useTemporalPlayback({
     const pauseForReducedMotion = (event: MediaQueryListEvent) => {
       if (event.matches) setPlaying(false);
     };
+    const pauseForVisibility = () => {
+      if (document.hidden) setPlaying(false);
+    };
+    document.addEventListener("visibilitychange", pauseForVisibility);
+    reducedMotion.addEventListener("change", pauseForReducedMotion);
+    if (stepCount && stepCount > 1) {
+      const interval = window.setInterval(() => {
+        setPositionState((current) => {
+          const currentIndex = timestepIndex(current, stepCount);
+          return timestepPosition((currentIndex + 1) % stepCount, stepCount);
+        });
+      }, 800 / speed);
+      return () => {
+        window.clearInterval(interval);
+        document.removeEventListener("visibilitychange", pauseForVisibility);
+        reducedMotion.removeEventListener("change", pauseForReducedMotion);
+      };
+    }
     let frame = 0;
     let previous: number | null = null;
     const tick = (now: number) => {
@@ -80,18 +98,13 @@ export function useTemporalPlayback({
       });
       frame = requestAnimationFrame(tick);
     };
-    const pauseForVisibility = () => {
-      if (document.hidden) setPlaying(false);
-    };
-    document.addEventListener("visibilitychange", pauseForVisibility);
-    reducedMotion.addEventListener("change", pauseForReducedMotion);
     frame = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("visibilitychange", pauseForVisibility);
       reducedMotion.removeEventListener("change", pauseForReducedMotion);
     };
-  }, [enabled, playing, speed]);
+  }, [enabled, playing, speed, stepCount]);
 
   const scrub = useCallback((next: number) => {
     setPositionState(clampTemporalPosition(next));

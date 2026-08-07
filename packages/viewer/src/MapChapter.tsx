@@ -675,6 +675,7 @@ export function MapChapter({
           playing={temporal.playing}
           speed={temporal.speed}
           stepCount={zarrStepCount || undefined}
+          timesteps={asset?.kind === "zarr" ? asset.zarr?.timesteps : undefined}
           onScrub={temporal.scrub}
           onStep={temporal.step}
           onToggle={temporal.toggle}

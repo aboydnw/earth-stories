@@ -117,13 +117,17 @@ export const exampleConnections: ExampleConnection[] = [
     description:
       "Global satellite precipitation estimates in a temporal Zarr store.",
     kind: "zarr",
-    locator: "https://data.source.coop/bkr/imerg/imerg_final.zarr",
+    locator: "https://data.source.coop/bkr/imerg/gpm_early.zarr",
     attribution: "NASA GPM IMERG / Source Cooperative",
     config: {
       variable: "precipitation",
       selection: {},
       timeDimension: "time",
-      timesteps: [{ label: "First available", index: 0 }],
+      timesteps: [
+        { label: "2000-07-06 12:00 UTC", index: 9000 },
+        { label: "2000-07-06 12:30 UTC", index: 9001 },
+        { label: "2000-07-06 13:00 UTC", index: 9002 },
+      ],
       geozarr: {
         dimensions: ["latitude", "longitude"],
         transform: [0.1, 0, -180, 0, 0.1, -90],

@@ -95,7 +95,7 @@ export function CogOverlay({
       prepared?.key === preparedKey
         ? buildCogLayers(
             asset,
-            prepared.rescale ? prepared.source : url,
+            prepared.source,
             onError,
             onLoad,
             prepared.rescale,

@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import type { PublicationAsset } from "@earth-stories/story-schema";
 import { timestepIndex, timestepPosition } from "./temporal.js";
 
 export function TemporalControls({
@@ -6,6 +8,7 @@ export function TemporalControls({
   playing,
   speed,
   stepCount,
+  timesteps,
   onScrub,
   onStep,
   onToggle,
@@ -16,6 +19,7 @@ export function TemporalControls({
   playing: boolean;
   speed: number;
   stepCount?: number;
+  timesteps?: NonNullable<PublicationAsset["zarr"]>["timesteps"];
   onScrub: (position: number) => void;
   onStep: (offset: number) => void;
   onToggle: () => void;
@@ -23,47 +27,99 @@ export function TemporalControls({
 }) {
   const discrete = !!stepCount && stepCount > 1;
   const index = discrete ? timestepIndex(position, stepCount) : 0;
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!calendarOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!calendarRef.current?.contains(event.target as Node))
+        setCalendarOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [calendarOpen]);
   return (
     <div className="story-map__time" aria-label="Time controls">
       <div className="story-map__time-row">
-        {discrete ? (
+        <div className="story-map__time-calendar" ref={calendarRef}>
           <button
             type="button"
-            aria-label="Previous timestep"
-            disabled={index === 0}
-            onClick={() => onStep(-1)}
+            className="story-map__time-date"
+            aria-label="Select date"
+            aria-expanded={calendarOpen}
+            onClick={() => setCalendarOpen((open) => !open)}
           >
-            ‹
+            <span aria-hidden="true">▣</span>
+            <span>{label}</span>
           </button>
-        ) : null}
-        <button
-          type="button"
-          className="story-map__time-play"
-          aria-label={playing ? "Pause animation" : "Play animation"}
-          onClick={onToggle}
-        >
-          {playing ? "Pause" : "Play"}
-        </button>
-        {discrete ? (
+          {calendarOpen && timesteps?.length ? (
+            <div
+              className="story-map__time-dates"
+              role="listbox"
+              aria-label="Available dates"
+            >
+              {timesteps.map((timestep, timestepNumber) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={timestepNumber === index}
+                  className={timestepNumber === index ? "is-active" : undefined}
+                  key={`${timestep.index}-${timestep.label}`}
+                  onClick={() => {
+                    onScrub(timestepPosition(timestepNumber, stepCount!));
+                    setCalendarOpen(false);
+                  }}
+                >
+                  {timestep.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="story-map__time-transport">
+          {discrete ? (
+            <button
+              type="button"
+              aria-label="Previous timestep"
+              disabled={index === 0}
+              onClick={() => onStep(-1)}
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+          ) : null}
           <button
             type="button"
-            aria-label="Next timestep"
-            disabled={index === stepCount - 1}
-            onClick={() => onStep(1)}
+            className="story-map__time-play"
+            aria-label={playing ? "Pause animation" : "Play animation"}
+            onClick={onToggle}
           >
-            ›
+            <span aria-hidden="true">{playing ? "Ⅱ" : "▶"}</span>
           </button>
-        ) : null}
-        <span className="story-map__time-label">{label}</span>
-        <select
-          aria-label="Playback speed"
-          value={speed}
-          onChange={(event) => onSpeed(Number(event.target.value))}
-        >
-          <option value="0.5">0.5×</option>
-          <option value="1">1×</option>
-          <option value="2">2×</option>
-        </select>
+          {discrete ? (
+            <button
+              type="button"
+              aria-label="Next timestep"
+              disabled={index === stepCount - 1}
+              onClick={() => onStep(1)}
+            >
+              <span aria-hidden="true">›</span>
+            </button>
+          ) : null}
+        </div>
+        <div className="story-map__time-speeds" aria-label="Playback speed">
+          {[0.5, 1, 2].map((option) => (
+            <button
+              type="button"
+              key={option}
+              aria-label={`Play at ${option} times speed`}
+              aria-pressed={speed === option}
+              className={speed === option ? "is-active" : undefined}
+              onClick={() => onSpeed(option)}
+            >
+              {option}×
+            </button>
+          ))}
+        </div>
       </div>
       <input
         type="range"
@@ -81,6 +137,9 @@ export function TemporalControls({
           )
         }
       />
+      <span className="story-map__time-count">
+        {discrete ? `${index + 1} of ${stepCount}` : label}
+      </span>
     </div>
   );
 }
