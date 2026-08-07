@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { PublicationManifest } from "@earth-stories/story-schema";
+import { groupChaptersIntoBlocks } from "./chapterBlocks.js";
 import "./viewer.css";
 
 const MapChapter = lazy(async () => {
@@ -12,6 +13,9 @@ const ChartChapter = lazy(async () => ({
 }));
 const FlyoverChapter = lazy(async () => ({
   default: (await import("./FlyoverChapter.js")).FlyoverChapter,
+}));
+const ScrollytellingBlock = lazy(async () => ({
+  default: (await import("./ScrollytellingBlock.js")).ScrollytellingBlock,
 }));
 
 export interface StoryViewerProps {
@@ -26,7 +30,14 @@ export function StoryViewer({
   theme,
 }: StoryViewerProps) {
   const [readingProgress, setReadingProgress] = useState(0);
-  const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
+  const assets = useMemo(
+    () => new Map(manifest.assets.map((asset) => [asset.id, asset])),
+    [manifest.assets],
+  );
+  const chapterBlocks = useMemo(
+    () => groupChaptersIntoBlocks(manifest.chapters),
+    [manifest.chapters],
+  );
   useEffect(() => {
     if (embed) return;
     let frame = 0;
@@ -75,7 +86,27 @@ export function StoryViewer({
       ) : null}
 
       <article className="story-chapters">
-        {manifest.chapters.map((chapter, index) => {
+        {chapterBlocks.map((block) => {
+          if (block.type === "scrolly") {
+            return (
+              <Suspense
+                key={`scrolly-${block.startIndex}`}
+                fallback={
+                  <div className="story-map story-map--loading">
+                    Preparing guided map…
+                  </div>
+                }
+              >
+                <ScrollytellingBlock
+                  chapters={block.chapters}
+                  startIndex={block.startIndex}
+                  assets={assets}
+                  basemapStyle={manifest.basemap.styleUrl}
+                />
+              </Suspense>
+            );
+          }
+          const { chapter, index } = block;
           const asset =
             "assetId" in chapter && chapter.assetId
               ? assets.get(chapter.assetId)
@@ -89,7 +120,7 @@ export function StoryViewer({
               : [];
           return (
             <section
-              className={`story-chapter story-chapter--${chapter.type}${chapter.type === "scrolly" ? ` story-chapter--overlay-${chapter.overlayPosition ?? "left"}` : ""}`}
+              className={`story-chapter story-chapter--${chapter.type}`}
               key={chapter.id}
               id={chapter.id}
               data-chapter-id={chapter.id}
@@ -101,8 +132,7 @@ export function StoryViewer({
                 <h2>{chapter.title}</h2>
                 <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
               </div>
-              {(chapter.type === "map" || chapter.type === "scrolly") &&
-              asset ? (
+              {chapter.type === "map" && asset ? (
                 <Suspense
                   fallback={
                     <div className="story-map story-map--loading">
@@ -115,7 +145,7 @@ export function StoryViewer({
                     asset={asset}
                     overlayAssets={overlayAssets}
                     basemapStyle={manifest.basemap.styleUrl}
-                    controlled={chapter.type === "scrolly"}
+                    autoFit
                   />
                 </Suspense>
               ) : null}

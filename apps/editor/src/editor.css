@@ -404,6 +404,44 @@ nav {
 .author-panel textarea {
   resize: vertical;
 }
+.markdown-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 7px;
+  padding: 5px;
+  border: 1px solid var(--es-border);
+  border-bottom: 0;
+  border-radius: var(--es-radius-control) var(--es-radius-control) 0 0;
+  background: var(--es-bg-subtle);
+}
+.markdown-toolbar + textarea {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.markdown-toolbar button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--es-fg-muted);
+  cursor: pointer;
+}
+.markdown-toolbar button:hover,
+.markdown-toolbar button:focus-visible {
+  background: var(--es-bg-raised);
+  color: var(--es-fg);
+}
+.markdown-toolbar span {
+  margin-left: auto;
+  padding-right: 5px;
+  color: var(--es-fg-muted);
+  font-size: 10px;
+}
 .field-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1382,9 +1420,10 @@ nav {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: end;
+  align-items: stretch;
 }
 .workspace-create input {
+  height: 46px;
   min-width: 0;
   border: 1px solid var(--es-border);
   border-radius: var(--es-radius-control);
@@ -1392,7 +1431,9 @@ nav {
   background: var(--es-bg-subtle);
 }
 .workspace-create .button {
-  height: auto;
+  min-width: 154px;
+  height: 46px;
+  padding-inline: 18px;
   margin: 0;
   white-space: nowrap;
 }

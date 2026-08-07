@@ -8,13 +8,19 @@ import {
   useState,
 } from "react";
 import maplibregl from "maplibre-gl";
-import Map, { Layer, Source, type MapRef } from "react-map-gl/maplibre";
+import Map, {
+  Layer,
+  NavigationControl,
+  Source,
+  type MapRef,
+} from "react-map-gl/maplibre";
 import { PMTiles, Protocol } from "pmtiles";
 import type {
   PublicationAsset,
   PublicationChapter,
 } from "@earth-stories/story-schema";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { geoJsonBounds } from "./geoBounds.js";
 
 const CogOverlay = lazy(async () => ({
   default: (await import("./CogOverlay.js")).CogOverlay,
@@ -88,6 +94,12 @@ function featureFilter(
     : undefined;
 }
 
+const terrainCompatible = (asset: PublicationAsset) =>
+  asset.kind === "pmtiles" ||
+  asset.kind === "geojson" ||
+  asset.kind === "trajectory" ||
+  asset.kind === "xyz";
+
 function AssetLayer({
   asset,
   onError,
@@ -100,11 +112,13 @@ function AssetLayer({
   const [pmtilesLayers, setPmtilesLayers] = useState<string[]>([]);
   const [trajectory, setTrajectory] =
     useState<GeoJSON.FeatureCollection | null>(null);
+  const [geojson, setGeojson] = useState<GeoJSON.GeoJSON | null>(null);
   const [trajectoryProgress, setTrajectoryProgress] = useState(1);
   const [trajectoryPlaying, setTrajectoryPlaying] = useState(false);
   const presentation = asset.presentation;
   const dataColor = categoryColor(presentation);
   const dataFilter = featureFilter(presentation);
+  const filterProps = dataFilter ? { filter: dataFilter as never } : {};
   const assetUrl = useMemo(() => absoluteAssetUrl(asset.href), [asset.href]);
   useEffect(() => {
     let active = true;
@@ -161,7 +175,7 @@ function AssetLayer({
             }>;
           }) => {
             if (!active) return;
-            setTrajectory({
+            const next = {
               type: "FeatureCollection",
               features: (data.tracks ?? []).map((track, index) => ({
                 type: "Feature",
@@ -169,7 +183,10 @@ function AssetLayer({
                 properties: { timestamps: track.timestamps ?? [] },
                 geometry: { type: "LineString", coordinates: track.path ?? [] },
               })),
-            });
+            } as GeoJSON.FeatureCollection;
+            setTrajectory(next);
+            const bounds = geoJsonBounds(next);
+            if (bounds) onBounds?.(bounds);
           },
         )
         .catch(
@@ -183,6 +200,25 @@ function AssetLayer({
                 : "The trajectory could not be opened.",
             ),
         );
+    }
+    if (asset.kind === "geojson") {
+      setGeojson(null);
+      fetch(assetUrl, { signal: controller.signal })
+        .then((response) => {
+          if (!response.ok)
+            throw new Error(`The GeoJSON source returned ${response.status}.`);
+          return response.json();
+        })
+        .then((data: GeoJSON.GeoJSON) => {
+          if (!active) return;
+          setGeojson(data);
+          const bounds = geoJsonBounds(data);
+          if (bounds) onBounds?.(bounds);
+        })
+        .catch((cause: unknown) => {
+          if (active && cause instanceof Error && cause.name !== "AbortError")
+            onError(cause.message);
+        });
     }
     return () => {
       active = false;
@@ -254,7 +290,11 @@ function AssetLayer({
   if (asset.kind === "geoparquet")
     return (
       <Suspense fallback={null}>
-        <GeoParquetOverlay asset={resolvedAsset} onError={onError} />
+        <GeoParquetOverlay
+          asset={resolvedAsset}
+          onError={onError}
+          onBounds={onBounds}
+        />
       </Suspense>
     );
   if (asset.kind === "copc")
@@ -270,7 +310,7 @@ function AssetLayer({
       </Suspense>
     );
   if (
-    asset.kind === "geojson" ||
+    (asset.kind === "geojson" && geojson) ||
     (asset.kind === "trajectory" && displayedTrajectory)
   ) {
     return (
@@ -278,12 +318,12 @@ function AssetLayer({
         <Source
           id={asset.id}
           type="geojson"
-          data={asset.kind === "trajectory" ? displayedTrajectory! : assetUrl}
+          data={asset.kind === "trajectory" ? displayedTrajectory! : geojson!}
         >
           <Layer
             id={`${asset.id}-fill`}
             type="fill"
-            filter={dataFilter as never}
+            {...filterProps}
             paint={{
               "fill-color": dataColor as never,
               "fill-opacity": presentation.opacity * 0.45,
@@ -292,7 +332,7 @@ function AssetLayer({
           <Layer
             id={`${asset.id}-line`}
             type="line"
-            filter={dataFilter as never}
+            {...filterProps}
             paint={{
               "line-color": dataColor as never,
               "line-opacity": presentation.opacity,
@@ -302,7 +342,7 @@ function AssetLayer({
           <Layer
             id={`${asset.id}-points`}
             type="circle"
-            filter={dataFilter as never}
+            {...filterProps}
             paint={{
               "circle-radius": presentation.radius,
               "circle-color": dataColor as never,
@@ -367,7 +407,7 @@ function AssetLayer({
             id={`${asset.id}-${sourceLayer}-fill`}
             source-layer={sourceLayer}
             type="fill"
-            filter={dataFilter as never}
+            {...filterProps}
             paint={{
               "fill-color": dataColor as never,
               "fill-opacity": presentation.opacity * 0.45,
@@ -378,7 +418,7 @@ function AssetLayer({
             id={`${asset.id}-${sourceLayer}-line`}
             source-layer={sourceLayer}
             type="line"
-            filter={dataFilter as never}
+            {...filterProps}
             paint={{
               "line-color": dataColor as never,
               "line-opacity": presentation.opacity,
@@ -390,7 +430,7 @@ function AssetLayer({
             id={`${asset.id}-${sourceLayer}-point`}
             source-layer={sourceLayer}
             type="circle"
-            filter={dataFilter as never}
+            {...filterProps}
             paint={{
               "circle-radius": presentation.radius,
               "circle-color": dataColor as never,
@@ -413,12 +453,18 @@ export function MapChapter({
   autoFit = false,
 }: MapChapterProps) {
   const [ready, setReady] = useState(false);
+  const [showBuildingHint, setShowBuildingHint] = useState(
+    chapter.camera.zoom < 14,
+  );
   const [error, setError] = useState<string | null>(null);
   const reportError = useCallback((message: string) => setError(message), []);
   const mapRef = useRef<MapRef | null>(null);
   const fittedAssetRef = useRef<string | null>(null);
   const activeAssetIdRef = useRef(asset?.id);
   activeAssetIdRef.current = asset?.id;
+  useEffect(() => {
+    setShowBuildingHint(chapter.camera.zoom < 14);
+  }, [chapter.camera.zoom, chapter.id]);
   const fitToBounds = useCallback(
     (bounds: [number, number, number, number]) => {
       if (
@@ -449,7 +495,7 @@ export function MapChapter({
   );
   useEffect(() => {
     fittedAssetRef.current = null;
-  }, [asset?.id]);
+  }, [asset?.id, asset?.href]);
   const initialViewState = useMemo(
     () => ({
       longitude: chapter.camera.center[0],
@@ -461,6 +507,8 @@ export function MapChapter({
     [chapter.camera],
   );
   const mapAssets = asset ? [asset, ...overlayAssets] : overlayAssets;
+  const terrainEnabled =
+    !!chapter.camera.terrain?.enabled && mapAssets.every(terrainCompatible);
 
   return (
     <div
@@ -477,51 +525,63 @@ export function MapChapter({
         interactive={!controlled}
         projection={chapter.camera.globe ? { type: "globe" } : undefined}
         terrain={
-          chapter.camera.terrain?.enabled
+          terrainEnabled
             ? {
                 source: "earth-stories-terrain",
-                exaggeration: chapter.camera.terrain.exaggeration,
+                exaggeration: chapter.camera.terrain?.exaggeration ?? 1,
               }
             : undefined
         }
         preserveDrawingBuffer
         onIdle={() => setReady(true)}
+        {...(!controlled && chapter.camera.buildings
+          ? {
+              onMove: (event: { viewState: { zoom: number } }) =>
+                setShowBuildingHint(event.viewState.zoom < 14),
+            }
+          : {})}
         onError={(event: { error: Error }) => setError(event.error.message)}
       >
-        {chapter.camera.terrain?.enabled ? (
+        {!controlled ? (
+          <NavigationControl position="top-right" showCompass visualizePitch />
+        ) : null}
+        {terrainEnabled ? (
           <Source
             id="earth-stories-terrain"
             type="raster-dem"
-            tiles={[
-              "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
-            ]}
-            tileSize={256}
+            tiles={["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"]}
+            tileSize={512}
             encoding="terrarium"
           />
         ) : null}
         {chapter.camera.buildings ? (
-          <Layer
-            id="earth-stories-buildings"
-            source="carto"
-            source-layer="building"
-            type="fill-extrusion"
-            minzoom={14}
-            paint={{
-              "fill-extrusion-color": "#d7cdc2",
-              "fill-extrusion-height": [
-                "coalesce",
-                ["get", "render_height"],
-                ["get", "height"],
-                8,
-              ],
-              "fill-extrusion-base": [
-                "coalesce",
-                ["get", "render_min_height"],
-                0,
-              ],
-              "fill-extrusion-opacity": 0.82,
-            }}
-          />
+          <Source
+            id="earth-stories-buildings-source"
+            type="vector"
+            url="https://tiles.openfreemap.org/planet"
+          >
+            <Layer
+              id="earth-stories-buildings"
+              source-layer="building"
+              type="fill-extrusion"
+              minzoom={14}
+              paint={{
+                "fill-extrusion-color": "#d7cdc2",
+                "fill-extrusion-height": [
+                  "coalesce",
+                  ["get", "render_height"],
+                  ["get", "height"],
+                  8,
+                ],
+                "fill-extrusion-base": [
+                  "coalesce",
+                  ["get", "render_min_height"],
+                  0,
+                ],
+                "fill-extrusion-opacity": 0.82,
+              }}
+            />
+          </Source>
         ) : null}
         {mapAssets.map((mapAsset) => (
           <AssetLayer
@@ -565,6 +625,16 @@ export function MapChapter({
             </span>
           )}
         </aside>
+      ) : null}
+      {!controlled && chapter.camera.buildings && showBuildingHint ? (
+        <div className="story-map__hint" role="status">
+          Zoom in to street level to see 3D buildings.
+        </div>
+      ) : null}
+      {chapter.camera.terrain?.enabled && !terrainEnabled ? (
+        <div className="story-map__hint" role="status">
+          Terrain is unavailable for this dataset renderer.
+        </div>
       ) : null}
       {error ? (
         <div className="story-map__error" role="alert">
