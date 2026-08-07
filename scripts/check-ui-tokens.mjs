@@ -28,28 +28,35 @@ const productFiles = [
   ...(await filesUnder("packages/ui/src")),
 ].filter((path) => !path.endsWith("packages/ui/src/tokens.ts"));
 
+function relativeFile(path) {
+  return relative(fileURLToPath(new URL(".", root)), path)
+    .split(sep)
+    .join("/");
+}
+
+function exceptionAllows(file, source, match) {
+  const start = source.lastIndexOf("\n", match.index ?? 0) + 1;
+  const end = source.indexOf("\n", match.index ?? 0);
+  const line = source.slice(start, end === -1 ? undefined : end);
+  return exceptions.some(
+    (entry) =>
+      entry.file === file &&
+      entry.value.toLowerCase() === match[0].toLowerCase() &&
+      typeof entry.context === "string" &&
+      line.includes(entry.context),
+  );
+}
+
 const violations = [];
 for (const path of productFiles) {
   const source = await readFile(path, "utf8");
-  const file = relative(fileURLToPath(new URL(".", root)), path)
-    .split(sep)
-    .join("/");
-  for (const value of source.match(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/gi) ?? []) {
-    const allowed = exceptions.some(
-      (entry) =>
-        entry.file === file &&
-        entry.value.toLowerCase() === value.toLowerCase(),
-    );
-    if (!allowed)
-      violations.push(`${file}: unapproved interface color ${value}`);
+  const file = relativeFile(path);
+  for (const match of source.matchAll(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)/gi)) {
+    if (!exceptionAllows(file, source, match))
+      violations.push(`${file}: unapproved interface color ${match[0]}`);
   }
   for (const match of source.matchAll(/\bhsla?\([^)]*\)/gi)) {
-    const allowed = exceptions.some(
-      (entry) =>
-        entry.file === file &&
-        entry.value.toLowerCase() === match[0].toLowerCase(),
-    );
-    if (!allowed)
+    if (!exceptionAllows(file, source, match))
       violations.push(`${file}: unapproved interface color ${match[0]}`);
   }
   const namedColorPattern = file.endsWith(".css")
@@ -57,13 +64,11 @@ for (const path of productFiles) {
     : /\b(?:background(?:Color)?|color|borderColor|outlineColor|fill|stroke)\s*:\s*["']([a-z]+)["']/gim;
   for (const match of source.matchAll(namedColorPattern)) {
     const value = match[1].toLowerCase();
-    const allowed = exceptions.some(
-      (entry) =>
-        entry.file === file &&
-        entry.value.toLowerCase() === value.toLowerCase(),
-    );
     if (
-      !allowed &&
+      !exceptionAllows(file, source, {
+        0: match[1],
+        index: match.index,
+      }) &&
       value in colorNames &&
       ![
         "inherit",
@@ -94,21 +99,19 @@ const definedVariables = new Set(
     (match) => match[1],
   ),
 );
-for (const path of [
-  "packages/ui/src/styles.css",
-  "apps/editor/src/editor.css",
-]) {
-  const source = await readFile(new URL(path, root), "utf8");
+for (const path of productFiles) {
+  const source = await readFile(path, "utf8");
+  const file = relativeFile(path);
   for (const variable of source.match(/--es-[a-z0-9-]+/g) ?? []) {
     if (!definedVariables.has(variable))
-      violations.push(`${path}: ${variable} is not defined by tokens.ts`);
+      violations.push(`${file}: ${variable} is not defined by tokens.ts`);
   }
   if (
     /https?:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com|api\.fontshare\.com)/.test(
       source,
     )
   )
-    violations.push(`${path}: product fonts must be bundled`);
+    violations.push(`${file}: product fonts must be bundled`);
 }
 const viewerCss = await readFile(
   new URL("packages/viewer/src/viewer.css", root),

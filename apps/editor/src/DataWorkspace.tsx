@@ -190,7 +190,7 @@ export function DataWorkspace({
             <BrandSpinner size="md" label="Loading data library" />
             <span>Loading data library…</span>
           </div>
-        ) : error ? (
+        ) : error && !items.length ? (
           <StatePanel
             tone="danger"
             title="Couldn’t load your data"
@@ -198,6 +198,14 @@ export function DataWorkspace({
           />
         ) : items.length ? (
           <>
+            {error ? (
+              <StatePanel
+                compact
+                tone="danger"
+                title="Local project data is unavailable"
+                description={`${error} Example datasets remain usable.`}
+              />
+            ) : null}
             {warning ? (
               <StatePanel
                 compact
