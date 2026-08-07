@@ -32,18 +32,29 @@ export async function openZarrVariable(
   const levels = rootAttrs.multiscales?.[0]?.datasets ?? [];
   const coarsest = levels[levels.length - 1];
   if (variable && coarsest?.path && coarsest.path !== ".") {
-    const node = await zarr.open(root.resolve(`${coarsest.path}/${variable}`), {
-      kind: "array",
-    });
-    return {
-      node,
-      metadata: {
-        "spatial:dimensions": rootAttrs["spatial:dimensions"],
-        "spatial:transform": coarsest["spatial:transform"],
-        "spatial:shape": coarsest["spatial:shape"],
-        "proj:code": coarsest.crs ?? rootAttrs["proj:code"],
-      },
-    };
+    try {
+      const node = await zarr.open(
+        root.resolve(`${coarsest.path}/${variable}`),
+        { kind: "array" },
+      );
+      const dimensions = rootAttrs["spatial:dimensions"];
+      const transform = coarsest["spatial:transform"];
+      const shape = coarsest["spatial:shape"];
+      return {
+        node,
+        metadata:
+          dimensions && transform && shape
+            ? {
+                "spatial:dimensions": dimensions,
+                "spatial:transform": transform,
+                "spatial:shape": shape,
+                "proj:code": coarsest.crs ?? rootAttrs["proj:code"],
+              }
+            : undefined,
+      };
+    } catch {
+      // Some multiscale stores keep the variable at the root; try that next.
+    }
   }
   try {
     const node = await zarr.open(root.resolve(variable), { kind: "array" });

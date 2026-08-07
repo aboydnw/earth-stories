@@ -23,6 +23,7 @@ export function ZarrOverlay({
   const [opened, setOpened] = useState<OpenedZarrNode | null>(null);
   useEffect(() => {
     let active = true;
+    setOpened(null);
     (async () => {
       try {
         const result = await openZarrVariable(

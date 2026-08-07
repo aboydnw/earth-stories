@@ -4,7 +4,12 @@ export type AppRoute =
   | { page: "data"; datasetId: string | null };
 
 export function parseRoute(pathname: string): AppRoute {
-  const segments = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  let segments: string[];
+  try {
+    segments = pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  } catch {
+    return { page: "stories" };
+  }
   if (segments[0] === "stories" && segments[1])
     return {
       page: "story",

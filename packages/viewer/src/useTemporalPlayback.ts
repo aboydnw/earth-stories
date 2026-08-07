@@ -61,10 +61,14 @@ export function useTemporalPlayback({
 
   useEffect(() => {
     if (!playing || !enabled) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (reducedMotion.matches) {
       setPlaying(false);
       return;
     }
+    const pauseForReducedMotion = (event: MediaQueryListEvent) => {
+      if (event.matches) setPlaying(false);
+    };
     let frame = 0;
     let previous: number | null = null;
     const tick = (now: number) => {
@@ -80,10 +84,12 @@ export function useTemporalPlayback({
       if (document.hidden) setPlaying(false);
     };
     document.addEventListener("visibilitychange", pauseForVisibility);
+    reducedMotion.addEventListener("change", pauseForReducedMotion);
     frame = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("visibilitychange", pauseForVisibility);
+      reducedMotion.removeEventListener("change", pauseForReducedMotion);
     };
   }, [enabled, playing, speed]);
 

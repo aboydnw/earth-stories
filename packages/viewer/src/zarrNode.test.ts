@@ -77,4 +77,35 @@ describe("openZarrVariable", () => {
     expect(result.node).toBe(array);
     expect(result.metadata?.["spatial:shape"]).toEqual([64, 128]);
   });
+
+  it("leaves metadata undefined when a multiscale level lacks georeferencing", async () => {
+    const multiscaleRoot = {
+      attrs: { multiscales: [{ datasets: [{ path: "16x" }] }] },
+      resolve: vi.fn((path: string) => ({ path })),
+    };
+    open
+      .mockResolvedValueOnce(multiscaleRoot as never)
+      .mockResolvedValueOnce(array as never);
+
+    await expect(
+      openZarrVariable("https://example.test/a.zarr", "variables"),
+    ).resolves.toEqual({ node: array, metadata: undefined });
+  });
+
+  it("falls back to the root variable when a multiscale path is missing", async () => {
+    const multiscaleRoot = {
+      attrs: { multiscales: [{ datasets: [{ path: "16x" }] }] },
+      resolve: vi.fn((path: string) => ({ path })),
+    };
+    open
+      .mockResolvedValueOnce(multiscaleRoot as never)
+      .mockRejectedValueOnce(new Error("missing overview variable"))
+      .mockResolvedValueOnce(array as never);
+
+    await expect(
+      openZarrVariable("https://example.test/a.zarr", "variables"),
+    ).resolves.toEqual({ node: array });
+    expect(multiscaleRoot.resolve).toHaveBeenNthCalledWith(1, "16x/variables");
+    expect(multiscaleRoot.resolve).toHaveBeenNthCalledWith(2, "variables");
+  });
 });

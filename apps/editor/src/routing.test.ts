@@ -19,4 +19,8 @@ describe("editor routes", () => {
     const route = { page: "data", datasetId: "project:source" } as const;
     expect(parseRoute(routePath(route))).toEqual(route);
   });
+
+  it("falls back safely for malformed URL escapes", () => {
+    expect(parseRoute("/stories/%")).toEqual({ page: "stories" });
+  });
 });

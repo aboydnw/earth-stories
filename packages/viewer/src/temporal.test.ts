@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clampTemporalPosition,
+  formatTemporalTimestamp,
   timestampAtPosition,
   timestepIndex,
   timestepPosition,
@@ -19,5 +20,9 @@ describe("temporal helpers", () => {
 
   it("maps normalized positions onto continuous timestamps", () => {
     expect(timestampAtPosition(0.25, 1_000, 5_000)).toBe(2_000);
+  });
+
+  it("does not throw for finite timestamps outside the Date range", () => {
+    expect(formatTemporalTimestamp(Number.MAX_VALUE)).toBe("");
   });
 });

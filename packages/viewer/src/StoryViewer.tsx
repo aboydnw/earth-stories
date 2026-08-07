@@ -98,14 +98,20 @@ export function StoryViewer({
                 key={`scrolly-${block.startIndex}`}
                 eager={snapshotMode}
                 fallback={
-                  <div className="story-map story-map--loading">
+                  <div
+                    className="story-map story-map--loading story-map--scrolly-placeholder"
+                    style={{ minHeight: `${block.chapters.length * 92}dvh` }}
+                  >
                     Preparing guided map…
                   </div>
                 }
               >
                 <Suspense
                   fallback={
-                    <div className="story-map story-map--loading">
+                    <div
+                      className="story-map story-map--loading story-map--scrolly-placeholder"
+                      style={{ minHeight: `${block.chapters.length * 92}dvh` }}
+                    >
                       Preparing guided map…
                     </div>
                   }
@@ -198,14 +204,36 @@ export function StoryViewer({
                 <StoryMapHydrationBoundary
                   eager={snapshotMode}
                   fallback={
-                    <div className="story-map story-map--loading">
+                    <div
+                      className="story-map story-map--loading story-map--flyover-placeholder"
+                      style={{
+                        minHeight: `${Math.max(
+                          120,
+                          chapter.scrollLength *
+                            100 *
+                            (chapter.keyframes.length - 1) +
+                            100,
+                        )}vh`,
+                      }}
+                    >
                       Preparing flyover…
                     </div>
                   }
                 >
                   <Suspense
                     fallback={
-                      <div className="story-map story-map--loading">
+                      <div
+                        className="story-map story-map--loading story-map--flyover-placeholder"
+                        style={{
+                          minHeight: `${Math.max(
+                            120,
+                            chapter.scrollLength *
+                              100 *
+                              (chapter.keyframes.length - 1) +
+                              100,
+                          )}vh`,
+                        }}
+                      >
                         Preparing flyover…
                       </div>
                     }

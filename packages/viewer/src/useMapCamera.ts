@@ -14,15 +14,30 @@ export function useMapCamera({
   transition: "fly-to" | "instant";
   enabled: boolean;
 }) {
-  const initialized = useRef(false);
+  const applied = useRef<string | null>(null);
   const programmatic = useRef(false);
 
   useEffect(() => {
     if (!map || !enabled) return;
-    if (!initialized.current) {
-      initialized.current = true;
-      return;
+    const signature = [
+      camera.center[0],
+      camera.center[1],
+      camera.zoom,
+      camera.bearing,
+      camera.pitch,
+    ].join(",");
+    if (applied.current === null) {
+      const center = map.getCenter();
+      applied.current = [
+        center.lng,
+        center.lat,
+        map.getZoom(),
+        map.getBearing(),
+        map.getPitch(),
+      ].join(",");
     }
+    if (applied.current === signature) return;
+    applied.current = signature;
     const command = cameraCommand(camera, transition, prefersReducedMotion());
     map.stop();
     programmatic.current = true;

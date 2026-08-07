@@ -120,7 +120,7 @@ const ignoreTimeBounds = () => undefined;
 
 function AssetLayer({
   asset,
-  onError,
+  onError: reportErrorToParent,
   onBounds,
   map,
   onReady,
@@ -142,6 +142,13 @@ function AssetLayer({
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
   const reportReady = useCallback(() => onReadyRef.current?.(), []);
+  const onError = useCallback(
+    (message: string) => {
+      reportErrorToParent(message);
+      reportReady();
+    },
+    [reportErrorToParent, reportReady],
+  );
   const presentation = asset.presentation;
   const dataColor = categoryColor(presentation);
   const dataFilter = featureFilter(presentation);
@@ -215,6 +222,9 @@ function AssetLayer({
       }
     };
   }, [asset.kind, assetUrl, onBounds, onError, reportReady]);
+  useEffect(() => {
+    if (asset.kind === "image" || asset.kind === "csv") reportReady();
+  }, [asset.kind, reportReady]);
   const vectorSourceLayers = presentation.sourceLayer
     ? [presentation.sourceLayer]
     : pmtilesLayers;
@@ -352,7 +362,7 @@ function AssetLayer({
             {...filterProps}
             paint={{
               "fill-color": dataColor as never,
-              "fill-opacity": 0,
+              "fill-opacity": presentation.opacity * 0.45,
             }}
           />,
           <Layer
@@ -399,7 +409,6 @@ export function MapChapter({
   onReady,
 }: MapChapterProps) {
   const [ready, setReady] = useState(false);
-  const [mapLoaded, setMapLoaded] = useState(false);
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   const [readyAssets, setReadyAssets] = useState(() => new Set<string>());
   const [showBuildingHint, setShowBuildingHint] = useState(
@@ -411,6 +420,8 @@ export function MapChapter({
   >(null);
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
   const reportError = useCallback((message: string) => setError(message), []);
   const mapRef = useRef<MapRef | null>(null);
   const fittedAssetRef = useRef<string | null>(null);
@@ -502,7 +513,7 @@ export function MapChapter({
     enabled: controlled,
   });
 
-  useEffect(() => () => onMapReady?.(null), [onMapReady]);
+  useEffect(() => () => onMapReadyRef.current?.(null), []);
   useEffect(() => {
     if (ready && dataReady) onReadyRef.current?.();
   }, [dataReady, ready]);
@@ -530,9 +541,8 @@ export function MapChapter({
         preserveDrawingBuffer={snapshotMode}
         onLoad={() => {
           const next = mapRef.current?.getMap() ?? null;
-          setMapLoaded(true);
           setMapInstance(next);
-          onMapReady?.(next);
+          onMapReadyRef.current?.(next);
         }}
         onIdle={() => setReady(true)}
         onMove={(event: {
@@ -604,7 +614,7 @@ export function MapChapter({
             asset={mapAsset}
             onError={reportError}
             onBounds={mapAsset.id === asset?.id ? fitToBounds : undefined}
-            map={mapLoaded ? (mapRef.current?.getMap() ?? null) : null}
+            map={mapInstance}
             onReady={() =>
               setReadyAssets((current) => {
                 if (current.has(mapAsset.id)) return current;
@@ -686,7 +696,7 @@ export function MapChapter({
           <strong>Map source unavailable</strong>
           <span>
             {snapshotMode
-              ? error
+              ? "This dataset could not be displayed in the snapshot."
               : "This dataset could not be displayed. The rest of the story is still available."}
           </span>
           {asset ? (

@@ -68,6 +68,7 @@ export function TemporalControls({
       <input
         type="range"
         aria-label={discrete ? "Select timestep" : "Scrub time"}
+        aria-valuetext={label}
         min="0"
         max={discrete ? stepCount - 1 : 1000}
         step="1"

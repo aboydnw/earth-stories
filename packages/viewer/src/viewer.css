@@ -465,6 +465,9 @@
   grid-column: 1 / -1;
   position: relative;
 }
+.story-chapter--flyover .story-map-boundary {
+  grid-column: 1 / -1;
+}
 .story-flyover__sticky {
   position: sticky;
   top: 0;

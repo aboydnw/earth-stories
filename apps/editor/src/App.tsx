@@ -98,6 +98,7 @@ const sourcePath = (source: ProjectSource) =>
 export function App() {
   const narrativeRef = useRef<HTMLTextAreaElement>(null);
   const previewCamerasRef = useRef(new Map<string, Camera>());
+  const routeLoadRef = useRef(0);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StoryProject | null>(null);
   const [route, setRoute] = useState<AppRoute>(() =>
@@ -154,14 +155,18 @@ export function App() {
       .then(async (items) => {
         setProjects(items);
         const initialRoute = parseRoute(window.location.pathname);
-        if (initialRoute.page === "story")
-          activate(await openProject(initialRoute.storyId));
+        if (initialRoute.page === "story") {
+          const token = ++routeLoadRef.current;
+          const opened = await openProject(initialRoute.storyId);
+          if (routeLoadRef.current === token) activate(opened);
+        }
       })
       .catch(showError)
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => {
     const syncRoute = () => {
+      const token = ++routeLoadRef.current;
       const next = parseRoute(window.location.pathname);
       setRoute(next);
       setPublishMenuOpen(false);
@@ -173,12 +178,16 @@ export function App() {
           (saveState === "changed" || saveState === "save-error") &&
           !(await persist())
         ) {
+          if (routeLoadRef.current !== token) return;
           navigate({ page: "story", storyId: project.id, preview: false });
           return;
         }
-        if (next.page === "story" && project?.id !== next.storyId)
-          activate(await openProject(next.storyId));
-        else if (next.page !== "story") setProject(null);
+        if (routeLoadRef.current !== token) return;
+        if (next.page === "story" && project?.id !== next.storyId) {
+          const opened = await openProject(next.storyId);
+          if (routeLoadRef.current === token) activate(opened);
+        } else if (next.page !== "story" && routeLoadRef.current === token)
+          setProject(null);
       })().catch(showError);
     };
     window.addEventListener("popstate", syncRoute);
@@ -1218,7 +1227,9 @@ export function App() {
         onOpenExample={(id) => void handleExampleStory(id)}
         view={route.page === "data" ? "data" : "stories"}
         selectedDatasetId={route.page === "data" ? route.datasetId : null}
-        onDatasetChange={(datasetId) => navigate({ page: "data", datasetId })}
+        onDatasetChange={(datasetId) =>
+          navigate({ page: "data", datasetId }, datasetId === null)
+        }
         onViewChange={(view) => {
           navigate(
             view === "data"

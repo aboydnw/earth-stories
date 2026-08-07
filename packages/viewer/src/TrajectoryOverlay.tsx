@@ -86,8 +86,7 @@ export function TrajectoryOverlay({
     };
   }, [asset.href, onBounds, onError, onReady, onTimeBounds]);
 
-  const layers = useMemo(() => {
-    if (!tracks.length) return [];
+  const timeBounds = useMemo(() => {
     let minimum = Infinity;
     let maximum = -Infinity;
     for (const track of tracks)
@@ -95,6 +94,11 @@ export function TrajectoryOverlay({
         minimum = Math.min(minimum, time);
         maximum = Math.max(maximum, time);
       }
+    return { minimum, maximum };
+  }, [tracks]);
+  const layers = useMemo(() => {
+    if (!tracks.length) return [];
+    const { minimum, maximum } = timeBounds;
     return [
       new TripsLayer<Track>({
         id: `${asset.id}-trajectory`,
@@ -115,6 +119,6 @@ export function TrajectoryOverlay({
         fadeTrail: true,
       }),
     ];
-  }, [asset, position, tracks]);
+  }, [asset, position, timeBounds, tracks]);
   return <DeckOverlay layers={layers} />;
 }

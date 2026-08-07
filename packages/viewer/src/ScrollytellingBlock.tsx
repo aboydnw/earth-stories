@@ -45,7 +45,10 @@ export function ScrollytellingBlock({
     const overlay = assets.get(id);
     return overlay ? [overlay] : [];
   });
-  requestedIndex.current = activeIndex;
+  useEffect(() => {
+    requestedIndex.current = activeIndex;
+    if (!sameScene && !pendingAsset) setCommittedIndex(activeIndex);
+  }, [activeIndex, pendingAsset, sameScene]);
 
   useEffect(() => {
     const steps = stepsRef.current?.querySelectorAll<HTMLElement>(
@@ -80,6 +83,7 @@ export function ScrollytellingBlock({
             {[
               {
                 key: sceneKey(committedChapter),
+                index: committedIndex,
                 pending: false,
                 chapter: sameScene
                   ? activeChapter
@@ -95,6 +99,7 @@ export function ScrollytellingBlock({
                 ? [
                     {
                       key: sceneKey(activeChapter),
+                      index: activeIndex,
                       pending: true,
                       chapter: activeChapter,
                       asset: pendingAsset,
@@ -118,8 +123,8 @@ export function ScrollytellingBlock({
                   onReady={
                     scene.pending
                       ? () => {
-                          if (requestedIndex.current === activeIndex)
-                            setCommittedIndex(activeIndex);
+                          if (requestedIndex.current === scene.index)
+                            setCommittedIndex(scene.index);
                         }
                       : undefined
                   }

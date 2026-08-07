@@ -22,5 +22,8 @@ export function timestampAtPosition(
 export function formatTemporalTimestamp(value: number) {
   if (!Number.isFinite(value)) return "";
   const milliseconds = Math.abs(value) < 100_000_000_000 ? value * 1000 : value;
-  return new Date(milliseconds).toISOString().replace(".000Z", "Z");
+  const date = new Date(milliseconds);
+  return Number.isNaN(date.getTime())
+    ? ""
+    : date.toISOString().replace(".000Z", "Z");
 }
