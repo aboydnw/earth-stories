@@ -5,16 +5,22 @@ import type {
   StoryProject,
 } from "@earth-stories/story-schema";
 import { storyProjectSchema } from "@earth-stories/story-schema";
-import { compileProject } from "./compile.js";
 import { containedRealPath } from "./paths.js";
 import { authorizedFetch } from "./remote-fetch.js";
+import {
+  deriveAuthoringReadiness,
+  type ReadinessArea,
+  type ReadinessSeverity,
+} from "./readiness.js";
 
-export type PreflightSeverity = "error" | "warning" | "info";
+export type PreflightSeverity = ReadinessSeverity;
 export interface PreflightIssue {
   id: string;
+  area: ReadinessArea;
   severity: PreflightSeverity;
   message: string;
   resolution?: string;
+  chapterId?: string;
   resourceId?: string;
 }
 export interface PublicationPreflight {
@@ -49,48 +55,10 @@ export async function preflightPublication(
     await readFile(join(projectDirectory, "story.json"), "utf8"),
   ) as unknown;
   const project = storyProjectSchema.parse(raw);
-  const issues: PreflightIssue[] = [];
-  let manifest: PublicationManifest | null = null;
-  try {
-    manifest = compileProject(project);
-  } catch (cause) {
-    issues.push({
-      id: "compile",
-      severity: "error",
-      message:
-        cause instanceof Error ? cause.message : "Project cannot be compiled",
-      resolution: "Repair the referenced chapter or source before exporting.",
-    });
-  }
-  if (!project.metadata.description.trim())
-    issues.push({
-      id: "description",
-      severity: "warning",
-      message: "The story has no description.",
-      resolution: "Add a short summary for readers and archive catalogs.",
-    });
+  const localReadiness = deriveAuthoringReadiness(project);
+  const issues: PreflightIssue[] = [...localReadiness.findings];
+  const manifest: PublicationManifest | null = localReadiness.manifest;
   for (const chapter of project.chapters) {
-    if (!chapter.title.trim())
-      issues.push({
-        id: `chapter-title-${chapter.id}`,
-        severity: "error",
-        message: "A chapter has no title.",
-        resolution: "Give every chapter a title.",
-      });
-    if (!chapter.narrative.trim())
-      issues.push({
-        id: `chapter-narrative-${chapter.id}`,
-        severity: "warning",
-        message: `“${chapter.title || "Untitled chapter"}” has no narrative.`,
-      });
-    if (chapter.type === "image" && !chapter.alt.trim())
-      issues.push({
-        id: `image-alt-${chapter.id}`,
-        severity: "warning",
-        message: `“${chapter.title}” has no alternative text.`,
-        resolution:
-          "Describe the image for readers using assistive technology.",
-      });
     if (
       chapter.type === "map" ||
       chapter.type === "scrolly" ||
@@ -98,7 +66,9 @@ export async function preflightPublication(
     )
       issues.push({
         id: `archive-snapshot-${chapter.id}`,
+        area: "publish",
         severity: "info",
+        chapterId: chapter.id,
         message: `The archival export will preserve “${chapter.title}” as a map snapshot.`,
       });
   }
@@ -119,6 +89,7 @@ export async function preflightPublication(
         safe
           ? {
               id: `connected-${source.id}`,
+              area: "publish",
               severity: "warning",
               resourceId: source.id,
               message: `“${source.label}” remains connected to ${asset.href}.`,
@@ -127,6 +98,7 @@ export async function preflightPublication(
             }
           : {
               id: `unsafe-url-${source.id}`,
+              area: "data",
               severity: "error",
               resourceId: source.id,
               message: `“${source.label}” does not use a valid HTTP or HTTPS URL.`,
@@ -170,6 +142,7 @@ export async function preflightPublication(
         else
           issues.push({
             id: `unknown-size-${source.id}`,
+            area: "publish",
             severity: "warning",
             resourceId: source.id,
             message: `The portable size of “${source.label}” is unknown.`,
@@ -179,6 +152,7 @@ export async function preflightPublication(
       } catch (cause) {
         issues.push({
           id: `unreachable-${source.id}`,
+          area: "data",
           severity: "error",
           resourceId: source.id,
           message: `Earth Stories could not reach “${source.label}” for portable inclusion.`,
@@ -207,6 +181,7 @@ export async function preflightPublication(
         cause instanceof Error && cause.message.includes("outside the project");
       issues.push({
         id: `${escaped ? "escape" : "missing"}-${source.id}`,
+        area: "data",
         severity: "error",
         resourceId: source.id,
         message: escaped
@@ -221,12 +196,14 @@ export async function preflightPublication(
   if (manifest?.externalDependencies.length)
     issues.push({
       id: "network",
+      area: "publish",
       severity: "info",
       message: `${manifest.externalDependencies.length} external resource${manifest.externalDependencies.length === 1 ? " is" : "s are"} required by the interactive publication.`,
     });
   if (manifest?.hostingRequirements.includes("byte-ranges"))
     issues.push({
       id: "hosting-byte-ranges",
+      area: "publish",
       severity: "info",
       message:
         "This publication contains browser-streamed geospatial data and needs a static host that supports HTTP byte-range requests.",
@@ -237,14 +214,18 @@ export async function preflightPublication(
   )
     issues.push({
       id: "portable-connected-exceptions",
+      area: "publish",
       severity: "warning",
       message:
         "This portable release still has connected exceptions, such as its basemap or XYZ tiles.",
       resolution:
         "Review the dependency report. Earth Stories does not claim offline support yet.",
     });
+  const deduplicated = [
+    ...new Map(issues.map((issue) => [issue.id, issue])).values(),
+  ];
   return {
-    ready: !issues.some((issue) => issue.severity === "error"),
+    ready: !deduplicated.some((issue) => issue.severity === "error"),
     projectId: project.id,
     profile: project.publication.profile,
     buildId: manifest?.build.id ?? null,
@@ -255,7 +236,7 @@ export async function preflightPublication(
     connectedAssets:
       manifest?.assets.filter((asset) => asset.delivery === "connected")
         .length ?? 0,
-    issues,
+    issues: deduplicated,
     manifest,
   };
 }

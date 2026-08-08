@@ -1,12 +1,20 @@
 import { z } from "zod";
-import { cameraSchema } from "./project.js";
+import {
+  cameraSchema,
+  defaultSourceProvenance,
+  sourceProvenanceSchema,
+} from "./project.js";
 
 const httpUrlSchema = z
   .string()
   .url()
   .refine((value) => {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:";
+    const url = new URL(value);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username &&
+      !url.password
+    );
   }, "Use an HTTP or HTTPS URL");
 
 export const publicationAssetSchema = z.object({
@@ -27,6 +35,7 @@ export const publicationAssetSchema = z.object({
   delivery: z.enum(["included", "connected"]),
   href: z.string().min(1),
   attribution: z.string().nullable(),
+  provenance: sourceProvenanceSchema.default(defaultSourceProvenance),
   sizeBytes: z.number().int().nonnegative().nullable(),
   tileType: z.enum(["raster", "vector"]).nullable(),
   presentation: z.object({
@@ -178,5 +187,6 @@ export const publicationManifestSchema = z.object({
 });
 
 export type PublicationAsset = z.infer<typeof publicationAssetSchema>;
+export type PublicationProvenance = PublicationAsset["provenance"];
 export type PublicationChapter = z.infer<typeof publicationChapterSchema>;
 export type PublicationManifest = z.infer<typeof publicationManifestSchema>;

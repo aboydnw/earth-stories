@@ -15,6 +15,144 @@ import {
   Warning,
 } from "@phosphor-icons/react";
 
+export type WorkflowStageState =
+  "complete" | "current" | "optional" | "blocked";
+export interface WorkflowStage {
+  id: string;
+  label: string;
+  state: WorkflowStageState;
+  description?: string;
+}
+
+const workflowStateCopy: Record<WorkflowStageState, string> = {
+  complete: "Complete",
+  current: "Current",
+  optional: "Optional",
+  blocked: "Blocked",
+};
+
+export function WorkflowGuide({
+  label = "Authoring progress",
+  stages,
+  onStageSelect,
+}: {
+  label?: string;
+  stages: WorkflowStage[];
+  onStageSelect: (stageId: string) => void;
+}) {
+  return (
+    <nav className="es-workflow" aria-label={label}>
+      <ol>
+        {stages.map((stage) => (
+          <li key={stage.id} data-state={stage.state}>
+            <button
+              type="button"
+              aria-current={stage.state === "current" ? "step" : undefined}
+              onClick={() => onStageSelect(stage.id)}
+            >
+              <span className="es-workflow__marker" aria-hidden="true" />
+              <span className="es-workflow__copy">
+                <strong>{stage.label}</strong>
+                <small>
+                  {stage.description ?? workflowStateCopy[stage.state]}
+                </small>
+              </span>
+              <span className="es-workflow__state">
+                {workflowStateCopy[stage.state]}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+export function GuidancePrompt({
+  children,
+  actionLabel,
+  onAction,
+  tone = "neutral",
+}: PropsWithChildren<{
+  actionLabel: string;
+  onAction: () => void;
+  tone?: "neutral" | "warning" | "danger";
+}>) {
+  return (
+    <div
+      className="es-guidance"
+      data-tone={tone}
+      role={tone === "danger" ? "alert" : "status"}
+    >
+      <p>{children}</p>
+      <Button
+        size="sm"
+        variant={tone === "danger" ? "solid" : "surface"}
+        onClick={onAction}
+      >
+        {actionLabel}
+      </Button>
+    </div>
+  );
+}
+
+export type ReadinessStatus = "ready" | "review" | "blocked";
+const readinessCopy: Record<ReadinessStatus, string> = {
+  ready: "Ready",
+  review: "Needs review",
+  blocked: "Blocked",
+};
+
+export function ReadinessSummary({
+  status,
+  errors,
+  warnings,
+  loading = false,
+  stale = false,
+  metrics,
+}: {
+  status: ReadinessStatus;
+  errors: number;
+  warnings: number;
+  loading?: boolean;
+  stale?: boolean;
+  metrics?: ReactNode;
+}) {
+  const tone =
+    status === "ready" ? "success" : status === "review" ? "warning" : "danger";
+  return (
+    <section
+      className="es-readiness"
+      data-status={status}
+      aria-label="Publication readiness"
+    >
+      <div>
+        <span className="es-readiness__indicator" aria-hidden="true" />
+        <div>
+          <strong>
+            {loading ? "Running publication checks…" : readinessCopy[status]}
+          </strong>
+          {stale ? <small>Previous checks · refresh required</small> : null}
+        </div>
+      </div>
+      <div className="es-readiness__counts" aria-label="Readiness findings">
+        <StatusBadge tone={errors ? "danger" : "neutral"}>
+          {errors} error{errors === 1 ? "" : "s"}
+        </StatusBadge>
+        <StatusBadge tone={warnings ? "warning" : "neutral"}>
+          {warnings} warning{warnings === 1 ? "" : "s"}
+        </StatusBadge>
+      </div>
+      {metrics ? <div className="es-readiness__metrics">{metrics}</div> : null}
+      <span
+        className="es-readiness__tone"
+        data-tone={tone}
+        aria-hidden="true"
+      />
+    </section>
+  );
+}
+
 export type SaveLifecycle =
   | "clean"
   | "dirty"

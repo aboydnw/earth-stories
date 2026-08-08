@@ -142,6 +142,28 @@ describe("compileProject", () => {
     });
   });
 
+  it("copies normalized provenance into publication assets and the digest", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    const original = compileProject(fixture);
+    fixture.sources[0].provenance = {
+      publisher: "River Observatory",
+      sourceUrl: "https://example.org/survey",
+      licenseName: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      dataUpdatedAt: "2026-07-01",
+      accessedAt: "2026-08-01",
+      staleAfterDays: 60,
+      temporalCoverage: { start: "2025-01-01", end: "2026-07-01" },
+      spatialCoverage: "Survey reach",
+      transformations: ["Removed duplicate observations"],
+    };
+    const compiled = compileProject(fixture);
+    expect(compiled.assets[0]?.provenance).toEqual(
+      fixture.sources[0].provenance,
+    );
+    expect(compiled.build.projectDigest).not.toBe(original.build.projectDigest);
+  });
+
   it("rejects broken source references and incompatible delivery overrides", async () => {
     const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
     fixture.chapters.push({
