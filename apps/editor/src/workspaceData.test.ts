@@ -35,6 +35,19 @@ describe("workspace data sources", () => {
     });
   });
 
+  it("rejects connected URLs with embedded credentials or non-HTTP schemes", () => {
+    expect(() =>
+      connectedSource(
+        "https://user:token@data.example/data.zarr",
+        "zarr",
+        null,
+      ),
+    ).toThrow();
+    expect(() =>
+      connectedSource("ftp://data.example/data.zarr", "zarr", null),
+    ).toThrow();
+  });
+
   it("turns a local GeoTIFF upload into an included COG source", () => {
     expect(
       uploadedSource({ name: "imagery.tif" } as File, {

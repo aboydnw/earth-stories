@@ -42,16 +42,20 @@ export function TemporalControls({
     <div className="story-map__time" aria-label="Time controls">
       <div className="story-map__time-row">
         <div className="story-map__time-calendar" ref={calendarRef}>
-          <button
-            type="button"
-            className="story-map__time-date"
-            aria-label="Select date"
-            aria-expanded={calendarOpen}
-            onClick={() => setCalendarOpen((open) => !open)}
-          >
-            <span aria-hidden="true">▣</span>
-            <span>{label}</span>
-          </button>
+          {timesteps?.length ? (
+            <button
+              type="button"
+              className="story-map__time-date"
+              aria-label="Select date"
+              aria-expanded={calendarOpen}
+              onClick={() => setCalendarOpen((open) => !open)}
+            >
+              <span aria-hidden="true">▣</span>
+              <span>{label}</span>
+            </button>
+          ) : (
+            <span className="story-map__time-date">{label}</span>
+          )}
           {calendarOpen && timesteps?.length ? (
             <div
               className="story-map__time-dates"

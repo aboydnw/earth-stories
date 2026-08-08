@@ -9,6 +9,13 @@ export function connectedSource(
   discovery: RemoteSourceDiscovery | null,
 ): ProjectSource {
   const parsed = new URL(url);
+  if (
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    parsed.username ||
+    parsed.password
+  ) {
+    throw new Error("Use a public HTTP(S) URL without embedded credentials.");
+  }
   const common = {
     id: crypto.randomUUID(),
     label: parsed.hostname,
