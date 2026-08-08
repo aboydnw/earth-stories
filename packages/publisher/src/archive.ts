@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import type {
+  PublicationAsset,
   PublicationManifest,
   StoryProject,
 } from "@earth-stories/story-schema";
@@ -30,6 +31,79 @@ function prose(value: string): string {
       (paragraph) => `<p>${escapeHtml(paragraph).replaceAll("\n", "<br>")}</p>`,
     )
     .join("");
+}
+function safeHttp(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username &&
+      !url.password
+      ? url.href
+      : null;
+  } catch {
+    return null;
+  }
+}
+function archiveFilters(asset: PublicationAsset): string[] {
+  const filters: string[] = [];
+  if (
+    asset.presentation.filterProperty &&
+    asset.presentation.filterValue !== null
+  )
+    filters.push(
+      `${asset.presentation.filterProperty} = ${asset.presentation.filterValue}`,
+    );
+  if (asset.presentation.symbolProperty)
+    filters.push(`Symbols grouped by ${asset.presentation.symbolProperty}`);
+  if (asset.kind === "cog") {
+    filters.push(`Raster band ${asset.presentation.rasterBand}`);
+    if (asset.presentation.rescale)
+      filters.push(
+        `Display range ${asset.presentation.rescale[0]}–${asset.presentation.rescale[1]}`,
+      );
+  }
+  if (asset.kind === "zarr" && asset.zarr) {
+    filters.push(`Variable ${asset.zarr.variable}`);
+    for (const [dimension, index] of Object.entries(asset.zarr.selection))
+      filters.push(`${dimension} index ${index}`);
+  }
+  return filters;
+}
+function provenanceHtml(
+  assets: PublicationAsset[],
+  exportedAt: string,
+): string {
+  const unique = [
+    ...new Map(assets.map((asset) => [asset.id, asset])).values(),
+  ];
+  if (!unique.length) return "";
+  return `<details class="provenance" open><summary>Source and provenance</summary>${unique
+    .map((asset) => {
+      const value = asset.provenance;
+      const sourceUrl =
+        safeHttp(value.sourceUrl) ??
+        (asset.delivery === "connected" ? safeHttp(asset.href) : null);
+      const licenseUrl = safeHttp(value.licenseUrl);
+      const updated = value.dataUpdatedAt;
+      const age = updated
+        ? Math.floor(
+            (Date.parse(exportedAt) - Date.parse(updated)) / 86_400_000,
+          )
+        : null;
+      const freshness =
+        updated &&
+        value.staleAfterDays !== null &&
+        age !== null &&
+        age > value.staleAfterDays
+          ? "May be stale"
+          : updated && value.staleAfterDays !== null
+            ? "Within the supplied freshness window"
+            : "Freshness not claimed";
+      const filters = archiveFilters(asset);
+      return `<section><h3>${escapeHtml(asset.label)}</h3><dl><dt>Publisher</dt><dd>${escapeHtml(value.publisher ?? asset.attribution ?? "Not provided")}</dd>${sourceUrl ? `<dt>Source</dt><dd><a href="${escapeHtml(sourceUrl)}">${escapeHtml(sourceUrl)}</a></dd>` : ""}${value.licenseName || licenseUrl ? `<dt>License</dt><dd>${licenseUrl ? `<a href="${escapeHtml(licenseUrl)}">${escapeHtml(value.licenseName ?? "License details")}</a>` : escapeHtml(value.licenseName ?? "")}</dd>` : ""}${updated ? `<dt>Data updated</dt><dd><time datetime="${escapeHtml(updated)}">${escapeHtml(updated)}</time> · ${freshness}</dd>` : ""}${value.accessedAt ? `<dt>Accessed</dt><dd><time datetime="${escapeHtml(value.accessedAt)}">${escapeHtml(value.accessedAt)}</time></dd>` : ""}${value.temporalCoverage ? `<dt>Temporal coverage</dt><dd>${escapeHtml(value.temporalCoverage.start ?? "Start not provided")} – ${escapeHtml(value.temporalCoverage.end ?? "End not provided")}</dd>` : ""}${value.spatialCoverage ? `<dt>Spatial coverage</dt><dd>${escapeHtml(value.spatialCoverage)}</dd>` : ""}</dl>${value.transformations.length ? `<h4>Transformations</h4><ol>${value.transformations.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>` : ""}${filters.length ? `<h4>Active display filters</h4><ul>${filters.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}</section>`;
+    })
+    .join("")}</details>`;
 }
 function mime(path: string): string {
   return (
@@ -134,6 +208,12 @@ export async function buildArchivalHtml({
   exportedAt = new Date().toISOString(),
 }: ArchivalOptions): Promise<string> {
   const sources = new Map(project.sources.map((source) => [source.id, source]));
+  const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
+  const chapterProvenance = (ids: Array<string | null | undefined>) =>
+    provenanceHtml(
+      ids.flatMap((id) => (id && assets.get(id) ? [assets.get(id)!] : [])),
+      exportedAt,
+    );
   const chapters: string[] = [];
   for (const chapter of project.chapters) {
     const heading = `<h2>${escapeHtml(chapter.title)}</h2>`;
@@ -154,7 +234,7 @@ export async function buildArchivalHtml({
           snapshot,
         );
       chapters.push(
-        `<section>${heading}${validSnapshot ? `<img src="${escapeHtml(snapshot)}" alt="Map snapshot for ${escapeHtml(chapter.title)}">` : `<div class="unavailable">Map snapshot unavailable.${chapter.type === "flyover" ? ` Flyover contains ${chapter.keyframes.length} camera keyframes.` : ` Camera: ${chapter.camera.center.join(", ")} at zoom ${chapter.camera.zoom}.`}</div>`}${narrative}</section>`,
+        `<section>${heading}${validSnapshot ? `<img src="${escapeHtml(snapshot)}" alt="Map snapshot for ${escapeHtml(chapter.title)}">` : `<div class="unavailable">Map snapshot unavailable.${chapter.type === "flyover" ? ` Flyover contains ${chapter.keyframes.length} camera keyframes.` : ` Camera: ${chapter.camera.center.join(", ")} at zoom ${chapter.camera.zoom}.`}</div>`}${chapterProvenance([chapter.sourceId, ...(chapter.overlaySourceIds ?? [])])}${narrative}</section>`,
       );
       continue;
     }
@@ -170,7 +250,7 @@ export async function buildArchivalHtml({
         await projectAsset(projectDirectory, source.path),
       );
       chapters.push(
-        `<section>${heading}<figure><img src="${src}" alt="${escapeHtml(chapter.alt)}"><figcaption>${escapeHtml(chapter.caption || source.label)}</figcaption></figure>${narrative}</section>`,
+        `<section>${heading}<figure><img src="${src}" alt="${escapeHtml(chapter.alt)}"><figcaption>${escapeHtml(chapter.caption || source.label)}</figcaption></figure>${chapterProvenance([chapter.sourceId])}${narrative}</section>`,
       );
       continue;
     }
@@ -186,7 +266,7 @@ export async function buildArchivalHtml({
         chapter.title,
       );
       chapters.push(
-        `<section>${heading}<figure>${svg}<figcaption>${escapeHtml(source.label)}</figcaption></figure>${narrative}</section>`,
+        `<section>${heading}<figure>${svg}<figcaption>${escapeHtml(source.label)}</figcaption></figure>${chapterProvenance([chapter.sourceId])}${narrative}</section>`,
       );
       continue;
     }
@@ -215,4 +295,4 @@ export async function buildArchivalHtml({
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(project.metadata.title)}</title><meta name="dc.title" content="${escapeHtml(project.metadata.title)}">${project.metadata.author ? `<meta name="dc.creator" content="${escapeHtml(project.metadata.author)}">` : ""}<meta name="dc.date" content="${escapeHtml(exportedAt)}"><meta name="dc.description" content="${escapeHtml(project.metadata.description)}">${sourceTags}<style>${archiveCss}</style></head><body><article><header><p class="kicker">Earth Stories archival edition</p><h1>${escapeHtml(project.metadata.title)}</h1><p class="description">${escapeHtml(project.metadata.description)}</p>${project.metadata.author ? `<p>By ${escapeHtml(project.metadata.author)}</p>` : ""}</header>${chapters.join("\n")}<section class="citations"><h2>Sources and attribution</h2><ul>${citations || "<li>None recorded.</li>"}</ul></section></article><footer>Exported ${escapeHtml(exportedAt)} · Project ${escapeHtml(project.id)} · Build ${escapeHtml(manifest.build.id)} · Earth Stories</footer></body></html>`;
 }
 
-const archiveCss = `:root{color:#2e2925;background:#d8d2c7;font-family:Georgia,serif}*{box-sizing:border-box}body{margin:0}article{max-width:900px;margin:auto;background:#f6f1e8;padding:clamp(24px,7vw,90px)}header{padding-bottom:3rem;border-bottom:1px solid #2e2925}h1{font-size:clamp(3rem,9vw,7rem);line-height:.9;font-weight:400;margin:.2em 0}h2{font-size:2rem;font-weight:400}section{margin:5rem 0}.kicker{font:11px monospace;text-transform:uppercase;color:#dd4b1a;letter-spacing:.14em}.description{font-size:1.3rem;color:#695d54}.narrative{font-size:1.1rem;line-height:1.7;max-width:680px}img,svg{display:block;width:100%;height:auto;border:1px solid #2e2925}figcaption{font:11px monospace;margin-top:.6rem}.unavailable{padding:3rem;border:1px dashed #dd4b1a;background:#fffaf1}.citations{border-top:1px solid #2e2925;padding-top:2rem}.citations li{margin:.7rem 0}a{color:#a92c08}footer{max-width:900px;margin:auto;padding:2rem;font:10px monospace;color:#695d54}`;
+const archiveCss = `:root{color:#2e2925;background:#d8d2c7;font-family:Georgia,serif}*{box-sizing:border-box}body{margin:0}article{max-width:900px;margin:auto;background:#f6f1e8;padding:clamp(24px,7vw,90px)}header{padding-bottom:3rem;border-bottom:1px solid #2e2925}h1{font-size:clamp(3rem,9vw,7rem);line-height:.9;font-weight:400;margin:.2em 0}h2{font-size:2rem;font-weight:400}section{margin:5rem 0}.kicker{font:11px monospace;text-transform:uppercase;color:#dd4b1a;letter-spacing:.14em}.description{font-size:1.3rem;color:#695d54}.narrative{font-size:1.1rem;line-height:1.7;max-width:680px}img,svg{display:block;width:100%;height:auto;border:1px solid #2e2925}figcaption{font:11px monospace;margin-top:.6rem}.unavailable{padding:3rem;border:1px dashed #dd4b1a;background:#fffaf1}.provenance{margin:1rem 0 2rem;padding:1rem;border-top:1px solid #695d54;font:12px/1.5 monospace}.provenance summary{font-weight:bold}.provenance section{margin:1rem 0}.provenance dl{display:grid;grid-template-columns:max-content 1fr;gap:.35rem 1rem}.provenance dd{margin:0;overflow-wrap:anywhere}.provenance h4{margin-bottom:.3rem}.citations{border-top:1px solid #2e2925;padding-top:2rem}.citations li{margin:.7rem 0}a{color:#a92c08}footer{max-width:900px;margin:auto;padding:2rem;font:10px monospace;color:#695d54}`;

@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Camera, PublicationManifest } from "@earth-stories/story-schema";
 import { groupChaptersIntoBlocks } from "./chapterBlocks.js";
 import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
+import { VisualizationProvenance } from "./VisualizationProvenance.js";
 import "./viewer.css";
 
 const MapChapter = lazy(async () => {
@@ -93,20 +94,18 @@ export function StoryViewer({
       <article className="story-chapters">
         {chapterBlocks.map((block) => {
           if (block.type === "scrolly") {
+            const blockAssets = block.chapters.flatMap((chapter) => [
+              ...(assets.get(chapter.assetId)
+                ? [assets.get(chapter.assetId)!]
+                : []),
+              ...chapter.overlayAssetIds.flatMap((id) =>
+                assets.get(id) ? [assets.get(id)!] : [],
+              ),
+            ]);
             return (
-              <StoryMapHydrationBoundary
-                key={`scrolly-${block.startIndex}`}
-                eager={snapshotMode}
-                fallback={
-                  <div
-                    className="story-map story-map--loading story-map--scrolly-placeholder"
-                    style={{ minHeight: `${block.chapters.length * 92}dvh` }}
-                  >
-                    Preparing guided map…
-                  </div>
-                }
-              >
-                <Suspense
+              <Fragment key={`scrolly-${block.startIndex}`}>
+                <StoryMapHydrationBoundary
+                  eager={snapshotMode}
                   fallback={
                     <div
                       className="story-map story-map--loading story-map--scrolly-placeholder"
@@ -116,15 +115,29 @@ export function StoryViewer({
                     </div>
                   }
                 >
-                  <ScrollytellingBlock
-                    chapters={block.chapters}
-                    startIndex={block.startIndex}
-                    assets={assets}
-                    basemapStyle={manifest.basemap.styleUrl}
-                    snapshotMode={snapshotMode}
-                  />
-                </Suspense>
-              </StoryMapHydrationBoundary>
+                  <Suspense
+                    fallback={
+                      <div
+                        className="story-map story-map--loading story-map--scrolly-placeholder"
+                        style={{
+                          minHeight: `${block.chapters.length * 92}dvh`,
+                        }}
+                      >
+                        Preparing guided map…
+                      </div>
+                    }
+                  >
+                    <ScrollytellingBlock
+                      chapters={block.chapters}
+                      startIndex={block.startIndex}
+                      assets={assets}
+                      basemapStyle={manifest.basemap.styleUrl}
+                      snapshotMode={snapshotMode}
+                    />
+                  </Suspense>
+                </StoryMapHydrationBoundary>
+                <VisualizationProvenance assets={blockAssets} />
+              </Fragment>
             );
           }
           const { chapter, index } = block;
@@ -139,6 +152,10 @@ export function StoryViewer({
                   return overlay ? [overlay] : [];
                 })
               : [];
+          const visualizationAssets = [
+            ...(asset ? [asset] : []),
+            ...overlayAssets,
+          ];
           return (
             <section
               className={`story-chapter story-chapter--${chapter.type}`}
@@ -267,6 +284,9 @@ export function StoryViewer({
                 >
                   <ChartChapter chapter={chapter} asset={asset} />
                 </Suspense>
+              ) : null}
+              {visualizationAssets.length ? (
+                <VisualizationProvenance assets={visualizationAssets} />
               ) : null}
             </section>
           );

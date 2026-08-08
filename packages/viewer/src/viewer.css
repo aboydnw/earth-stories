@@ -450,6 +450,101 @@
   background: #fff0ea;
   color: #a12e0a;
 }
+.story-provenance {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 14px;
+  border-top: 1px solid var(--story-border);
+  color: var(--story-muted);
+  font-size: 13px;
+}
+.story-chapters > .story-provenance {
+  margin: 18px 0 72px;
+}
+.story-provenance summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 2px;
+  color: var(--story-ink);
+  cursor: pointer;
+}
+.story-provenance summary::marker {
+  color: var(--story-accent);
+}
+.story-provenance summary:focus-visible,
+.story-provenance a:focus-visible {
+  outline: 2px solid var(--story-accent);
+  outline-offset: 3px;
+}
+.story-provenance summary span {
+  font-weight: 650;
+}
+.story-provenance summary small {
+  color: var(--story-muted);
+  text-align: right;
+}
+.story-provenance [data-freshness="stale"] {
+  color: #a12e0a;
+}
+.story-provenance [data-freshness="current"] {
+  color: #236637;
+}
+.story-provenance__content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 20px;
+  padding: 10px 0 24px;
+}
+.story-provenance__source {
+  min-width: 0;
+  padding-left: 14px;
+  border-left: 2px solid var(--story-border);
+}
+.story-provenance__source h3 {
+  margin: 0 0 6px;
+  color: var(--story-ink);
+  font-size: 15px;
+}
+.story-provenance__source h4 {
+  margin: 16px 0 5px;
+  color: var(--story-ink);
+  font-size: 12px;
+}
+.story-provenance__freshness {
+  margin: 0 0 12px;
+}
+.story-provenance dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+.story-provenance dl div {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.45fr) 1fr;
+  gap: 10px;
+}
+.story-provenance dt {
+  font-weight: 650;
+  color: var(--story-ink);
+}
+.story-provenance dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.story-provenance :is(ol, ul) {
+  margin: 0;
+  padding-left: 20px;
+}
+.story-provenance li + li {
+  margin-top: 4px;
+}
+.story-provenance a {
+  color: var(--story-accent-text);
+  overflow-wrap: anywhere;
+}
 .story-video {
   grid-column: 2 / -1;
   margin: 0;
@@ -689,6 +784,26 @@
   }
   .story-masthead h1 {
     font-size: clamp(46px, 16vw, 82px);
+  }
+  .story-provenance summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .story-provenance summary small {
+    text-align: left;
+  }
+}
+
+@media print {
+  .story-provenance summary {
+    list-style: none;
+  }
+  .story-provenance__content {
+    display: grid !important;
+  }
+  .story-reading-progress {
+    display: none;
   }
 }
 
