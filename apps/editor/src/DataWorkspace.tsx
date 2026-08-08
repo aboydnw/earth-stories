@@ -21,7 +21,7 @@ import type {
   ProjectSource,
   StoryProject,
 } from "@earth-stories/story-schema";
-import { defaultSourceProvenance } from "@earth-stories/story-schema";
+import { createDefaultSourceProvenance } from "@earth-stories/story-schema";
 import {
   BrandSpinner,
   ActionButton,
@@ -382,7 +382,7 @@ export function DataWorkspace({
           ) : (
             <StatePanel
               title="Data is optional until a visualization needs it"
-              description="Prose and video stories can publish without data. Add a source when you are ready to build a map, chart, or image chapter."
+              description="Prose and video stories can publish without data. Add a source when you are ready to build a map or chart chapter."
               actionLabel={eligibleProjects.length ? "Add data" : undefined}
               onAction={
                 eligibleProjects.length
@@ -740,7 +740,7 @@ function exampleDataItem(example: ExampleConnection): DataItem {
     attribution: example.attribution,
     sizeBytes: null,
     delivery: "connected" as const,
-    provenance: defaultSourceProvenance,
+    provenance: createDefaultSourceProvenance(),
   };
   const source: ProjectSource =
     example.kind === "pmtiles"

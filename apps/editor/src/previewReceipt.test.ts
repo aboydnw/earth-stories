@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearPreviewReceipt,
   previewMatchesRevision,
@@ -8,7 +8,11 @@ import {
 } from "./previewReceipt";
 
 describe("preview receipts", () => {
-  beforeEach(() => sessionStorage.clear());
+  beforeEach(() => {
+    sessionStorage.clear();
+    for (const projectId of ["one", "two", "bad", "blocked"])
+      clearPreviewReceipt(projectId);
+  });
 
   it("tracks saved revisions per project", () => {
     recordPreviewReceipt("one", "rev-1");
@@ -23,5 +27,14 @@ describe("preview receipts", () => {
   it("discards corrupt values", () => {
     sessionStorage.setItem("earth-stories:preview-receipt:bad", "not json");
     expect(readPreviewReceipt("bad")).toBeNull();
+  });
+
+  it("falls back safely when corrupt storage cannot be removed", () => {
+    sessionStorage.setItem("earth-stories:preview-receipt:blocked", "not json");
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(readPreviewReceipt("blocked")).toBeNull();
+    vi.restoreAllMocks();
   });
 });

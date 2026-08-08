@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   cameraSchema,
-  defaultSourceProvenance,
+  createDefaultSourceProvenance,
   sourceProvenanceSchema,
 } from "./project.js";
 
@@ -35,7 +35,7 @@ export const publicationAssetSchema = z.object({
   delivery: z.enum(["included", "connected"]),
   href: z.string().min(1),
   attribution: z.string().nullable(),
-  provenance: sourceProvenanceSchema.default(defaultSourceProvenance),
+  provenance: sourceProvenanceSchema.default(createDefaultSourceProvenance),
   sizeBytes: z.number().int().nonnegative().nullable(),
   tileType: z.enum(["raster", "vector"]).nullable(),
   presentation: z.object({

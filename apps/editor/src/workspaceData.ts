@@ -1,5 +1,5 @@
 import {
-  defaultSourceProvenance,
+  createDefaultSourceProvenance,
   type ProjectSource,
 } from "@earth-stories/story-schema";
 import type { ImportedAsset, RemoteSourceDiscovery } from "./api";
@@ -26,7 +26,7 @@ export function connectedSource(
     attribution: null,
     sizeBytes: discovery?.sizeBytes ?? null,
     delivery: "connected" as const,
-    provenance: defaultSourceProvenance,
+    provenance: createDefaultSourceProvenance(),
   };
   const variable = discovery?.details.variables?.[0];
   const timeDimension =
@@ -61,7 +61,7 @@ export function uploadedSource(
     attribution: null,
     sizeBytes: uploaded.sizeBytes,
     delivery: "included" as const,
-    provenance: defaultSourceProvenance,
+    provenance: createDefaultSourceProvenance(),
   };
   if (extension === "tif" || extension === "tiff")
     return { ...common, kind: "cog", locator: uploaded.path };

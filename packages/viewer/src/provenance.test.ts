@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import {
   activeFilterDescriptions,
+  formatProvenanceDate,
   safeHttpUrl,
   sourceFreshness,
 } from "./provenance.js";
@@ -52,6 +53,10 @@ function asset(overrides: Partial<PublicationAsset> = {}): PublicationAsset {
 }
 
 describe("viewer provenance", () => {
+  it("formats date-only provenance without shifting calendar days", () => {
+    expect(formatProvenanceDate("2026-08-01")).toBe("Aug 1, 2026");
+  });
+
   it("calculates freshness at the day boundary", () => {
     const item = asset({
       provenance: {

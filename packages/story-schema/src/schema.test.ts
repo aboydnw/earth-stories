@@ -46,6 +46,24 @@ describe("storyProjectSchema", () => {
     });
   });
 
+  it("creates independent provenance defaults for every parsed source", () => {
+    const first = projectSourceSchema.parse({
+      id: "first",
+      label: "First",
+      kind: "local-geojson",
+      path: "first.geojson",
+    });
+    const second = projectSourceSchema.parse({
+      id: "second",
+      label: "Second",
+      kind: "local-geojson",
+      path: "second.geojson",
+    });
+    first.provenance.transformations.push("Changed first source");
+    expect(second.provenance.transformations).toEqual([]);
+    expect(first.provenance).not.toBe(second.provenance);
+  });
+
   it("rejects unsafe provenance URLs, invalid dates, and freshness windows", () => {
     expect(() =>
       sourceProvenanceSchema.parse({ sourceUrl: "javascript:alert(1)" }),

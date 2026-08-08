@@ -19,9 +19,17 @@ function validHttp(value: string | null): boolean {
 
 function validIso(value: string | null): boolean {
   if (!value) return true;
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(value);
+  if (!match || !Number.isFinite(Date.parse(value))) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const calendarDate = new Date(0);
+  calendarDate.setUTCFullYear(year, month, day);
   return (
-    /^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(value) &&
-    Number.isFinite(Date.parse(value))
+    calendarDate.getUTCFullYear() === year &&
+    calendarDate.getUTCMonth() === month &&
+    calendarDate.getUTCDate() === day
   );
 }
 

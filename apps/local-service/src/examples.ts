@@ -1,5 +1,5 @@
 import {
-  defaultSourceProvenance,
+  createDefaultSourceProvenance,
   type StoryProject,
 } from "@earth-stories/story-schema";
 
@@ -199,7 +199,7 @@ const antakya: StoryProject = {
       attribution: exampleConnection("antakya-aerial-cog").attribution,
       sizeBytes: null,
       delivery: "connected",
-      provenance: defaultSourceProvenance,
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.92,
         color: "#cf3f02",
@@ -268,7 +268,7 @@ const boundaries: StoryProject = {
       attribution: exampleConnection("countries-pmtiles").attribution,
       sizeBytes: null,
       delivery: "connected",
-      provenance: defaultSourceProvenance,
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.82,
         color: "#cf3f02",
@@ -340,7 +340,7 @@ const pointCloud: StoryProject = {
       attribution: "Hobu Inc.",
       sizeBytes: null,
       delivery: "connected",
-      provenance: defaultSourceProvenance,
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         ...{
           opacity: 0.9,
@@ -437,7 +437,7 @@ const temporalFields: StoryProject = {
       attribution: "Fields of The World / Source Cooperative",
       sizeBytes: null,
       delivery: "connected",
-      provenance: defaultSourceProvenance,
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.82,
         color: "#cf3f02",
@@ -500,7 +500,7 @@ const richMedia: StoryProject = {
       attribution: exampleConnection("regions-pmtiles").attribution,
       sizeBytes: null,
       delivery: "connected",
-      provenance: defaultSourceProvenance,
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.72,
         color: "#f0a93b",

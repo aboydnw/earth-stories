@@ -24,7 +24,7 @@ import type {
   ProjectSource,
   StoryProject,
 } from "@earth-stories/story-schema";
-import { defaultSourceProvenance } from "@earth-stories/story-schema";
+import { createDefaultSourceProvenance } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
 import {
   ActionButton,
@@ -724,7 +724,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
-          provenance: defaultSourceProvenance,
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -744,7 +744,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
-          provenance: defaultSourceProvenance,
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -766,7 +766,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
-          provenance: defaultSourceProvenance,
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -785,7 +785,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
-          provenance: defaultSourceProvenance,
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -805,7 +805,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
-          provenance: defaultSourceProvenance,
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -824,7 +824,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
-          provenance: defaultSourceProvenance,
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -1006,7 +1006,7 @@ export function App() {
             ? result.output.sizeBytes
             : null,
         delivery: "included" as const,
-        provenance: defaultSourceProvenance,
+        provenance: createDefaultSourceProvenance(),
       };
       const source: ProjectSource =
         capability === "raster" || capability === "multidim"
@@ -1060,7 +1060,7 @@ export function App() {
       attribution: null,
       sizeBytes: null,
       delivery: "connected" as const,
-      provenance: defaultSourceProvenance,
+      provenance: createDefaultSourceProvenance(),
     };
     const resolvedKind = connectedKind;
     const discoveredVariable = connectionDiscovery?.details.variables?.[0];
@@ -1167,7 +1167,7 @@ export function App() {
       attribution: example.attribution,
       sizeBytes: null,
       delivery: "connected" as const,
-      provenance: defaultSourceProvenance,
+      provenance: createDefaultSourceProvenance(),
     };
     const source: ProjectSource =
       example.kind === "pmtiles"

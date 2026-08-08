@@ -68,6 +68,8 @@ function archiveFilters(asset: PublicationAsset): string[] {
     for (const [dimension, index] of Object.entries(asset.zarr.selection))
       filters.push(`${dimension} index ${index}`);
   }
+  if (asset.kind === "copc" && asset.copc)
+    filters.push(`Point colors: ${asset.copc.colorMode}`);
   return filters;
 }
 function provenanceHtml(

@@ -39,21 +39,27 @@ export const sourceProvenanceSchema = z.object({
     .nullable()
     .default(null),
   spatialCoverage: z.string().nullable().default(null),
-  transformations: z.array(z.string()).default([]),
+  transformations: z.array(z.string()).default(() => []),
 });
 
-export const defaultSourceProvenance: SourceProvenance = {
-  publisher: null,
-  sourceUrl: null,
-  licenseName: null,
-  licenseUrl: null,
-  dataUpdatedAt: null,
-  accessedAt: null,
-  staleAfterDays: null,
-  temporalCoverage: null,
-  spatialCoverage: null,
-  transformations: [],
-};
+export type SourceProvenance = z.infer<typeof sourceProvenanceSchema>;
+
+export function createDefaultSourceProvenance(): SourceProvenance {
+  return {
+    publisher: null,
+    sourceUrl: null,
+    licenseName: null,
+    licenseUrl: null,
+    dataUpdatedAt: null,
+    accessedAt: null,
+    staleAfterDays: null,
+    temporalCoverage: null,
+    spatialCoverage: null,
+    transformations: [],
+  };
+}
+
+export const defaultSourceProvenance = createDefaultSourceProvenance();
 
 export const cameraSchema = z.object({
   center: z.tuple([z.number(), z.number()]),
@@ -73,7 +79,7 @@ const sourceBaseSchema = z.object({
   attribution: z.string().nullable().default(null),
   sizeBytes: z.number().int().nonnegative().nullable().default(null),
   delivery: z.enum(["auto", "included", "connected"]).default("auto"),
-  provenance: sourceProvenanceSchema.default(defaultSourceProvenance),
+  provenance: sourceProvenanceSchema.default(createDefaultSourceProvenance),
   presentation: z
     .object({
       opacity: z.number().min(0).max(1).default(0.85),
@@ -319,7 +325,6 @@ export function parseStoryProject(value: unknown): StoryProject {
 }
 
 export type Camera = z.infer<typeof cameraSchema>;
-export type SourceProvenance = z.infer<typeof sourceProvenanceSchema>;
 export type ProjectSource = z.infer<typeof projectSourceSchema>;
 export type ProjectDataAsset = z.infer<typeof projectDataAssetSchema>;
 export type ProjectChapter = z.infer<typeof projectChapterSchema>;

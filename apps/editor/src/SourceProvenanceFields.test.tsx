@@ -47,7 +47,8 @@ describe("SourceProvenanceFields", () => {
           value={{
             ...defaultSourceProvenance,
             sourceUrl: "bad" as never,
-            dataUpdatedAt: "yesterday" as never,
+            dataUpdatedAt: "2026-02-30",
+            accessedAt: "2026-13-01",
           }}
           onChange={() => undefined}
         />
@@ -64,6 +65,39 @@ describe("SourceProvenanceFields", () => {
     expect(
       screen
         .getByRole("textbox", { name: "Data updated" })
+        .getAttribute("aria-invalid"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("textbox", { name: "Accessed" })
+        .getAttribute("aria-invalid"),
+    ).toBe("true");
+  });
+
+  it("accepts real leap days and rejects non-leap-year boundaries", async () => {
+    render(
+      <EarthStoriesProvider>
+        <SourceProvenanceFields
+          value={{
+            ...defaultSourceProvenance,
+            dataUpdatedAt: "2024-02-29",
+            accessedAt: "2023-02-29",
+          }}
+          onChange={() => undefined}
+        />
+      </EarthStoriesProvider>,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Source and provenance" }),
+    );
+    expect(
+      screen
+        .getByRole("textbox", { name: "Data updated" })
+        .getAttribute("aria-invalid"),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("textbox", { name: "Accessed" })
         .getAttribute("aria-invalid"),
     ).toBe("true");
   });

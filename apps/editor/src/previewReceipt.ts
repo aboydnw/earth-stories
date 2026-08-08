@@ -23,7 +23,11 @@ export function readPreviewReceipt(projectId: string): string | null {
   } catch {
     // Corrupt session values are discarded below.
   }
-  storage()?.removeItem(key);
+  try {
+    storage()?.removeItem(key);
+  } catch {
+    // The in-memory copy is cleared below.
+  }
   memory.delete(key);
   return null;
 }

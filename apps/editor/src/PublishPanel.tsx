@@ -460,7 +460,7 @@ export function PublishPanel({
           </StatusNotice>
         ) : null}
         {result ? (
-          <div className="publish-completion" role="status">
+          <div className="publish-completion">
             <StatusNotice className="publish-result" tone="success">
               <CheckCircle weight="fill" /> {result}
             </StatusNotice>

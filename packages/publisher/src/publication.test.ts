@@ -364,6 +364,26 @@ describe("publication hardening", () => {
     for (const finding of local.findings)
       expect(server.issues.map(({ id }) => id)).toContain(finding.id);
 
+    const copcManifest = {
+      ...local.manifest!,
+      assets: local.manifest!.assets.map((asset, index) =>
+        index === 0
+          ? {
+              ...asset,
+              kind: "copc" as const,
+              copc: { colorMode: "classification" as const, pointSize: 2 },
+            }
+          : asset,
+      ),
+    };
+    const copcArchive = await buildArchivalHtml({
+      project: normalized,
+      manifest: copcManifest,
+      projectDirectory: project,
+      exportedAt: "2026-08-08T00:00:00Z",
+    });
+    expect(copcArchive).toContain("Point colors: classification");
+
     const output = join(root, "provenance-output");
     await buildPublication({
       projectDirectory: project,

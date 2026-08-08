@@ -74,12 +74,13 @@ describe("VisualizationProvenance", () => {
             provenance: {
               ...asset.provenance,
               publisher: null,
-              sourceUrl: "javascript:alert(1)" as never,
+              sourceUrl: "javascript:alert(1)",
               licenseName: null,
               licenseUrl: null,
             },
           },
         ]}
+        now={new Date("2026-08-08T00:00:00Z")}
       />,
     );
     expect(screen.queryByRole("link", { name: "Open source" })).toBeNull();

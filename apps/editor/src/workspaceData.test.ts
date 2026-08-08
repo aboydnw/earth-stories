@@ -61,4 +61,20 @@ describe("workspace data sources", () => {
       delivery: "included",
     });
   });
+
+  it("creates independent provenance for unrelated sources", () => {
+    const first = connectedSource(
+      "https://data.example/first.copc.laz",
+      "copc",
+      null,
+    );
+    const second = connectedSource(
+      "https://data.example/second.copc.laz",
+      "copc",
+      null,
+    );
+    first.provenance.transformations.push("Changed first source");
+    expect(second.provenance.transformations).toEqual([]);
+    expect(first.provenance).not.toBe(second.provenance);
+  });
 });
