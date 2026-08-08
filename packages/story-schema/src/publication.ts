@@ -96,6 +96,7 @@ export const publicationChapterSchema = z.discriminatedUnion("type", [
     assetId: z.string().min(1),
     overlayAssetIds: z.array(z.string().min(1)),
     transition: z.enum(["fly-to", "instant"]),
+    temporalPosition: z.number().min(0).max(1).optional(),
   }),
   publicationChapterBaseSchema.extend({
     type: z.literal("scrolly"),
@@ -104,6 +105,7 @@ export const publicationChapterSchema = z.discriminatedUnion("type", [
     overlayAssetIds: z.array(z.string().min(1)),
     transition: z.enum(["fly-to", "instant"]),
     overlayPosition: z.enum(["left", "right"]),
+    temporalPosition: z.number().min(0).max(1).optional(),
   }),
   publicationChapterBaseSchema.extend({
     type: z.literal("image"),

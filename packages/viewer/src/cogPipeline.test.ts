@@ -59,6 +59,16 @@ describe("cogPipeline", () => {
       }) as unknown as GeoTIFF;
 
     expect(supportsInferredPipeline(raster(3, [8, 8, 8]))).toBe(true);
+    expect(
+      supportsInferredPipeline({
+        cachedTags: {
+          samplesPerPixel: 3,
+          bitsPerSample: [8, 8, 8],
+          sampleFormat: undefined,
+          photometric: Photometric.Rgb,
+        },
+      } as unknown as GeoTIFF),
+    ).toBe(true);
     expect(supportsInferredPipeline(raster(5, [8, 8, 8, 8, 8]))).toBe(false);
     expect(supportsInferredPipeline(raster(1, [4]))).toBe(false);
     expect(supportsInferredPipeline(raster(3, [32, 32, 32]))).toBe(false);

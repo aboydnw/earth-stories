@@ -1,20 +1,26 @@
 import { useEffect } from "react";
-import { useMap } from "react-map-gl/maplibre";
-import { LidarControl } from "maplibre-gl-lidar";
+import type { Map as MapLibreMap } from "maplibre-gl";
+import { LidarControl, type PointCloudInfo } from "maplibre-gl-lidar";
 import "maplibre-gl-lidar/style.css";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 
 export function CopcOverlay({
   asset,
+  map,
   onError,
+  onReady,
+  autoFit = false,
 }: {
   asset: PublicationAsset;
+  map: MapLibreMap | null;
   onError: (message: string) => void;
+  onReady?: () => void;
+  autoFit?: boolean;
 }) {
-  const maps = useMap();
   useEffect(() => {
     let active = true;
-    const map = maps.current?.getMap();
+    let moveEndHandler: (() => void) | null = null;
+    let readyFallback: number | null = null;
     if (!map || asset.kind !== "copc") return;
     const control = new LidarControl({
       collapsed: true,
@@ -29,17 +35,42 @@ export function CopcOverlay({
     map.addControl(control);
     control
       .loadPointCloudStreaming(asset.href)
-      .catch(
-        (cause: unknown) =>
-          active &&
-          onError(
-            cause instanceof Error
-              ? cause.message
-              : "The point cloud could not be opened.",
-          ),
-      );
+      .then((pointCloud: PointCloudInfo) => {
+        if (!active) {
+          control.unloadPointCloud(pointCloud.id);
+          return;
+        }
+        if (!autoFit) {
+          onReady?.();
+          return;
+        }
+        const finishReady = () => {
+          if (readyFallback !== null) window.clearTimeout(readyFallback);
+          readyFallback = null;
+          if (moveEndHandler) map.off("moveend", moveEndHandler);
+          moveEndHandler = null;
+          if (active) onReady?.();
+        };
+        moveEndHandler = finishReady;
+        map.once("moveend", moveEndHandler);
+        control.flyToPointCloud(pointCloud.id);
+        readyFallback = window.setTimeout(finishReady, 1_250);
+      })
+      .catch((cause: unknown) => {
+        if (!active) {
+          control.unloadPointCloud();
+          return;
+        }
+        onError(
+          cause instanceof Error
+            ? cause.message
+            : "The point cloud could not be opened.",
+        );
+      });
     return () => {
       active = false;
+      if (readyFallback !== null) window.clearTimeout(readyFallback);
+      if (moveEndHandler) map.off("moveend", moveEndHandler);
       control.unloadPointCloud();
       map.removeControl(control);
     };
@@ -48,8 +79,10 @@ export function CopcOverlay({
     asset.kind,
     asset.copc?.colorMode,
     asset.copc?.pointSize,
-    maps,
+    map,
     onError,
+    onReady,
+    autoFit,
   ]);
   return null;
 }

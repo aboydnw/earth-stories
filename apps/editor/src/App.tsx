@@ -6,6 +6,8 @@ import {
   BookOpen,
   Database,
   Export,
+  CaretDown,
+  Eye,
   FileArrowUp,
   FloppyDisk,
   Link,
@@ -18,6 +20,7 @@ import {
 } from "@phosphor-icons/react";
 import { compileProject } from "@earth-stories/publisher/compile";
 import type {
+  Camera,
   ConversionCapability,
   ProjectDataAsset,
   ProjectChapter,
@@ -49,6 +52,7 @@ import { PublishPanel } from "./PublishPanel";
 import { WorkspaceScreen } from "./WorkspaceScreen";
 import { ChapterAddMenu } from "./ChapterAddMenu";
 import { MarkdownToolbar } from "./MarkdownToolbar";
+import { parseRoute, routePath, type AppRoute } from "./routing";
 
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
@@ -93,10 +97,12 @@ const sourcePath = (source: ProjectSource) =>
 
 export function App() {
   const narrativeRef = useRef<HTMLTextAreaElement>(null);
+  const previewCamerasRef = useRef(new Map<string, Camera>());
+  const routeLoadRef = useRef(0);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StoryProject | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<"stories" | "data">(() =>
-    window.location.hash === "#data" ? "data" : "stories",
+  const [route, setRoute] = useState<AppRoute>(() =>
+    parseRoute(window.location.pathname),
   );
   const [activeChapter, setActiveChapter] = useState("");
   const [newTitle, setNewTitle] = useState("");
@@ -112,6 +118,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [publishOpen, setPublishOpen] = useState(false);
+  const [publishMenuOpen, setPublishMenuOpen] = useState(false);
   const [examples, setExamples] = useState<ExampleCatalog | null>(null);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("chapter");
   const [addChapterOpen, setAddChapterOpen] = useState(false);
@@ -128,6 +135,16 @@ export function App() {
     null,
   );
   const chapterAddRef = useRef<HTMLDivElement>(null);
+  const publishMenuRef = useRef<HTMLDivElement>(null);
+
+  function navigate(next: AppRoute, replace = false) {
+    window.history[replace ? "replaceState" : "pushState"](
+      null,
+      "",
+      routePath(next),
+    );
+    setRoute(next);
+  }
 
   const refreshProjects = async () => setProjects(await listProjects());
   useEffect(() => {
@@ -135,10 +152,70 @@ export function App() {
       .then(setExamples)
       .catch(() => undefined);
     listProjects()
-      .then(setProjects)
+      .then(async (items) => {
+        setProjects(items);
+        const initialRoute = parseRoute(window.location.pathname);
+        if (initialRoute.page === "story") {
+          const token = ++routeLoadRef.current;
+          const opened = await openProject(initialRoute.storyId);
+          if (routeLoadRef.current === token) activate(opened);
+        }
+      })
       .catch(showError)
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => {
+    const syncRoute = () => {
+      const token = ++routeLoadRef.current;
+      const next = parseRoute(window.location.pathname);
+      setRoute(next);
+      setPublishMenuOpen(false);
+      setPublishOpen(false);
+      void (async () => {
+        if (
+          project &&
+          (next.page !== "story" || next.storyId !== project.id) &&
+          (saveState === "changed" || saveState === "save-error") &&
+          !(await persist()) &&
+          !window.confirm(
+            "Earth Stories could not save your changes. Leave without saving?",
+          )
+        ) {
+          if (routeLoadRef.current !== token) return;
+          navigate({ page: "story", storyId: project.id, preview: false });
+          return;
+        }
+        if (routeLoadRef.current !== token) return;
+        if (next.page === "story" && project?.id !== next.storyId) {
+          const opened = await openProject(next.storyId);
+          if (routeLoadRef.current === token) activate(opened);
+        } else if (next.page !== "story" && routeLoadRef.current === token)
+          setProject(null);
+      })().catch(showError);
+    };
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, [project, saveState]);
+  useEffect(() => {
+    if (!publishMenuOpen) return;
+    const dismiss = (event: PointerEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key === "Escape") {
+        setPublishMenuOpen(false);
+        return;
+      }
+      if (
+        event instanceof PointerEvent &&
+        !publishMenuRef.current?.contains(event.target as Node)
+      )
+        setPublishMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", dismiss);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", dismiss);
+    };
+  }, [publishMenuOpen]);
   useEffect(() => {
     if (!addChapterOpen) return;
     const dismiss = (event: PointerEvent | KeyboardEvent) => {
@@ -297,7 +374,9 @@ export function App() {
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
     try {
-      activate(await createProject(newTitle.trim() || "Untitled story"));
+      const created = await createProject(newTitle.trim() || "Untitled story");
+      activate(created);
+      navigate({ page: "story", storyId: created.id, preview: false });
       setNewTitle("");
       await refreshProjects();
     } catch (cause) {
@@ -307,6 +386,7 @@ export function App() {
   async function handleOpen(id: string) {
     try {
       activate(await openProject(id));
+      navigate({ page: "story", storyId: id, preview: false });
     } catch (cause) {
       showError(cause);
     }
@@ -347,7 +427,9 @@ export function App() {
   async function handleExampleStory(id: string) {
     try {
       setLoading(true);
-      activate(await createExampleStory(id));
+      const created = await createExampleStory(id);
+      activate(created);
+      navigate({ page: "story", storyId: created.id, preview: false });
       await refreshProjects();
     } catch (cause) {
       showError(cause);
@@ -1040,10 +1122,14 @@ export function App() {
     void (async () => {
       if (
         (saveState === "changed" || saveState === "save-error") &&
-        !(await persist())
+        !(await persist()) &&
+        !window.confirm(
+          "Earth Stories could not save your changes. Leave without saving?",
+        )
       )
         return;
       setProject(null);
+      navigate({ page: "stories" });
       setError(null);
       setAddChapterOpen(false);
     })();
@@ -1145,18 +1231,51 @@ export function App() {
         onConfirmDelete={() => void confirmDelete()}
         onDismissDelete={() => setDeleteTarget(null)}
         onOpenExample={(id) => void handleExampleStory(id)}
-        view={workspaceView}
+        view={route.page === "data" ? "data" : "stories"}
+        selectedDatasetId={route.page === "data" ? route.datasetId : null}
+        onDatasetChange={(datasetId) =>
+          navigate({ page: "data", datasetId }, datasetId === null)
+        }
         onViewChange={(view) => {
-          setWorkspaceView(view);
-          window.history.replaceState(
-            null,
-            "",
+          navigate(
             view === "data"
-              ? "#data"
-              : `${window.location.pathname}${window.location.search}`,
+              ? { page: "data", datasetId: null }
+              : { page: "stories" },
           );
         }}
       />
+    );
+
+  if (route.page === "story" && route.preview)
+    return (
+      <div className="story-preview-shell">
+        <header className="story-preview-bar">
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                { page: "story", storyId: project.id, preview: false },
+                true,
+              )
+            }
+          >
+            <ArrowDown className="story-preview-bar__back" size={17} /> Back to
+            editor
+          </button>
+          <div>
+            <strong>Preview</strong>
+            <span>Draft · not published</span>
+          </div>
+          <span>{project.metadata.title}</span>
+        </header>
+        {publication ? (
+          <StoryViewer manifest={publication} />
+        ) : (
+          <p className="error-message">
+            {publicationResult.error ?? "Give the story a title to preview it."}
+          </p>
+        )}
+      </div>
     );
 
   return (
@@ -1196,18 +1315,57 @@ export function App() {
         >
           <FloppyDisk size={17} /> Save
         </ActionButton>
-        <ActionButton
-          className="button button--primary"
-          disabled={!publication || saveState === "exporting"}
-          onClick={() => {
-            void (async () => {
-              const saved = saveState === "saved" ? project : await persist();
-              if (saved) setPublishOpen(true);
-            })();
-          }}
-        >
-          <Export size={17} /> Publish
-        </ActionButton>
+        <div className="publish-menu" ref={publishMenuRef}>
+          <ActionButton
+            className="button button--primary"
+            disabled={!publication || saveState === "exporting"}
+            aria-haspopup="menu"
+            aria-expanded={publishMenuOpen}
+            onClick={() => setPublishMenuOpen((open) => !open)}
+          >
+            <Export size={17} /> Publish <CaretDown size={14} />
+          </ActionButton>
+          {publishMenuOpen ? (
+            <div className="publish-menu__popover" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setPublishMenuOpen(false);
+                  navigate({
+                    page: "story",
+                    storyId: project.id,
+                    preview: true,
+                  });
+                }}
+              >
+                <Eye size={18} />
+                <span>
+                  <strong>Preview</strong>
+                  <small>Open the unpublished reader view</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setPublishMenuOpen(false);
+                  void (async () => {
+                    const saved =
+                      saveState === "saved" ? project : await persist();
+                    if (saved) setPublishOpen(true);
+                  })();
+                }}
+              >
+                <Export size={18} />
+                <span>
+                  <strong>Publish</strong>
+                  <small>Choose a publication profile and format</small>
+                </span>
+              </button>
+            </div>
+          ) : null}
+        </div>
       </header>
       <aside className="editor-rail">
         <div className="project-label">
@@ -2276,6 +2434,39 @@ export function App() {
                   {selectedChapter.keyframes.map((keyframe, index) => (
                     <fieldset key={index}>
                       <legend>Keyframe {index + 1}</legend>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = previewCamerasRef.current.get(
+                            selectedChapter.id,
+                          );
+                          if (!current) {
+                            setError(
+                              "Scroll to this flyover in the live preview before capturing its current view.",
+                            );
+                            return;
+                          }
+                          changeProject((project) => ({
+                            ...project,
+                            chapters: project.chapters.map((chapter) =>
+                              chapter.id === selectedChapter.id &&
+                              chapter.type === "flyover"
+                                ? {
+                                    ...chapter,
+                                    keyframes: chapter.keyframes.map(
+                                      (frame, frameIndex) =>
+                                        frameIndex === index
+                                          ? structuredClone(current)
+                                          : frame,
+                                    ),
+                                  }
+                                : chapter,
+                            ),
+                          }));
+                        }}
+                      >
+                        Use current preview view
+                      </button>
                       <label>
                         Longitude
                         <input
@@ -2634,6 +2825,103 @@ export function App() {
                       <option value="scrolly">Sticky scrollytelling</option>
                     </select>
                   </label>
+                  <label>
+                    Camera transition
+                    <select
+                      value={selectedChapter.transition ?? "fly-to"}
+                      onChange={(event) =>
+                        changeProject((current) => ({
+                          ...current,
+                          chapters: current.chapters.map((chapter) =>
+                            chapter.id === selectedChapter.id &&
+                            (chapter.type === "map" ||
+                              chapter.type === "scrolly")
+                              ? {
+                                  ...chapter,
+                                  transition: event.target.value as
+                                    "fly-to" | "instant",
+                                }
+                              : chapter,
+                          ),
+                        }))
+                      }
+                    >
+                      <option value="fly-to">Fly to this view</option>
+                      <option value="instant">Cut immediately</option>
+                    </select>
+                  </label>
+                  {(selectedSource?.kind === "trajectory" ||
+                    (selectedSource?.kind === "zarr" &&
+                      selectedSource.timesteps.length > 1)) && (
+                    <fieldset className="temporal-authoring">
+                      <legend>Chapter time</legend>
+                      <label className="temporal-authoring__toggle">
+                        <input
+                          type="checkbox"
+                          checked={
+                            selectedChapter.temporalPosition !== undefined
+                          }
+                          onChange={(event) =>
+                            changeProject((current) => ({
+                              ...current,
+                              chapters: current.chapters.map((chapter) =>
+                                chapter.id === selectedChapter.id &&
+                                (chapter.type === "map" ||
+                                  chapter.type === "scrolly")
+                                  ? {
+                                      ...chapter,
+                                      temporalPosition: event.target.checked
+                                        ? 0
+                                        : undefined,
+                                    }
+                                  : chapter,
+                              ),
+                            }))
+                          }
+                        />
+                        Set a time for this chapter
+                      </label>
+                      {selectedChapter.temporalPosition !== undefined ? (
+                        <label>
+                          Position:{" "}
+                          {Math.round(selectedChapter.temporalPosition * 100)}%
+                          <input
+                            type="range"
+                            min="0"
+                            max="1"
+                            step={
+                              selectedSource.kind === "zarr"
+                                ? 1 / (selectedSource.timesteps.length - 1)
+                                : 0.001
+                            }
+                            value={selectedChapter.temporalPosition}
+                            onChange={(event) =>
+                              changeProject((current) => ({
+                                ...current,
+                                chapters: current.chapters.map((chapter) =>
+                                  chapter.id === selectedChapter.id &&
+                                  (chapter.type === "map" ||
+                                    chapter.type === "scrolly")
+                                    ? {
+                                        ...chapter,
+                                        temporalPosition: Number(
+                                          event.target.value,
+                                        ),
+                                      }
+                                    : chapter,
+                                ),
+                              }))
+                            }
+                          />
+                        </label>
+                      ) : (
+                        <small>
+                          Without a set time, consecutive chapters keep the
+                          reader’s current position.
+                        </small>
+                      )}
+                    </fieldset>
+                  )}
                   <label>
                     Zoom
                     <input
@@ -3481,7 +3769,13 @@ export function App() {
         </div>
         {publication ? (
           <div className="preview-frame">
-            <StoryViewer manifest={publication} />
+            <StoryViewer
+              manifest={publication}
+              snapshotMode={publishOpen}
+              onChapterCameraChange={(chapterId, nextCamera) => {
+                previewCamerasRef.current.set(chapterId, nextCamera);
+              }}
+            />
           </div>
         ) : (
           <p className="error-message">

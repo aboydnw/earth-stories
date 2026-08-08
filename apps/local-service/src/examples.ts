@@ -41,7 +41,7 @@ export const exampleConnections: ExampleConnection[] = [
     locator:
       "https://oin-hotosm-temp.s3.amazonaws.com/63eb7815ca43600005f4d91e/0/63eb7815ca43600005f4d91f.tif",
     attribution: "OpenAerialMap contributors, CC BY 4.0",
-    camera: { center: [36.15, 36.24], zoom: 14, bearing: 0, pitch: 0 },
+    camera: { center: [36.1493, 36.1977], zoom: 16, bearing: 0, pitch: 0 },
   },
   {
     id: "hatay-turinclu-cog",
@@ -62,7 +62,7 @@ export const exampleConnections: ExampleConnection[] = [
     locator:
       "https://oin-hotosm-temp.s3.amazonaws.com/63f21def525f0700077ed4e2/0/63f21def525f0700077ed4e3.tif",
     attribution: "OpenAerialMap / HOT",
-    camera: { center: [36.155, 36.205], zoom: 13, bearing: 0, pitch: 0 },
+    camera: { center: [36.1995, 36.229], zoom: 15, bearing: 0, pitch: 0 },
   },
   {
     id: "countries-pmtiles",
@@ -117,13 +117,17 @@ export const exampleConnections: ExampleConnection[] = [
     description:
       "Global satellite precipitation estimates in a temporal Zarr store.",
     kind: "zarr",
-    locator: "https://data.source.coop/bkr/imerg/imerg_final.zarr",
+    locator: "https://data.source.coop/bkr/imerg/gpm_early.zarr",
     attribution: "NASA GPM IMERG / Source Cooperative",
     config: {
       variable: "precipitation",
       selection: {},
       timeDimension: "time",
-      timesteps: [],
+      timesteps: [
+        { label: "2000-07-06 12:00 UTC", index: 9000 },
+        { label: "2000-07-06 12:30 UTC", index: 9001 },
+        { label: "2000-07-06 13:00 UTC", index: 9002 },
+      ],
       geozarr: {
         dimensions: ["latitude", "longitude"],
         transform: [0.1, 0, -180, 0, 0.1, -90],
@@ -225,7 +229,7 @@ const antakya: StoryProject = {
       narrative:
         "This chapter reads the cloud-optimized GeoTIFF directly from its public source. Pan and zoom to inspect the captured landscape without a tile server.",
       sourceId: "antakya-cog",
-      camera: { center: [36.155, 36.205], zoom: 14, bearing: 0, pitch: 22 },
+      camera: { center: [36.1995, 36.229], zoom: 15, bearing: 0, pitch: 22 },
     },
     {
       id: "antakya-method",
@@ -515,8 +519,8 @@ const richMedia: StoryProject = {
       narrative:
         "Video chapters keep their original source link in archival exports.",
       provider: "youtube",
-      videoId: "v6QMEf5p4qM",
-      originalUrl: "https://www.youtube.com/watch?v=v6QMEf5p4qM",
+      videoId: "4E6yQLoGO2o",
+      originalUrl: "https://www.youtube.com/watch?v=4E6yQLoGO2o",
     },
     {
       id: "media-overlay",

@@ -4,7 +4,6 @@ import { CreateTexture } from "@developmentseed/deck.gl-raster/gpu-modules";
 import type { Texture } from "@luma.gl/core";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import type { GeoTIFF } from "@developmentseed/geotiff";
-import type { ProjectionDefinition } from "@developmentseed/proj";
 
 const ramps = {
   viridis: [
@@ -35,6 +34,16 @@ function shaderColor(hex: string) {
   );
 }
 
+function shaderFloat(value: number) {
+  if (!Number.isFinite(value)) return "0.0";
+  const literal = String(value);
+  return /[.eE]/.test(literal) ? literal : `${literal}.0`;
+}
+
+function shaderVector(values: readonly number[]) {
+  return values.map(shaderFloat).join(",");
+}
+
 export function colorize(
   name: keyof typeof ramps,
   categoryColors: Record<string, string> = {},
@@ -47,7 +56,7 @@ export function colorize(
           const value = Number(raw);
           return Number.isFinite(value)
             ? [
-                `if (abs(rawValue - ${value}) < 0.00001) mapped = vec3(${shaderColor(hex).join(",")});`,
+                `if (abs(rawValue - ${shaderFloat(value)}) < 0.00001) mapped = vec3(${shaderVector(shaderColor(hex))});`,
               ]
             : [];
         })
@@ -60,13 +69,13 @@ export function colorize(
       "fs:DECKGL_FILTER_COLOR": `
         float encoded = color.r;
         float value = max(0.0, (encoded * 255.0 - 1.0) / 254.0);
-        vec3 low = vec3(${low.join(",")});
-        vec3 middle = vec3(${middle.join(",")});
-        vec3 high = vec3(${high.join(",")});
+        vec3 low = vec3(${shaderVector(low)});
+        vec3 middle = vec3(${shaderVector(middle)});
+        vec3 high = vec3(${shaderVector(high)});
         vec3 mapped = value < 0.5
           ? mix(low, middle, value * 2.0)
           : mix(middle, high, (value - 0.5) * 2.0);
-        float rawValue = ${minimum} + value * ${maximum - minimum || 1};
+        float rawValue = ${shaderFloat(minimum)} + value * ${shaderFloat(maximum - minimum || 1)};
         ${categoryShader}
         color = vec4(mapped, encoded <= 0.0 ? 0.0 : 1.0);
       `,
@@ -78,16 +87,6 @@ export function buildCogLayers(
   asset: PublicationAsset,
   source: GeoTIFF | string,
   onError: (message: string) => void,
-  onLoad?: (
-    geotiff: GeoTIFF,
-    projection: ProjectionDefinition,
-    geographicBounds: {
-      west: number;
-      south: number;
-      east: number;
-      north: number;
-    },
-  ) => void,
   rescale: [number, number] | null = asset.presentation.rescale,
 ): Layer[] {
   const { presentation } = asset;
@@ -98,14 +97,6 @@ export function buildCogLayers(
         geotiff: source,
         opacity: presentation.opacity,
         maxError: 0.03,
-        onGeoTIFFLoad: (geotiff, options) =>
-          onLoad?.(geotiff, options.projection, options.geographicBounds),
-        onError: (cause: unknown) =>
-          onError(
-            cause instanceof Error
-              ? cause.message
-              : "The COG could not be rendered.",
-          ),
       }),
     ];
 
@@ -116,45 +107,55 @@ export function buildCogLayers(
     image,
     options,
   ) => {
-    const tile = await image.fetchTile(options.x, options.y, {
-      boundless: false,
-      signal: options.signal ?? new AbortController().signal,
-    });
-    const { width, height } = tile.array;
-    const bandIndex = Math.max(0, presentation.rasterBand - 1);
-    const bandCount = Math.max(1, tile.array.count);
-    const source =
-      tile.array.layout === "band-separate"
-        ? (tile.array.bands[bandIndex] ?? tile.array.bands[0]!)
-        : tile.array.data;
-    const normalized = new Uint8Array(width * height);
-    for (let index = 0; index < normalized.length; index += 1) {
-      const sourceIndex =
+    try {
+      const tile = await image.fetchTile(options.x, options.y, {
+        boundless: false,
+        signal: options.signal ?? new AbortController().signal,
+      });
+      const { width, height } = tile.array;
+      const bandIndex = Math.max(0, presentation.rasterBand - 1);
+      const bandCount = Math.max(1, tile.array.count);
+      const source =
         tile.array.layout === "band-separate"
-          ? index
-          : index * bandCount + Math.min(bandIndex, bandCount - 1);
-      const value = Number(source[sourceIndex]);
-      const valid =
-        Number.isFinite(value) &&
-        (tile.array.mask === null || tile.array.mask[index] !== 0) &&
-        (tile.array.nodata === null || value !== tile.array.nodata);
-      normalized[index] = valid
-        ? 1 +
-          Math.round(
-            Math.max(0, Math.min(254, ((value - minimum) / range) * 254)),
-          )
-        : 0;
-    }
-    return {
-      texture: options.device.createTexture({
-        data: normalized,
-        format: "r8unorm",
+          ? (tile.array.bands[bandIndex] ?? tile.array.bands[0]!)
+          : tile.array.data;
+      const normalized = new Uint8Array(width * height);
+      for (let index = 0; index < normalized.length; index += 1) {
+        const sourceIndex =
+          tile.array.layout === "band-separate"
+            ? index
+            : index * bandCount + Math.min(bandIndex, bandCount - 1);
+        const value = Number(source[sourceIndex]);
+        const valid =
+          Number.isFinite(value) &&
+          (tile.array.mask === null || tile.array.mask[index] !== 0) &&
+          (tile.array.nodata === null || value !== tile.array.nodata);
+        normalized[index] = valid
+          ? 1 +
+            Math.round(
+              Math.max(0, Math.min(254, ((value - minimum) / range) * 254)),
+            )
+          : 0;
+      }
+      return {
+        texture: options.device.createTexture({
+          data: normalized,
+          format: "r8unorm",
+          width,
+          height,
+        }),
         width,
         height,
-      }),
-      width,
-      height,
-    };
+      };
+    } catch (cause) {
+      if (!(cause instanceof Error && cause.name === "AbortError"))
+        onError(
+          cause instanceof Error
+            ? cause.message
+            : "The COG tile could not be read.",
+        );
+      throw cause;
+    }
   };
   const renderTile: COGLayerProps<CogTile>["renderTile"] = (data) => ({
     renderPipeline: [
@@ -176,14 +177,6 @@ export function buildCogLayers(
       getTileData,
       renderTile,
       maxError: 0.03,
-      onGeoTIFFLoad: (geotiff, options) =>
-        onLoad?.(geotiff, options.projection, options.geographicBounds),
-      onError: (cause: unknown) =>
-        onError(
-          cause instanceof Error
-            ? cause.message
-            : "The COG could not be rendered.",
-        ),
     }),
   ];
 }

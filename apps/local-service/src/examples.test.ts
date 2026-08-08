@@ -36,4 +36,15 @@ describe("example catalog", () => {
       ]).toContain(connection.kind);
     }
   });
+
+  it("uses a working geospatial video in the rich-media example", () => {
+    const story = findExampleStory("rich-media");
+    const video = story?.chapters.find((chapter) => chapter.type === "video");
+
+    expect(video).toMatchObject({
+      provider: "youtube",
+      videoId: "4E6yQLoGO2o",
+      originalUrl: "https://www.youtube.com/watch?v=4E6yQLoGO2o",
+    });
+  });
 });

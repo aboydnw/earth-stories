@@ -91,6 +91,7 @@ describe("compileProject", () => {
         narrative: "",
         sourceId: "rain",
         camera: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        temporalPosition: 0.5,
       },
     );
     const result = compileProject(fixture);
@@ -100,6 +101,9 @@ describe("compileProject", () => {
     expect(result.assets.find((asset) => asset.id === "rain")?.delivery).toBe(
       "connected",
     );
+    expect(
+      result.chapters.find((chapter) => chapter.id === "scroll"),
+    ).toMatchObject({ temporalPosition: 0.5 });
     expect(
       result.externalDependencies.find((item) => item.resourceId === "rain")
         ?.requirements,

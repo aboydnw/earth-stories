@@ -30,6 +30,8 @@ export function WorkspaceScreen({
   onOpenExample,
   view,
   onViewChange,
+  selectedDatasetId,
+  onDatasetChange,
 }: {
   projects: ProjectSummary[];
   examples: ExampleCatalog | null;
@@ -48,6 +50,8 @@ export function WorkspaceScreen({
   onOpenExample: (id: string) => void;
   view: "stories" | "data";
   onViewChange: (view: "stories" | "data") => void;
+  selectedDatasetId: string | null;
+  onDatasetChange: (id: string | null) => void;
 }) {
   return (
     <div className="workspace-screen">
@@ -57,6 +61,7 @@ export function WorkspaceScreen({
           <span>Earth Stories</span>
           <small>local</small>
         </div>
+        <span>Your stories stay on this computer until you publish</span>
         <nav className="workspace-tabs" aria-label="Workspace sections">
           <button
             type="button"
@@ -75,13 +80,14 @@ export function WorkspaceScreen({
             Data
           </button>
         </nav>
-        <span>Your stories stay on this computer until you publish</span>
       </header>
       {view === "data" ? (
         <DataWorkspace
           projects={projects}
           examples={examples}
           onOpenStory={onOpen}
+          selectedDatasetId={selectedDatasetId}
+          onDatasetChange={onDatasetChange}
         />
       ) : (
         <main className="workspace-main">

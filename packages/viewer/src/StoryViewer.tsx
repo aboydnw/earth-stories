@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import type { PublicationManifest } from "@earth-stories/story-schema";
+import type { Camera, PublicationManifest } from "@earth-stories/story-schema";
 import { groupChaptersIntoBlocks } from "./chapterBlocks.js";
+import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
 import "./viewer.css";
 
 const MapChapter = lazy(async () => {
@@ -22,12 +23,16 @@ export interface StoryViewerProps {
   manifest: PublicationManifest;
   embed?: boolean;
   theme?: "cng" | "editorial";
+  snapshotMode?: boolean;
+  onChapterCameraChange?: (chapterId: string, camera: Camera) => void;
 }
 
 export function StoryViewer({
   manifest,
   embed = false,
   theme,
+  snapshotMode = false,
+  onChapterCameraChange,
 }: StoryViewerProps) {
   const [readingProgress, setReadingProgress] = useState(0);
   const assets = useMemo(
@@ -89,21 +94,37 @@ export function StoryViewer({
         {chapterBlocks.map((block) => {
           if (block.type === "scrolly") {
             return (
-              <Suspense
+              <StoryMapHydrationBoundary
                 key={`scrolly-${block.startIndex}`}
+                eager={snapshotMode}
                 fallback={
-                  <div className="story-map story-map--loading">
+                  <div
+                    className="story-map story-map--loading story-map--scrolly-placeholder"
+                    style={{ minHeight: `${block.chapters.length * 92}dvh` }}
+                  >
                     Preparing guided map…
                   </div>
                 }
               >
-                <ScrollytellingBlock
-                  chapters={block.chapters}
-                  startIndex={block.startIndex}
-                  assets={assets}
-                  basemapStyle={manifest.basemap.styleUrl}
-                />
-              </Suspense>
+                <Suspense
+                  fallback={
+                    <div
+                      className="story-map story-map--loading story-map--scrolly-placeholder"
+                      style={{ minHeight: `${block.chapters.length * 92}dvh` }}
+                    >
+                      Preparing guided map…
+                    </div>
+                  }
+                >
+                  <ScrollytellingBlock
+                    chapters={block.chapters}
+                    startIndex={block.startIndex}
+                    assets={assets}
+                    basemapStyle={manifest.basemap.styleUrl}
+                    snapshotMode={snapshotMode}
+                  />
+                </Suspense>
+              </StoryMapHydrationBoundary>
             );
           }
           const { chapter, index } = block;
@@ -133,21 +154,34 @@ export function StoryViewer({
                 <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
               </div>
               {chapter.type === "map" && asset ? (
-                <Suspense
+                <StoryMapHydrationBoundary
+                  eager={snapshotMode}
                   fallback={
                     <div className="story-map story-map--loading">
                       Preparing map…
                     </div>
                   }
                 >
-                  <MapChapter
-                    chapter={chapter}
-                    asset={asset}
-                    overlayAssets={overlayAssets}
-                    basemapStyle={manifest.basemap.styleUrl}
-                    autoFit
-                  />
-                </Suspense>
+                  <Suspense
+                    fallback={
+                      <div className="story-map story-map--loading">
+                        Preparing map…
+                      </div>
+                    }
+                  >
+                    <MapChapter
+                      chapter={chapter}
+                      asset={asset}
+                      overlayAssets={overlayAssets}
+                      basemapStyle={manifest.basemap.styleUrl}
+                      autoFit
+                      snapshotMode={snapshotMode}
+                      onCameraChange={(camera) =>
+                        onChapterCameraChange?.(chapter.id, camera)
+                      }
+                    />
+                  </Suspense>
+                </StoryMapHydrationBoundary>
               ) : null}
               {chapter.type === "video" ? (
                 <figure className="story-video">
@@ -167,20 +201,55 @@ export function StoryViewer({
                 </figure>
               ) : null}
               {chapter.type === "flyover" ? (
-                <Suspense
+                <StoryMapHydrationBoundary
+                  eager={snapshotMode}
                   fallback={
-                    <div className="story-map story-map--loading">
+                    <div
+                      className="story-map story-map--loading story-map--flyover-placeholder"
+                      style={{
+                        minHeight: `${Math.max(
+                          120,
+                          chapter.scrollLength *
+                            100 *
+                            (chapter.keyframes.length - 1) +
+                            100,
+                        )}vh`,
+                      }}
+                    >
                       Preparing flyover…
                     </div>
                   }
                 >
-                  <FlyoverChapter
-                    chapter={chapter}
-                    asset={asset ?? null}
-                    overlayAssets={overlayAssets}
-                    basemapStyle={manifest.basemap.styleUrl}
-                  />
-                </Suspense>
+                  <Suspense
+                    fallback={
+                      <div
+                        className="story-map story-map--loading story-map--flyover-placeholder"
+                        style={{
+                          minHeight: `${Math.max(
+                            120,
+                            chapter.scrollLength *
+                              100 *
+                              (chapter.keyframes.length - 1) +
+                              100,
+                          )}vh`,
+                        }}
+                      >
+                        Preparing flyover…
+                      </div>
+                    }
+                  >
+                    <FlyoverChapter
+                      chapter={chapter}
+                      asset={asset ?? null}
+                      overlayAssets={overlayAssets}
+                      basemapStyle={manifest.basemap.styleUrl}
+                      snapshotMode={snapshotMode}
+                      onCameraChange={(camera) =>
+                        onChapterCameraChange?.(chapter.id, camera)
+                      }
+                    />
+                  </Suspense>
+                </StoryMapHydrationBoundary>
               ) : null}
               {chapter.type === "image" && asset ? (
                 <figure className="story-image">

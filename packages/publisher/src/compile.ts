@@ -356,6 +356,7 @@ function compileChapter(chapter: ProjectChapter): PublicationChapter {
         assetId: chapter.sourceId,
         overlayAssetIds: chapter.overlaySourceIds ?? [],
         transition: chapter.transition ?? "fly-to",
+        temporalPosition: chapter.temporalPosition,
       };
     case "scrolly":
       return {
@@ -366,6 +367,7 @@ function compileChapter(chapter: ProjectChapter): PublicationChapter {
         overlayAssetIds: chapter.overlaySourceIds ?? [],
         transition: chapter.transition ?? "fly-to",
         overlayPosition: chapter.overlayPosition ?? "left",
+        temporalPosition: chapter.temporalPosition,
       };
     case "image":
       return {

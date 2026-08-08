@@ -76,10 +76,12 @@ export function GeoParquetOverlay({
   asset,
   onError,
   onBounds,
+  onReady,
 }: {
   asset: PublicationAsset;
   onError: (message: string) => void;
   onBounds?: (bounds: GeographicBounds) => void;
+  onReady?: () => void;
 }) {
   const [data, setData] = useState<ReturnType<typeof rowsToGeoJson> | null>(
     null,
@@ -130,6 +132,7 @@ export function GeoParquetOverlay({
         if (active) {
           const next = rowsToGeoJson(table);
           setData(next);
+          onReady?.();
           const bounds = geoJsonBounds(next);
           if (bounds) onBounds?.(bounds);
         }
@@ -145,7 +148,7 @@ export function GeoParquetOverlay({
     return () => {
       active = false;
     };
-  }, [asset.href, onBounds, onError]);
+  }, [asset.href, onBounds, onError, onReady]);
   const layers = useMemo<DeckLayer[]>(() => {
     if (!data) return [];
     const presentation = asset.presentation;
