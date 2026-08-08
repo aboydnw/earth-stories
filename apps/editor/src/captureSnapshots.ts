@@ -189,7 +189,8 @@ export async function downloadAnimatedMapCaptures(
       section
         .querySelectorAll<HTMLButtonElement>(".story-map__time button")
         .forEach((button) => {
-          if (button.textContent?.trim() === "Play") button.click();
+          if (button.getAttribute("aria-label") === "Play animation")
+            button.click();
         });
       recorder.start(250);
       await new Promise((resolve) => window.setTimeout(resolve, durationMs));

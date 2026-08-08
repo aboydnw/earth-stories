@@ -26,6 +26,26 @@ describe("openZarrVariable", () => {
     vi.clearAllMocks();
   });
 
+  it("opens URLs that point directly at an array", async () => {
+    const directArray = {
+      kind: "array",
+      shape: [2, 3],
+      dimensionNames: ["y", "x"],
+    };
+    open.mockResolvedValueOnce(directArray as never);
+
+    await expect(
+      openZarrVariable(
+        "https://example.test/a.zarr/precipitation",
+        "precipitation",
+      ),
+    ).resolves.toEqual({
+      node: directArray,
+      dimensions: ["y", "x"],
+    });
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+
   it("pre-opens a single-array variable and omits the variable prop", async () => {
     open
       .mockResolvedValueOnce(root as never)

@@ -20,6 +20,7 @@ export function CopcOverlay({
   useEffect(() => {
     let active = true;
     let moveEndHandler: (() => void) | null = null;
+    let readyFallback: number | null = null;
     if (!map || asset.kind !== "copc") return;
     const control = new LidarControl({
       collapsed: true,
@@ -43,12 +44,17 @@ export function CopcOverlay({
           onReady?.();
           return;
         }
-        moveEndHandler = () => {
+        const finishReady = () => {
+          if (readyFallback !== null) window.clearTimeout(readyFallback);
+          readyFallback = null;
+          if (moveEndHandler) map.off("moveend", moveEndHandler);
           moveEndHandler = null;
           if (active) onReady?.();
         };
+        moveEndHandler = finishReady;
         map.once("moveend", moveEndHandler);
         control.flyToPointCloud(pointCloud.id);
+        readyFallback = window.setTimeout(finishReady, 1_250);
       })
       .catch((cause: unknown) => {
         if (!active) {
@@ -63,6 +69,7 @@ export function CopcOverlay({
       });
     return () => {
       active = false;
+      if (readyFallback !== null) window.clearTimeout(readyFallback);
       if (moveEndHandler) map.off("moveend", moveEndHandler);
       control.unloadPointCloud();
       map.removeControl(control);

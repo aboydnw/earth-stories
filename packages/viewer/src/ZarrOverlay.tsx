@@ -69,6 +69,20 @@ export function ZarrOverlay({
     };
   }, [asset.href, asset.zarr?.variable, onError, onReady, targetWidth]);
   const timeIndex = timestepIndex(position, asset.zarr?.timesteps.length ?? 0);
+  const colormapTextures = useMemo(
+    () => ({
+      byDevice: new WeakMap<object, Texture>(),
+      textures: new Set<Texture>(),
+    }),
+    [asset.presentation.colormap],
+  );
+  useEffect(
+    () => () => {
+      for (const texture of colormapTextures.textures) texture.destroy();
+      colormapTextures.textures.clear();
+    },
+    [colormapTextures],
+  );
   const layers = useMemo(() => {
     if (!opened || !asset.zarr) return [];
     const spatialDimensions =
@@ -85,7 +99,6 @@ export function ZarrOverlay({
     );
     const [minimum, maximum] = asset.presentation.rescale ?? [0, 1];
     const range = maximum - minimum || 1;
-    const colormapTextures = new WeakMap<object, Texture>();
     return [
       new ZarrLayer({
         id: `${asset.id}-zarr-${timeIndex}`,
@@ -117,13 +130,16 @@ export function ZarrOverlay({
                 )
               : 0;
           }
-          let lutTexture = colormapTextures.get(options.device as object);
+          let lutTexture = colormapTextures.byDevice.get(
+            options.device as object,
+          );
           if (!lutTexture) {
             lutTexture = createColormapTexture(
               options.device,
               asset.presentation.colormap,
             );
-            colormapTextures.set(options.device as object, lutTexture);
+            colormapTextures.byDevice.set(options.device as object, lutTexture);
+            colormapTextures.textures.add(lutTexture);
           }
           return {
             texture: options.device.createTexture({
@@ -151,6 +167,6 @@ export function ZarrOverlay({
           ),
       }),
     ];
-  }, [asset, opened, onError, timeIndex]);
+  }, [asset, colormapTextures, opened, onError, timeIndex]);
   return <DeckOverlay layers={layers} />;
 }

@@ -472,6 +472,10 @@ export function MapChapter({
     [chapter.camera],
   );
   const mapAssets = asset ? [asset, ...overlayAssets] : overlayAssets;
+  const mapAssetEntries = mapAssets.map((item) => ({
+    item,
+    key: `${item.id}:${item.href}`,
+  }));
   const zarrStepCount =
     asset?.kind === "zarr" ? (asset.zarr?.timesteps.length ?? 0) : 0;
   const temporal = useTemporalPlayback({
@@ -499,11 +503,15 @@ export function MapChapter({
             ),
           )
         : "";
-  const mapAssetKey = mapAssets
-    .map(({ id, href }) => `${id}:${href}`)
-    .join("|");
-  useEffect(() => setReadyAssets(new Set()), [mapAssetKey]);
-  const dataReady = mapAssets.every((item) => readyAssets.has(item.id));
+  const dataReady = mapAssetEntries.every(({ key }) => readyAssets.has(key));
+  const markReady = useCallback((key: string) => {
+    setReadyAssets((current) => {
+      if (current.has(key)) return current;
+      const next = new Set(current);
+      next.add(key);
+      return next;
+    });
+  }, []);
   const terrainEnabled =
     !!chapter.camera.terrain?.enabled && mapAssets.every(terrainCompatible);
   const programmaticCamera = useMapCamera({
@@ -538,7 +546,7 @@ export function MapChapter({
               }
             : undefined
         }
-        preserveDrawingBuffer={snapshotMode}
+        preserveDrawingBuffer
         onLoad={() => {
           const next = mapRef.current?.getMap() ?? null;
           setMapInstance(next);
@@ -608,21 +616,14 @@ export function MapChapter({
             />
           </Source>
         ) : null}
-        {mapAssets.map((mapAsset) => (
+        {mapAssetEntries.map(({ item: mapAsset, key }) => (
           <AssetLayer
-            key={mapAsset.id}
+            key={key}
             asset={mapAsset}
             onError={reportError}
             onBounds={mapAsset.id === asset?.id ? fitToBounds : undefined}
             map={mapInstance}
-            onReady={() =>
-              setReadyAssets((current) => {
-                if (current.has(mapAsset.id)) return current;
-                const next = new Set(current);
-                next.add(mapAsset.id);
-                return next;
-              })
-            }
+            onReady={() => markReady(key)}
             autoFit={autoFit}
             temporalPosition={mapAsset.id === asset?.id ? temporal.position : 0}
             onTimeBounds={

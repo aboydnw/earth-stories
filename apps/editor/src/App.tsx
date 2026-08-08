@@ -176,7 +176,10 @@ export function App() {
           project &&
           (next.page !== "story" || next.storyId !== project.id) &&
           (saveState === "changed" || saveState === "save-error") &&
-          !(await persist())
+          !(await persist()) &&
+          !window.confirm(
+            "Earth Stories could not save your changes. Leave without saving?",
+          )
         ) {
           if (routeLoadRef.current !== token) return;
           navigate({ page: "story", storyId: project.id, preview: false });
@@ -1119,7 +1122,10 @@ export function App() {
     void (async () => {
       if (
         (saveState === "changed" || saveState === "save-error") &&
-        !(await persist())
+        !(await persist()) &&
+        !window.confirm(
+          "Earth Stories could not save your changes. Leave without saving?",
+        )
       )
         return;
       setProject(null);
@@ -1244,7 +1250,15 @@ export function App() {
     return (
       <div className="story-preview-shell">
         <header className="story-preview-bar">
-          <button type="button" onClick={() => window.history.back()}>
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                { page: "story", storyId: project.id, preview: false },
+                true,
+              )
+            }
+          >
             <ArrowDown className="story-preview-bar__back" size={17} /> Back to
             editor
           </button>

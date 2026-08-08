@@ -1,13 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { TripsLayer } from "@deck.gl/geo-layers";
+import { PathLayer } from "@deck.gl/layers";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { DeckOverlay } from "./DeckOverlay.js";
 import { geoJsonBounds } from "./geoBounds.js";
 import { timestampAtPosition } from "./temporal.js";
 
-interface Track {
+export interface Track {
   path: [number, number][];
-  timestamps: number[];
+  timestamps: number[] | null;
+}
+
+export function normalizeTracks(tracks: Track[]) {
+  return tracks.reduce<Track[]>((result, track) => {
+    if (!Array.isArray(track.path) || track.path.length < 2) return result;
+    if (!Array.isArray(track.timestamps) || !track.timestamps.length) {
+      result.push({ path: track.path, timestamps: null });
+      return result;
+    }
+    const length = Math.min(track.path.length, track.timestamps.length);
+    if (length < 2) return result;
+    const timestamps = track.timestamps.slice(0, length).map(Number);
+    if (timestamps.every(Number.isFinite))
+      result.push({ path: track.path.slice(0, length), timestamps });
+    return result;
+  }, []);
 }
 
 export function TrajectoryOverlay({
@@ -37,23 +54,12 @@ export function TrajectoryOverlay({
       })
       .then((data: { tracks?: Track[] }) => {
         if (!active) return;
-        const valid = (data.tracks ?? []).flatMap((track) => {
-          const length = Math.min(
-            track.path?.length ?? 0,
-            track.timestamps?.length ?? 0,
-          );
-          if (length < 2) return [];
-          const path = track.path.slice(0, length);
-          const timestamps = track.timestamps.slice(0, length).map(Number);
-          return timestamps.every(Number.isFinite)
-            ? [{ path, timestamps }]
-            : [];
-        });
+        const valid = normalizeTracks(data.tracks ?? []);
         setTracks(valid);
         let minimum = Infinity;
         let maximum = -Infinity;
         for (const track of valid) {
-          for (const time of track.timestamps) {
+          for (const time of track.timestamps ?? []) {
             minimum = Math.min(minimum, time);
             maximum = Math.max(maximum, time);
           }
@@ -90,7 +96,7 @@ export function TrajectoryOverlay({
     let minimum = Infinity;
     let maximum = -Infinity;
     for (const track of tracks)
-      for (const time of track.timestamps) {
+      for (const time of track.timestamps ?? []) {
         minimum = Math.min(minimum, time);
         maximum = Math.max(maximum, time);
       }
@@ -99,25 +105,49 @@ export function TrajectoryOverlay({
   const layers = useMemo(() => {
     if (!tracks.length) return [];
     const { minimum, maximum } = timeBounds;
+    const color = asset.presentation.color
+      .match(/[a-f\d]{2}/gi)
+      ?.map((part) => parseInt(part, 16)) as [number, number, number];
+    const timedTracks = tracks.filter(
+      (track): track is Track & { timestamps: number[] } =>
+        track.timestamps !== null,
+    );
+    const staticTracks = tracks.filter((track) => track.timestamps === null);
     return [
-      new TripsLayer<Track>({
-        id: `${asset.id}-trajectory`,
-        data: tracks,
-        getPath: (track) => track.path,
-        getTimestamps: (track) => track.timestamps,
-        getColor: asset.presentation.color
-          .match(/[a-f\d]{2}/gi)
-          ?.map((part) => parseInt(part, 16)) as [number, number, number],
-        currentTime: timestampAtPosition(position, minimum, maximum),
-        trailLength:
-          (asset.trajectory?.trailLength ?? 600) *
-          (Math.abs(maximum) >= 100_000_000_000 ? 1000 : 1),
-        widthMinPixels: 4,
-        opacity: asset.presentation.opacity,
-        capRounded: true,
-        jointRounded: true,
-        fadeTrail: true,
-      }),
+      ...(staticTracks.length
+        ? [
+            new PathLayer<Track>({
+              id: `${asset.id}-trajectory-static`,
+              data: staticTracks,
+              getPath: (track) => track.path,
+              getColor: color,
+              widthMinPixels: 4,
+              opacity: asset.presentation.opacity,
+              capRounded: true,
+              jointRounded: true,
+            }),
+          ]
+        : []),
+      ...(timedTracks.length && Number.isFinite(minimum) && maximum > minimum
+        ? [
+            new TripsLayer<Track & { timestamps: number[] }>({
+              id: `${asset.id}-trajectory`,
+              data: timedTracks,
+              getPath: (track) => track.path,
+              getTimestamps: (track) => track.timestamps,
+              getColor: color,
+              currentTime: timestampAtPosition(position, minimum, maximum),
+              trailLength:
+                (asset.trajectory?.trailLength ?? 600) *
+                (Math.abs(maximum) >= 100_000_000_000 ? 1000 : 1),
+              widthMinPixels: 4,
+              opacity: asset.presentation.opacity,
+              capRounded: true,
+              jointRounded: true,
+              fadeTrail: true,
+            }),
+          ]
+        : []),
     ];
   }, [asset, position, timeBounds, tracks]);
   return <DeckOverlay layers={layers} />;

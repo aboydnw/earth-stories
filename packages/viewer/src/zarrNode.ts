@@ -69,7 +69,8 @@ export async function openZarrVariable(
   const store = await zarr.withMaybeConsolidatedMetadata(
     new zarr.FetchStore(href),
   );
-  const root = await zarr.open(store, { kind: "group" });
+  const root = await zarr.open(store);
+  if (root.kind === "array") return { node: root, ...arrayDimensions(root) };
   const rootAttrs = root.attrs as {
     multiscales?: Array<{
       datasets?: MultiscaleDataset[];
