@@ -1,4 +1,7 @@
-import type { ProjectSource } from "@earth-stories/story-schema";
+import {
+  defaultSourceProvenance,
+  type ProjectSource,
+} from "@earth-stories/story-schema";
 import type { ImportedAsset, RemoteSourceDiscovery } from "./api";
 
 export type ConnectableKind = Exclude<RemoteSourceDiscovery["kind"], "unknown">;
@@ -23,6 +26,7 @@ export function connectedSource(
     attribution: null,
     sizeBytes: discovery?.sizeBytes ?? null,
     delivery: "connected" as const,
+    provenance: defaultSourceProvenance,
   };
   const variable = discovery?.details.variables?.[0];
   const timeDimension =
@@ -57,6 +61,7 @@ export function uploadedSource(
     attribution: null,
     sizeBytes: uploaded.sizeBytes,
     delivery: "included" as const,
+    provenance: defaultSourceProvenance,
   };
   if (extension === "tif" || extension === "tiff")
     return { ...common, kind: "cog", locator: uploaded.path };

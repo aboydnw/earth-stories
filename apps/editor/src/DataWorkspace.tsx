@@ -21,6 +21,7 @@ import type {
   ProjectSource,
   StoryProject,
 } from "@earth-stories/story-schema";
+import { defaultSourceProvenance } from "@earth-stories/story-schema";
 import {
   BrandSpinner,
   ActionButton,
@@ -379,11 +380,16 @@ export function DataWorkspace({
               </div>
             </>
           ) : (
-            <div className="workspace-empty">
-              <Database size={28} weight="duotone" />
-              <strong>Your data library is empty</strong>
-              <span>Import or connect data from a story’s map chapter.</span>
-            </div>
+            <StatePanel
+              title="Data is optional until a visualization needs it"
+              description="Prose and video stories can publish without data. Add a source when you are ready to build a map, chart, or image chapter."
+              actionLabel={eligibleProjects.length ? "Add data" : undefined}
+              onAction={
+                eligibleProjects.length
+                  ? () => openAddPanel("upload")
+                  : undefined
+              }
+            />
           )}
         </section>
       </main>
@@ -676,6 +682,26 @@ function DataMapViewer({
               {item.source.attribution}
             </small>
           ) : null}
+          <dl className="data-map-viewer__provenance">
+            <div>
+              <dt>Publisher</dt>
+              <dd>{item.source.provenance.publisher ?? "Not provided"}</dd>
+            </div>
+            <div>
+              <dt>Data updated</dt>
+              <dd>{item.source.provenance.dataUpdatedAt ?? "Not provided"}</dd>
+            </div>
+            <div>
+              <dt>License</dt>
+              <dd>{item.source.provenance.licenseName ?? "Not provided"}</dd>
+            </div>
+            {item.source.provenance.spatialCoverage ? (
+              <div>
+                <dt>Spatial coverage</dt>
+                <dd>{item.source.provenance.spatialCoverage}</dd>
+              </div>
+            ) : null}
+          </dl>
         </aside>
         <section className="data-map-viewer__map" aria-label="Dataset map">
           {asset ? (
@@ -714,6 +740,7 @@ function exampleDataItem(example: ExampleConnection): DataItem {
     attribution: example.attribution,
     sizeBytes: null,
     delivery: "connected" as const,
+    provenance: defaultSourceProvenance,
   };
   const source: ProjectSource =
     example.kind === "pmtiles"
