@@ -26,7 +26,10 @@ const ramps = {
 
 export type ColormapName = keyof typeof ramps;
 
-export function buildColormapLut(name: ColormapName) {
+export function buildColormapLut(
+  name: ColormapName,
+  options?: { alphaRamp?: boolean },
+) {
   const stops = ramps[name];
   const lut = new Uint8Array(256 * 4);
   for (let index = 0; index < 256; index += 1) {
@@ -43,7 +46,12 @@ export function buildColormapLut(name: ColormapName) {
           255,
       );
     }
-    lut[index * 4 + 3] = index === 0 ? 0 : 255;
+    lut[index * 4 + 3] =
+      index === 0
+        ? 0
+        : options?.alphaRamp
+          ? Math.round(255 * Math.min(1, (index - 1) / 101))
+          : 255;
   }
   return lut;
 }
@@ -51,11 +59,12 @@ export function buildColormapLut(name: ColormapName) {
 export function createColormapTexture(
   device: Device,
   name: ColormapName,
-  filter: "linear" | "nearest" = "linear",
+  options?: { filter?: "linear" | "nearest"; alphaRamp?: boolean },
 ) {
+  const filter = options?.filter ?? "linear";
   return device.createTexture({
     dimension: "2d-array",
-    data: buildColormapLut(name),
+    data: buildColormapLut(name, options),
     format: "rgba8unorm",
     width: 256,
     height: 1,

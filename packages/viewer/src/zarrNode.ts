@@ -8,12 +8,23 @@ export interface OpenedZarrNode {
   variable?: string;
   metadata?: Record<string, unknown>;
   dimensions?: string[];
+  fillValue?: number;
 }
 
 function arrayDimensions(
   node: zarr.Array<zarr.DataType, zarr.Readable>,
-): Pick<OpenedZarrNode, "dimensions"> {
-  return node.dimensionNames ? { dimensions: node.dimensionNames } : {};
+): Pick<OpenedZarrNode, "dimensions" | "fillValue"> {
+  const fill = (node as { fillValue?: unknown }).fillValue;
+  const fillValue =
+    typeof fill === "number"
+      ? fill
+      : typeof fill === "string" || typeof fill === "bigint"
+        ? Number(fill)
+        : undefined;
+  return {
+    ...(node.dimensionNames ? { dimensions: node.dimensionNames } : {}),
+    ...(fillValue !== undefined ? { fillValue } : {}),
+  };
 }
 
 interface MultiscaleDataset {

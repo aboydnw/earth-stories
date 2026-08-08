@@ -31,10 +31,11 @@ export function ZarrOverlay({
   useEffect(() => {
     const map = maps.current?.getMap();
     if (!map) return;
-    const updateTarget = () =>
-      setTargetWidth(
-        Math.min(8192, Math.max(512, 256 * 2 ** Math.floor(map.getZoom()))),
-      );
+    const updateTarget = () => {
+      const worldWidth =
+        512 * 2 ** map.getZoom() * (window.devicePixelRatio || 1);
+      setTargetWidth(Math.max(512, 2 ** Math.ceil(Math.log2(worldWidth))));
+    };
     updateTarget();
     map.on("zoomend", updateTarget);
     return () => {
@@ -43,7 +44,6 @@ export function ZarrOverlay({
   }, [maps]);
   useEffect(() => {
     let active = true;
-    setOpened(null);
     (async () => {
       try {
         const result = await openZarrVariable(
@@ -99,13 +99,15 @@ export function ZarrOverlay({
     );
     const [minimum, maximum] = asset.presentation.rescale ?? [0, 1];
     const range = maximum - minimum || 1;
+    const fillValue = opened.fillValue;
     return [
       new ZarrLayer({
-        id: `${asset.id}-zarr-${timeIndex}`,
+        id: `${asset.id}-zarr`,
         node: opened.node,
         variable: opened.variable,
         selection,
         opacity: asset.presentation.opacity,
+        updateTriggers: { renderTile: [timeIndex] },
         metadata:
           opened.metadata ??
           (asset.zarr.geozarr
@@ -117,41 +119,64 @@ export function ZarrOverlay({
               }
             : undefined),
         getTileData: async (array, options) => {
-          const chunk = (await zarr.get(array, options.sliceSpec)) as {
-            data: ArrayLike<number>;
-          };
-          const normalized = new Uint8Array(options.width * options.height);
-          for (let index = 0; index < normalized.length; index += 1) {
-            const value = Number(chunk.data[index]);
-            normalized[index] = Number.isFinite(value)
-              ? 1 +
-                Math.round(
-                  Math.max(0, Math.min(254, ((value - minimum) / range) * 254)),
-                )
-              : 0;
-          }
-          let lutTexture = colormapTextures.byDevice.get(
-            options.device as object,
-          );
-          if (!lutTexture) {
-            lutTexture = createColormapTexture(
-              options.device,
-              asset.presentation.colormap,
+          try {
+            const chunk = (await zarr.get(array, options.sliceSpec)) as {
+              data: ArrayLike<number>;
+            };
+            const normalized = new Uint8Array(options.width * options.height);
+            for (let index = 0; index < normalized.length; index += 1) {
+              const value = Number(chunk.data[index]);
+              normalized[index] =
+                Number.isFinite(value) && value !== fillValue
+                  ? 1 +
+                    Math.round(
+                      Math.max(
+                        0,
+                        Math.min(254, ((value - minimum) / range) * 254),
+                      ),
+                    )
+                  : 0;
+            }
+            let lutTexture = colormapTextures.byDevice.get(
+              options.device as object,
             );
-            colormapTextures.byDevice.set(options.device as object, lutTexture);
-            colormapTextures.textures.add(lutTexture);
-          }
-          return {
-            texture: options.device.createTexture({
-              data: normalized,
-              format: "r8unorm",
+            if (!lutTexture) {
+              lutTexture = createColormapTexture(
+                options.device,
+                asset.presentation.colormap,
+                { alphaRamp: true },
+              );
+              colormapTextures.byDevice.set(
+                options.device as object,
+                lutTexture,
+              );
+              colormapTextures.textures.add(lutTexture);
+            }
+            return {
+              texture: options.device.createTexture({
+                data: normalized,
+                format: "r8unorm",
+                width: options.width,
+                height: options.height,
+                sampler: {
+                  minFilter: "linear",
+                  magFilter: "linear",
+                  addressModeU: "clamp-to-edge",
+                  addressModeV: "clamp-to-edge",
+                },
+              }) as Texture,
+              lutTexture,
               width: options.width,
               height: options.height,
-            }) as Texture,
-            lutTexture,
-            width: options.width,
-            height: options.height,
-          };
+            };
+          } catch (cause) {
+            onError(
+              cause instanceof Error
+                ? cause.message
+                : "The Zarr data could not be read.",
+            );
+            throw cause;
+          }
         },
         renderTile: (data) => ({
           renderPipeline: [
@@ -159,12 +184,6 @@ export function ZarrOverlay({
             { module: Colormap, props: { colormapTexture: data.lutTexture } },
           ],
         }),
-        onError: (cause: unknown) =>
-          onError(
-            cause instanceof Error
-              ? cause.message
-              : "The Zarr layer could not be rendered.",
-          ),
       }),
     ];
   }, [asset, colormapTextures, opened, onError, timeIndex]);

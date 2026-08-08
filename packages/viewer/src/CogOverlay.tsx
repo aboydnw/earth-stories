@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { GeoTIFF } from "@developmentseed/geotiff";
-import type { ProjectionDefinition } from "@developmentseed/proj";
+import {
+  epsgResolver,
+  parseWkt,
+  type ProjectionDefinition,
+} from "@developmentseed/proj";
 import proj4 from "proj4";
 import { useMap } from "react-map-gl/maplibre";
 import { buildCogLayers } from "./CogLayer.js";
@@ -34,6 +38,10 @@ export function CogOverlay({
   } | null>(null);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const onBoundsRef = useRef(onBounds);
+  onBoundsRef.current = onBounds;
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
   const [rescaleMin, rescaleMax] = asset.presentation.rescale ?? [null, null];
   const preparedKey = `${url}|${asset.presentation.rasterBand}|${rescaleMin}|${rescaleMax}`;
   useEffect(() => {
@@ -42,6 +50,10 @@ export function CogOverlay({
       try {
         const absoluteUrl = new URL(url, window.location.href).toString();
         const source = await GeoTIFF.fromUrl(absoluteUrl);
+        const crs = source.crs;
+        const projection = (
+          typeof crs === "number" ? await epsgResolver(crs) : parseWkt(crs)
+        ) as ProjectionDefinition;
         let rescale: [number, number] | null =
           rescaleMin !== null && rescaleMax !== null
             ? [rescaleMin, rescaleMax]
@@ -52,7 +64,32 @@ export function CogOverlay({
             asset.presentation.rasterBand,
           );
         }
-        if (!cancelled) setPrepared({ key: preparedKey, source, rescale });
+        if (cancelled) return;
+        raster.current = { geotiff: source, projection };
+        const projectionName = `EARTH_STORIES:${asset.id}`;
+        proj4.defs(projectionName, projection as never);
+        const [minX, minY, maxX, maxY] = source.bbox;
+        const corners = (
+          [
+            [minX, minY],
+            [maxX, minY],
+            [maxX, maxY],
+            [minX, maxY],
+          ] as Array<[number, number]>
+        ).map(
+          (corner) =>
+            proj4(projectionName, "EPSG:4326", corner) as [number, number],
+        );
+        const lons = corners.map((corner) => corner[0]);
+        const lats = corners.map((corner) => corner[1]);
+        onBoundsRef.current?.([
+          Math.min(...lons),
+          Math.min(...lats),
+          Math.max(...lons),
+          Math.max(...lats),
+        ]);
+        onReadyRef.current?.();
+        setPrepared({ key: preparedKey, source, rescale });
       } catch (cause) {
         if (!cancelled)
           onErrorRef.current(
@@ -68,40 +105,12 @@ export function CogOverlay({
     // preparedKey encodes every input that should trigger a re-open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preparedKey]);
-  const onLoad = useCallback(
-    (
-      geotiff: GeoTIFF,
-      projection: ProjectionDefinition,
-      geographicBounds: {
-        west: number;
-        south: number;
-        east: number;
-        north: number;
-      },
-    ) => {
-      raster.current = { geotiff, projection };
-      onBounds?.([
-        geographicBounds.west,
-        geographicBounds.south,
-        geographicBounds.east,
-        geographicBounds.north,
-      ]);
-      onReady?.();
-    },
-    [onBounds, onReady],
-  );
   const layers = useMemo(
     () =>
       prepared?.key === preparedKey
-        ? buildCogLayers(
-            asset,
-            prepared.source,
-            onError,
-            onLoad,
-            prepared.rescale,
-          )
+        ? buildCogLayers(asset, prepared.source, onError, prepared.rescale)
         : [],
-    [asset, onError, onLoad, prepared, preparedKey],
+    [asset, onError, prepared, preparedKey],
   );
   useEffect(() => {
     const map = maps.current?.getMap();

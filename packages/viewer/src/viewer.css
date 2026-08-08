@@ -179,7 +179,7 @@
 .story-chapter--map .story-map {
   grid-column: 1 / -1;
   width: 100%;
-  min-height: clamp(500px, 68dvh, 760px);
+  height: clamp(500px, 68dvh, 760px);
 }
 .story-map-boundary {
   grid-column: 1 / -1;

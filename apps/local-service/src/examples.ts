@@ -41,7 +41,7 @@ export const exampleConnections: ExampleConnection[] = [
     locator:
       "https://oin-hotosm-temp.s3.amazonaws.com/63eb7815ca43600005f4d91e/0/63eb7815ca43600005f4d91f.tif",
     attribution: "OpenAerialMap contributors, CC BY 4.0",
-    camera: { center: [36.15, 36.24], zoom: 14, bearing: 0, pitch: 0 },
+    camera: { center: [36.1493, 36.1977], zoom: 16, bearing: 0, pitch: 0 },
   },
   {
     id: "hatay-turinclu-cog",

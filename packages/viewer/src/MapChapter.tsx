@@ -68,6 +68,18 @@ function ensurePmtilesProtocol() {
   maplibregl.addProtocol("pmtiles", protocol.tile);
 }
 
+const pmtilesArchives = new globalThis.Map<string, PMTiles>();
+function ensurePmtilesArchive(url: string) {
+  ensurePmtilesProtocol();
+  let archive = pmtilesArchives.get(url);
+  if (!archive) {
+    archive = new PMTiles(url);
+    pmtilesArchives.set(url, archive);
+    protocol?.add(archive);
+  }
+  return archive;
+}
+
 function absoluteAssetUrl(href: string) {
   return /^https?:\/\//i.test(href)
     ? href
@@ -156,13 +168,9 @@ function AssetLayer({
   const assetUrl = useMemo(() => absoluteAssetUrl(asset.href), [asset.href]);
   useEffect(() => {
     let active = true;
-    let registeredArchive: PMTiles | null = null;
     const controller = new AbortController();
     if (asset.kind === "pmtiles") {
-      ensurePmtilesProtocol();
-      const archive = new PMTiles(assetUrl);
-      registeredArchive = archive;
-      protocol?.add(archive);
+      const archive = ensurePmtilesArchive(assetUrl);
       Promise.all([archive.getMetadata(), archive.getHeader()])
         .then(([raw, header]) => {
           const metadata = raw as { vector_layers?: Array<{ id?: unknown }> };
@@ -215,11 +223,6 @@ function AssetLayer({
     return () => {
       active = false;
       controller.abort();
-      if (registeredArchive && protocol) {
-        const key = registeredArchive.source.getKey();
-        if (protocol.tiles.get(key) === registeredArchive)
-          protocol.tiles.delete(key);
-      }
     };
   }, [asset.kind, assetUrl, onBounds, onError, reportReady]);
   useEffect(() => {

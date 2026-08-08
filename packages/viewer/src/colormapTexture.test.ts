@@ -10,6 +10,15 @@ describe("colormapTexture", () => {
     expect(lut[1023]).toBe(255);
   });
 
+  it("fades low values to transparent when alphaRamp is set", () => {
+    const lut = buildColormapLut("viridis", { alphaRamp: true });
+    expect(lut[3]).toBe(0);
+    expect(lut[7]).toBe(0);
+    expect(lut[4 * 52 + 3]).toBeGreaterThan(100);
+    expect(lut[4 * 102 + 3]).toBe(255);
+    expect(lut[1023]).toBe(255);
+  });
+
   it("creates the 2d-array texture required by the raster colormap shader", () => {
     const createTexture = vi.fn(() => ({ id: "lut" }));
     const texture = createColormapTexture(
