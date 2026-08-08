@@ -12,6 +12,30 @@ resources; included and connected asset counts; estimated included data size;
 and map chapters that the archive will preserve as snapshots. The compiler
 remains authoritative, and the interface cannot bypass blocking findings.
 
+Browser guidance and server preflight share stable structural, narrative, and
+provenance finding IDs. The server adds filesystem containment, missing-file,
+remote reachability, size, dependency, and portability checks. Missing
+provenance is a recommendation in this release and never blocks a build.
+
+## Source provenance
+
+Every compiled publication asset contains a normalized provenance object with
+publisher, source URL, license name and URL, data update and access dates,
+author-supplied freshness window, temporal and spatial coverage, and ordered
+plain-language transformations. Existing concise `attribution` remains in the
+manifest and on map canvases.
+
+The reader derives active filters from the asset presentation contract,
+including property/category filters, raster band and rescale, Zarr variable and
+selection, and applicable point styling. Those display choices are not copied
+into authored provenance.
+
+Earth Stories reports data as stale only when an author or source supplies both
+`dataUpdatedAt` and `staleAfterDays`. It does not fetch or invent update dates,
+freshness policies, licenses, or coverage. Interactive manifests, folder/ZIP
+outputs, embeds, and archival HTML retain the same authored values; archival
+HTML also prints them beside each captured or unavailable visualization.
+
 ## Publication profiles
 
 Choose a profile in the publication workshop. Profiles are release defaults,

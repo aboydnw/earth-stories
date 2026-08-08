@@ -18,6 +18,8 @@ geospatial authoring tool; it does not recreate that system independently.
   reader themes, authored colors, and rendering constraints.
 - [Dependency policy](dependencies.md) records what works locally and what may
   require a network connection.
+- [UX improvement backlog](../ux-improvement-backlog.md) preserves researched
+  product opportunities that have not yet become established patterns.
 
 ## Source-of-truth order
 
