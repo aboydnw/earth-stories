@@ -1,5 +1,6 @@
 export * from "./build.js";
 export * from "./compile.js";
+export * from "./readiness.js";
 export * from "./archive.js";
 export * from "./embed.js";
 export * from "./preflight.js";

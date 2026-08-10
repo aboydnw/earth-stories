@@ -34,10 +34,16 @@ export {
   InspectorSection,
   ProgressPresentation,
   PublicationFinding,
+  WorkflowGuide,
+  GuidancePrompt,
+  ReadinessSummary,
   SaveStatus,
   StatusBadge,
   type ProgressStage,
   type SaveLifecycle,
+  type WorkflowStage,
+  type WorkflowStageState,
+  type ReadinessStatus,
 } from "./ProductPatterns.js";
 
 export function EarthStoriesProvider({ children }: PropsWithChildren) {

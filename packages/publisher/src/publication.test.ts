@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { storyProjectSchema } from "@earth-stories/story-schema";
 
 vi.mock("node:dns/promises", () => ({
   lookup: vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]),
@@ -21,6 +22,7 @@ import { buildLatestPublication, buildPublication } from "./build.js";
 import { compileProject } from "./compile.js";
 import { createEmbedSnippet } from "./embed.js";
 import { preflightPublication } from "./preflight.js";
+import { deriveAuthoringReadiness } from "./readiness.js";
 import { verifyPublication } from "./verify.js";
 
 const temporary: string[] = [];
@@ -236,6 +238,7 @@ describe("publication hardening", () => {
       delivery: "connected",
       href: "javascript:alert(1)",
       attribution: null,
+      provenance: manifest.assets[0]!.provenance,
       sizeBytes: null,
       tileType: "raster",
       presentation: manifest.assets[0]!.presentation,
@@ -334,5 +337,64 @@ describe("publication hardening", () => {
     expect(await readFile(join(output, "assets", "rain.tif"), "utf8")).toBe(
       "cog-data",
     );
+  });
+
+  it("shares local findings and preserves warning-only provenance in folder and archive outputs", async () => {
+    const { root, project } = await setup();
+    const story = await readProject(project);
+    story.sources[0].provenance = {
+      publisher: "River Observatory",
+      sourceUrl: "https://example.org/survey",
+      licenseName: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      dataUpdatedAt: "2026-08-01",
+      accessedAt: "2026-08-08",
+      staleAfterDays: 365,
+      temporalCoverage: { start: "2025-01-01", end: "2026-08-01" },
+      spatialCoverage: "Survey reach",
+      transformations: ["Removed duplicate observations"],
+    };
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+    const normalized = storyProjectSchema.parse(story);
+    const local = deriveAuthoringReadiness(normalized, {
+      now: new Date("2026-08-08T00:00:00Z"),
+    });
+    const server = await preflightPublication(project);
+    expect(server.ready).toBe(true);
+    for (const finding of local.findings)
+      expect(server.issues.map(({ id }) => id)).toContain(finding.id);
+
+    const copcManifest = {
+      ...local.manifest!,
+      assets: local.manifest!.assets.map((asset, index) =>
+        index === 0
+          ? {
+              ...asset,
+              kind: "copc" as const,
+              copc: { colorMode: "classification" as const, pointSize: 2 },
+            }
+          : asset,
+      ),
+    };
+    const copcArchive = await buildArchivalHtml({
+      project: normalized,
+      manifest: copcManifest,
+      projectDirectory: project,
+      exportedAt: "2026-08-08T00:00:00Z",
+    });
+    expect(copcArchive).toContain("Point colors: classification");
+
+    const output = join(root, "provenance-output");
+    await buildPublication({
+      projectDirectory: project,
+      outputDirectory: output,
+    });
+    const manifest = JSON.parse(
+      await readFile(join(output, "publication.json"), "utf8"),
+    );
+    expect(manifest.assets[0].provenance).toEqual(story.sources[0].provenance);
+    const archive = await readFile(join(output, "archival.html"), "utf8");
+    expect(archive).toContain("River Observatory");
+    expect(archive).toContain("Removed duplicate observations");
   });
 });

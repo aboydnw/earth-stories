@@ -40,6 +40,20 @@ the product supports it.
 Preflight separates blocking errors, portability/network warnings, and
 information. Build progress uses real stages. A failed build preserves the
 previous publication. Success identifies the local path or downloaded result.
+Use **Ready** only for current server checks with no errors or warnings, **Needs
+review** for recommendations or checks not yet run, and **Blocked** for errors.
+Stale cached checks stay visible as historical context but never authorize a
+build.
+
+## Authoring guidance — Provisional
+
+`Story → Chapters → Data → Preview → Publish` is a derived, non-linear view of
+the current project, never a persisted wizard. Every stage remains clickable.
+Data is optional when no chapter references a source; an empty source library
+alone is not incomplete. Show one contextual next action at a time. Unsaved or
+failed saves take precedence over ordinary guidance, followed by structural
+story/chapter blockers, required data, preview review, server publication
+blockers, warnings, and publish.
 
 ## Map and reader controls — Established principles
 
@@ -47,6 +61,11 @@ Map loading, unavailable sources, attribution, network dependency, animation,
 and reduced-motion behavior remain explicit. Map controls carry their own
 legible surface over changing basemaps and stay at the map-control layer. Story
 prose becomes readable without waiting for map code.
+
+Concise attribution remains visible on the map for legal and visual context.
+Expanded source, license, coverage, transformation, freshness-policy, and
+active-filter details live in a keyboard-accessible disclosure beside the
+visualization and remain readable when the visualization cannot load.
 
 ## Content
 

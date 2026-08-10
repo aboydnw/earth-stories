@@ -121,6 +121,183 @@ select:focus-visible {
   padding: 12px;
   border-radius: var(--es-radius-control);
 }
+.es-workflow {
+  min-width: 0;
+  overflow-x: auto;
+  background: var(--es-bg);
+  border-bottom: 1px solid var(--es-border);
+}
+.es-workflow ol {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(132px, 1fr));
+  min-width: 660px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.es-workflow li {
+  min-width: 0;
+  border-right: 1px solid var(--es-border);
+}
+.es-workflow li:last-child {
+  border-right: 0;
+}
+.es-workflow button {
+  width: 100%;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--es-fg);
+  text-align: left;
+  cursor: pointer;
+}
+.es-workflow button:hover {
+  background: var(--es-bg-subtle);
+}
+.es-workflow button:focus-visible,
+.es-guidance button:focus-visible {
+  outline: 2px solid var(--es-action);
+  outline-offset: -3px;
+}
+.es-workflow__marker {
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--es-border-emphasized);
+  border-radius: 50%;
+}
+.es-workflow [data-state="complete"] .es-workflow__marker {
+  border-color: var(--es-success);
+  background: var(--es-success);
+}
+.es-workflow [data-state="current"] .es-workflow__marker {
+  border-color: var(--es-action);
+  background: var(--es-action);
+}
+.es-workflow [data-state="blocked"] .es-workflow__marker {
+  border-color: var(--es-danger);
+}
+.es-workflow__copy {
+  display: grid;
+  min-width: 0;
+}
+.es-workflow__copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.es-workflow__copy small {
+  color: var(--es-fg-muted);
+}
+.es-workflow__state {
+  font:
+    500 10px/1.2 "DM Mono",
+    monospace;
+  color: var(--es-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.es-guidance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--es-border);
+  background: var(--es-bg-raised);
+}
+.es-guidance[data-tone="warning"] {
+  background: var(--es-warning-bg);
+  color: var(--es-warning);
+}
+.es-guidance[data-tone="danger"] {
+  background: var(--es-danger-bg);
+  color: var(--es-danger);
+}
+.es-guidance p {
+  margin: 0;
+  text-wrap: pretty;
+}
+.es-guidance button {
+  flex: 0 0 auto;
+}
+.es-readiness {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+  background: var(--es-bg-raised);
+  overflow: hidden;
+}
+.es-readiness > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.es-readiness > div:first-child > div {
+  display: grid;
+}
+.es-readiness small {
+  color: var(--es-fg-muted);
+}
+.es-readiness__indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--es-border-emphasized);
+}
+.es-readiness[data-status="ready"] .es-readiness__indicator {
+  background: var(--es-success);
+}
+.es-readiness[data-status="review"] .es-readiness__indicator {
+  background: var(--es-warning);
+}
+.es-readiness[data-status="blocked"] .es-readiness__indicator {
+  background: var(--es-danger);
+}
+.es-readiness__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.es-readiness__metrics {
+  color: var(--es-fg-muted);
+  font-size: 12px;
+}
+.es-readiness__tone {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--es-border);
+}
+.es-readiness__tone[data-tone="success"] {
+  background: var(--es-success);
+}
+.es-readiness__tone[data-tone="warning"] {
+  background: var(--es-warning);
+}
+.es-readiness__tone[data-tone="danger"] {
+  background: var(--es-danger);
+}
+@media (max-width: 720px) {
+  .es-guidance {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .es-guidance button {
+    align-self: flex-start;
+  }
+  .es-workflow__state {
+    display: none;
+  }
+}
 .is-spinning {
   animation: es-spin 900ms linear infinite;
 }

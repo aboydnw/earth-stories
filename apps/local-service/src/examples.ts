@@ -1,4 +1,7 @@
-import type { StoryProject } from "@earth-stories/story-schema";
+import {
+  createDefaultSourceProvenance,
+  type StoryProject,
+} from "@earth-stories/story-schema";
 
 const created = "2026-08-05T00:00:00.000Z";
 const basemap = {
@@ -196,6 +199,7 @@ const antakya: StoryProject = {
       attribution: exampleConnection("antakya-aerial-cog").attribution,
       sizeBytes: null,
       delivery: "connected",
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.92,
         color: "#cf3f02",
@@ -280,6 +284,7 @@ const boundaries: StoryProject = {
       attribution: exampleConnection("countries-pmtiles").attribution,
       sizeBytes: null,
       delivery: "connected",
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.82,
         color: "#cf3f02",
@@ -305,6 +310,7 @@ const boundaries: StoryProject = {
       attribution: "Earth Stories, computed from the archive header",
       sizeBytes: null,
       delivery: "included",
+      provenance: createDefaultSourceProvenance(),
     },
     {
       id: "everest-relief",
@@ -314,6 +320,7 @@ const boundaries: StoryProject = {
       attribution: "Copernicus DEM GLO-30 / ESA, rendered by Earth Stories",
       sizeBytes: null,
       delivery: "included",
+      provenance: createDefaultSourceProvenance(),
     },
     {
       id: "everest-elevation",
@@ -323,6 +330,7 @@ const boundaries: StoryProject = {
       attribution: "Copernicus DEM GLO-30 / ESA, computed by Earth Stories",
       sizeBytes: null,
       delivery: "included",
+      provenance: createDefaultSourceProvenance(),
     },
   ],
   chapters: [
@@ -431,6 +439,7 @@ const pointCloud: StoryProject = {
       attribution: "Hobu Inc.",
       sizeBytes: null,
       delivery: "connected",
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         ...{
           opacity: 0.9,
@@ -458,6 +467,7 @@ const pointCloud: StoryProject = {
       attribution: "Hobu Inc., computed by Earth Stories",
       sizeBytes: null,
       delivery: "included",
+      provenance: createDefaultSourceProvenance(),
     },
     {
       id: "autzen-scatter",
@@ -467,6 +477,7 @@ const pointCloud: StoryProject = {
       attribution: "Hobu Inc., rendered by Earth Stories",
       sizeBytes: null,
       delivery: "included",
+      provenance: createDefaultSourceProvenance(),
     },
   ],
   chapters: [
@@ -593,6 +604,7 @@ const temporalFields: StoryProject = {
       attribution: "Fields of The World / Source Cooperative",
       sizeBytes: null,
       delivery: "connected",
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.82,
         color: "#cf3f02",
@@ -619,6 +631,7 @@ const temporalFields: StoryProject = {
         "Fields of The World / Source Cooperative, rendered by Earth Stories",
       sizeBytes: null,
       delivery: "included",
+      provenance: createDefaultSourceProvenance(),
     },
     {
       id: "fields-probability",
@@ -629,6 +642,7 @@ const temporalFields: StoryProject = {
         "Fields of The World / Source Cooperative, computed by Earth Stories",
       sizeBytes: null,
       delivery: "included",
+      provenance: createDefaultSourceProvenance(),
     },
   ],
   chapters: [
@@ -721,6 +735,7 @@ const richMedia: StoryProject = {
       attribution: exampleConnection("regions-pmtiles").attribution,
       sizeBytes: null,
       delivery: "connected",
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.72,
         color: "#f0a93b",
@@ -803,6 +818,7 @@ const stormTrack: StoryProject = {
       attribution: exampleConnection("regions-pmtiles").attribution,
       sizeBytes: null,
       delivery: "connected",
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.55,
         color: "#7a8a99",
@@ -829,6 +845,7 @@ const stormTrack: StoryProject = {
       attribution: "NOAA National Hurricane Center, HURDAT2",
       sizeBytes: null,
       delivery: "included",
+      provenance: createDefaultSourceProvenance(),
       presentation: {
         opacity: 0.95,
         color: "#d1274a",
@@ -854,6 +871,7 @@ const stormTrack: StoryProject = {
       attribution: "NOAA National Hurricane Center, HURDAT2",
       sizeBytes: null,
       delivery: "included",
+      provenance: createDefaultSourceProvenance(),
     },
   ],
   chapters: [

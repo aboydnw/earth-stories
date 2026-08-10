@@ -6,6 +6,9 @@ import {
   SaveStatus,
   StatePanel,
   StatusBadge,
+  GuidancePrompt,
+  ReadinessSummary,
+  WorkflowGuide,
 } from "./index";
 
 const meta = { title: "Patterns/Product states" } satisfies Meta;
@@ -112,5 +115,39 @@ export const FindingsAndBadges: Story = {
         message="The archival copy preserves interactive maps as attributed snapshots."
       />
     </Stack>
+  ),
+};
+
+export const AuthoringGuidance: Story = {
+  render: () => (
+    <Grid gap="3" maxW="1100px">
+      <WorkflowGuide
+        stages={[
+          {
+            id: "story",
+            label: "A very long story details stage",
+            state: "complete",
+          },
+          { id: "chapters", label: "Chapters", state: "complete" },
+          { id: "data", label: "Data", state: "optional" },
+          { id: "preview", label: "Preview", state: "current" },
+          { id: "publish", label: "Publish", state: "blocked" },
+        ]}
+        onStageSelect={() => undefined}
+      />
+      <GuidancePrompt actionLabel="See as a reader" onAction={() => undefined}>
+        Review the latest saved revision before publishing publicly.
+      </GuidancePrompt>
+      <ReadinessSummary status="blocked" errors={12} warnings={23} />
+      <ReadinessSummary status="review" errors={0} warnings={4} loading stale />
+      <div style={{ maxWidth: 360 }}>
+        <ReadinessSummary
+          status="ready"
+          errors={0}
+          warnings={0}
+          metrics="8 chapters · 3 sources"
+        />
+      </div>
+    </Grid>
   ),
 };

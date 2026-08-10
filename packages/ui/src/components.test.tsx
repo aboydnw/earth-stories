@@ -16,7 +16,10 @@ import {
   EarthStoriesProvider,
   FormField,
   IconButton,
+  GuidancePrompt,
+  ReadinessSummary,
   TextInput,
+  WorkflowGuide,
 } from "./index";
 
 afterEach(cleanup);
@@ -94,5 +97,47 @@ describe("shared product controls", () => {
     expect(screen.getByRole("alertdialog")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Remove story" }));
     expect(confirm).toHaveBeenCalledOnce();
+  });
+
+  it("renders workflow stages as ordered, actionable navigation", async () => {
+    const select = vi.fn();
+    product(
+      <WorkflowGuide
+        stages={[
+          { id: "story", label: "Story", state: "complete" },
+          { id: "data", label: "Data", state: "optional" },
+          { id: "preview", label: "Preview", state: "current" },
+        ]}
+        onStageSelect={select}
+      />,
+    );
+    expect(
+      screen.getByRole("navigation", { name: "Authoring progress" }),
+    ).toBeTruthy();
+    expect(document.querySelector("ol")?.children).toHaveLength(3);
+    expect(
+      screen
+        .getByRole("button", { name: /Preview/ })
+        .getAttribute("aria-current"),
+    ).toBe("step");
+    await userEvent.tab();
+    await userEvent.keyboard("{Enter}");
+    expect(select).toHaveBeenCalledWith("story");
+  });
+
+  it("keeps guidance to one primary action and exposes readiness counts", () => {
+    product(
+      <>
+        <GuidancePrompt actionLabel="Review preview" onAction={() => undefined}>
+          The saved story changed after your last review.
+        </GuidancePrompt>
+        <ReadinessSummary status="review" errors={12} warnings={23} stale />
+      </>,
+    );
+    expect(screen.getByRole("button", { name: "Review preview" })).toBeTruthy();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByText("12 errors")).toBeTruthy();
+    expect(screen.getByText("23 warnings")).toBeTruthy();
+    expect(screen.getByText(/refresh required/)).toBeTruthy();
   });
 });

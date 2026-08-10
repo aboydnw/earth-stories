@@ -24,6 +24,11 @@ state or layout. A wrapper that merely shortens syntax is not a contract.
   hierarchy and disclosure.
 - `WorkspaceRow` and `DataSourceRow`: keyboard-operable collection rows with
   accessible metadata and optional actions.
+- `WorkflowGuide`: ordered, clickable, non-linear authoring stages with
+  complete, current, optional, and blocked states.
+- `GuidancePrompt`: one sentence and exactly one recovery or next action.
+- `ReadinessSummary`: Ready, Needs review, or Blocked with explicit error and
+  warning counts and optional compact metrics.
 
 ## Provisional
 
@@ -33,6 +38,9 @@ state or layout. A wrapper that merely shortens syntax is not a contract.
   canvas, and overlay behavior are domain-specific.
 - Data conversion configuration remains editor-owned; its progress and feedback
   presentations are shared.
+- `VisualizationProvenance` is viewer-owned editorial UI. It consumes the
+  publication asset contract and viewer theme variables; it must not import
+  Chakra or product tokens.
 
 ## Local layout CSS
 

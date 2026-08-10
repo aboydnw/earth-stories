@@ -4,9 +4,62 @@ const httpUrlSchema = z
   .string()
   .url()
   .refine((value) => {
-    const protocol = new URL(value).protocol;
-    return protocol === "http:" || protocol === "https:";
+    const url = new URL(value);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username &&
+      !url.password
+    );
   }, "Use an HTTP or HTTPS URL");
+
+const isoDateOrDateTimeSchema = z.union([
+  z.string().date(),
+  z.string().datetime({ offset: true }),
+]);
+
+export const sourceProvenanceSchema = z.object({
+  publisher: z.string().nullable().default(null),
+  sourceUrl: httpUrlSchema.nullable().default(null),
+  licenseName: z.string().nullable().default(null),
+  licenseUrl: httpUrlSchema.nullable().default(null),
+  dataUpdatedAt: isoDateOrDateTimeSchema.nullable().default(null),
+  accessedAt: isoDateOrDateTimeSchema.nullable().default(null),
+  staleAfterDays: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(36_500)
+    .nullable()
+    .default(null),
+  temporalCoverage: z
+    .object({
+      start: isoDateOrDateTimeSchema.nullable().default(null),
+      end: isoDateOrDateTimeSchema.nullable().default(null),
+    })
+    .nullable()
+    .default(null),
+  spatialCoverage: z.string().nullable().default(null),
+  transformations: z.array(z.string()).default(() => []),
+});
+
+export type SourceProvenance = z.infer<typeof sourceProvenanceSchema>;
+
+export function createDefaultSourceProvenance(): SourceProvenance {
+  return {
+    publisher: null,
+    sourceUrl: null,
+    licenseName: null,
+    licenseUrl: null,
+    dataUpdatedAt: null,
+    accessedAt: null,
+    staleAfterDays: null,
+    temporalCoverage: null,
+    spatialCoverage: null,
+    transformations: [],
+  };
+}
+
+export const defaultSourceProvenance = createDefaultSourceProvenance();
 
 export const cameraSchema = z.object({
   center: z.tuple([z.number(), z.number()]),
@@ -26,6 +79,7 @@ const sourceBaseSchema = z.object({
   attribution: z.string().nullable().default(null),
   sizeBytes: z.number().int().nonnegative().nullable().default(null),
   delivery: z.enum(["auto", "included", "connected"]).default("auto"),
+  provenance: sourceProvenanceSchema.default(createDefaultSourceProvenance),
   presentation: z
     .object({
       opacity: z.number().min(0).max(1).default(0.85),

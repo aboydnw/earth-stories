@@ -24,10 +24,12 @@ export interface ImportedAsset {
 }
 export interface PreflightIssue {
   id: string;
+  area: "story" | "chapters" | "data" | "preview" | "publish";
   severity: "error" | "warning" | "info";
   message: string;
   resolution?: string;
   resourceId?: string;
+  chapterId?: string;
 }
 export interface PublicationPreflight {
   ready: boolean;

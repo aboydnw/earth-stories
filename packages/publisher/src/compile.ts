@@ -155,6 +155,7 @@ function compileAsset(
     ...source.presentation,
   };
   const specialized = (value?: Partial<PublicationAsset>) => ({
+    provenance: source.provenance,
     zarr: null,
     trajectory: null,
     copc: null,

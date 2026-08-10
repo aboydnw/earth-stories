@@ -10,18 +10,16 @@ import {
   X,
 } from "@phosphor-icons/react";
 import type { StoryProject } from "@earth-stories/story-schema";
+import type { AuthoringReadiness } from "@earth-stories/publisher/readiness";
 import {
   ActionButton,
   ProgressPresentation,
   PublicationFinding,
+  ReadinessSummary,
   StatusNotice,
 } from "@earth-stories/ui";
-import {
-  exportProject,
-  getPublicationPreflight,
-  type ExportFormat,
-  type PublicationPreflight,
-} from "./api";
+import { exportProject, type ExportFormat } from "./api";
+import type { PublicationReadinessState } from "./usePublicationReadiness";
 import {
   captureMapSnapshots,
   downloadAnimatedMapCaptures,
@@ -36,6 +34,10 @@ interface Props {
   onProfileChange: (
     profile: StoryProject["publication"]["profile"],
   ) => Promise<StoryProject | null>;
+  preflightState: PublicationReadinessState;
+  onRefreshPreflight: () => void;
+  localReadiness: AuthoringReadiness;
+  unsaved: boolean;
 }
 const formats: Array<{
   id: ExportFormat;
@@ -81,12 +83,17 @@ export function PublishPanel({
   onClose,
   onBeforeExport,
   onProfileChange,
+  preflightState,
+  onRefreshPreflight,
+  localReadiness,
+  unsaved,
 }: Props) {
-  const [preflight, setPreflight] = useState<PublicationPreflight | null>(null);
+  const preflight = preflightState.result;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [snippet, setSnippet] = useState("");
+  const [resultBuildId, setResultBuildId] = useState<string | null>(null);
   const [publicationUrl, setPublicationUrl] = useState("");
   const [busyLabel, setBusyLabel] = useState(
     "Building and validating the latest publication…",
@@ -98,11 +105,7 @@ export function PublishPanel({
     if (!open) return;
     setError(null);
     setResult(null);
-    getPublicationPreflight(project.id)
-      .then(setPreflight)
-      .catch((cause: unknown) =>
-        setError(cause instanceof Error ? cause.message : "Preflight failed"),
-      );
+    setResultBuildId(null);
   }, [open, project.id, project.metadata.updated]);
   useEffect(() => {
     if (!open || !panelRef.current) return;
@@ -149,6 +152,7 @@ export function PublishPanel({
     setLoading(true);
     setError(null);
     setResult(null);
+    setResultBuildId(null);
     setBusyLabel("Building and validating the latest publication…");
     try {
       const saved = await onBeforeExport();
@@ -158,6 +162,7 @@ export function PublishPanel({
         mapSnapshots,
         publicationUrl,
       });
+      setResultBuildId(response.buildId ?? null);
       if (response.blob && response.filename) {
         const href = URL.createObjectURL(response.blob);
         const anchor = document.createElement("a");
@@ -174,7 +179,7 @@ export function PublishPanel({
           "Embed code is ready. Deploy the latest publication folder before using it.",
         );
       }
-      setPreflight(await getPublicationPreflight(saved.id));
+      onRefreshPreflight();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Export failed");
     } finally {
@@ -184,10 +189,17 @@ export function PublishPanel({
   async function copySnippet() {
     if (snippet) await navigator.clipboard.writeText(snippet);
   }
-  const errors =
-    preflight?.issues.filter((issue) => issue.severity === "error") ?? [];
-  const warnings =
-    preflight?.issues.filter((issue) => issue.severity === "warning") ?? [];
+  const currentServerResult =
+    !unsaved && preflightState.status === "ready" ? preflight : null;
+  const findings = currentServerResult?.issues ?? localReadiness.findings;
+  const errors = findings.filter((issue) => issue.severity === "error");
+  const warnings = findings.filter((issue) => issue.severity === "warning");
+  const information = findings.filter((issue) => issue.severity === "info");
+  const readinessStatus = errors.length
+    ? "blocked"
+    : warnings.length || !currentServerResult
+      ? "review"
+      : "ready";
   return (
     <div className="publish-backdrop" role="presentation">
       <section
@@ -226,6 +238,31 @@ export function PublishPanel({
             <span>connected assets</span>
           </div>
         </div>
+        <ReadinessSummary
+          status={readinessStatus}
+          errors={errors.length}
+          warnings={warnings.length}
+          loading={preflightState.status === "loading" && !preflight}
+          stale={
+            unsaved ||
+            preflightState.status === "stale" ||
+            (preflightState.status === "loading" && Boolean(preflight))
+          }
+        />
+        <ActionButton
+          variant="ghost"
+          disabled={unsaved || preflightState.status === "loading"}
+          onClick={onRefreshPreflight}
+        >
+          {unsaved
+            ? "Save before running publication checks"
+            : preflightState.status === "idle"
+              ? "Run publication checks"
+              : "Refresh publication checks"}
+        </ActionButton>
+        {preflightState.error ? (
+          <StatusNotice tone="danger">{preflightState.error}</StatusNotice>
+        ) : null}
         <fieldset className="publication-profiles">
           <legend>Publication profile</legend>
           {(
@@ -249,15 +286,12 @@ export function PublishPanel({
                 name="publication-profile"
                 value={id}
                 checked={project.publication.profile === id}
-                disabled={loading}
+                disabled={loading || unsaved}
                 onChange={() => {
                   setLoading(true);
                   setError(null);
                   void onProfileChange(id)
-                    .then(async (saved) => {
-                      if (saved)
-                        setPreflight(await getPublicationPreflight(saved.id));
-                    })
+                    .then(() => undefined)
                     .catch((cause: unknown) =>
                       setError(
                         cause instanceof Error
@@ -305,12 +339,30 @@ export function PublishPanel({
             ))}
           </div>
         ) : null}
+        {information.length ? (
+          <div className="publish-issues publish-issues--info">
+            <h3>Publication details</h3>
+            {information.map((issue) => (
+              <PublicationFinding
+                key={issue.id}
+                severity="info"
+                message={issue.message}
+                resolution={issue.resolution}
+              />
+            ))}
+          </div>
+        ) : null}
         <div className="publish-formats">
           {formats.map(({ id, title, description, icon: Icon }) => (
             <ActionButton
               variant="surface"
               key={id}
-              disabled={loading || !preflight?.ready}
+              disabled={
+                loading ||
+                unsaved ||
+                preflightState.status !== "ready" ||
+                !preflight?.ready
+              }
               onClick={() => void run(id)}
             >
               <Icon size={22} weight="duotone" />
@@ -408,9 +460,15 @@ export function PublishPanel({
           </StatusNotice>
         ) : null}
         {result ? (
-          <StatusNotice className="publish-result" tone="success">
-            <CheckCircle weight="fill" /> {result}
-          </StatusNotice>
+          <div className="publish-completion">
+            <StatusNotice className="publish-result" tone="success">
+              <CheckCircle weight="fill" /> {result}
+            </StatusNotice>
+            <p>
+              {resultBuildId ? `Build ${resultBuildId}. ` : ""}Open or deploy
+              the output, then verify it at its public URL.
+            </p>
+          </div>
         ) : null}
         {loading ? (
           <div className="publish-progress">

@@ -1,13 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Copy,
   ArrowDown,
   ArrowUp,
   BookOpen,
   Database,
-  Export,
-  CaretDown,
-  Eye,
   FileArrowUp,
   FloppyDisk,
   Link,
@@ -18,7 +15,7 @@ import {
   PencilSimple,
   Trash,
 } from "@phosphor-icons/react";
-import { compileProject } from "@earth-stories/publisher/compile";
+import { deriveAuthoringReadiness } from "@earth-stories/publisher/readiness";
 import type {
   Camera,
   ConversionCapability,
@@ -27,8 +24,16 @@ import type {
   ProjectSource,
   StoryProject,
 } from "@earth-stories/story-schema";
+import { createDefaultSourceProvenance } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
-import { ActionButton, BrandSpinner, SaveStatus } from "@earth-stories/ui";
+import {
+  ActionButton,
+  BrandSpinner,
+  GuidancePrompt,
+  SaveStatus,
+  StatePanel,
+  WorkflowGuide,
+} from "@earth-stories/ui";
 import { reorderChapters } from "./chapterOrder";
 import {
   createProject,
@@ -53,6 +58,11 @@ import { WorkspaceScreen } from "./WorkspaceScreen";
 import { ChapterAddMenu } from "./ChapterAddMenu";
 import { MarkdownToolbar } from "./MarkdownToolbar";
 import { parseRoute, routePath, type AppRoute } from "./routing";
+import { PublishMenu } from "./PublishMenu";
+import { SourceProvenanceFields } from "./SourceProvenanceFields";
+import { nextGuidanceAction, workflowStages } from "./editorReadiness";
+import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
+import { usePublicationReadiness } from "./usePublicationReadiness";
 
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
@@ -134,8 +144,9 @@ export function App() {
   const [categoryColorsDraft, setCategoryColorsDraft] = useState<string | null>(
     null,
   );
+  const [previewReceiptVersion, setPreviewReceiptVersion] = useState(0);
   const chapterAddRef = useRef<HTMLDivElement>(null);
-  const publishMenuRef = useRef<HTMLDivElement>(null);
+  const publicationReadiness = usePublicationReadiness(project);
 
   function navigate(next: AppRoute, replace = false) {
     window.history[replace ? "replaceState" : "pushState"](
@@ -197,26 +208,6 @@ export function App() {
     return () => window.removeEventListener("popstate", syncRoute);
   }, [project, saveState]);
   useEffect(() => {
-    if (!publishMenuOpen) return;
-    const dismiss = (event: PointerEvent | KeyboardEvent) => {
-      if (event instanceof KeyboardEvent && event.key === "Escape") {
-        setPublishMenuOpen(false);
-        return;
-      }
-      if (
-        event instanceof PointerEvent &&
-        !publishMenuRef.current?.contains(event.target as Node)
-      )
-        setPublishMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", dismiss);
-    document.addEventListener("keydown", dismiss);
-    return () => {
-      document.removeEventListener("pointerdown", dismiss);
-      document.removeEventListener("keydown", dismiss);
-    };
-  }, [publishMenuOpen]);
-  useEffect(() => {
     if (!addChapterOpen) return;
     const dismiss = (event: PointerEvent | KeyboardEvent) => {
       if (event instanceof KeyboardEvent) {
@@ -242,6 +233,16 @@ export function App() {
     window.addEventListener("beforeunload", warnBeforeLeaving);
     return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
   }, [saveState]);
+  useEffect(() => {
+    if (publishOpen && saveState === "saved") void publicationReadiness.load();
+  }, [
+    publishOpen,
+    project?.id,
+    project?.metadata.updated,
+    project?.publication.profile,
+    publicationReadiness.load,
+    saveState,
+  ]);
   function showError(cause: unknown) {
     setError(
       cause instanceof Error
@@ -263,21 +264,19 @@ export function App() {
     setError(null);
   }
 
+  const localReadiness = useMemo(
+    () => (project ? deriveAuthoringReadiness(project) : null),
+    [project],
+  );
   const publicationResult = useMemo(() => {
-    if (!project || !project.metadata.title.trim())
-      return { manifest: null, error: null };
-    let compiled;
-    try {
-      compiled = compileProject(project);
-    } catch (cause) {
+    if (!project || !localReadiness?.manifest)
       return {
         manifest: null,
         error:
-          cause instanceof Error
-            ? cause.message
-            : "The story cannot be compiled.",
+          localReadiness?.findings.find(({ id }) => id === "compile")
+            ?.message ?? null,
       };
-    }
+    const compiled = localReadiness.manifest;
     const sources = new Map(
       project.sources.map((source) => [source.id, source]),
     );
@@ -309,8 +308,18 @@ export function App() {
         }),
       },
     };
-  }, [project]);
+  }, [localReadiness, project]);
   const publication = publicationResult.manifest;
+  useEffect(() => {
+    if (project && route.page === "story" && route.preview && publication)
+      recordPreviewReceipt(project.id, project.metadata.updated);
+  }, [
+    project?.id,
+    project?.metadata.updated,
+    publication,
+    route.page,
+    route.page === "story" ? route.preview : false,
+  ]);
   const selectedChapter = project?.chapters.find(
     (chapter) => chapter.id === activeChapter,
   );
@@ -444,6 +453,7 @@ export function App() {
       const saved = await saveProject(project);
       setProject(saved);
       setSaveState("saved");
+      publicationReadiness.invalidate();
       await refreshProjects();
       return saved;
     } catch (cause) {
@@ -452,6 +462,10 @@ export function App() {
       return null;
     }
   }
+
+  const loadPublicationReadiness = useCallback(() => {
+    if (saveState === "saved") void publicationReadiness.load();
+  }, [publicationReadiness.load, saveState]);
 
   function addChapter(chapter: ProjectChapter) {
     changeProject((current) => ({
@@ -710,6 +724,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -729,6 +744,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -750,6 +766,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -768,6 +785,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -787,6 +805,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -805,6 +824,7 @@ export function App() {
           attribution: null,
           sizeBytes: uploaded.sizeBytes,
           delivery: "included",
+          provenance: createDefaultSourceProvenance(),
         };
         chapter = {
           id: crypto.randomUUID(),
@@ -986,6 +1006,7 @@ export function App() {
             ? result.output.sizeBytes
             : null,
         delivery: "included" as const,
+        provenance: createDefaultSourceProvenance(),
       };
       const source: ProjectSource =
         capability === "raster" || capability === "multidim"
@@ -1039,6 +1060,7 @@ export function App() {
       attribution: null,
       sizeBytes: null,
       delivery: "connected" as const,
+      provenance: createDefaultSourceProvenance(),
     };
     const resolvedKind = connectedKind;
     const discoveredVariable = connectionDiscovery?.details.variables?.[0];
@@ -1145,6 +1167,7 @@ export function App() {
       attribution: example.attribution,
       sizeBytes: null,
       delivery: "connected" as const,
+      provenance: createDefaultSourceProvenance(),
     };
     const source: ProjectSource =
       example.kind === "pmtiles"
@@ -1204,6 +1227,56 @@ export function App() {
       chapters: [...current.chapters, chapter],
     }));
     setActiveChapter(chapter.id);
+  }
+
+  const previewReviewed = Boolean(
+    project &&
+    saveState === "saved" &&
+    previewMatchesRevision(project.id, project.metadata.updated),
+  );
+  void previewReceiptVersion;
+  const guidance =
+    project && localReadiness
+      ? nextGuidanceAction({
+          readiness: localReadiness,
+          activeChapterId: activeChapter || null,
+          saveState,
+          previewReviewed,
+          preflight: publicationReadiness.state,
+        })
+      : null;
+
+  function openReaderPreview() {
+    if (!project || !publication) return;
+    recordPreviewReceipt(project.id, project.metadata.updated);
+    setPreviewReceiptVersion((version) => version + 1);
+    navigate({ page: "story", storyId: project.id, preview: true });
+  }
+
+  function openPublicationWorkshop() {
+    if (!project) return;
+    if (localReadiness?.findings.some(({ severity }) => severity === "error")) {
+      setPublishOpen(true);
+      return;
+    }
+    void (async () => {
+      const saved = saveState === "saved" ? project : await persist();
+      if (saved) setPublishOpen(true);
+    })();
+  }
+
+  function followGuidance(
+    destination: "save" | "story" | "chapters" | "data" | "preview" | "publish",
+  ) {
+    if (destination === "save") {
+      void persist();
+      return;
+    }
+    if (destination === "story") setInspectorMode("story");
+    if (destination === "chapters") setInspectorMode("chapter");
+    if (destination === "data") setInspectorMode("data");
+    if (destination === "preview") openReaderPreview();
+    if (destination === "publish") openPublicationWorkshop();
   }
 
   if (loading)
@@ -1315,58 +1388,43 @@ export function App() {
         >
           <FloppyDisk size={17} /> Save
         </ActionButton>
-        <div className="publish-menu" ref={publishMenuRef}>
-          <ActionButton
-            className="button button--primary"
-            disabled={!publication || saveState === "exporting"}
-            aria-haspopup="menu"
-            aria-expanded={publishMenuOpen}
-            onClick={() => setPublishMenuOpen((open) => !open)}
-          >
-            <Export size={17} /> Publish <CaretDown size={14} />
-          </ActionButton>
-          {publishMenuOpen ? (
-            <div className="publish-menu__popover" role="menu">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setPublishMenuOpen(false);
-                  navigate({
-                    page: "story",
-                    storyId: project.id,
-                    preview: true,
-                  });
-                }}
-              >
-                <Eye size={18} />
-                <span>
-                  <strong>Preview</strong>
-                  <small>Open the unpublished reader view</small>
-                </span>
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setPublishMenuOpen(false);
-                  void (async () => {
-                    const saved =
-                      saveState === "saved" ? project : await persist();
-                    if (saved) setPublishOpen(true);
-                  })();
-                }}
-              >
-                <Export size={18} />
-                <span>
-                  <strong>Publish</strong>
-                  <small>Choose a publication profile and format</small>
-                </span>
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <PublishMenu
+          open={publishMenuOpen}
+          onOpenChange={setPublishMenuOpen}
+          localReadiness={localReadiness!}
+          serverReadiness={publicationReadiness.state}
+          chapterCount={project.chapters.length}
+          sourceCount={project.sources.length}
+          previewReviewed={previewReviewed}
+          disabled={saveState === "exporting"}
+          unsaved={saveState === "changed" || saveState === "save-error"}
+          onLoadReadiness={loadPublicationReadiness}
+          onPreview={openReaderPreview}
+          onPublish={openPublicationWorkshop}
+        />
       </header>
+      <div className="editor-guidance">
+        <WorkflowGuide
+          stages={workflowStages(localReadiness!, {
+            previewReviewed,
+            preflight: publicationReadiness.state,
+          })}
+          onStageSelect={(stage) =>
+            followGuidance(
+              stage as "story" | "chapters" | "data" | "preview" | "publish",
+            )
+          }
+        />
+        {guidance ? (
+          <GuidancePrompt
+            tone={guidance.tone}
+            actionLabel={guidance.label}
+            onAction={() => followGuidance(guidance.destination)}
+          >
+            {guidance.message}
+          </GuidancePrompt>
+        ) : null}
+      </div>
       <aside className="editor-rail">
         <div className="project-label">
           <button type="button" onClick={leaveProject}>
@@ -1786,13 +1844,23 @@ export function App() {
                     })}
                   </div>
                 ) : project.dataAssets.length === 0 ? (
-                  <p className="data-library-empty">
-                    No project data yet. Import a file or add a connection
-                    below.
-                  </p>
+                  <StatePanel
+                    compact
+                    title="Data is optional until a visualization needs it"
+                    description="Prose and video stories can publish without data. Add a source when you create a map, chart, or image chapter."
+                    actionLabel="Add data"
+                    onAction={() =>
+                      document
+                        .getElementById("story-data-import")
+                        ?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "center",
+                        })
+                    }
+                  />
                 ) : null}
               </section>
-              <section>
+              <section id="story-data-import">
                 <h3>Import from this computer</h3>
                 <p>
                   The file becomes an included project asset and is also added
@@ -3267,7 +3335,10 @@ export function App() {
                             onChange={(event) =>
                               updateSelectedSource((source) =>
                                 source.kind === "zarr"
-                                  ? { ...source, variable: event.target.value }
+                                  ? {
+                                      ...source,
+                                      variable: event.target.value,
+                                    }
                                   : source,
                               )
                             }
@@ -3757,6 +3828,17 @@ export function App() {
                   </div>
                 </fieldset>
               ) : null}
+              {selectedSource ? (
+                <SourceProvenanceFields
+                  value={selectedSource.provenance}
+                  onChange={(provenance) =>
+                    updateSelectedSource((source) => ({
+                      ...source,
+                      provenance,
+                    }))
+                  }
+                />
+              ) : null}
             </>
           ) : null}
         </div>
@@ -3791,6 +3873,10 @@ export function App() {
         onBeforeExport={() =>
           saveState === "saved" ? Promise.resolve(project) : persist()
         }
+        preflightState={publicationReadiness.state}
+        onRefreshPreflight={() => void publicationReadiness.load(true)}
+        localReadiness={localReadiness!}
+        unsaved={saveState !== "saved"}
         onProfileChange={async (profile) => {
           const next = {
             ...project,
@@ -3801,6 +3887,7 @@ export function App() {
             const saved = await saveProject(next);
             setProject(saved);
             setSaveState("saved");
+            publicationReadiness.invalidate();
             await refreshProjects();
             return saved;
           } catch (cause) {
