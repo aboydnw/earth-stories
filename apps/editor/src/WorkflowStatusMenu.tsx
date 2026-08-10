@@ -64,6 +64,7 @@ export function WorkflowStatusMenu({
         type="button"
         className="workflow-status-menu__trigger"
         data-status={errors ? "blocked" : warnings ? "review" : "ready"}
+        aria-label={`Workflow status: ${label}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}

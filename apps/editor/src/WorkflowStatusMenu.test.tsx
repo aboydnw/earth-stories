@@ -47,13 +47,14 @@ function renderMenu() {
 describe("WorkflowStatusMenu", () => {
   it("keeps the workflow compact until requested", async () => {
     renderMenu();
-    expect(
-      screen.getByRole("button", { name: /Needs review · 1/ }),
-    ).toBeTruthy();
-    expect(screen.queryByRole("dialog")).toBeNull();
-    await userEvent.click(
-      screen.getByRole("button", { name: /Needs review · 1/ }),
+    const trigger = screen.getByRole("button", {
+      name: "Workflow status: Needs review · 1",
+    });
+    expect(trigger.getAttribute("aria-label")).toBe(
+      "Workflow status: Needs review · 1",
     );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await userEvent.click(trigger);
     expect(
       screen.getByRole("dialog", { name: "Story progress and guidance" }),
     ).toBeTruthy();
@@ -75,6 +76,7 @@ describe("WorkflowStatusMenu", () => {
       screen.getByRole("button", { name: "Review warnings" }),
     );
     expect(callbacks.onGuidance).toHaveBeenCalledWith("publish");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("closes with Escape and restores trigger focus", async () => {

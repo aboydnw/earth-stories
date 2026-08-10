@@ -77,14 +77,19 @@ same origin. This avoids `file://` behavior, preserves relative fetches, and
 supports browser security and byte-range requests.
 
 Origin checks alone are not sufficient authentication for a long-lived desktop
-service. Generate a random per-launch capability. The Electron bootstrap URL
-exchanges it for a `HttpOnly`, `SameSite=Strict` session cookie and redirects to
-a clean URL. Mutating APIs require the session plus existing trusted-origin
-checks. Dev standalone mode retains its current behavior behind an explicit
-configuration option.
+service. Generate a random per-launch capability in the main process and keep it
+outside URLs, renderer JavaScript, storage, logs, and crash reports. Use a
+dedicated in-memory Electron session whose `webRequest` hook adds the capability
+as an authorization header only for the exact loopback service origin, including
+its allocated port. The service rejects every packaged-mode request without that
+header; a listener on another loopback port must never receive or replay it.
+Mutating APIs require the capability plus the existing trusted-origin checks.
 
-Bind only to `127.0.0.1`, never all interfaces. Do not put project paths or
-session secrets in query strings, logs, renderer storage, or crash reports.
+Bind only to `127.0.0.1`, never all interfaces. Dev standalone mode retains its
+current unauthenticated behavior only behind an explicit configuration option,
+and packaged mode fails closed if that option is enabled. Add tests for token
+absence from URLs/logs/storage and for a malicious listener on another loopback
+port.
 
 ### 4. Preserve visible user ownership
 
@@ -95,8 +100,12 @@ preferences in Electron's application-data directory.
 
 Do not move existing projects automatically. On first launch, offer to choose
 the existing `earth-stories-projects` parent folder or start a new workspace.
-Changing workspace restarts/reconfigures the local service only after unsaved
-edits are resolved.
+Changing workspace uses the same lifecycle protocol as application quit: stop
+accepting mutations, resolve unsaved edits, drain active conversion and
+publication work, request cooperative cancellation for remaining jobs, and only
+then restart or terminate the service. Jobs write to temporary paths and
+atomically promote completed outputs; persisted job state lets the next launch
+remove or recover interrupted work without exposing partial results.
 
 ### 5. Package runtime resources explicitly
 
@@ -200,8 +209,9 @@ process with different temporary workspaces.
 - Resolve resource and mutable cache paths per platform.
 - Start the service, exchange the bootstrap session, create the hardened
   BrowserWindow, and show a useful startup-error window if initialization fails.
-- Flush/close the service and conversion children before quit with a bounded
-  forced-shutdown fallback.
+- Run the shared mutation-stop, drain, cooperative-cancellation, and cleanup
+  protocol before quit, with a bounded forced-shutdown fallback that leaves
+  recoverable job state rather than partial promoted output.
 - Restore window dimensions without persisting story content or URLs.
 
 #### `apps/desktop/src/preload.ts` (new)
@@ -267,9 +277,13 @@ small local file, builds a publication, restarts, and reopens the same project.
   location documentation.
 - Ensure uninstall never removes Documents-based workspaces or retained Pixi
   data without a separate explicit cleanup action.
-- Add a diagnostics export containing versions, platform, paths with sensitive
-  segments redacted, service state, and recent errors—but no story prose, data,
-  URLs, or credentials by default.
+- Add a diagnostics export containing only an allowlisted schema: component and
+  error codes, coarse lifecycle stage, timestamps, versions, platform, and
+  sanitized service state. Redact values before persistence as well as export;
+  omit raw exception messages, paths, URLs and query parameters, credentials,
+  request bodies, story prose, and source data by default. Test a fixture whose
+  failures contain secrets, story text, and sensitive paths/URLs and prove none
+  appear in persisted or exported diagnostics.
 - Register `.earthstory` only after the handoff importer is complete and route
   open-file events through its inspect/confirm flow.
 - Establish a release owner for certificates, notarization credentials,
@@ -283,6 +297,8 @@ not just locally generated installers.
 - Local-service parity tests in standalone and embedded modes.
 - Session/bootstrap, navigation, CSP, permission, preload-validation, and
   malicious-local-origin security tests.
+- Workspace-change and quit tests during conversion and publication, including
+  cooperative cancellation, forced termination, and next-launch recovery.
 - Electron lifecycle tests for first/second instance, crash, failed service
   startup, graceful quit, conversion child cleanup, and workspace change.
 - Fresh-machine packaged smoke tests with Node, Yarn, GDAL, and PDAL absent.

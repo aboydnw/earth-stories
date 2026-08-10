@@ -18,8 +18,10 @@ data from the internet, and passes a network-isolated browser verification.
 This is an offline-publication guarantee, not initially an offline-authoring
 guarantee. An author may need a connection while downloading remote source data
 into the release or provisioning a Pixi conversion environment. Once all
-required inputs and tools are local, repeat builds should work without a
-connection.
+required inputs and tools are local, repeat builds work without a connection by
+reusing persistent, content-addressed materializations keyed by an expected
+digest. A repeat build verifies those bytes and compiles against their local
+locators; it never silently falls back to the original remote locator.
 
 ## Scope
 
@@ -33,8 +35,11 @@ The first supported release should:
 - block unsupported connected features with source- or chapter-specific
   resolution guidance;
 - prove the completed publication works while outbound requests are denied;
-- retain the folder, ZIP, archive, embed, PNG, and animated-capture outputs
-  where their content is compatible with offline delivery.
+- retain the folder, ZIP, archive, embed, PNG, and animated-capture outputs only
+  when an artifact-specific verifier proves their promised contents are usable
+  offline. Interactive folders, ZIPs, archives, and embeds receive isolated
+  runtime checks; static image/capture outputs receive decode, dimension, frame,
+  and integrity checks.
 
 The first release does not promise offline authoring on a brand-new computer,
 cache arbitrary XYZ pyramids, mirror a whole Zarr store, download global
@@ -54,14 +59,20 @@ Add a machine-readable guarantee to the publication manifest and verification
 report:
 
 ```ts
-interface PublicationConnectivity {
+type PublicationConnectivity = {
   requested: "connected" | "portable" | "custom" | "offline";
-  verified: "connected" | "offline";
-}
+} & (
+  | { state: "pending" }
+  | { state: "verified"; verified: "connected" | "offline" }
+  | { state: "failed"; reasonCode: string }
+);
 ```
 
 The dependency report should say **Verified offline** only after verification.
-A failed verification never replaces the prior latest publication.
+A candidate remains `pending` until the browser check succeeds. Verification
+atomically rewrites `publication.json` to `verified` before candidate promotion;
+a failed candidate is marked `failed` in its report and never replaces the prior
+latest publication.
 
 ### 2. Version the changed contracts
 
@@ -71,7 +82,8 @@ assume. Introduce `earth-stories/project/v2` and
 `parseStoryProject`. Keep the authoring basemap URL for ordinary preview and
 connected builds, and add a publication setting for the offline basemap policy.
 
-The publication basemap becomes a discriminated contract:
+The publication basemap becomes a discriminated contract and participates in
+the same dependency inventory and integrity rules as story assets:
 
 ```ts
 type PublicationBasemap =
@@ -92,8 +104,10 @@ type PublicationBasemap =
 ```
 
 The initial included option is `neutral`: a project-independent MapLibre style
-with a background and optional graticule only. A later version may reference a
-licensed, project-local PMTiles basemap.
+with a background and optional graticule only. Its `styleHref`, style document,
+and every transitive sprite, glyph, source, and asset reference are contained,
+inventoried, and checksummed. A later version may reference a licensed,
+project-local PMTiles basemap.
 
 ### 3. Build one authoritative dependency inventory
 
@@ -102,21 +116,44 @@ preflight, handoff export, reports, and verification. Do not keep separate
 lists of external URLs in each workflow.
 
 ```ts
-interface PublicationDependency {
+interface PublicationDependencyBase {
   id: string;
   owner: { type: "basemap" | "source" | "chapter" | "runtime"; id: string };
   locator: string;
-  delivery: "included" | "connected" | "unsupported";
-  materialization: "copy-local" | "download-file" | "bundle-runtime" | "none";
   estimatedBytes: number | null;
-  requirements: Array<"network" | "cors" | "byte-ranges">;
-  reason?: string;
 }
+
+type PublicationDependency =
+  | (PublicationDependencyBase & {
+      delivery: "included";
+      materialization: "copy-local" | "download-file" | "bundle-runtime";
+      requirements: Array<"byte-ranges">;
+      sha256: string;
+    })
+  | (PublicationDependencyBase & {
+      delivery: "connected";
+      materialization: "none";
+      requirements: Array<"network" | "cors" | "byte-ranges">;
+    })
+  | (PublicationDependencyBase & {
+      delivery: "unsupported";
+      materialization: "none";
+      requirements: Array<"network" | "cors" | "byte-ranges">;
+      reason: string;
+    });
 ```
 
+Schema refinement requires `network` for connected dependencies, forbids it for
+included dependencies, requires a non-empty reason for unsupported dependencies,
+and rejects connected or unsupported entries in an offline manifest.
+
 Compilation remains deterministic and does not fetch. Preflight resolves
-availability and size; the build materializer copies or downloads; verification
-checks the result. Reports are projections of this same inventory.
+availability, size, expected digest, and a constrained locator; the build
+materializer copies or downloads; verification checks the result. Reports are
+projections of this same inventory. Every included dependency, including runtime
+and basemap files, is hashed from its materialized bytes. The ordered dependency
+digests contribute to release identity alongside `digestProject(project)`, so a
+remote-content change produces a different `build.id`.
 
 ### 4. Fail closed for unsupported content
 
@@ -153,11 +190,13 @@ COG that would still require a resolver request.
 ### 6. Verify dynamically, not only by inspecting strings
 
 Static checks catch manifest dependencies but cannot prove a library will not
-make an implicit request. Start the built folder on a loopback static server,
-launch a browser with every non-loopback request aborted, visit `index.html`,
+make an implicit request. Start the built folder on a loopback static server and
+launch a fresh browser profile with cache and service workers disabled. Allow
+requests only to the publication's exact scheme, host, and port; fail on every
+other request, including other loopback origins. Visit `index.html`,
 scroll/hydrate every chapter, and require all chapter readiness markers to
-settle without runtime errors. Record attempted external URLs in the failed
-verification report.
+settle without runtime errors under one bounded overall timeout. Record
+sanitized attempted origins in the failed verification report.
 
 This check belongs in publication verification and in CI fixtures. A string
 scan may supplement it but must not be the sole offline test.
@@ -175,7 +214,8 @@ scan may supplement it but must not be the sole offline test.
 - Measure a representative offline viewer payload and document the baseline.
 
 Exit criterion: the field-notes fixture plus one GeoParquet and one projected
-COG fixture render with non-loopback requests denied.
+COG fixture render with every request outside the exact publication origin
+denied.
 
 ### Phase 1 — Contracts and dependency inventory
 
@@ -191,20 +231,24 @@ COG fixture render with non-loopback requests denied.
 
 - Add publication v2, the discriminated basemap, connectivity guarantee, and
   optional local projection definitions/runtime asset references.
-- Keep a parser for v1 publications if reader compatibility is required; the
-  publisher emits only v2 after rollout.
+- Keep a v1 parser in both the viewer and verifier. Normalize legacy
+  `basemap.styleUrl` into the connected-basemap representation and cover v1
+  manifests with regression fixtures; the publisher emits only v2 after rollout.
 
 #### `packages/publisher/src/dependencies.ts` (new)
 
 - Implement the pure dependency inventory and stable diagnostic IDs.
-- Cover basemaps, every source kind, video chapters, terrain/buildings, COG
-  projection resolution, and GeoParquet runtime files.
+- Cover basemaps (including `styleHref` and transitive style resources), every
+  source kind, video chapters, terrain/buildings, COG projection resolution, and
+  GeoParquet runtime files.
 
 #### `packages/publisher/src/compile.ts`
 
 - Resolve offline assets to relative `href` values.
-- Emit the neutral included basemap and no external dependency for it.
+- Emit the neutral basemap as an included, checksummed dependency and no
+  connected dependency for it.
 - Derive manifest connectivity from the inventory, not ad hoc arrays.
+- Include the ordered materialized dependency digests in release identity.
 
 Exit criterion: table-driven tests describe every source/chapter combination
 and an offline manifest cannot parse with a connected dependency.
@@ -224,8 +268,13 @@ and an offline manifest cannot parse with a connected dependency.
 #### `packages/publisher/src/materialize.ts` (new)
 
 - Move local-copy and remote-download behavior out of `build.ts`.
-- Stream to a temporary path, enforce containment and the existing size limit,
-  verify the expected size/checksum when known, fsync, and rename atomically.
+- Canonicalize local locators with `realpath` and require containment within the
+  project workspace. For remote locators, allow only configured schemes and
+  hosts, resolve and revalidate every redirect and destination address, block
+  private/link-local/metadata ranges, and enforce byte and overall time limits.
+- Stream to a temporary path, enforce containment and the size limit, verify the
+  required digest, fsync, and rename atomically into persistent content-addressed
+  storage. Rewrite the build plan to that local materialization.
 - Bundle the neutral style, projection definitions, and runtime files.
 - Deduplicate files referenced by more than one chapter/source.
 
@@ -281,8 +330,14 @@ loopback origin while every supported chapter becomes ready.
 
 #### `packages/publisher/src/verify.ts`
 
-- Add manifest invariants, checksums for included dependencies, and the
-  network-isolated browser verifier.
+- Add manifest invariants and checksums for all expected assets, including the
+  basemap style and its transitive resources, and reject escaping references.
+- Add the fresh-profile, exact-origin, time-bounded browser verifier and
+  artifact-specific verification for folders, ZIPs, archives, embeds, PNGs, and
+  animated captures.
+- Serve included COG, PMTiles, GeoParquet, and COPC fixtures through the loopback
+  server; require byte-range requests to return `206` with a valid
+  `Content-Range`, and fail verification when range serving is unavailable.
 - Persist external request attempts and chapter readiness results in
   `publication-verification.json`.
 
@@ -313,15 +368,18 @@ Do not block the offline-publication release on full first-install authoring.
 ## Test plan
 
 - Schema migration tests for project v1 to v2 and publication v2 validation.
+- Viewer/verifier regression fixtures for legacy publication-v1 basemaps.
 - Inventory matrix tests for every source kind, delivery override, basemap,
   video, terrain, buildings, and runtime dependency.
-- Materializer tests for truncation, timeout, checksum mismatch, duplicate
-  references, containment, retry, and candidate cleanup.
+- Materializer tests for truncation, timeout, checksum mismatch, redirect and
+  address rejection, duplicate references, containment, persistent offline
+  reuse, retry, and candidate cleanup.
 - Viewer tests with local DuckDB assets and injected COG projections.
 - Publication tests proving ordinary connected/portable/custom behavior does
   not change.
-- Browser tests that fail on any non-loopback request and wait for all chapter
-  readiness markers.
+- Browser tests that fail on any request outside the exact publication origin,
+  disable caches/service workers, enforce the overall timeout, validate every
+  output kind, exercise byte ranges, and wait for all chapter readiness markers.
 - CI offline fixture containing prose, image, chart, GeoJSON, PMTiles, COG,
   GeoParquet, trajectory, and COPC chapters.
 

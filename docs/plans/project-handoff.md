@@ -4,8 +4,8 @@ Status: proposed
 
 Priority: high team value
 
-Depends on: shared dependency inventory; self-contained mode also depends on
-offline materialization
+Depends on: shared dependency inventory; a future self-contained schema also
+depends on offline materialization
 
 ## Outcome
 
@@ -30,9 +30,11 @@ The first release provides two handoff presets:
   author-owned project files, excluding derived publications, private history,
   temporary files, locks, trash, and conversion/runtime caches.
 
-A later **Self-contained working copy** can materialize compatible connected
-files using the offline-publication dependency engine. It must still block or
-report unbounded services such as XYZ, remote Zarr stores, and hosted video.
+A later schema version may add **Self-contained working copy** after Phase 4 can
+materialize compatible connected files using the offline-publication dependency
+engine. V1 does not advertise or accept that mode. The future mode must still
+block or report unbounded services such as XYZ, remote Zarr stores, and hosted
+video.
 
 The bundle does not include Earth Stories itself, operating-system credentials,
 Pixi environments, caches, or hidden data from outside the project directory.
@@ -59,7 +61,7 @@ interface EarthStoryHandoffV1 {
   schema: "earth-stories/handoff/v1";
   createdAt: string;
   appVersion: string;
-  mode: "working-copy" | "complete-archive" | "self-contained";
+  mode: "working-copy" | "complete-archive";
   originalProjectId: string;
   projectSchema: string;
   projectDigest: string;
@@ -78,10 +80,26 @@ interface EarthStoryHandoffV1 {
 }
 ```
 
-The manifest covers every archived file except itself, uses normalized POSIX
-relative paths, deterministic ordering, and SHA-256 digests. `README.txt`
-explains how to install/open Earth Stories and summarizes connected dependencies
-for recipients who inspect the archive without the app.
+The manifest covers every archived file except itself, uses canonical portable
+relative paths, deterministic ordering, and SHA-256 digests. One canonicalizer
+runs before duplicate checks, containment checks, and staging writes. It treats
+backslashes as separators, normalizes Unicode to NFC, rejects case-folded
+collisions and Windows reserved or trailing-dot/space names, and applies the
+same policy in inventory, export, and import. Align it with the traversal and
+filename behavior in `packages/project-store/src/store.test.ts`.
+
+`projectDigest` is SHA-256 over canonical UTF-8 JSON for the validated authored
+project plus the ordered `(path, sha256)` pairs for referenced local content. It
+excludes timestamps, project ID, handoff metadata, receipts, and other mutable
+identity metadata; `files[].sha256` remains the per-file integrity record. A
+preserve-ID import must reproduce both authored and content digests. A copy-ID
+import verifies the incoming digest before rewrite, records it in the receipt,
+and recomputes the same content digest after rewriting only excluded identity
+fields. The receipt separately records the new project ID and timestamps.
+
+`README.txt` explains how to install/open Earth Stories and summarizes connected
+dependencies for recipients who inspect the archive without the app. Recipient-
+facing text contains only redacted locators.
 
 ### 2. Derive contents from project semantics and containment
 
@@ -95,8 +113,9 @@ Create one project-file inventory that classifies:
 - `.earth-stories` metadata, locks, temporary files, and symlinks.
 
 Working-copy selection comes from references. Complete-archive selection adds
-ordinary author files. Never follow symlinks outside the real project root and
-never accept browser-supplied filesystem paths.
+ordinary author files. Exclude every symlink from both presets, even when its
+target is contained, because the importer rejects link entries and a generated
+bundle must remain portable. Never accept browser-supplied filesystem paths.
 
 Files referenced by the story but missing or outside the project block export.
 Unreferenced ordinary files produce a selectable size category rather than
@@ -104,10 +123,14 @@ being silently included in a small working copy.
 
 ### 3. Export a snapshot without mutating the project
 
-Acquire a read-consistent project transaction: validate the saved revision,
-inventory paths, stream each file into the archive, and confirm size and digest
-against its final stat. If a file changes during streaming, fail and ask the
-author to retry. Do not rewrite `story.json` merely to export it.
+Acquire a read-consistent project transaction: bind preflight to the exact saved
+revision and inventory fingerprint, then either hold the shared project-writer
+lock through inventory and streaming or stream from an immutable snapshot.
+Conversion and publication jobs use the same lock and cannot create or modify
+project files within that boundary. Hash the bytes actually written to the
+archive and confirm size and digest against the bound inventory. If the boundary
+cannot be maintained, fail and ask the author to retry. Do not rewrite
+`story.json` merely to export it.
 
 Self-contained mode, when added, builds a cloned in-archive project contract
 whose remote compatible sources point to bundled relative files. Preserve the
@@ -125,9 +148,14 @@ directory under the configured project root while enforcing:
 - exact manifest membership, sizes, and SHA-256 checksums;
 - a valid supported project schema and contained project references.
 
-Only after every check passes should the service rename the staged folder into
-the workspace. Failed imports remove staging data and never alter an existing
-project.
+Validate `originalProjectId` against the project-ID grammar before any filesystem
+access. Before promotion, write and validate `.earth-stories/import.json` inside
+staging, including the original ID, incoming digest, selected collision action,
+and post-rewrite digest. Under the `ProjectStore` mutation lock, revalidate the ID
+and collision choice, atomically claim the destination with no-replace semantics,
+and promote the complete staged folder. A concurrent import or project creation
+therefore cannot overwrite an existing project. Failed imports remove staging
+data and never alter an existing project or report success.
 
 ### 5. Make ID collisions an explicit product choice
 
@@ -142,6 +170,12 @@ Do not offer overwrite in the first release. Copy import rewrites only the
 project ID and relevant build-independent metadata, assigns new creation/update
 times, validates the result, and records the original project ID in the import
 receipt outside `story.json`.
+
+Before complete-archive export, scan selected filenames and locator values for
+credential-like material. Block known credential files; require explicit,
+itemized confirmation for ambiguous sensitive author files. Never place raw
+tokens, signed query strings, credentials, or unredacted sensitive locators in
+`handoff.json`, `README.txt`, logs, or UI summaries.
 
 ### 6. Keep private operational history out by default
 
@@ -185,6 +219,8 @@ inventory on every supported OS.
   known, using a temporary candidate archive.
 - Re-stat files to detect changes during export.
 - Generate the plain-text recipient README and exclusion report.
+- Accept an abort signal, propagate cancellation through preflight and every
+  stream helper, and release temporary archives and locks in `finally` paths.
 
 #### `apps/local-service/src/server.ts`
 
@@ -199,6 +235,8 @@ POST /api/projects/:id/handoff?mode=working-copy|complete-archive
   dependencies, and unknown sizes from preflight.
 - Stream the final bundle with a safe filename and no in-memory archive copy.
 - Use a per-project export lock compatible with publication builds and saves.
+- Abort export on UI cancellation or client disconnect and clean partial
+  archives on errors, aborts, and service restart.
 
 #### `apps/editor/src/HandoffPanel.tsx` (new)
 
@@ -221,7 +259,8 @@ and a changed/missing source fails before a misleading success result.
 - Reject undeclared archive entries and missing declared entries.
 - Parse/validate the project and all local references from the staged root.
 - Implement preserve-ID and clone-ID promotion plans.
-- Write an import receipt to `.earth-stories/import.json` after promotion.
+- Write and validate the import receipt in staging before atomic no-replace
+  promotion.
 
 #### `apps/local-service/src/server.ts`
 
@@ -236,12 +275,15 @@ DELETE /api/handoffs/:inspectionId
 - Inspection streams to a bounded temporary file/staging area and returns
   metadata, compatibility, dependencies, size, and collision state.
 - Import accepts only `preserve` or `copy`; never a destination path.
-- Expire abandoned inspections and clean them on service restart.
+- Propagate client disconnect and UI cancellation through inspection and import;
+  release staging directories and per-project locks in `finally` paths.
+- Expire abandoned inspections and clean partial work on service restart.
 
 #### `apps/editor/src/ImportHandoffDialog.tsx` (new)
 
 - Add **Import project** to the workspace.
 - Support file picker and drag/drop with progress and cancellation.
+- Send cancellation to the service instead of merely dismissing local progress.
 - Show author/title, source app/schema version, included sizes, connected
   dependencies, and any incompatibility before import.
 - Handle collisions explicitly and open the promoted project on success.
@@ -286,7 +328,8 @@ based clone-and-run users.
 - Round trips for working copy, complete archive, ID-preserving import, and
   collision-as-copy.
 - Project fixtures containing every supported source and data-asset type.
-- UI tests for size disclosure, connected warnings, cancellation, collision,
+- UI and service tests for size disclosure, connected warnings, client
+  disconnect, repeated cancellation, restart cleanup, collision races,
   incompatible schema, and successful open.
 
 ## Acceptance criteria
@@ -312,7 +355,7 @@ based clone-and-run users.
   supports streaming ZIP64 on every supported platform before committing the
   file format.
 - Connected source licensing may forbid redistribution. Working-copy mode keeps
-  URLs; self-contained mode must surface provenance/license warnings before
-  download.
+  URLs; a future self-contained mode must surface provenance/license warnings
+  before download.
 - Case-insensitive filesystems can collapse distinct archive paths. Reject
   portable-path collisions during export and import.

@@ -54,6 +54,15 @@ Each revision is a self-describing immutable envelope so a corrupt or stale
 central index cannot make all history disappear:
 
 ```ts
+interface PublicationRevisionMetadataV1 {
+  buildId: string;
+  profile: string;
+  builtAt: string;
+  verification: "verified" | "failed";
+  retainedReleaseBytes: number | null;
+  retainedReleaseSha256: string | null;
+}
+
 interface StoryRevisionV1 {
   schema: "earth-stories/revision/v1";
   id: string;
@@ -63,9 +72,18 @@ interface StoryRevisionV1 {
   parentRevisionId: string | null;
   restoredFromRevisionId: string | null;
   projectDigest: string;
+  revisionDigest: string;
+  publication: PublicationRevisionMetadataV1 | null;
   project: StoryProject;
 }
 ```
+
+`projectDigest` is SHA-256 over canonical UTF-8 JSON for authored project fields,
+excluding mutable timestamps and revision metadata. It identifies equal authored
+content across repeated saves and restores. `revisionDigest` is SHA-256 over the
+canonical envelope fields other than itself and distinguishes exact revisions
+with different IDs, kinds, labels, lineage, or publication metadata. Build data
+is immutable typed metadata; it is never encoded in `label`.
 
 The filesystem is the authority. Listing reads and validates envelopes, sorts
 them by `createdAt`, and can rebuild any optional cache.
@@ -73,10 +91,14 @@ them by `createdAt`, and can rebuild any optional cache.
 ### 2. Save the previous state before replacing it
 
 On every successful save transaction, write an immutable revision of the
-current on-disk project before promoting the new `story.json`. Use the same
-per-project lock and atomic-write discipline as the current store. A failed
-revision write fails the save rather than creating a gap users were told was
-protected.
+current on-disk project before promoting the new `story.json`. Under the same
+per-project lock, write and fsync the revision envelope, atomically rename it,
+and fsync the history directory before promoting `story.json` with the store's
+file and directory durability steps. Persist a small transaction marker so
+startup can reconcile crashes between revision promotion and story promotion;
+recovery may discard an uncommitted duplicate revision, but a new head can never
+lack its promised prior revision. A failed revision write fails the save rather
+than creating a gap users were told was protected.
 
 Do not create multiple revisions for identical project digests. Do create a
 revision when its kind/label gives it independent meaning, such as a named
@@ -88,13 +110,16 @@ Restoring revision R does not replace the clock with R's old timestamp. In one
 locked transaction:
 
 1. require the caller's expected current `metadata.updated` value;
-2. snapshot the current project;
+2. preserve the current project as an `automatic` revision when its content is
+   not already represented;
 3. validate R and its local references;
-4. copy R's authored fields while preserving current project ID and original
-   creation time;
+4. create a new `restore` envelope whose project copies R's authored fields
+   while preserving the current project ID and original creation time, whose
+   parent is the preserved current revision, and whose
+   `restoredFromRevisionId` is R;
 5. assign a new monotonically increasing `metadata.updated` value;
-6. atomically replace `story.json`;
-7. record `restoredFromRevisionId` in the revision metadata, not the project.
+6. durably promote the restore envelope, then atomically replace `story.json`
+   with its embedded project using the recoverable transaction protocol.
 
 The restored project becomes a new head. This keeps every recovery reversible
 and preserves optimistic concurrency.
@@ -124,8 +149,17 @@ Replace the current flat maximum of 20 backups with a documented policy:
 - report history bytes in the UI;
 - run pruning only after the new revision and `story.json` are durable.
 
-Legacy backup files count as automatic revisions until lazily migrated. Do not
-delete them during migration until their new envelopes have been verified.
+Lineage IDs are non-authoritative audit metadata: pruning may leave a parent or
+restore source unavailable, and listing/preview must show that state without
+treating the surviving revision as corrupt. Pinned revisions do not implicitly
+pin every ancestor.
+
+Legacy backup files and migrated `legacy` envelopes count as automatic revisions
+for pruning. Derive a stable legacy source identity from the original backup
+name and content digest, store it in migration metadata, and deduplicate the raw
+file and envelope during recovery/listing. Do not delete the raw file until the
+new envelope is durable and verified; a crash before deletion must not expose
+both copies as separate revisions.
 
 ### 6. Separate story checkpoints from heavy release retention
 
@@ -156,15 +190,19 @@ silently retain many gigabytes of duplicate map data.
 - Refactor the lock-protected write path into a transaction reusable by save,
   checkpoint, and restore.
 - Add `listHistory`, `readRevision`, `createCheckpoint`, `restoreRevision`, and
-  `deleteCheckpoint` methods.
-- Only allow deletion of user-pinned checkpoint metadata/release archives;
-  automatic history remains retention-managed.
+  `deleteRevision` methods.
+- Allow explicit deletion only for `checkpoint` and `publication` revisions;
+  reject `automatic`, `restore`, and `legacy`, which remain retention-managed.
+  Deleting a publication revision does not delete its retained release. Release
+  deletion is a separate confirmed action, and a retained release remains
+  addressable by build ID even if its story checkpoint was removed.
 
 #### `packages/project-store/src/store.test.ts`
 
 - Cover first save, repeated identical saves, concurrent saves, failure before
   promotion, monotonic timestamps, legacy backup migration, corrupt envelope
-  isolation, retention, and restore-after-restore.
+  isolation, legacy crash deduplication, retention with missing non-authoritative
+  lineage, pinned revisions, and restore-after-restore.
 
 Exit criterion: store-level tests prove no successful save or restore can lose
 the immediately previous valid story.
@@ -187,11 +225,20 @@ GET    /api/projects/:id/history/:revisionId
 POST   /api/projects/:id/history/checkpoints
 POST   /api/projects/:id/history/:revisionId/restore
 DELETE /api/projects/:id/history/:revisionId
+POST   /api/projects/:id/releases/:buildId/retain
+GET    /api/projects/:id/releases/:buildId/download
+POST   /api/projects/:id/releases/:buildId/verify
+POST   /api/projects/:id/releases/:buildId/restore-latest
+DELETE /api/projects/:id/releases/:buildId
 ```
 
 - Require `{ expectedUpdated }` for restore and checkpoint mutation.
 - Return a compact summary from list; return a full project only from the
   individual revision endpoint.
+- Return typed release results containing build ID, checksum, byte size,
+  verification state, expected-current identity, and atomic-promotion outcome.
+  Retain, restore, and delete operations require the expected current build or
+  revision identity where stale actions could replace newer work.
 - Reuse trusted-origin checks, body limits, project ID validation, and
   per-project locking.
 - Never accept a filesystem path from the browser.
@@ -208,7 +255,8 @@ outside the selected project.
 
 #### `apps/editor/src/api.ts`
 
-- Add typed revision summary, detail, checkpoint, restore, and delete calls.
+- Add typed revision summary, detail, checkpoint, restore, delete, release
+  retention/download/verification, restore-latest, and release-deletion calls.
 - Parse the embedded project with the shared story parser.
 
 #### `apps/editor/src/HistoryPanel.tsx` (new)
@@ -244,11 +292,16 @@ restore it while retaining a path back to the newer state.
 
 #### `packages/publisher/src/build.ts`
 
-- After candidate verification but before latest promotion, request a
-  publication checkpoint containing build ID, project digest, profile, build
-  time, and verification status.
-- Ensure a checkpoint failure follows an explicit policy: for the first
-  release, fail promotion so every claimed build remains traceable.
+- After candidate verification, start a recoverable publication transaction
+  containing the candidate identity and typed checkpoint metadata. Stage the
+  checkpoint as pending, then finalize it and promote `latest` as one logical
+  transaction with explicit commit state.
+- On startup, reconcile both crash orders: remove or mark failed a checkpoint
+  whose candidate never promoted, and finalize a pending checkpoint when its
+  exact verified build became latest. History must never report an unpromoted
+  build as successful.
+- A checkpoint write or finalization failure fails promotion for the first
+  release so every claimed successful build remains traceable.
 
 #### `packages/project-store/src/releases.ts` (new)
 
@@ -257,6 +310,8 @@ restore it while retaining a path back to the newer state.
 - Verify before restoring or downloading it.
 - Promote a retained release through the same recoverable latest-directory
   replacement used by ordinary builds.
+- Keep retained-release deletion independent from publication-revision deletion
+  and require explicit confirmation for each.
 
 #### `apps/editor/src/PublishPanel.tsx`
 
@@ -279,7 +334,8 @@ recompilation.
 - Editor interaction and accessibility tests for preview, checkpoint, and
   restore.
 - Publication integration test linking build ID, project digest, revision ID,
-  and optional retained archive checksum.
+  and optional retained archive checksum, including both checkpoint-before-
+  promotion and promotion-before-checkpoint crash recovery orders.
 
 ## Acceptance criteria
 
