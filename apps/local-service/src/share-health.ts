@@ -1,4 +1,4 @@
-import { authorizedFetch } from "@earth-stories/publisher";
+import { authorizedFetch, isValidPng } from "@earth-stories/publisher";
 
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
 const MAX_CARD_BYTES = 5 * 1024 * 1024;
@@ -23,13 +23,10 @@ export interface ShareLinkReport {
   problems: ShareLinkProblem[];
 }
 
-const PNG_SIGNATURE = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-]);
-
 /**
  * Decodes a PNG data URL produced by the editor's card capture, rejecting
  * anything that is not genuinely a PNG small enough for social platforms.
+ * Oversized payloads are refused before they are decoded into memory.
  */
 export function decodeShareCard(value: unknown): Buffer {
   if (typeof value !== "string")
@@ -38,11 +35,12 @@ export function decodeShareCard(value: unknown): Buffer {
     /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/,
   )?.[1];
   if (!encoded) throw new Error("Send the share card as a PNG data URL");
+  if (encoded.length > Math.ceil((MAX_CARD_BYTES * 4) / 3))
+    throw new Error("The share card is larger than 5 MB");
   const buffer = Buffer.from(encoded, "base64");
-  if (!buffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE))
-    throw new Error("The share card is not a PNG image");
   if (buffer.byteLength > MAX_CARD_BYTES)
     throw new Error("The share card is larger than 5 MB");
+  if (!isValidPng(buffer)) throw new Error("The share card is not a PNG image");
   return buffer;
 }
 

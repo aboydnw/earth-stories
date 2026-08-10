@@ -41,6 +41,7 @@ const PROJECTS_DIRECTORY = resolve(
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_ASSET_BYTES = 5 * 1024 * 1024 * 1024;
 const MAX_EXPORT_BODY_BYTES = 50 * 1024 * 1024;
+const MAX_SHARE_CARD_BODY_BYTES = 8 * 1024 * 1024;
 const REPOSITORY_DIRECTORY = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../../..",
@@ -81,10 +82,11 @@ function json(response: ServerResponse, status: number, value: unknown): void {
   response.end(`${JSON.stringify(value)}\n`);
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
-  return JSON.parse(
-    (await readBody(request, MAX_BODY_BYTES)).toString("utf8"),
-  ) as unknown;
+async function readJson(
+  request: IncomingMessage,
+  limit = MAX_BODY_BYTES,
+): Promise<unknown> {
+  return JSON.parse((await readBody(request, limit)).toString("utf8"));
 }
 
 async function readOptionalJson(
@@ -448,7 +450,9 @@ export function createLocalServer(
       );
       if (shareCardMatch && request.method === "POST") {
         const id = decodeURIComponent(shareCardMatch[1]);
-        const body = (await readJson(request)) as { image?: unknown };
+        const body = (await readJson(request, MAX_SHARE_CARD_BODY_BYTES)) as {
+          image?: unknown;
+        };
         const card = decodeShareCard(body.image);
         await writeFile(
           join(store.projectPath(id), SHARE_CARD_SOURCE_FILENAME),

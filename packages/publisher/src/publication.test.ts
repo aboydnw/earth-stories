@@ -25,6 +25,11 @@ import { preflightPublication } from "./preflight.js";
 import { deriveAuthoringReadiness } from "./readiness.js";
 import { verifyPublication } from "./verify.js";
 
+const VALID_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQcLAAAAEcAJlbA0QyAAAAAElFTkSuQmCC",
+  "base64",
+);
+
 const temporary: string[] = [];
 afterEach(async () =>
   Promise.all(
@@ -120,7 +125,7 @@ describe("publication hardening", () => {
 
   it("emits a share kit that a later export rebakes with the real URL", async () => {
     const { project, viewer } = await setup();
-    await writeFile(join(project, "share-card.png"), "png-bytes");
+    await writeFile(join(project, "share-card.png"), VALID_PNG);
     const placeheld = await buildLatestPublication({
       projectDirectory: project,
       viewerDirectory: viewer,
@@ -135,8 +140,8 @@ describe("publication hardening", () => {
       ),
     ).toContain("{{PUBLICATION_URL}}");
     expect(
-      await readFile(join(placeheld.directory, "share", "card-1.png"), "utf8"),
-    ).toBe("png-bytes");
+      await readFile(join(placeheld.directory, "share", "card-1.png")),
+    ).toEqual(VALID_PNG);
     expect(
       await readFile(join(placeheld.directory, "embed.html"), "utf8"),
     ).not.toContain("og:title");

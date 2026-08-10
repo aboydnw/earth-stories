@@ -57,13 +57,38 @@ export function shareDescription(project: StoryProject): string | null {
 }
 
 function normalizeBase(publicationUrl: string): string {
-  const base = publicationUrl.replace(/\/+$/, "");
-  if (base !== PUBLICATION_URL_PLACEHOLDER) {
-    const parsed = new URL(base);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
-      throw new Error("Publication URL must use HTTP or HTTPS");
-  }
-  return base;
+  if (publicationUrl === PUBLICATION_URL_PLACEHOLDER)
+    return PUBLICATION_URL_PLACEHOLDER;
+  const parsed = new URL(publicationUrl);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
+    throw new Error("Publication URL must use HTTP or HTTPS");
+  if (parsed.search || parsed.hash)
+    throw new Error(
+      "Publication URL must not include a query string or fragment",
+    );
+  return parsed.toString().replace(/\/+$/, "");
+}
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const IHDR = [0x49, 0x48, 0x44, 0x52];
+const IEND = [0x49, 0x45, 0x4e, 0x44];
+
+function matchesAt(bytes: Uint8Array, offset: number, expected: number[]) {
+  return expected.every((byte, index) => bytes[offset + index] === byte);
+}
+
+/**
+ * Reports whether bytes are a structurally sound PNG rather than arbitrary
+ * data wearing a PNG signature, which browsers and social platforms refuse to
+ * render as a link preview.
+ */
+export function isValidPng(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 45) return false;
+  return (
+    matchesAt(bytes, 0, PNG_SIGNATURE) &&
+    matchesAt(bytes, 12, IHDR) &&
+    matchesAt(bytes, bytes.byteLength - 8, IEND)
+  );
 }
 
 /**

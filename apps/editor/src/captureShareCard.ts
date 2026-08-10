@@ -68,14 +68,25 @@ export function wrapLines(
   if (lines.length < maxLines && line) lines.push(line);
   const rendered = lines.slice(0, maxLines);
   const consumed = rendered.join(" ").split(/\s+/).length;
-  if (consumed < words.length && rendered.length) {
+  const clipped = consumed < words.length;
+  if (rendered.length) {
     const last = rendered.length - 1;
-    let truncated = rendered[last]!;
-    while (truncated && measure(`${truncated}…`) > maxWidth)
-      truncated = truncated.slice(0, -1).trimEnd();
-    rendered[last] = `${truncated}…`;
+    const overflows = measure(rendered[last]!) > maxWidth;
+    if (clipped || overflows)
+      rendered[last] = ellipsize(rendered[last]!, measure, maxWidth);
   }
   return rendered;
+}
+
+function ellipsize(
+  value: string,
+  measure: (value: string) => number,
+  maxWidth: number,
+): string {
+  let truncated = value;
+  while (truncated && measure(`${truncated}…`) > maxWidth)
+    truncated = truncated.slice(0, -1).trimEnd();
+  return `${truncated}…`;
 }
 
 function readyMapCanvas(root: ParentNode): HTMLCanvasElement | null {
@@ -87,6 +98,41 @@ function readyMapCanvas(root: ParentNode): HTMLCanvasElement | null {
 }
 
 /**
+ * Crops the first ready map into a card-shaped canvas, but only returns it once
+ * its pixels are proven readable. A cross-origin tile taints a canvas silently
+ * during drawImage and only throws when the finished card is exported, so the
+ * taint has to be caught here, while the story card can still fall back to its
+ * scrim alone.
+ */
+function readableMapLayer(root: ParentNode): HTMLCanvasElement | null {
+  const source = readyMapCanvas(root);
+  if (!source) return null;
+  const layer = document.createElement("canvas");
+  layer.width = SHARE_CARD_WIDTH;
+  layer.height = SHARE_CARD_HEIGHT;
+  const context = layer.getContext("2d");
+  if (!context) return null;
+  const { sx, sy, sWidth, sHeight } = coverRect(source.width, source.height);
+  try {
+    context.drawImage(
+      source,
+      sx,
+      sy,
+      sWidth,
+      sHeight,
+      0,
+      0,
+      SHARE_CARD_WIDTH,
+      SHARE_CARD_HEIGHT,
+    );
+    context.getImageData(0, 0, 1, 1);
+  } catch {
+    return null;
+  }
+  return layer;
+}
+
+/**
  * Renders the link preview image: the first ready map behind a scrim carrying
  * the story title. Stories without a usable map get the scrim alone, so every
  * story still has a card.
@@ -95,8 +141,8 @@ export async function captureShareCard(
   title: string,
   root: ParentNode = document,
 ): Promise<string> {
-  const map = root.querySelector<HTMLElement>(".story-map");
-  if (map) await waitForMap(map);
+  const mapElement = root.querySelector<HTMLElement>(".story-map");
+  if (mapElement) await waitForMap(mapElement);
 
   const output = document.createElement("canvas");
   output.width = SHARE_CARD_WIDTH;
@@ -108,25 +154,8 @@ export async function captureShareCard(
   context.fillStyle = "#1d2b2a";
   context.fillRect(0, 0, SHARE_CARD_WIDTH, SHARE_CARD_HEIGHT);
 
-  const source = readyMapCanvas(root);
-  if (source) {
-    const { sx, sy, sWidth, sHeight } = coverRect(source.width, source.height);
-    try {
-      context.drawImage(
-        source,
-        sx,
-        sy,
-        sWidth,
-        sHeight,
-        0,
-        0,
-        SHARE_CARD_WIDTH,
-        SHARE_CARD_HEIGHT,
-      );
-    } catch {
-      /* A cross-origin tile can taint the canvas; the scrim alone still reads. */
-    }
-  }
+  const mapLayer = readableMapLayer(root);
+  if (mapLayer) context.drawImage(mapLayer, 0, 0);
 
   const scrim = context.createLinearGradient(
     0,

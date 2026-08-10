@@ -96,6 +96,7 @@ export function PublishPanel({
   const [snippet, setSnippet] = useState("");
   const [resultBuildId, setResultBuildId] = useState<string | null>(null);
   const [publicationUrl, setPublicationUrl] = useState("");
+  const [shareBusy, setShareBusy] = useState(false);
   const [busyLabel, setBusyLabel] = useState(
     "Building and validating the latest publication…",
   );
@@ -360,6 +361,7 @@ export function PublishPanel({
               key={id}
               disabled={
                 loading ||
+                shareBusy ||
                 unsaved ||
                 preflightState.status !== "ready" ||
                 !preflight?.ready
@@ -449,6 +451,7 @@ export function PublishPanel({
           project={project}
           publicationUrl={publicationUrl}
           disabled={loading}
+          onBusyChange={setShareBusy}
         />
         {snippet ? (
           <div className="embed-result">

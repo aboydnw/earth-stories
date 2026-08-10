@@ -36,13 +36,18 @@ const project: StoryProject = storyProjectSchema.parse(
   ),
 );
 
-function rehearsal(overrides: Partial<StoryProject> = {}, url = "") {
+function rehearsal(
+  overrides: Partial<StoryProject> = {},
+  url = "",
+  onBusyChange?: (busy: boolean) => void,
+) {
   return render(
     <EarthStoriesProvider>
       <ShareRehearsal
         project={{ ...project, ...overrides }}
         publicationUrl={url}
         disabled={false}
+        onBusyChange={onBusyChange}
       />
     </EarthStoriesProvider>,
   );
@@ -118,6 +123,62 @@ describe("ShareRehearsal", () => {
     expect(
       await screen.findByText("The published page has no og:image."),
     ).toBeTruthy();
+  });
+
+  it("hides a report once the author edits the URL it described", async () => {
+    vi.mocked(checkShareLink).mockResolvedValue({
+      url: "https://example.org/field-notes",
+      reachable: true,
+      title: "Field Notes",
+      description: "A coastline, mapped.",
+      imageUrl: null,
+      imageBytes: null,
+      problems: [
+        {
+          id: "missing-image",
+          severity: "error",
+          message: "The published page has no og:image.",
+        },
+      ],
+    });
+    const view = rehearsal({}, "https://example.org/field-notes");
+    await userEvent.click(
+      screen.getByRole("button", { name: /check published link/i }),
+    );
+    expect(
+      await screen.findByText("The published page has no og:image."),
+    ).toBeTruthy();
+    view.rerender(
+      <EarthStoriesProvider>
+        <ShareRehearsal
+          project={project}
+          publicationUrl="https://example.org/somewhere-else"
+          disabled={false}
+        />
+      </EarthStoriesProvider>,
+    );
+    expect(
+      screen.queryByText("The published page has no og:image."),
+    ).toBeNull();
+  });
+
+  it("reports busy while a card upload is in flight", async () => {
+    let release!: (value: { bytes: number }) => void;
+    vi.mocked(captureShareCard).mockResolvedValue("data:image/png;base64,AAA");
+    vi.mocked(uploadShareCard).mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const onBusyChange = vi.fn();
+    rehearsal({}, "", onBusyChange);
+    await userEvent.click(
+      screen.getByRole("button", { name: /render link preview image/i }),
+    );
+    await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(true));
+    expect(onBusyChange).not.toHaveBeenCalledWith(false);
+    release({ bytes: 1024 });
+    await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(false));
   });
 
   it("confirms a healthy link when nothing is wrong", async () => {

@@ -8,9 +8,15 @@ import {
 import {
   buildShareKit,
   injectShareMeta,
+  isValidPng,
   shareDescription,
   PUBLICATION_URL_PLACEHOLDER,
 } from "./share.js";
+
+const VALID_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQcLAAAAEcAJlbA0QyAAAAAElFTkSuQmCC",
+  "base64",
+);
 
 async function fixture(): Promise<StoryProject> {
   return storyProjectSchema.parse(
@@ -104,6 +110,50 @@ describe("buildShareKit", () => {
     expect(() =>
       buildShareKit({ project, publicationUrl: "ftp://example.org/story" }),
     ).toThrow();
+  });
+
+  it("rejects a publication URL carrying a query string or fragment", async () => {
+    const project = await fixture();
+    expect(() =>
+      buildShareKit({
+        project,
+        publicationUrl: "https://example.org/story?preview=1",
+      }),
+    ).toThrow();
+    expect(() =>
+      buildShareKit({
+        project,
+        publicationUrl: "https://example.org/story#intro",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("isValidPng", () => {
+  it("accepts a structurally sound PNG", () => {
+    expect(isValidPng(VALID_PNG)).toBe(true);
+  });
+
+  it("rejects arbitrary bytes wearing a PNG signature", () => {
+    expect(
+      isValidPng(
+        Buffer.concat([
+          VALID_PNG.subarray(0, 8),
+          Buffer.from("not really an image at all, just padding bytes here"),
+        ]),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a truncated PNG missing its terminating chunk", () => {
+    expect(isValidPng(VALID_PNG.subarray(0, VALID_PNG.byteLength - 8))).toBe(
+      false,
+    );
+  });
+
+  it("rejects text and empty data", () => {
+    expect(isValidPng(Buffer.from("png-bytes"))).toBe(false);
+    expect(isValidPng(Buffer.alloc(0))).toBe(false);
   });
 });
 

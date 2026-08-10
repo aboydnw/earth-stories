@@ -6,10 +6,13 @@ vi.mock("node:dns/promises", () => ({
 
 import { checkShareLink, decodeShareCard } from "./share-health.js";
 
-const pngDataUrl = (body = "share-card") =>
+const VALID_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQcLAAAAEcAJlbA0QyAAAAAElFTkSuQmCC";
+const pngDataUrl = () => `data:image/png;base64,${VALID_PNG_BASE64}`;
+const signatureOnlyDataUrl = () =>
   `data:image/png;base64,${Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    Buffer.from(body),
+    Buffer.from("arbitrary bytes that are not a real image at all"),
   ]).toString("base64")}`;
 
 const page = (body: string) =>
@@ -55,6 +58,15 @@ describe("decodeShareCard", () => {
         `data:image/png;base64,${Buffer.from("<svg/>").toString("base64")}`,
       ),
     ).toThrow();
+  });
+
+  it("rejects arbitrary bytes wearing a PNG signature", () => {
+    expect(() => decodeShareCard(signatureOnlyDataUrl())).toThrow();
+  });
+
+  it("rejects an oversized payload before decoding it", () => {
+    const oversized = `data:image/png;base64,${"A".repeat(8 * 1024 * 1024)}`;
+    expect(() => decodeShareCard(oversized)).toThrow(/larger than 5 MB/);
   });
 
   it("rejects a non-string payload", () => {

@@ -45,6 +45,13 @@ describe("wrapLines", () => {
     expect(lines.at(-1)!.endsWith("…")).toBe(true);
   });
 
+  it("ellipsizes a single word too wide for the card", () => {
+    const lines = wrapLines("x".repeat(40), measure, 100);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.endsWith("…")).toBe(true);
+    expect(measure(lines[0]!)).toBeLessThanOrEqual(100);
+  });
+
   it("returns nothing for blank text", () => {
     expect(wrapLines("   ", measure, 400)).toEqual([]);
   });

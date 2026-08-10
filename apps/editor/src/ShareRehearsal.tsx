@@ -14,6 +14,7 @@ interface Props {
   project: StoryProject;
   publicationUrl: string;
   disabled: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 function hostLabel(url: string): string {
@@ -24,15 +25,29 @@ function hostLabel(url: string): string {
   }
 }
 
-export function ShareRehearsal({ project, publicationUrl, disabled }: Props) {
+export function ShareRehearsal({
+  project,
+  publicationUrl,
+  disabled,
+  onBusyChange,
+}: Props) {
   const [card, setCard] = useState<string | null>(null);
-  const [report, setReport] = useState<ShareLinkReport | null>(null);
-  const [busy, setBusy] = useState<"card" | "link" | null>(null);
+  const [report, setReport] = useState<
+    (ShareLinkReport & { checkedUrl: string }) | null
+  >(null);
+  const [busy, setBusyState] = useState<"card" | "link" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const title = project.metadata.title.trim() || "Untitled story";
   const description = shareDescription(project);
+  const trimmedUrl = publicationUrl.trim();
+  const currentReport = report?.checkedUrl === trimmedUrl ? report : null;
+
+  function setBusy(value: "card" | "link" | null) {
+    setBusyState(value);
+    onBusyChange?.(value !== null);
+  }
 
   async function generateCard() {
     setBusy("card");
@@ -61,7 +76,10 @@ export function ShareRehearsal({ project, publicationUrl, disabled }: Props) {
     setError(null);
     setNotice(null);
     try {
-      setReport(await checkShareLink(publicationUrl));
+      setReport({
+        ...(await checkShareLink(trimmedUrl)),
+        checkedUrl: trimmedUrl,
+      });
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -130,7 +148,7 @@ export function ShareRehearsal({ project, publicationUrl, disabled }: Props) {
         </ActionButton>
         <ActionButton
           variant="surface"
-          disabled={disabled || busy !== null || !publicationUrl.trim()}
+          disabled={disabled || busy !== null || !trimmedUrl}
           onClick={() => void runLinkCheck()}
         >
           <LinkSimple size={18} />{" "}
@@ -139,7 +157,7 @@ export function ShareRehearsal({ project, publicationUrl, disabled }: Props) {
             : "Check published link"}
         </ActionButton>
       </div>
-      {!publicationUrl.trim() ? (
+      {!trimmedUrl ? (
         <p className="share-hint">
           Add your deployed publication URL above to check how the live link
           unfurls.
@@ -147,11 +165,11 @@ export function ShareRehearsal({ project, publicationUrl, disabled }: Props) {
       ) : null}
       {error ? <StatusNotice tone="danger">{error}</StatusNotice> : null}
       {notice ? <StatusNotice tone="success">{notice}</StatusNotice> : null}
-      {report ? (
-        report.problems.length ? (
+      {currentReport ? (
+        currentReport.problems.length ? (
           <div className="publish-issues">
             <h4>Problems with the published link</h4>
-            {report.problems.map((problem) => (
+            {currentReport.problems.map((problem) => (
               <PublicationFinding
                 key={problem.id}
                 severity={problem.severity}
