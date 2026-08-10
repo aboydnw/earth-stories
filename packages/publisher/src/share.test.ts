@@ -13,6 +13,8 @@ import {
   PUBLICATION_URL_PLACEHOLDER,
 } from "./share.js";
 
+const SMALLEST_PNG_BYTES = 45;
+
 const VALID_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQcLAAAAEcAJlbA0QyAAAAAElFTkSuQmCC",
   "base64",
@@ -147,6 +149,33 @@ describe("isValidPng", () => {
 
   it("rejects a truncated PNG missing its terminating chunk", () => {
     expect(isValidPng(VALID_PNG.subarray(0, VALID_PNG.byteLength - 8))).toBe(
+      false,
+    );
+  });
+
+  it("rejects a chunk length reaching past the end of the file", () => {
+    const malformed = Buffer.alloc(SMALLEST_PNG_BYTES);
+    VALID_PNG.copy(malformed, 0, 0, 8);
+    malformed.writeUInt32BE(0xffffffff, 8);
+    malformed.write("IHDR", 12);
+    malformed.write("IEND", 37);
+    expect(isValidPng(malformed)).toBe(false);
+  });
+
+  it("rejects a header chunk that is not 13 bytes", () => {
+    const malformed = Buffer.from(VALID_PNG);
+    malformed.writeUInt32BE(12, 8);
+    expect(isValidPng(malformed)).toBe(false);
+  });
+
+  it("rejects a corrupted chunk whose CRC no longer matches", () => {
+    const corrupted = Buffer.from(VALID_PNG);
+    corrupted[20] = corrupted[20]! ^ 0xff;
+    expect(isValidPng(corrupted)).toBe(false);
+  });
+
+  it("rejects data trailing the terminating chunk", () => {
+    expect(isValidPng(Buffer.concat([VALID_PNG, Buffer.from("extra")]))).toBe(
       false,
     );
   });
