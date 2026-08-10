@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { access, readFile, readdir, stat } from "node:fs/promises";
+import { access, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
@@ -17,6 +17,8 @@ import {
   createEmbedSnippet,
   discoverRemoteSource,
   preflightPublication,
+  PUBLICATION_URL_PLACEHOLDER,
+  SHARE_CARD_SOURCE_FILENAME,
 } from "@earth-stories/publisher";
 import { Zip, ZipDeflate } from "fflate";
 import { parseByteRange } from "./range.js";
@@ -27,6 +29,7 @@ import {
 } from "./examples.js";
 import { loadExampleAssetFiles } from "./exampleAssets.js";
 import { isTrustedMutationOrigin } from "./security.js";
+import { checkShareLink, decodeShareCard } from "./share-health.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 
@@ -440,6 +443,29 @@ export function createLocalServer(
         );
         return;
       }
+      const shareCardMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/share-card$/,
+      );
+      if (shareCardMatch && request.method === "POST") {
+        const id = decodeURIComponent(shareCardMatch[1]);
+        const body = (await readJson(request)) as { image?: unknown };
+        const card = decodeShareCard(body.image);
+        await writeFile(
+          join(store.projectPath(id), SHARE_CARD_SOURCE_FILENAME),
+          card,
+        );
+        json(response, 200, { bytes: card.byteLength });
+        return;
+      }
+
+      if (url.pathname === "/api/share/link-health" && request.method === "POST") {
+        const body = (await readJson(request)) as { url?: unknown };
+        if (typeof body.url !== "string")
+          throw new Error("Enter the URL where you published the story");
+        json(response, 200, await checkShareLink(body.url));
+        return;
+      }
+
       const exportMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/export$/,
       );
@@ -454,11 +480,16 @@ export function createLocalServer(
           typeof body.mapSnapshots === "object" && body.mapSnapshots !== null
             ? (body.mapSnapshots as Record<string, string>)
             : undefined;
+        const publicationUrl =
+          typeof body.publicationUrl === "string" && body.publicationUrl.trim()
+            ? body.publicationUrl.trim()
+            : PUBLICATION_URL_PLACEHOLDER;
         await withProjectExportLock(id, async () => {
           const latest = await buildLatestPublication({
             projectDirectory: store.projectPath(id),
             viewerDirectory: VIEWER_DIRECTORY,
             mapSnapshots: snapshots,
+            publicationUrl,
           });
           if (format === "folder") {
             json(response, 200, {
@@ -484,11 +515,6 @@ export function createLocalServer(
             return;
           }
           if (format === "embed") {
-            const publicationUrl =
-              typeof body.publicationUrl === "string" &&
-              body.publicationUrl.trim()
-                ? body.publicationUrl.trim()
-                : "{{PUBLICATION_URL}}";
             json(response, 200, {
               format,
               directory: latest.directory,
