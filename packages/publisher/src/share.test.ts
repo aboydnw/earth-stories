@@ -111,7 +111,7 @@ describe("injectShareMeta", () => {
   it("inserts the metadata before the closing head tag", () => {
     const result = injectShareMeta(
       "<!doctype html><html><head><title>x</title></head><body></body></html>",
-      "<meta name=\"a\" content=\"b\">",
+      '<meta name="a" content="b">',
     );
     expect(result).toContain('<title>x</title><meta name="a" content="b">');
     expect(result.indexOf("<meta")).toBeLessThan(result.indexOf("</head>"));
@@ -120,7 +120,7 @@ describe("injectShareMeta", () => {
   it("inserts after the doctype when the document has no head", () => {
     const result = injectShareMeta(
       '<!doctype html><script type="module" src="./assets/viewer.js"></script>',
-      "<meta name=\"a\" content=\"b\">",
+      '<meta name="a" content="b">',
     );
     expect(result.startsWith('<!doctype html><meta name="a"')).toBe(true);
   });

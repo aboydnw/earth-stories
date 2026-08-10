@@ -458,7 +458,10 @@ export function createLocalServer(
         return;
       }
 
-      if (url.pathname === "/api/share/link-health" && request.method === "POST") {
+      if (
+        url.pathname === "/api/share/link-health" &&
+        request.method === "POST"
+      ) {
         const body = (await readJson(request)) as { url?: unknown };
         if (typeof body.url !== "string")
           throw new Error("Enter the URL where you published the story");

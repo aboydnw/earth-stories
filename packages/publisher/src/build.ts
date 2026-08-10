@@ -235,9 +235,7 @@ async function writeShareKit(
   try {
     await cp(card, join(outputDirectory, SHARE_CARD_PATH));
   } catch (cause) {
-    if (
-      !(cause instanceof Error && "code" in cause && cause.code === "ENOENT")
-    )
+    if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT"))
       throw cause;
   }
 }

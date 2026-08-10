@@ -87,6 +87,28 @@ which format was used.
 iframe remains `100vh` tall and acts as the story scrollport, preserving sticky
 scrollytelling. Generate the final snippet after entering the deployed URL.
 
+### Share kit
+
+Every release carries the metadata a social platform reads when someone pastes
+its link. `index.html` gains Open Graph and Twitter card tags, `share/card-1.png`
+holds the link preview image, and `share/post-text.md` holds ready-to-paste post
+text. `embed.html` is copied before the tags are injected, so an embedded story
+does not advertise itself as the page being shared.
+
+Platforms require absolute URLs and never run the page's scripts, but the
+publication URL is unknown while the story is still local. Builds therefore
+default to the same `{{PUBLICATION_URL}}` placeholder the embed snippet uses.
+Once the story is deployed, enter the URL in the publication workshop and export
+again: the release is rebuilt with real absolute URLs throughout. There is no
+in-place rewrite, because each build replaces the whole release folder.
+
+The workshop renders the link preview image from the first ready map chapter
+behind a scrim carrying the story title, and stores it beside `story.json` so it
+survives the next build. Stories without a usable map still get a card from the
+scrim alone. "Check published link" fetches a deployed story and reports missing
+metadata, an unresolved placeholder, or a preview image platforms cannot fetch —
+the same failures that otherwise only show up after posting publicly.
+
 ## Latest-only lifecycle
 
 A build is assembled in a temporary sibling directory. The service moves the

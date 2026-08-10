@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./compile": "./src/compile.ts",
     "./readiness": "./src/readiness.ts",
+    "./share": "./src/share.ts",
     "./build": "./src/build.ts"
   },
   "scripts": {

@@ -25,6 +25,7 @@ import {
   downloadAnimatedMapCaptures,
   downloadMapSnapshots,
 } from "./captureSnapshots";
+import { ShareRehearsal } from "./ShareRehearsal";
 
 interface Props {
   open: boolean;
@@ -439,8 +440,16 @@ export function PublishPanel({
             onChange={(event) => setPublicationUrl(event.target.value)}
             placeholder="https://example.org/my-story"
           />
-          <small>Optional until you generate embed code.</small>
+          <small>
+            Paste this once you deploy, then export again so link previews carry
+            your real URL.
+          </small>
         </label>
+        <ShareRehearsal
+          project={project}
+          publicationUrl={publicationUrl}
+          disabled={loading}
+        />
         {snippet ? (
           <div className="embed-result">
             <textarea

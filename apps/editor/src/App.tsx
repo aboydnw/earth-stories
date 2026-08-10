@@ -1412,7 +1412,9 @@ export function App() {
           guidance={guidance}
           errors={readinessErrors}
           warnings={readinessWarnings}
-          onStageSelect={(stage) => followGuidance(stage as GuidanceDestination)}
+          onStageSelect={(stage) =>
+            followGuidance(stage as GuidanceDestination)
+          }
           onGuidance={followGuidance}
         />
         <ActionButton

@@ -23,7 +23,9 @@ export interface ShareLinkReport {
   problems: ShareLinkProblem[];
 }
 
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
 
 /**
  * Decodes a PNG data URL produced by the editor's card capture, rejecting
@@ -32,7 +34,9 @@ const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0
 export function decodeShareCard(value: unknown): Buffer {
   if (typeof value !== "string")
     throw new Error("Send the share card as a PNG data URL");
-  const encoded = value.match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/)?.[1];
+  const encoded = value.match(
+    /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/,
+  )?.[1];
   if (!encoded) throw new Error("Send the share card as a PNG data URL");
   const buffer = Buffer.from(encoded, "base64");
   if (!buffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE))
@@ -138,7 +142,8 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
       id: "missing-title",
       severity: "error",
       message: "The published page has no og:title.",
-      resolution: "Re-export after deploying so the release carries its share metadata.",
+      resolution:
+        "Re-export after deploying so the release carries its share metadata.",
     });
   if (!report.description)
     problems.push({
@@ -151,7 +156,8 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
     problems.push({
       id: "unresolved-placeholder",
       severity: "error",
-      message: "The published page still contains the {{PUBLICATION_URL}} placeholder.",
+      message:
+        "The published page still contains the {{PUBLICATION_URL}} placeholder.",
       resolution:
         "Export again with your published URL, then redeploy the release folder.",
     });
@@ -160,7 +166,8 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
     problems.push({
       id: "missing-image",
       severity: "error",
-      message: "The published page has no og:image, so the link shows no artwork.",
+      message:
+        "The published page has no og:image, so the link shows no artwork.",
       resolution: "Generate a share card, then re-export and redeploy.",
     });
     return report;
@@ -173,8 +180,10 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
     problems.push({
       id: "relative-image",
       severity: "error",
-      message: "The og:image is not an absolute URL, so platforms cannot fetch it.",
-      resolution: "Export again with your published URL so the image resolves absolutely.",
+      message:
+        "The og:image is not an absolute URL, so platforms cannot fetch it.",
+      resolution:
+        "Export again with your published URL so the image resolves absolutely.",
     });
     return report;
   }
@@ -208,7 +217,8 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
         problems.push({
           id: "image-too-large",
           severity: "warning",
-          message: "The link preview image is larger than 5 MB and may be skipped.",
+          message:
+            "The link preview image is larger than 5 MB and may be skipped.",
           resolution: "Regenerate the share card at a smaller size.",
         });
     }
@@ -231,7 +241,8 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
       problems.push({
         id: "image-aspect",
         severity: "warning",
-        message: "The declared preview image shape is not the 1.91:1 platforms crop to.",
+        message:
+          "The declared preview image shape is not the 1.91:1 platforms crop to.",
         resolution: "Regenerate the share card so it matches 1200×627.",
       });
   }

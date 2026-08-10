@@ -119,7 +119,9 @@ describe("checkShareLink", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
       String(input).endsWith(".png")
         ? image({ "content-type": "image/png" })
-        : page(shareHtml({ "og:image:width": "600", "og:image:height": "600" })),
+        : page(
+            shareHtml({ "og:image:width": "600", "og:image:height": "600" }),
+          ),
     );
     const report = await checkShareLink("https://example.org/story/");
     expect(report.problems).toContainEqual(

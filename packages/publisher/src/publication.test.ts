@@ -129,7 +129,10 @@ describe("publication hardening", () => {
       await readFile(join(placeheld.directory, "index.html"), "utf8"),
     ).toContain('content="{{PUBLICATION_URL}}/share/card-1.png"');
     expect(
-      await readFile(join(placeheld.directory, "share", "post-text.md"), "utf8"),
+      await readFile(
+        join(placeheld.directory, "share", "post-text.md"),
+        "utf8",
+      ),
     ).toContain("{{PUBLICATION_URL}}");
     expect(
       await readFile(join(placeheld.directory, "share", "card-1.png"), "utf8"),

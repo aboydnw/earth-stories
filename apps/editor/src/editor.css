@@ -764,6 +764,106 @@ nav {
   color: var(--es-fg-muted);
   font-weight: 400;
 }
+.share-rehearsal {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--es-border);
+}
+.share-rehearsal h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.share-rehearsal > p {
+  margin: 0 0 14px;
+  color: var(--es-fg-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.share-previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+.share-preview {
+  margin: 0;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+  background: var(--es-bg-raised);
+}
+.share-preview__label {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--es-bg-emphasized);
+  color: var(--es-fg-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.share-preview__image {
+  aspect-ratio: 1200 / 627;
+  display: grid;
+  place-items: center;
+  background: var(--es-bg-emphasized);
+  color: var(--es-fg-muted);
+  font-size: 11px;
+}
+.share-preview__image span {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+.share-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+.share-preview figcaption {
+  padding: 11px 13px;
+  display: grid;
+  gap: 4px;
+}
+.share-preview figcaption small {
+  color: var(--es-fg-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.share-preview figcaption strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+.share-preview figcaption span {
+  color: var(--es-fg-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.share-preview--slack figcaption {
+  margin: 11px 13px;
+  padding: 2px 0 2px 11px;
+  border-left: 3px solid var(--es-border);
+}
+.share-preview--slack img {
+  margin-top: 8px;
+  max-height: 120px;
+  border-radius: var(--es-radius-control);
+}
+.share-actions {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.share-hint {
+  margin: 10px 0 0;
+  color: var(--es-fg-muted);
+  font-size: 11px;
+}
 .embed-result {
   margin-top: 16px;
 }
