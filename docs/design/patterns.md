@@ -40,6 +40,10 @@ the product supports it.
 Preflight separates blocking errors, portability/network warnings, and
 information. Build progress uses real stages. A failed build preserves the
 previous publication. Success identifies the local path or downloaded result.
+Keep workflow progress and non-blocking publication warnings in compact,
+on-demand top-bar controls so they do not displace the authoring canvas. Reserve
+persistent full-width guidance for failures that block saving, previewing, or
+publishing, and place chapter-specific warnings beside the affected field.
 Use **Ready** only for current server checks with no errors or warnings, **Needs
 review** for recommendations or checks not yet run, and **Blocked** for errors.
 Stale cached checks stay visible as historical context but never authorize a

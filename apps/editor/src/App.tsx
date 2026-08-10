@@ -32,7 +32,6 @@ import {
   GuidancePrompt,
   SaveStatus,
   StatePanel,
-  WorkflowGuide,
 } from "@earth-stories/ui";
 import { reorderChapters } from "./chapterOrder";
 import {
@@ -63,6 +62,7 @@ import { SourceProvenanceFields } from "./SourceProvenanceFields";
 import { nextGuidanceAction, workflowStages } from "./editorReadiness";
 import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
 import { usePublicationReadiness } from "./usePublicationReadiness";
+import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
@@ -1245,6 +1245,29 @@ export function App() {
           preflight: publicationReadiness.state,
         })
       : null;
+  const workflow =
+    project && localReadiness
+      ? workflowStages(localReadiness, {
+          previewReviewed,
+          preflight: publicationReadiness.state,
+        })
+      : [];
+  const readinessFindings =
+    saveState === "saved" && publicationReadiness.state.status === "ready"
+      ? (publicationReadiness.state.result?.issues ??
+        localReadiness?.findings ??
+        [])
+      : (localReadiness?.findings ?? []);
+  const readinessErrors = readinessFindings.filter(
+    ({ severity }) => severity === "error",
+  ).length;
+  const readinessWarnings = readinessFindings.filter(
+    ({ severity }) => severity === "warning",
+  ).length;
+  const blockingGuidance = guidance?.tone === "danger" ? guidance : null;
+  const selectedNarrativeWarning = localReadiness?.findings.find(
+    ({ id }) => id === `chapter-narrative-${selectedChapter?.id}`,
+  );
 
   function openReaderPreview() {
     if (!project || !publication) return;
@@ -1352,7 +1375,11 @@ export function App() {
     );
 
   return (
-    <div className="editor-shell">
+    <div
+      className={
+        blockingGuidance ? "editor-shell has-blocking-guidance" : "editor-shell"
+      }
+    >
       <a className="skip-link" href="#top">
         Skip to story editor
       </a>
@@ -1380,6 +1407,18 @@ export function App() {
             }
           />
         </div>
+        <WorkflowStatusMenu
+          stages={workflow}
+          guidance={guidance}
+          errors={readinessErrors}
+          warnings={readinessWarnings}
+          onStageSelect={(stage) =>
+            followGuidance(
+              stage as "story" | "chapters" | "data" | "preview" | "publish",
+            )
+          }
+          onGuidance={followGuidance}
+        />
         <ActionButton
           variant="surface"
           className="button button--save"
@@ -1403,28 +1442,17 @@ export function App() {
           onPublish={openPublicationWorkshop}
         />
       </header>
-      <div className="editor-guidance">
-        <WorkflowGuide
-          stages={workflowStages(localReadiness!, {
-            previewReviewed,
-            preflight: publicationReadiness.state,
-          })}
-          onStageSelect={(stage) =>
-            followGuidance(
-              stage as "story" | "chapters" | "data" | "preview" | "publish",
-            )
-          }
-        />
-        {guidance ? (
+      {blockingGuidance ? (
+        <div className="editor-blocking-guidance">
           <GuidancePrompt
-            tone={guidance.tone}
-            actionLabel={guidance.label}
-            onAction={() => followGuidance(guidance.destination)}
+            tone={blockingGuidance.tone}
+            actionLabel={blockingGuidance.label}
+            onAction={() => followGuidance(blockingGuidance.destination)}
           >
-            {guidance.message}
+            {blockingGuidance.message}
           </GuidancePrompt>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       <aside className="editor-rail">
         <div className="project-label">
           <button type="button" onClick={leaveProject}>
@@ -2190,6 +2218,12 @@ export function App() {
                   }))
                 }
               />
+              {selectedNarrativeWarning ? (
+                <p className="chapter-field-warning" role="status">
+                  {selectedNarrativeWarning.message} Add context so readers know
+                  what to notice.
+                </p>
+              ) : null}
               {selectedChapter.type === "video" ? (
                 <div className="field-row">
                   <label>
