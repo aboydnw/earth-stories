@@ -60,6 +60,7 @@ import { parseRoute, routePath, type AppRoute } from "./routing";
 import { PublishMenu } from "./PublishMenu";
 import { SourceProvenanceFields } from "./SourceProvenanceFields";
 import { nextGuidanceAction, workflowStages } from "./editorReadiness";
+import type { GuidanceDestination } from "./editorReadiness";
 import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
 import { usePublicationReadiness } from "./usePublicationReadiness";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
@@ -1288,9 +1289,7 @@ export function App() {
     })();
   }
 
-  function followGuidance(
-    destination: "save" | "story" | "chapters" | "data" | "preview" | "publish",
-  ) {
+  function followGuidance(destination: GuidanceDestination) {
     if (destination === "save") {
       void persist();
       return;
@@ -1299,7 +1298,8 @@ export function App() {
     if (destination === "chapters") setInspectorMode("chapter");
     if (destination === "data") setInspectorMode("data");
     if (destination === "preview") openReaderPreview();
-    if (destination === "publish") openPublicationWorkshop();
+    if (destination === "publish" || destination === "sharing")
+      openPublicationWorkshop();
   }
 
   if (loading)
@@ -1412,11 +1412,7 @@ export function App() {
           guidance={guidance}
           errors={readinessErrors}
           warnings={readinessWarnings}
-          onStageSelect={(stage) =>
-            followGuidance(
-              stage as "story" | "chapters" | "data" | "preview" | "publish",
-            )
-          }
+          onStageSelect={(stage) => followGuidance(stage as GuidanceDestination)}
           onGuidance={followGuidance}
         />
         <ActionButton

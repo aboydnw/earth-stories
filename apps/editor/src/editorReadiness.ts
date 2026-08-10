@@ -21,7 +21,16 @@ const labels: Record<ReadinessArea, string> = {
   data: "Data",
   preview: "Preview",
   publish: "Publish",
+  sharing: "Sharing",
 };
+
+const workflowOrder: ReadinessArea[] = [
+  "story",
+  "chapters",
+  "data",
+  "preview",
+  "publish",
+];
 
 export function workflowStages(
   readiness: AuthoringReadiness,
@@ -54,7 +63,7 @@ export function workflowStages(
       descriptions.publish = "Ready";
     }
   }
-  return (Object.keys(labels) as ReadinessArea[]).map((id) => ({
+  return workflowOrder.map((id) => ({
     id,
     label: labels[id],
     state: states[id],

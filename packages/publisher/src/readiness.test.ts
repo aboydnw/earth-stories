@@ -85,6 +85,29 @@ describe("deriveAuthoringReadiness", () => {
     expect(result.manifest).not.toBeNull();
   });
 
+  it("warns when a shared link would have no summary", async () => {
+    const project = await fixture();
+    project.metadata.description = "";
+    for (const chapter of project.chapters) chapter.narrative = "";
+    const result = deriveAuthoringReadiness(project);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        id: "share-description",
+        area: "sharing",
+        severity: "warning",
+      }),
+    );
+    expect(result.stages.sharing).toBe("current");
+  });
+
+  it("stays quiet about sharing when a chapter narrative can stand in", async () => {
+    const project = await fixture();
+    project.metadata.description = "";
+    const result = deriveAuthoringReadiness(project);
+    expect(result.findings.some(({ area }) => area === "sharing")).toBe(false);
+    expect(result.stages.sharing).toBe("complete");
+  });
+
   it("catches a compiler failure once", async () => {
     const project = await fixture();
     const source = project.sources[0]!;

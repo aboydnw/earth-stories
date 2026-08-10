@@ -29,6 +29,9 @@ function readiness(
       publish: findings.some(({ severity }) => severity === "error")
         ? "blocked"
         : "current",
+      sharing: findings.some(({ severity }) => severity === "error")
+        ? "blocked"
+        : "current",
     },
   };
 }

@@ -3,6 +3,7 @@ export * from "./compile.js";
 export * from "./readiness.js";
 export * from "./archive.js";
 export * from "./embed.js";
+export * from "./share.js";
 export * from "./preflight.js";
 export * from "./verify.js";
 export * from "./discover.js";

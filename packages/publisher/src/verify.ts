@@ -4,6 +4,7 @@ import {
   publicationManifestSchema,
   type PublicationManifest,
 } from "@earth-stories/story-schema";
+import { SHARE_POST_TEXT_PATH } from "./share.js";
 
 export interface PublicationVerification {
   verifiedAt: string;
@@ -16,7 +17,7 @@ export interface PublicationVerification {
 export async function verifyPublication(
   directory: string,
   expected: PublicationManifest,
-  options: { requireEmbed?: boolean } = {},
+  options: { requireEmbed?: boolean; requireShareKit?: boolean } = {},
 ): Promise<PublicationVerification> {
   const required = [
     "index.html",
@@ -25,6 +26,7 @@ export async function verifyPublication(
     "publication-report.html",
     "README.txt",
     ...(options.requireEmbed ? ["embed.html", "EMBED.txt"] : []),
+    ...(options.requireShareKit ? [SHARE_POST_TEXT_PATH] : []),
   ];
   const failures: string[] = [];
   for (const filename of required) {

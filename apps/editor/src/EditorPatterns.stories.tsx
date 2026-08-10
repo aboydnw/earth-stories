@@ -112,6 +112,7 @@ const guidanceReadiness: AuthoringReadiness = {
     data: "optional",
     preview: "current",
     publish: "current",
+    sharing: "current",
   },
 };
 
