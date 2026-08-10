@@ -107,6 +107,32 @@ describe("ProjectStore", () => {
     expect(await store.read(template.id)).toEqual(template);
   });
 
+  it("writes bundled asset files when materializing a template", async () => {
+    const store = await createStore();
+    const template = await store.create({ title: "Example River" });
+    const copy = await store.createFromTemplate(
+      { ...template, id: "example-river" },
+      [
+        {
+          path: "assets/overview.png",
+          contents: new Uint8Array([1, 2, 3, 4]),
+        },
+      ],
+    );
+    expect(
+      await readFile(store.assetPath(copy.id, "assets/overview.png")),
+    ).toEqual(Buffer.from([1, 2, 3, 4]));
+
+    const reopened = await store.createFromTemplate(
+      { ...template, id: "example-river" },
+      [{ path: "assets/overview.png", contents: new Uint8Array([9, 9]) }],
+    );
+    expect(reopened).toEqual(copy);
+    expect(
+      await readFile(store.assetPath(copy.id, "assets/overview.png")),
+    ).toEqual(Buffer.from([1, 2, 3, 4]));
+  });
+
   it("rejects traversal-shaped project and asset paths", async () => {
     const store = await createStore();
     await expect(store.read("../private")).rejects.toThrow(

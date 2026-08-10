@@ -11,7 +11,7 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import {
   parseStoryProject,
   storyProjectSchema,
@@ -70,6 +70,12 @@ export interface ImportedAsset {
   path: string;
   filename: string;
   sizeBytes: number;
+}
+
+export interface TemplateAssetFile {
+  /** Project-relative destination, e.g. "assets/overview.png". */
+  path: string;
+  contents: Uint8Array;
 }
 
 function slugify(value: string): string {
@@ -199,7 +205,10 @@ export class ProjectStore {
     return project;
   }
 
-  async createFromTemplate(template: StoryProject): Promise<StoryProject> {
+  async createFromTemplate(
+    template: StoryProject,
+    assetFiles: TemplateAssetFile[] = [],
+  ): Promise<StoryProject> {
     const validated = storyProjectSchema.parse(template);
     await this.initialize();
     const id = validated.id;
@@ -214,6 +223,11 @@ export class ProjectStore {
       metadata: { ...validated.metadata, created: now, updated: now },
     });
     await mkdir(this.directory(id), { recursive: false });
+    for (const file of assetFiles) {
+      const destination = this.assetPath(id, file.path);
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, file.contents, { flag: "wx" });
+    }
     await this.writeAtomic(id, project, false);
     return project;
   }
