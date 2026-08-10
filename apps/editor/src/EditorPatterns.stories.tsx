@@ -15,6 +15,7 @@ import type { AuthoringReadiness } from "@earth-stories/publisher/readiness";
 import { useState } from "react";
 import { PublishMenu } from "./PublishMenu";
 import { SourceProvenanceFields } from "./SourceProvenanceFields";
+import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 import "./editor.css";
 
 const meta = { title: "Patterns/Editor collections" } satisfies Meta;
@@ -148,6 +149,46 @@ function PublishMenuExample() {
 
 export const PublicationReadinessMenu: Story = {
   render: () => <PublishMenuExample />,
+};
+
+export const CompactWorkflowStatus: Story = {
+  render: () => (
+    <div
+      style={{
+        minHeight: 520,
+        display: "flex",
+        justifyContent: "flex-end",
+        alignItems: "flex-start",
+        padding: 24,
+      }}
+    >
+      <WorkflowStatusMenu
+        stages={[
+          { id: "story", label: "Story", state: "complete" },
+          { id: "chapters", label: "Chapters", state: "complete" },
+          { id: "data", label: "Data", state: "complete" },
+          { id: "preview", label: "Preview", state: "complete" },
+          {
+            id: "publish",
+            label: "Publish",
+            state: "current",
+            description: "Needs review",
+          },
+        ]}
+        guidance={{
+          id: "narrative",
+          label: "Review warnings",
+          message: "One chapter has no narrative.",
+          destination: "publish",
+          tone: "warning",
+        }}
+        errors={0}
+        warnings={1}
+        onStageSelect={() => undefined}
+        onGuidance={() => undefined}
+      />
+    </div>
+  ),
 };
 
 function ProvenanceFormExample() {

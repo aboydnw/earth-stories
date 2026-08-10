@@ -92,17 +92,29 @@ export function PublishMenu({
     : errors
       ? "blocked"
       : "review";
+  const issueCount = errors + warnings;
 
   return (
     <div className="publish-menu" ref={rootRef}>
       <ActionButton
         className="button button--primary"
         disabled={disabled}
+        aria-label={
+          issueCount
+            ? `Publish, ${issueCount} issue${issueCount === 1 ? "" : "s"}`
+            : "Publish"
+        }
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
       >
-        <Export size={17} /> Publish <CaretDown size={14} />
+        <Export size={17} /> Publish
+        {issueCount ? (
+          <span className="publish-menu__badge" aria-hidden="true">
+            {issueCount > 99 ? "99+" : issueCount}
+          </span>
+        ) : null}
+        <CaretDown size={14} />
       </ActionButton>
       {open ? (
         <div
