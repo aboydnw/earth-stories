@@ -25,6 +25,7 @@ import {
   exampleConnections,
   findExampleStory,
 } from "./examples.js";
+import { loadExampleAssetFiles } from "./exampleAssets.js";
 import { isTrustedMutationOrigin } from "./security.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { ConversionJobs } from "./conversion-jobs.js";
@@ -344,7 +345,12 @@ export function createLocalServer(
           json(response, 404, { error: "Example story not found" });
           return;
         }
-        json(response, 201, await store.createFromTemplate(example));
+        const assetFiles = await loadExampleAssetFiles(example.id);
+        json(
+          response,
+          201,
+          await store.createFromTemplate(example, assetFiles),
+        );
         return;
       }
 
