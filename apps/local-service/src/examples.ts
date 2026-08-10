@@ -785,7 +785,7 @@ const stormTrack: StoryProject = {
   metadata: {
     title: "Tracking a hurricane",
     description:
-      "Six-hourly best-track fixes turn one of the most studied Atlantic hurricanes into an animated path.",
+      "Best-track fixes turn one of the most studied Atlantic hurricanes into an animated path.",
     author: "Development Seed",
     created,
     updated: created,
@@ -862,7 +862,7 @@ const stormTrack: StoryProject = {
       type: "prose",
       title: "A storm finds its shape",
       narrative:
-        "On 23 August 2005, a tropical depression organized over the southeastern Bahamas. Over the next eight days it would cross Florida, explode into a Category 5 hurricane over the Gulf of Mexico, and make landfall on the Louisiana coast — becoming one of the most destructive storms in United States history. Every position in this story comes from NOAA's **best track** for the storm: a six-hourly reconstruction built after the fact from aircraft reconnaissance, satellite imagery, and surface observations.",
+        "On 23 August 2005, a tropical depression organized over the southeastern Bahamas. Over the next eight days it would cross Florida, explode into a Category 5 hurricane over the Gulf of Mexico, and make landfall on the Louisiana coast — becoming one of the most destructive storms in United States history. Every position in this story comes from NOAA's **best track** for the storm: a reconstruction built after the fact from aircraft reconnaissance, satellite imagery, and surface observations, at regular six-hour intervals with extra fixes inserted at each landfall and at peak intensity.",
     },
     {
       id: "storm-formation",
@@ -880,7 +880,7 @@ const stormTrack: StoryProject = {
       type: "scrolly",
       title: "First landfall: South Florida",
       narrative:
-        "At 22:30 UTC on 25 August, the storm — now Hurricane Katrina — came ashore near the Miami-Dade/Broward county line as a Category 1 hurricane, sustained winds near 70 knots. It crossed the peninsula in under six hours and re-emerged over the Gulf of Mexico, barely weakened.",
+        "At 22:30 UTC on 25 August, the storm — now Hurricane Katrina — came ashore near the Miami-Dade/Broward county line as a Category 1 hurricane, sustained winds near 70 knots. It crossed the narrow peninsula within hours and re-emerged over the Gulf of Mexico by the next morning, barely weakened.",
       sourceId: "katrina-track",
       overlaySourceIds: ["regions"],
       camera: { center: [-80.15, 26.05], zoom: 7.6, bearing: 0, pitch: 0 },
@@ -911,7 +911,7 @@ const stormTrack: StoryProject = {
     {
       id: "storm-intensity-chart",
       type: "chart",
-      title: "Wind speed, six hours at a time",
+      title: "Wind speed, fix by fix",
       narrative:
         "The same best-track fixes, plotted as sustained wind speed instead of position: the Gulf crossing shows up as a sharp climb and an almost-as-sharp fall, the signature of a storm intensifying over open water and weakening the moment it meets land.",
       sourceId: "katrina-intensity",
@@ -926,7 +926,7 @@ const stormTrack: StoryProject = {
       type: "prose",
       title: "How this story was built",
       narrative:
-        "The track and intensity data are drawn directly from NOAA's public-domain HURDAT2 database — 34 six-hourly fixes, unmodified except for the coordinate and timestamp conversion needed to match this story's format. The animated path uses Earth Stories' **trajectory** source kind, which pairs a sequence of positions with a matching sequence of timestamps so the map can interpolate a moving point between them. Duplicate this example to trace a different storm from the same public archive.",
+        "The track and intensity data are drawn directly from NOAA's public-domain HURDAT2 database — 34 best-track fixes, most six hours apart with a few extra ones at each landfall and at peak intensity, unmodified except for the coordinate and timestamp conversion needed to match this story's format. The animated path uses Earth Stories' **trajectory** source kind, which pairs a sequence of positions with a matching sequence of timestamps so the map can interpolate a moving point between them. Duplicate this example to trace a different storm from the same public archive.",
     },
   ],
 };

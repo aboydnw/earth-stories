@@ -36,21 +36,15 @@ describe("example catalog", () => {
         const file = includedFiles.find((item) => item.path === source.path);
         expect(file?.contents.byteLength).toBeGreaterThan(0);
       }
-      if (
-        validated.sources.some(
-          (source) =>
-            source.kind === "trajectory" &&
-            source.delivery === "included" &&
-            !/^https?:\/\//i.test(source.locator),
-        )
-      ) {
-        const trajectorySource = validated.sources.find(
-          (source) => source.kind === "trajectory",
-        );
-        expect(trajectorySource).toBeDefined();
-        if (trajectorySource && "locator" in trajectorySource) {
-          expect(bundledPaths.has(trajectorySource.locator)).toBe(true);
+      for (const source of validated.sources) {
+        if (
+          source.kind !== "trajectory" ||
+          source.delivery !== "included" ||
+          /^https?:\/\//i.test(source.locator)
+        ) {
+          continue;
         }
+        expect(bundledPaths.has(source.locator)).toBe(true);
       }
     }
   });

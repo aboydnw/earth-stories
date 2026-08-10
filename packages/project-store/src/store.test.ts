@@ -133,6 +133,31 @@ describe("ProjectStore", () => {
     ).toEqual(Buffer.from([1, 2, 3, 4]));
   });
 
+  it("cleans up a template materialization that fails partway through", async () => {
+    const store = await createStore();
+    const template = await store.create({ title: "Example River" });
+    const broken = { ...template, id: "example-river" };
+    const goodFile = {
+      path: "assets/first.txt",
+      contents: new TextEncoder().encode("a"),
+    };
+    const escapingFile = {
+      path: "../escape.txt",
+      contents: new TextEncoder().encode("b"),
+    };
+
+    await expect(
+      store.createFromTemplate(broken, [goodFile, escapingFile]),
+    ).rejects.toThrow("escapes the project directory");
+    expect(await readdir(store.root)).not.toContain(broken.id);
+
+    const recovered = await store.createFromTemplate(broken, [goodFile]);
+    expect(recovered.id).toBe(broken.id);
+    expect(
+      await readFile(store.assetPath(broken.id, goodFile.path), "utf8"),
+    ).toBe("a");
+  });
+
   it("rejects traversal-shaped project and asset paths", async () => {
     const store = await createStore();
     await expect(store.read("../private")).rejects.toThrow(

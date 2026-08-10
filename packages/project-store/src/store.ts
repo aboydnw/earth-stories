@@ -7,6 +7,7 @@ import {
   readFile,
   readdir,
   rename,
+  rm,
   stat,
   unlink,
   writeFile,
@@ -223,12 +224,17 @@ export class ProjectStore {
       metadata: { ...validated.metadata, created: now, updated: now },
     });
     await mkdir(this.directory(id), { recursive: false });
-    for (const file of assetFiles) {
-      const destination = this.assetPath(id, file.path);
-      await mkdir(dirname(destination), { recursive: true });
-      await writeFile(destination, file.contents, { flag: "wx" });
+    try {
+      for (const file of assetFiles) {
+        const destination = this.assetPath(id, file.path);
+        await mkdir(dirname(destination), { recursive: true });
+        await writeFile(destination, file.contents, { flag: "wx" });
+      }
+      await this.writeAtomic(id, project, false);
+    } catch (cause) {
+      await rm(this.directory(id), { recursive: true, force: true });
+      throw cause;
     }
-    await this.writeAtomic(id, project, false);
     return project;
   }
 
