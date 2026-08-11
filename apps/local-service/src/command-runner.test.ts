@@ -64,6 +64,16 @@ describe("runCommand", () => {
     ).rejects.toThrow(/\[redacted\]/);
   });
 
+  it("kills a child that never exits and says so", async () => {
+    await expect(
+      runCommand({
+        executable: node,
+        args: ["-e", "setInterval(() => {}, 1000)"],
+        timeoutMs: 200,
+      }),
+    ).rejects.toThrow(/did not finish within/);
+  });
+
   it("runs in the requested working directory", async () => {
     const result = await runCommand({
       executable: node,

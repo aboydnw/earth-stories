@@ -196,6 +196,24 @@ describe("PagesJobs", () => {
     );
   });
 
+  it("signs in before taking the project lock", async () => {
+    const order: string[] = [];
+    const deps = dependencies({
+      resolveToken: vi.fn(async () => {
+        order.push("sign-in");
+        return { token: "t", login: "mapper", source: "device" as const };
+      }) as unknown as PagesJobsDependencies["resolveToken"],
+      withLock: async (_id, operation) => {
+        order.push("lock");
+        return operation();
+      },
+    });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    await settle(jobs, id);
+    expect(order).toEqual(["sign-in", "lock"]);
+  });
+
   it("never puts the token in a job event", async () => {
     const deps = dependencies();
     const jobs = new PagesJobs(store, deps);

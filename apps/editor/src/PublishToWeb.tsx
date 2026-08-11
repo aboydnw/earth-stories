@@ -58,6 +58,7 @@ export function PublishToWeb({
   const [job, setJob] = useState<PublishJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pollAttempt, setPollAttempt] = useState(0);
   const publishedRef = useRef(false);
 
   useEffect(() => {
@@ -80,7 +81,9 @@ export function PublishToWeb({
     const timer = setTimeout(() => {
       void getPublishJob(job.id)
         .then((next) => {
-          if (!cancelled) setJob(next);
+          if (cancelled) return;
+          setError(null);
+          setJob(next);
         })
         .catch((cause: unknown) => {
           if (cancelled) return;
@@ -89,13 +92,14 @@ export function PublishToWeb({
               ? cause.message
               : "The publish job could not be checked.",
           );
+          setPollAttempt((attempt) => attempt + 1);
         });
     }, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [job]);
+  }, [job, pollAttempt]);
 
   const running = Boolean(job) && !isSettled(job);
 
@@ -113,6 +117,7 @@ export function PublishToWeb({
   async function publish() {
     setError(null);
     setCopied(false);
+    setPollAttempt(0);
     publishedRef.current = false;
     try {
       const mapSnapshots = await captureMapSnapshots();
@@ -129,8 +134,12 @@ export function PublishToWeb({
   async function copyLink() {
     const url = job?.url ?? record?.url;
     if (!url) return;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      setError("The link could not be copied. Select and copy it manually.");
+    }
   }
 
   const publishedUrl =

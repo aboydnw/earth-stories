@@ -203,6 +203,24 @@ describe("PublishToWeb", () => {
     ).toBeTruthy();
   });
 
+  it("keeps polling after a failed check instead of stalling forever", async () => {
+    vi.mocked(getPublishRecord).mockResolvedValue(null);
+    vi.mocked(startPublish).mockResolvedValue(job());
+    vi.mocked(getPublishJob)
+      .mockRejectedValueOnce(new Error("The local service is not responding."))
+      .mockResolvedValue(
+        job({ status: "succeeded", stage: "done", url: record.url, record }),
+      );
+    panel();
+    await userEvent.click(
+      screen.getByRole("button", { name: /publish to the web/i }),
+    );
+    expect(
+      await screen.findByRole("link", { name: record.url }, { timeout: 6000 }),
+    ).toBeTruthy();
+    expect(vi.mocked(getPublishJob).mock.calls.length).toBeGreaterThan(1);
+  });
+
   it("offers to update the story it already published", async () => {
     vi.mocked(getPublishRecord).mockResolvedValue(record);
     panel();

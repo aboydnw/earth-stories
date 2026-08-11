@@ -1,11 +1,14 @@
 import { spawn } from "node:child_process";
 
+export const DEFAULT_COMMAND_TIMEOUT_MS = 600_000;
+
 export interface Command {
   executable: string;
   args: string[];
   cwd?: string;
   env?: Record<string, string>;
   secrets?: string[];
+  timeoutMs?: number;
 }
 
 export interface CommandResult {
@@ -43,30 +46,56 @@ export const runCommand: CommandRunner = (command) =>
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const timeoutMs = command.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+
+    const settle = (finish: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      finish();
+    };
+
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      settle(() =>
+        rejectCommand(
+          new Error(
+            `${command.executable} ${command.args[0] ?? ""} did not finish within ${Math.round(timeoutMs / 1000)} seconds`,
+          ),
+        ),
+      );
+    }, timeoutMs);
+    timer.unref?.();
+
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => (stdout += chunk));
     child.stderr.on("data", (chunk: string) => (stderr += chunk));
     child.once("error", (cause) =>
-      rejectCommand(
-        new Error(
-          `${command.executable} could not be started: ${redact(cause.message, command.secrets)}`,
+      settle(() =>
+        rejectCommand(
+          new Error(
+            `${command.executable} could not be started: ${redact(cause.message, command.secrets)}`,
+          ),
         ),
       ),
     );
-    child.once("close", (code) => {
-      if (code === 0) {
-        resolveCommand({
-          stdout: redact(stdout, command.secrets),
-          stderr: redact(stderr, command.secrets),
-        });
-        return;
-      }
-      const detail = redact(stderr.trim() || stdout.trim(), command.secrets);
-      rejectCommand(
-        new Error(
-          `${command.executable} ${command.args[0] ?? ""} failed${detail ? `: ${detail}` : ` with exit code ${code}`}`,
-        ),
-      );
-    });
+    child.once("close", (code) =>
+      settle(() => {
+        if (code === 0) {
+          resolveCommand({
+            stdout: redact(stdout, command.secrets),
+            stderr: redact(stderr, command.secrets),
+          });
+          return;
+        }
+        const detail = redact(stderr.trim() || stdout.trim(), command.secrets);
+        rejectCommand(
+          new Error(
+            `${command.executable} ${command.args[0] ?? ""} failed${detail ? `: ${detail}` : ` with exit code ${code}`}`,
+          ),
+        );
+      }),
+    );
   });

@@ -133,7 +133,9 @@ already has it, and otherwise runs GitHub's device flow: the panel shows a code
 to enter at `github.com/login/device`, which needs no git or CLI knowledge. The
 resulting token is stored at `~/.earth-stories/credentials.json` with mode
 `0600`, deliberately outside every project directory, because project
-directories get exported, zipped, and pushed to a public repository.
+directories get exported, zipped, and pushed to a public repository. Windows
+does not apply POSIX modes, so there the file is protected by the account's own
+profile permissions rather than by `0600`.
 
 The published address is `https://<account>.github.io/<repo>/`. It is known
 before the first push, so the release is built with that URL already in its

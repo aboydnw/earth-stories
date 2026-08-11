@@ -260,6 +260,25 @@ describe("waitForPages", () => {
     ).resolves.toBe(true);
   });
 
+  it("aborts a request that would outlive the deadline", async () => {
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
+        }),
+    ) as unknown as typeof fetch;
+    await expect(
+      waitForPages("https://mapper.github.io/notes/", {
+        fetchImpl,
+        deadlineMs: 50,
+        intervalMs: 1,
+        sleep: async () => undefined,
+      }),
+    ).resolves.toBe(false);
+  });
+
   it("gives up at the deadline instead of hanging", async () => {
     let clock = 0;
     const fetchImpl = vi.fn(

@@ -235,14 +235,25 @@ export async function waitForPages(
   const started = now();
 
   for (let attempt = 1; ; attempt += 1) {
+    const remaining = deadlineMs - (now() - started);
+    if (remaining <= 0) return false;
     options.onAttempt?.(attempt);
+
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), remaining);
+    abortTimer.unref?.();
     let served = false;
     try {
-      const response = await fetchImpl(url, { redirect: "follow" });
+      const response = await fetchImpl(url, {
+        redirect: "follow",
+        signal: controller.signal,
+      });
       await response.body?.cancel();
       served = response.ok;
     } catch {
       served = false;
+    } finally {
+      clearTimeout(abortTimer);
     }
     if (served) return true;
     if (now() - started >= deadlineMs) return false;

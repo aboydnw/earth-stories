@@ -102,7 +102,8 @@ export interface StartPublishInput {
  * Runs GitHub Pages publishes as polled background jobs, because a publish
  * takes minutes: the release is built, pushed, and then waited on while Pages
  * performs its own build. Mirrors the conversion-job shape the editor already
- * knows how to poll.
+ * knows how to poll. Signing in happens before the project lock is taken, so
+ * an author typing a device code does not block exports of the same project.
  */
 export class PagesJobs {
   readonly #jobs = new Map<string, PublishJobSnapshot>();
@@ -192,19 +193,19 @@ export class PagesJobs {
     snapshot.updatedAt = new Date().toISOString();
 
     try {
+      this.#note(snapshot, "signing-in", "Signing in to GitHub…");
+      const identity: GitHubIdentity = await this.#deps.resolveToken({
+        onDeviceCode: (prompt) => {
+          snapshot.deviceCode = prompt;
+          this.#note(
+            snapshot,
+            "signing-in",
+            `Enter code ${prompt.userCode} at ${prompt.verificationUri} to continue.`,
+          );
+        },
+      });
+      snapshot.deviceCode = null;
       await withLock(snapshot.projectId, async () => {
-        this.#note(snapshot, "signing-in", "Signing in to GitHub…");
-        const identity: GitHubIdentity = await this.#deps.resolveToken({
-          onDeviceCode: (prompt) => {
-            snapshot.deviceCode = prompt;
-            this.#note(
-              snapshot,
-              "signing-in",
-              `Enter code ${prompt.userCode} at ${prompt.verificationUri} to continue.`,
-            );
-          },
-        });
-        snapshot.deviceCode = null;
         this.#note(
           snapshot,
           "checking",

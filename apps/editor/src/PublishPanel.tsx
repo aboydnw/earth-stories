@@ -116,6 +116,7 @@ export function PublishPanel({
   const [resultBuildId, setResultBuildId] = useState<string | null>(null);
   const [publicationUrl, setPublicationUrl] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
   const [cardVersion, setCardVersion] = useState(0);
   const [busyLabel, setBusyLabel] = useState(
     "Building and validating the latest publication…",
@@ -140,6 +141,7 @@ export function PublishPanel({
     setSnippet("");
     setCardVersion(0);
     setShareBusy(false);
+    setPublishBusy(false);
   }, [project.id]);
 
   useEffect(() => {
@@ -215,6 +217,7 @@ export function PublishPanel({
   const canBuild =
     !loading &&
     !shareBusy &&
+    !publishBusy &&
     !unsaved &&
     preflightState.status === "ready" &&
     Boolean(preflight?.ready);
@@ -459,7 +462,7 @@ export function PublishPanel({
         <PublishToWeb
           project={project}
           disabled={!canBuild}
-          onBusyChange={setShareBusy}
+          onBusyChange={setPublishBusy}
           onPublished={onRefreshPreflight}
         />
 

@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { platform, tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { credentialsPath, resolveToken } from "./github-auth.js";
 import type { CommandRunner } from "./command-runner.js";
@@ -24,8 +24,9 @@ async function scratchCredentials(): Promise<string> {
 
 describe("credentialsPath", () => {
   it("stays outside any project directory", () => {
-    expect(credentialsPath()).toContain(".earth-stories");
-    expect(credentialsPath()).not.toContain("earth-stories-projects");
+    const path = credentialsPath();
+    expect(path).toContain(".earth-stories");
+    expect(relative(process.cwd(), path)).toMatch(/^\.\.(?:[\\/]|$)/);
   });
 });
 
@@ -48,7 +49,7 @@ describe("resolveToken", () => {
     });
   });
 
-  it("falls back to the gh CLI and stores the token privately", async () => {
+  it("falls back to the gh CLI without copying its token to disk", async () => {
     const path = await scratchCredentials();
     const identity = await resolveToken({
       credentialsPath: path,
@@ -60,11 +61,39 @@ describe("resolveToken", () => {
     });
     expect(identity.source).toBe("gh");
     expect(identity.token).toBe("gh-token");
+    await expect(readFile(path, "utf8")).rejects.toThrow();
+  });
+
+  it("stores a device-flow token privately", async () => {
+    const path = await scratchCredentials();
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/login/device/code"))
+        return jsonResponse({
+          device_code: "device-code",
+          user_code: "WXYZ-1234",
+          verification_uri: "https://github.com/login/device",
+          expires_in: 900,
+          interval: 1,
+        });
+      if (url.endsWith("/login/oauth/access_token"))
+        return jsonResponse({ access_token: "device-token" });
+      return userResponse("mapper");
+    }) as unknown as typeof fetch;
+
+    await resolveToken({
+      credentialsPath: path,
+      clientId: "client-id",
+      run: nowhere,
+      fetchImpl,
+      sleep: async () => undefined,
+    });
     const written = JSON.parse(await readFile(path, "utf8")) as {
       token: string;
     };
-    expect(written.token).toBe("gh-token");
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect(written.token).toBe("device-token");
+    if (platform() !== "win32")
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
   it("walks the device flow, waiting through authorization_pending", async () => {

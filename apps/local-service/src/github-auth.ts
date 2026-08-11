@@ -8,6 +8,8 @@ const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const USER_URL = "https://api.github.com/user";
 const DEFAULT_POLL_SECONDS = 5;
+const REQUEST_TIMEOUT_MS = 15_000;
+const GH_CLI_TIMEOUT_MS = 15_000;
 
 export type TokenSource = "stored" | "gh" | "device";
 
@@ -76,21 +78,30 @@ async function resolveLogin(
   token: string,
   fetchImpl: typeof fetch,
 ): Promise<string | null> {
-  const response = await fetchImpl(USER_URL, {
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: "application/vnd.github+json",
-      "user-agent": "earth-stories",
-    },
-  });
-  if (!response.ok) return null;
-  const body = (await response.json()) as { login?: unknown };
-  return typeof body.login === "string" && body.login ? body.login : null;
+  try {
+    const response = await fetchImpl(USER_URL, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/vnd.github+json",
+        "user-agent": "earth-stories",
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { login?: unknown };
+    return typeof body.login === "string" && body.login ? body.login : null;
+  } catch {
+    return null;
+  }
 }
 
 async function tokenFromGhCli(run: CommandRunner): Promise<string | null> {
   try {
-    const { stdout } = await run({ executable: "gh", args: ["auth", "token"] });
+    const { stdout } = await run({
+      executable: "gh",
+      args: ["auth", "token"],
+      timeoutMs: GH_CLI_TIMEOUT_MS,
+    });
     const token = stdout.trim();
     return token || null;
   } catch {
@@ -117,11 +128,22 @@ async function postJson<T>(
   body: Record<string, string>,
   fetchImpl: typeof fetch,
 ): Promise<T> {
-  const response = await fetchImpl(url, {
-    method: "POST",
-    headers: { accept: "application/json", "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    throw new Error(
+      "GitHub did not respond. Check your connection and try again.",
+    );
+  }
   if (!response.ok)
     throw new Error(
       `GitHub sign-in failed with ${response.status}. Check your connection and try again.`,
@@ -196,7 +218,9 @@ async function deviceFlow(
 /**
  * Resolves a usable GitHub token and account login, preferring credentials
  * this computer already has: a previously stored token, then the `gh` CLI,
- * and finally the device flow, which needs no git or CLI knowledge.
+ * and finally the device flow, which needs no git or CLI knowledge. Only the
+ * device-flow token is written to disk; a `gh` token is read fresh each time
+ * so signing out or rotating it there takes effect immediately.
  */
 export async function resolveToken(
   options: ResolveTokenOptions = {},
@@ -217,11 +241,7 @@ export async function resolveToken(
   const ghToken = await tokenFromGhCli(run);
   if (ghToken) {
     const login = await resolveLogin(ghToken, fetchImpl);
-    if (login) {
-      const identity: GitHubIdentity = { token: ghToken, login, source: "gh" };
-      await writeStored(path, identity);
-      return identity;
-    }
+    if (login) return { token: ghToken, login, source: "gh" };
   }
 
   const clientId =
