@@ -67,6 +67,11 @@ describe("ChapterRail", () => {
     const chapterLink = screen.getByRole("button", {
       name: /changing shoreline/i,
     });
+    expect(
+      screen.getByRole("button", {
+        name: /changing shoreline.*map.*choose data$/i,
+      }),
+    ).toBe(chapterLink);
     const descriptionId = chapterLink.getAttribute("aria-describedby");
     expect(descriptionId).toBeTruthy();
     expect(document.getElementById(descriptionId!)?.textContent).toContain(

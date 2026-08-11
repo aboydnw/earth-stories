@@ -46,7 +46,12 @@ export function CopcOverlay({
           onReady?.();
           return;
         }
-        let ready = false;
+        let readinessReported = false;
+        const reportReady = () => {
+          if (!active || readinessReported) return;
+          readinessReported = true;
+          onReady?.();
+        };
         const clearReadyWait = () => {
           if (readyFallback !== null) window.clearTimeout(readyFallback);
           readyFallback = null;
@@ -54,19 +59,15 @@ export function CopcOverlay({
           moveEndHandler = null;
         };
         const finishMove = () => {
-          if (ready) return;
-          ready = true;
           clearReadyWait();
           if (active) {
-            onReady?.();
+            reportReady();
             onFitCameraChange?.();
           }
         };
         const finishReadyFallback = () => {
-          if (ready) return;
-          ready = true;
-          clearReadyWait();
-          if (active) onReady?.();
+          readyFallback = null;
+          reportReady();
         };
         moveEndHandler = finishMove;
         map.once("moveend", moveEndHandler);

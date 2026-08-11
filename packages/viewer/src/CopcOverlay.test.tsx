@@ -90,6 +90,9 @@ describe("CopcOverlay", () => {
     act(() => vi.advanceTimersByTime(1_250));
     expect(onReady).toHaveBeenCalledOnce();
     expect(onFitCameraChange).not.toHaveBeenCalled();
+    act(() => finishMove?.());
+    expect(onReady).toHaveBeenCalledOnce();
+    expect(onFitCameraChange).toHaveBeenCalledOnce();
     expect(map.off).toHaveBeenCalledWith("moveend", finishMove);
   });
 });
