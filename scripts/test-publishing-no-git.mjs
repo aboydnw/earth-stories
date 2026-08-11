@@ -1,57 +1,57 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, readdir, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { resolve } from "node:path";
+import { startVitest } from "vitest/node";
 
-const publishingTests = [
+export const PUBLISHING_TESTS = [
   "apps/local-service/src/git-objects.test.ts",
   "apps/local-service/src/pages-deploy.test.ts",
   "apps/local-service/src/pages-jobs.test.ts",
 ];
 
-function environmentWithPath(path) {
-  return Object.fromEntries([
-    ...Object.entries(process.env).filter(
-      ([name]) => name.toUpperCase() !== "PATH",
-    ),
-    ["PATH", path],
-  ]);
+// PATH entries must be directories. Pointing PATH at this regular file makes
+// every executable-name lookup fail without creating launchers or temporary
+// directories. Vitest can still run because Node is already running and its
+// programmatic API does not need a node/yarn command from PATH.
+export const NO_GIT_PATH = fileURLToPath(import.meta.url);
+
+function pathEntries() {
+  return Object.entries(process.env).filter(
+    ([name]) => name.toUpperCase() === "PATH",
+  );
 }
 
-function run(command, args, env) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { env, stdio: "inherit" });
-    child.once("error", reject);
-    child.once("close", (code, signal) => {
-      if (signal) reject(new Error(`Publishing tests stopped by ${signal}.`));
-      else resolve(code ?? 1);
-    });
-  });
+function replacePath(path) {
+  const previous = pathEntries();
+  for (const [name] of previous) delete process.env[name];
+  process.env.PATH = path;
+
+  return () => {
+    for (const [name] of pathEntries()) delete process.env[name];
+    for (const [name, value] of previous) process.env[name] = value;
+  };
 }
 
-const yarnPath = process.env.npm_execpath;
-if (!yarnPath)
-  throw new Error(
-    "Run this verification through `yarn test:publishing:no-git` so Yarn tooling can be isolated.",
-  );
-
-const tools = await mkdtemp(join(tmpdir(), "earth-stories-no-git-"));
-try {
-  await symlink(process.execPath, join(tools, basename(process.execPath)));
-  await symlink(yarnPath, join(tools, basename(yarnPath)));
-
-  const availableTools = (await readdir(tools)).sort();
-  console.log(
-    `Running publishing tests with isolated PATH tools: ${availableTools.join(", ")}`,
-  );
-
-  const vitest = fileURLToPath(import.meta.resolve("vitest/vitest.mjs"));
-  process.exitCode = await run(
-    process.execPath,
-    [vitest, "run", ...publishingTests],
-    environmentWithPath(tools),
-  );
-} finally {
-  await rm(tools, { force: true, recursive: true });
+export async function runPublishingTests(start = startVitest) {
+  const restorePath = replacePath(NO_GIT_PATH);
+  const previousExitCode = process.exitCode;
+  process.exitCode = undefined;
+  try {
+    console.log(
+      "Running publishing tests with executable lookup disabled (no git on PATH)",
+    );
+    await start("test", PUBLISHING_TESTS, { run: true });
+    return process.exitCode ?? 0;
+  } finally {
+    process.exitCode = previousExitCode;
+    restorePath();
+  }
 }
+
+function isMain() {
+  return (
+    process.argv[1] !== undefined &&
+    pathToFileURL(resolve(process.argv[1])).href === import.meta.url
+  );
+}
+
+if (isMain()) process.exitCode = await runPublishingTests();
