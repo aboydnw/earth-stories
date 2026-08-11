@@ -102,6 +102,7 @@ export function isValidPng(bytes: Uint8Array): boolean {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let offset = PNG_SIGNATURE.length;
   let expectHeader = true;
+  let hasImageData = false;
 
   while (offset + 12 <= bytes.byteLength) {
     const length = view.getUint32(offset);
@@ -115,8 +116,10 @@ export function isValidPng(bytes: Uint8Array): boolean {
       return false;
 
     expectHeader = false;
+    if (type === "IDAT") hasImageData = true;
     offset = crcStart + 4;
-    if (type === "IEND") return length === 0 && offset === bytes.byteLength;
+    if (type === "IEND")
+      return length === 0 && hasImageData && offset === bytes.byteLength;
   }
   return false;
 }

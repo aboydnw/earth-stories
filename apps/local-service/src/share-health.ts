@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import {
   authorizedFetch,
   isPrivateNetworkHost,
@@ -49,25 +50,35 @@ export function decodeShareCard(value: unknown): Buffer {
   return buffer;
 }
 
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
 function isLoopbackHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  return (
-    host === "localhost" ||
-    host.endsWith(".localhost") ||
-    host === "::1" ||
-    /^127\./.test(host)
-  );
+  if (host === "localhost" || host.endsWith(".localhost")) return true;
+  if (host === "::1") return true;
+  return isIP(host) === 4 && host.startsWith("127.");
 }
 
 /**
- * Fetches a URL for the user-initiated link check. Loopback addresses use a
- * plain fetch so authors can rehearse against a story served on this computer;
- * everything else keeps the SSRF-guarded fetch used for remote assets.
+ * Fetches a loopback URL so authors can rehearse against a story served on
+ * this computer. Redirects are resolved manually and every target must remain
+ * loopback, so a local page can never send the checker anywhere else. All
+ * other hosts go through the SSRF-guarded fetch used for remote assets.
  */
-function shareFetch(url: URL, init: RequestInit): Promise<Response> {
-  return isLoopbackHost(url.hostname)
-    ? fetch(url, init)
-    : authorizedFetch(url.toString(), init);
+async function loopbackFetch(url: URL, init: RequestInit): Promise<Response> {
+  let current = url;
+  for (let redirects = 0; redirects <= 5; redirects += 1) {
+    const response = await fetch(current, { ...init, redirect: "manual" });
+    if (!REDIRECT_STATUSES.has(response.status)) return response;
+    const location = response.headers.get("location");
+    if (!location)
+      throw new Error("The local server returned an invalid redirect.");
+    await response.body?.cancel();
+    current = new URL(location, current);
+    if (!isLoopbackHost(current.hostname))
+      throw new Error("The local page redirected away from this computer.");
+  }
+  throw new Error("The local page redirected too many times.");
 }
 
 function metaContent(html: string, key: string): string | null {
@@ -151,11 +162,13 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
     return report;
   }
 
+  const pageIsLoopback = isLoopbackHost(parsed.hostname);
   let html = "";
   try {
-    const response = await shareFetch(parsed, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    const init = { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) };
+    const response = pageIsLoopback
+      ? await loopbackFetch(parsed, init)
+      : await authorizedFetch(parsed.toString(), init);
     if (!response.ok) {
       problems.push({
         id: "page-unreachable",
@@ -234,10 +247,22 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
   }
   report.imageUrl = imageUrl.toString();
 
-  try {
-    const response = await shareFetch(imageUrl, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  if (isLoopbackHost(imageUrl.hostname) && !pageIsLoopback) {
+    problems.push({
+      id: "image-local",
+      severity: "error",
+      message:
+        "The preview image points at this computer, so platforms cannot fetch it.",
+      resolution: "Export again with your public URL, then redeploy.",
     });
+    return report;
+  }
+
+  try {
+    const init = { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) };
+    const response = isLoopbackHost(imageUrl.hostname)
+      ? await loopbackFetch(imageUrl, init)
+      : await authorizedFetch(imageUrl.toString(), init);
     if (!response.ok) {
       problems.push({
         id: "image-unreachable",

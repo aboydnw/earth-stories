@@ -216,4 +216,42 @@ describe("checkShareLink", () => {
       expect.objectContaining({ id: "private-host", severity: "error" }),
     );
   });
+
+  it("does not treat a 127-prefixed hostname as this computer", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => page(shareHtml()));
+    await checkShareLink("http://127.attacker.example/story/");
+    expect(fetchSpy.mock.calls.length).toBeGreaterThan(0);
+    for (const [, init] of fetchSpy.mock.calls)
+      expect(init && "dispatcher" in init).toBe(true);
+  });
+
+  it("refuses to follow a local page redirecting off this computer", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://192.168.1.20/story/" },
+        }),
+    );
+    const report = await checkShareLink("http://localhost:8080/story/");
+    expect(report.reachable).toBe(false);
+    expect(report.problems).toContainEqual(
+      expect.objectContaining({
+        id: "page-unreachable",
+        resolution: "The local page redirected away from this computer.",
+      }),
+    );
+  });
+
+  it("flags a public page whose preview image points at this computer", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      page(shareHtml({ "og:image": "http://localhost:8080/share/card-1.png" })),
+    );
+    const report = await checkShareLink("https://example.org/story/");
+    expect(report.problems).toContainEqual(
+      expect.objectContaining({ id: "image-local", severity: "error" }),
+    );
+  });
 });

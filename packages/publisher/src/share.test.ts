@@ -144,6 +144,16 @@ describe("buildShareKit", () => {
       buildShareKit({ project, publicationUrl: "not a url at all" }),
     ).toThrow(/publication URL/);
   });
+
+  it("rejects a publication URL carrying credentials", async () => {
+    const project = await fixture();
+    expect(() =>
+      buildShareKit({
+        project,
+        publicationUrl: "https://user:secret@example.org/story",
+      }),
+    ).toThrow(/credentials/);
+  });
 });
 
 describe("injectShareMeta", () => {
@@ -161,6 +171,14 @@ describe("injectShareMeta", () => {
 describe("isValidPng", () => {
   it("accepts a structurally sound PNG", () => {
     expect(isValidPng(VALID_PNG)).toBe(true);
+  });
+
+  it("rejects a CRC-valid container with no image data", () => {
+    const withoutImageData = Buffer.concat([
+      VALID_PNG.subarray(0, 33),
+      VALID_PNG.subarray(-12),
+    ]);
+    expect(isValidPng(withoutImageData)).toBe(false);
   });
 
   it("rejects arbitrary bytes wearing a PNG signature", () => {

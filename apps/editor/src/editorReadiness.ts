@@ -45,6 +45,7 @@ export function workflowStages(
   if (readiness.manifest && !options.previewReviewed) {
     states.preview = "current";
     states.publish = "blocked";
+    states.sharing = "blocked";
     descriptions.preview = "Review again";
   } else if (readiness.manifest) {
     const serverFindings =
@@ -53,6 +54,7 @@ export function workflowStages(
         : null;
     if (!serverFindings) {
       states.publish = "current";
+      states.sharing = "blocked";
       descriptions.publish = "Checks required";
     } else {
       const sharingFindings = serverFindings.filter(

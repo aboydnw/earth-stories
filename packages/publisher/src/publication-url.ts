@@ -32,6 +32,8 @@ export function normalizePublicationUrl(value: string): string {
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
     throw new Error("Publication URL must use HTTP or HTTPS");
+  if (parsed.username || parsed.password)
+    throw new Error("Publication URL must not include credentials");
   parsed.search = "";
   parsed.hash = "";
   return parsed.toString().replace(/\/+$/, "");
