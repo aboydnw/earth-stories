@@ -65,6 +65,8 @@ export const productTokens = {
     comfortableControl: "44px",
     inspectorGap: "12px",
     sectionGap: "20px",
+    editorRail: "240px",
+    compactEditorRail: "200px",
   },
 } as const;
 
@@ -120,4 +122,6 @@ export const productCssVariables = {
   "--es-control-comfortable": productTokens.density.comfortableControl,
   "--es-inspector-gap": productTokens.density.inspectorGap,
   "--es-section-gap": productTokens.density.sectionGap,
+  "--es-editor-rail-width": productTokens.density.editorRail,
+  "--es-editor-rail-width-compact": productTokens.density.compactEditorRail,
 } as const;

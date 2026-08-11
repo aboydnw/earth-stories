@@ -21,7 +21,8 @@ state or layout. A wrapper that merely shortens syntax is not a contract.
   modal panel anatomy.
 - `PublicationFinding`: consistent preflight result semantics.
 - `SectionHeader`, `InspectorSection`, and `CollapsibleSection`: reusable
-  hierarchy and disclosure.
+  hierarchy and disclosure. `CollapsibleSection` may show a short collapsed
+  summary and accessible issue text; domain language stays in its consumer.
 - `WorkspaceRow` and `DataSourceRow`: keyboard-operable collection rows with
   accessible metadata and optional actions.
 - `WorkflowGuide`: ordered, clickable, non-linear authoring stages with
@@ -41,6 +42,19 @@ state or layout. A wrapper that merely shortens syntax is not a contract.
 - `VisualizationProvenance` is viewer-owned editorial UI. It consumes the
   publication asset contract and viewer theme variables; it must not import
   Chakra or product tokens.
+
+## Editor-owned chapter workflow
+
+`EditorShell`, `EditorViewTabs`, `ChapterRail`, `ChapterCanvas`,
+`ChapterInspector`, the type-specific chapter editors, `ChapterDataSelector`,
+`OverlayListEditor`, `OverlayPickerPanel`, `FlyoverPathEditor`,
+`SourceDetailsEditor`, and `SourcePresentationFields` are stable editor feature
+components. They compose shared UI contracts but own project-specific layout,
+compatibility, and mutation semantics.
+
+`FocusedChapterViewer` and `PublicationChapterRenderer` remain viewer-owned so
+focused authoring and complete story preview cannot drift into separate
+renderers.
 
 ## Local layout CSS
 

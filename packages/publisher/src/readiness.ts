@@ -1,9 +1,10 @@
 import type {
   PublicationManifest,
-  ProjectChapter,
   StoryProject,
 } from "@earth-stories/story-schema";
+import { referencedSourceIds } from "./chapterSources.js";
 import { compileProject } from "./compile.js";
+import { projectCompileIssues } from "./compileValidation.js";
 import { shareDescription } from "./share.js";
 
 export type ReadinessArea =
@@ -26,14 +27,6 @@ export interface AuthoringReadiness {
   manifest: PublicationManifest | null;
   findings: ReadinessFinding[];
   stages: Record<ReadinessArea, ReadinessStageState>;
-}
-
-function referencedSourceIds(chapter: ProjectChapter): string[] {
-  if (chapter.type === "prose" || chapter.type === "video") return [];
-  return [
-    ...(chapter.sourceId ? [chapter.sourceId] : []),
-    ...("overlaySourceIds" in chapter ? (chapter.overlaySourceIds ?? []) : []),
-  ];
 }
 
 function ageInDays(value: string, now: Date): number | null {
@@ -99,7 +92,8 @@ export function deriveAuthoringReadiness(
     if (
       (chapter.type === "chart" &&
         (!chapter.xColumn.trim() || !chapter.yColumn.trim())) ||
-      (chapter.type === "video" && !chapter.videoId.trim()) ||
+      (chapter.type === "video" &&
+        (!chapter.videoId.trim() || chapter.videoId === "VIDEO_ID")) ||
       (chapter.type === "flyover" && chapter.keyframes.length < 2)
     )
       findings.push({
@@ -160,6 +154,43 @@ export function deriveAuthoringReadiness(
     }
   }
 
+  const compileIssues = projectCompileIssues(project);
+  for (const [index, issue] of compileIssues.entries()) {
+    if (issue.code === "invalid-source")
+      findings.push({
+        id: `source-publication-${issue.resourceId}`,
+        area: "data",
+        severity: "error",
+        resourceId: issue.resourceId,
+        message: issue.message,
+        resolution: "Choose a compatible publication delivery or source URL.",
+      });
+    else if (issue.code === "incompatible-overlay")
+      findings.push({
+        id: `chapter-overlay-kind-${issue.chapterId}-${issue.resourceId}`,
+        area: "data",
+        severity: "error",
+        chapterId: issue.chapterId,
+        resourceId: issue.resourceId,
+        message: issue.message,
+        resolution: "Choose a geospatial source for this overlay.",
+      });
+    else if (
+      !["missing-source", "missing-overlay", "incompatible-source"].includes(
+        issue.code,
+      )
+    )
+      findings.push({
+        id: `compile-${issue.code}-${issue.chapterId ?? issue.resourceId ?? index}`,
+        area: issue.resourceId ? "data" : "preview",
+        severity: "error",
+        chapterId: issue.chapterId,
+        resourceId: issue.resourceId,
+        message: issue.message,
+        resolution: "Repair the referenced chapter or source before exporting.",
+      });
+  }
+
   const now = options.now ?? new Date();
   for (const source of project.sources) {
     if (!source.attribution?.trim() && !source.provenance.publisher?.trim())
@@ -210,17 +241,21 @@ export function deriveAuthoringReadiness(
     });
 
   let manifest: PublicationManifest | null = null;
-  try {
-    manifest = compileProject(project);
-  } catch (cause) {
-    findings.push({
-      id: "compile",
-      area: "preview",
-      severity: "error",
-      message:
-        cause instanceof Error ? cause.message : "Project cannot be compiled.",
-      resolution: "Repair the referenced chapter or source before exporting.",
-    });
+  if (compileIssues.length === 0) {
+    try {
+      manifest = compileProject(project);
+    } catch (cause) {
+      findings.push({
+        id: "compile",
+        area: "preview",
+        severity: "error",
+        message:
+          cause instanceof Error
+            ? cause.message
+            : "Project cannot be compiled.",
+        resolution: "Repair the referenced chapter or source before exporting.",
+      });
+    }
   }
 
   const storyBlocked = findings.some(

@@ -8,10 +8,11 @@ import {
   TextT,
   VideoCamera,
 } from "@phosphor-icons/react";
-import { useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 export function ChapterAddMenu({
   open,
+  canAddMap,
   canAddImage,
   canAddChart,
   onToggle,
@@ -22,8 +23,10 @@ export function ChapterAddMenu({
   onAddVideo,
   onAddChart,
   onAddFlyover,
+  onAddDataForType,
 }: {
   open: boolean;
+  canAddMap: boolean;
   canAddImage: boolean;
   canAddChart: boolean;
   onToggle: () => void;
@@ -34,7 +37,13 @@ export function ChapterAddMenu({
   onAddVideo: () => void;
   onAddChart: () => void;
   onAddFlyover: () => void;
+  onAddDataForType?: (type: "map" | "scrolly" | "image" | "chart") => void;
 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreId = useId();
+  useEffect(() => {
+    if (!open) setMoreOpen(false);
+  }, [open]);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const enabledItems = () => [
@@ -97,14 +106,26 @@ export function ChapterAddMenu({
           <MenuItem
             icon={<Path size={17} />}
             title="Guided tour"
-            description="Scroll through a locked map scene"
-            onClick={onAddScrolly}
+            description={
+              canAddMap
+                ? "Scroll through a locked map scene"
+                : "Add map data for this chapter"
+            }
+            disabled={!canAddMap && !onAddDataForType}
+            onClick={() =>
+              canAddMap ? onAddScrolly() : onAddDataForType?.("scrolly")
+            }
           />
           <MenuItem
             icon={<MapTrifold size={17} />}
             title="Map"
-            description="Interactive map and data"
-            onClick={onAddMap}
+            description={
+              canAddMap
+                ? "Interactive map and data"
+                : "Add map data for this chapter"
+            }
+            disabled={!canAddMap && !onAddDataForType}
+            onClick={() => (canAddMap ? onAddMap() : onAddDataForType?.("map"))}
           />
           <MenuItem
             icon={<Image size={17} />}
@@ -114,30 +135,54 @@ export function ChapterAddMenu({
                 ? "Imported image with caption"
                 : "Import an image first"
             }
-            disabled={!canAddImage}
-            onClick={onAddImage}
-          />
-          <MenuItem
-            icon={<VideoCamera size={17} />}
-            title="Video"
-            description="YouTube or Vimeo"
-            onClick={onAddVideo}
-          />
-          <MenuItem
-            icon={<ChartLine size={17} />}
-            title="Chart"
-            description={
-              canAddChart ? "Visualize imported CSV data" : "Import a CSV first"
+            disabled={!canAddImage && !onAddDataForType}
+            onClick={() =>
+              canAddImage ? onAddImage() : onAddDataForType?.("image")
             }
-            disabled={!canAddChart}
-            onClick={onAddChart}
           />
           <MenuItem
-            icon={<MapTrifold size={17} weight="duotone" />}
-            title="Flyover"
-            description="Animate between map views"
-            onClick={onAddFlyover}
+            icon={<CaretDown size={17} />}
+            title="More chapter types"
+            description="Video, chart, and flyover"
+            id={`${moreId}-trigger`}
+            ariaExpanded={moreOpen}
+            ariaControls={`${moreId}-group`}
+            onClick={() => setMoreOpen((value) => !value)}
           />
+          {moreOpen ? (
+            <div
+              className="chapter-add__specialist"
+              role="group"
+              id={`${moreId}-group`}
+              aria-labelledby={`${moreId}-trigger`}
+            >
+              <MenuItem
+                icon={<VideoCamera size={17} />}
+                title="Video"
+                description="YouTube or Vimeo"
+                onClick={onAddVideo}
+              />
+              <MenuItem
+                icon={<ChartLine size={17} />}
+                title="Chart"
+                description={
+                  canAddChart
+                    ? "Visualize imported CSV data"
+                    : "Add CSV data for this chapter"
+                }
+                disabled={!canAddChart && !onAddDataForType}
+                onClick={() =>
+                  canAddChart ? onAddChart() : onAddDataForType?.("chart")
+                }
+              />
+              <MenuItem
+                icon={<MapTrifold size={17} weight="duotone" />}
+                title="Flyover"
+                description="Animate between map views"
+                onClick={onAddFlyover}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </>
@@ -149,16 +194,30 @@ function MenuItem({
   title,
   description,
   disabled,
+  id,
+  ariaExpanded,
+  ariaControls,
   onClick,
 }: {
   icon: ReactNode;
   title: string;
   description: string;
   disabled?: boolean;
+  id?: string;
+  ariaExpanded?: boolean;
+  ariaControls?: string;
   onClick: () => void;
 }) {
   return (
-    <button role="menuitem" type="button" disabled={disabled} onClick={onClick}>
+    <button
+      role="menuitem"
+      type="button"
+      id={id}
+      disabled={disabled}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
+      onClick={onClick}
+    >
       {icon}
       <span>
         <strong>{title}</strong>

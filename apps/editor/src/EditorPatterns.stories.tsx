@@ -9,6 +9,8 @@ import {
 import { DataSourceRow, IconButton, WorkspaceRow } from "@earth-stories/ui";
 import {
   defaultSourceProvenance,
+  type ProjectChapter,
+  type ProjectSource,
   type SourceProvenance,
 } from "@earth-stories/story-schema";
 import type { AuthoringReadiness } from "@earth-stories/publisher/readiness";
@@ -17,6 +19,9 @@ import { PublishMenu } from "./PublishMenu";
 import { SourceProvenanceFields } from "./SourceProvenanceFields";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 import "./editor.css";
+import { ChapterInspector } from "./ChapterInspector";
+import { ChapterRail } from "./ChapterRail";
+import { EditorShell } from "./EditorShell";
 
 const meta = { title: "Patterns/Editor collections" } satisfies Meta;
 export default meta;
@@ -210,4 +215,110 @@ function ProvenanceFormExample() {
 
 export const ProvenanceForm: Story = {
   render: () => <ProvenanceFormExample />,
+};
+
+const mapSource: ProjectSource = {
+  id: "floodplain",
+  kind: "local-geojson",
+  label: "Floodplain extent",
+  path: "data/floodplain.geojson",
+  attribution: "River Observatory",
+  sizeBytes: 42_000,
+  delivery: "included",
+  provenance: defaultSourceProvenance,
+};
+
+const editorChapters: ProjectChapter[] = [
+  {
+    id: "intro",
+    type: "prose",
+    title: "Why the floodplain matters",
+    narrative: "Seasonal water connects farms, wetlands, and settlements.",
+  },
+  {
+    id: "extent",
+    type: "map",
+    title: "A changing edge with an intentionally long chapter title",
+    narrative: "Move the map to compose the view readers should see.",
+    sourceId: "floodplain",
+    overlaySourceIds: [],
+    camera: {
+      center: [104.92, 12.48],
+      zoom: 7.2,
+      bearing: 4,
+      pitch: 28,
+    },
+  },
+];
+
+export const MapChapterInspector: Story = {
+  render: () => (
+    <div style={{ width: 420, minHeight: 900, background: "var(--es-bg)" }}>
+      <ChapterInspector
+        chapter={editorChapters[1]!}
+        chapterIndex={1}
+        sources={[mapSource]}
+        sourceUsage={{ floodplain: 2 }}
+        readiness={{ tone: "warning", label: "Add reader text" }}
+        currentCamera={
+          editorChapters[1] && "camera" in editorChapters[1]
+            ? editorChapters[1].camera
+            : null
+        }
+        onUpdateChapter={() => undefined}
+        onEditSource={() => undefined}
+        onAddData={() => undefined}
+      />
+    </div>
+  ),
+};
+
+export const ResponsiveChapterShell: Story = {
+  render: () => (
+    <div style={{ height: 760 }}>
+      <EditorShell
+        region="edit"
+        onRegionChange={() => undefined}
+        chapters={
+          <ChapterRail
+            projectTitle="Lower Mekong floodplain"
+            chapters={editorChapters}
+            activeChapterId="extent"
+            mode="chapter"
+            readiness={{
+              intro: { tone: "ready", label: "Ready" },
+              extent: { tone: "warning", label: "Add reader text" },
+            }}
+            onWorkspace={() => undefined}
+            onStory={() => undefined}
+            onStoryData={() => undefined}
+            onSelectChapter={() => undefined}
+            onRequestRegion={() => undefined}
+            onMove={() => undefined}
+            onDuplicate={() => undefined}
+            onDelete={() => undefined}
+            addChapter={<button type="button">Add chapter</button>}
+          />
+        }
+        canvas={
+          <div className="chapter-canvas__state">
+            Interactive chapter canvas
+          </div>
+        }
+        inspector={
+          <ChapterInspector
+            chapter={editorChapters[1]!}
+            chapterIndex={1}
+            sources={[mapSource]}
+            sourceUsage={{ floodplain: 2 }}
+            readiness={{ tone: "ready", label: "Ready" }}
+            currentCamera={null}
+            onUpdateChapter={() => undefined}
+            onEditSource={() => undefined}
+            onAddData={() => undefined}
+          />
+        }
+      />
+    </div>
+  ),
 };

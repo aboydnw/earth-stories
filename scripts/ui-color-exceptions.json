@@ -14,6 +14,27 @@
     "reason": "Default map layer stroke passed to the publication schema."
   },
   {
+    "file": "apps/editor/src/SourcePresentationFields.tsx",
+    "value": "#cf3f02",
+    "context": "color: \"#cf3f02\"",
+    "domain": "authored-data",
+    "reason": "Default authored map layer fill passed to the publication schema."
+  },
+  {
+    "file": "apps/editor/src/SourcePresentationFields.tsx",
+    "value": "#443f3f",
+    "context": "strokeColor: \"#443f3f\"",
+    "domain": "authored-data",
+    "reason": "Default authored map layer stroke passed to the publication schema."
+  },
+  {
+    "file": "apps/editor/src/SourcePresentationFields.test.tsx",
+    "value": "#228833",
+    "context": "forest=#228833",
+    "domain": "authored-data",
+    "reason": "Test fixture for a valid authored category color."
+  },
+  {
     "file": "apps/editor/src/App.tsx",
     "value": "#2f7d32",
     "context": "placeholder=\"forest=#2f7d32, water=#2878b5\"",

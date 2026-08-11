@@ -23,6 +23,7 @@ import type {
 import "maplibre-gl/dist/maplibre-gl.css";
 import { geoJsonBounds } from "./geoBounds.js";
 import { useMapCamera } from "./useMapCamera.js";
+import { resolveMapInteraction, runProgrammaticMove } from "./mapCamera.js";
 import { TemporalControls } from "./TemporalControls.js";
 import {
   formatTemporalTimestamp,
@@ -48,16 +49,22 @@ const TrajectoryOverlay = lazy(async () => ({
   default: (await import("./TrajectoryOverlay.js")).TrajectoryOverlay,
 }));
 
-interface MapChapterProps {
+export interface MapChapterProps {
   chapter: Extract<PublicationChapter, { type: "map" | "scrolly" }>;
   asset: PublicationAsset | null;
   overlayAssets?: PublicationAsset[];
   basemapStyle: string;
   controlled?: boolean;
+  interactive?: boolean;
+  followCamera?: boolean;
   autoFit?: boolean;
+  commitAutoFit?: boolean;
+  fitRequestToken?: string | number;
   snapshotMode?: boolean;
   onMapReady?: (map: maplibregl.Map | null) => void;
   onCameraChange?: (camera: Camera) => void;
+  onFitAvailabilityChange?: (available: boolean) => void;
+  onFitCameraChange?: (camera: Camera) => void;
   onReady?: () => void;
 }
 
@@ -137,6 +144,7 @@ function AssetLayer({
   map,
   onReady,
   autoFit,
+  onAutoFitCameraChange,
   temporalPosition,
   onTimeBounds,
 }: {
@@ -146,6 +154,7 @@ function AssetLayer({
   map?: maplibregl.Map | null;
   onReady?: () => void;
   autoFit?: boolean;
+  onAutoFitCameraChange?: () => void;
   temporalPosition: number;
   onTimeBounds: (bounds: [number, number] | null) => void;
 }) {
@@ -267,6 +276,7 @@ function AssetLayer({
           onError={onError}
           onReady={reportReady}
           autoFit={autoFit}
+          onFitCameraChange={onAutoFitCameraChange}
         />
       </Suspense>
     );
@@ -405,14 +415,23 @@ export function MapChapter({
   overlayAssets = [],
   basemapStyle,
   controlled = false,
+  interactive,
+  followCamera,
   autoFit = false,
+  commitAutoFit = false,
+  fitRequestToken,
   snapshotMode = false,
   onMapReady,
   onCameraChange,
+  onFitAvailabilityChange,
+  onFitCameraChange,
   onReady,
 }: MapChapterProps) {
   const [ready, setReady] = useState(false);
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
+  const [primaryBounds, setPrimaryBounds] = useState<
+    [number, number, number, number] | null
+  >(null);
   const [readyAssets, setReadyAssets] = useState(() => new Set<string>());
   const [showBuildingHint, setShowBuildingHint] = useState(
     chapter.camera.zoom < 14,
@@ -425,35 +444,98 @@ export function MapChapter({
   onReadyRef.current = onReady;
   const onMapReadyRef = useRef(onMapReady);
   onMapReadyRef.current = onMapReady;
+  const onFitAvailabilityRef = useRef(onFitAvailabilityChange);
+  onFitAvailabilityRef.current = onFitAvailabilityChange;
+  const onFitCameraRef = useRef(onFitCameraChange);
+  onFitCameraRef.current = onFitCameraChange;
   const reportError = useCallback((message: string) => setError(message), []);
   const mapRef = useRef<MapRef | null>(null);
   const fittedAssetRef = useRef<string | null>(null);
+  const fitRequestRef = useRef<string | number | undefined>(undefined);
+  const programmaticFitCleanupRef = useRef<(() => void) | null>(null);
   const activeAssetIdRef = useRef(asset?.id);
   activeAssetIdRef.current = asset?.id;
+  const autoFitRef = useRef(autoFit);
+  autoFitRef.current = autoFit;
+  const commitAutoFitRef = useRef(commitAutoFit);
+  commitAutoFitRef.current = commitAutoFit;
+  const chapterCameraRef = useRef(chapter.camera);
+  chapterCameraRef.current = chapter.camera;
+  const interaction = resolveMapInteraction({
+    controlled,
+    interactive,
+    followCamera,
+  });
+  const programmaticCamera = useMapCamera({
+    map: mapInstance,
+    camera: chapter.camera,
+    transition: chapter.transition,
+    enabled: interaction.followCamera,
+  });
   useEffect(() => {
     setShowBuildingHint(chapter.camera.zoom < 14);
   }, [chapter.camera.zoom, chapter.id]);
-  const fitToBounds = useCallback(
-    (bounds: [number, number, number, number]) => {
-      if (
-        !autoFit ||
-        activeAssetIdRef.current !== asset?.id ||
-        fittedAssetRef.current === asset?.id
-      )
-        return;
+  const applyBounds = useCallback(
+    (bounds: [number, number, number, number], commit = false) => {
       const map = mapRef.current;
       if (!map) return;
-      fittedAssetRef.current = asset?.id ?? null;
-      map.fitBounds(
-        [
-          [bounds[0], bounds[1]],
-          [bounds[2], bounds[3]],
-        ],
-        { padding: 64, duration: 0, maxZoom: 16 },
+      programmaticFitCleanupRef.current?.();
+      programmaticFitCleanupRef.current = runProgrammaticMove(
+        map.getMap(),
+        programmaticCamera,
+        () =>
+          map.fitBounds(
+            [
+              [bounds[0], bounds[1]],
+              [bounds[2], bounds[3]],
+            ],
+            { padding: 64, duration: 0, maxZoom: 16 },
+          ),
+        commit
+          ? () => {
+              const instance = map.getMap();
+              const center = instance.getCenter();
+              onFitCameraRef.current?.({
+                ...chapterCameraRef.current,
+                center: [center.lng, center.lat],
+                zoom: instance.getZoom(),
+                bearing: instance.getBearing(),
+                pitch: instance.getPitch(),
+              });
+            }
+          : undefined,
+        1_250,
       );
     },
-    [asset?.id, autoFit],
+    [programmaticCamera],
   );
+  const fitToBounds = useCallback(
+    (bounds: [number, number, number, number]) => {
+      setPrimaryBounds(bounds);
+      onFitAvailabilityRef.current?.(true);
+      if (
+        !autoFitRef.current ||
+        fittedAssetRef.current === activeAssetIdRef.current
+      )
+        return;
+      fittedAssetRef.current = activeAssetIdRef.current ?? null;
+      applyBounds(bounds, commitAutoFitRef.current);
+    },
+    [applyBounds],
+  );
+  const commitCopcFit = useCallback(() => {
+    if (!commitAutoFitRef.current) return;
+    const instance = mapRef.current?.getMap();
+    if (!instance) return;
+    const center = instance.getCenter();
+    onFitCameraRef.current?.({
+      ...chapterCameraRef.current,
+      center: [center.lng, center.lat],
+      zoom: instance.getZoom(),
+      bearing: instance.getBearing(),
+      pitch: instance.getPitch(),
+    });
+  }, []);
   const overlayKey = overlayAssets
     .map(({ id, href }) => `${id}:${href}`)
     .join("|");
@@ -463,7 +545,19 @@ export function MapChapter({
   );
   useEffect(() => {
     fittedAssetRef.current = null;
+    setPrimaryBounds(null);
+    onFitAvailabilityRef.current?.(false);
   }, [asset?.id, asset?.href]);
+  useEffect(() => {
+    if (
+      fitRequestToken === undefined ||
+      fitRequestRef.current === fitRequestToken ||
+      !primaryBounds
+    )
+      return;
+    fitRequestRef.current = fitRequestToken;
+    applyBounds(primaryBounds, true);
+  }, [applyBounds, fitRequestToken, primaryBounds]);
   const initialViewState = useMemo(
     () => ({
       longitude: chapter.camera.center[0],
@@ -517,14 +611,14 @@ export function MapChapter({
   }, []);
   const terrainEnabled =
     !!chapter.camera.terrain?.enabled && mapAssets.every(terrainCompatible);
-  const programmaticCamera = useMapCamera({
-    map: mapInstance,
-    camera: chapter.camera,
-    transition: chapter.transition,
-    enabled: controlled,
-  });
-
   useEffect(() => () => onMapReadyRef.current?.(null), []);
+  useEffect(
+    () => () => {
+      programmaticFitCleanupRef.current?.();
+      onFitAvailabilityRef.current?.(false);
+    },
+    [],
+  );
   useEffect(() => {
     if (ready && dataReady) onReadyRef.current?.();
   }, [dataReady, ready]);
@@ -539,7 +633,7 @@ export function MapChapter({
         ref={mapRef}
         initialViewState={initialViewState}
         mapStyle={basemapStyle}
-        interactive={!controlled}
+        interactive={interaction.interactive}
         projection={chapter.camera.globe ? { type: "globe" } : undefined}
         terrain={
           terrainEnabled
@@ -565,9 +659,13 @@ export function MapChapter({
             pitch: number;
           };
         }) => {
-          if (!controlled && chapter.camera.buildings)
+          if (interaction.interactive && chapter.camera.buildings)
             setShowBuildingHint(event.viewState.zoom < 14);
-          if (!controlled && !programmaticCamera.current && onCameraChange)
+          if (
+            interaction.interactive &&
+            !programmaticCamera.current &&
+            onCameraChange
+          )
             onCameraChange({
               ...chapter.camera,
               center: [event.viewState.longitude, event.viewState.latitude],
@@ -578,7 +676,7 @@ export function MapChapter({
         }}
         onError={(event: { error: Error }) => setError(event.error.message)}
       >
-        {!controlled ? (
+        {interaction.interactive ? (
           <NavigationControl position="top-right" showCompass visualizePitch />
         ) : null}
         {terrainEnabled ? (
@@ -628,6 +726,9 @@ export function MapChapter({
             map={mapInstance}
             onReady={() => markReady(key)}
             autoFit={autoFit}
+            onAutoFitCameraChange={
+              mapAsset.id === asset?.id ? commitCopcFit : undefined
+            }
             temporalPosition={mapAsset.id === asset?.id ? temporal.position : 0}
             onTimeBounds={
               mapAsset.id === asset?.id
@@ -686,7 +787,9 @@ export function MapChapter({
           onSpeed={temporal.setSpeed}
         />
       )}
-      {!controlled && chapter.camera.buildings && showBuildingHint ? (
+      {interaction.interactive &&
+      chapter.camera.buildings &&
+      showBuildingHint ? (
         <div className="story-map__hint" role="status">
           Zoom in to street level to see 3D buildings.
         </div>
