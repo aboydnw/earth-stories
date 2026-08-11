@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -513,6 +513,45 @@ describe("pushRelease", () => {
     ).toHaveLength(4);
   });
 
+  it.each([
+    ["numeric", "3600"],
+    ["HTTP-date", new Date(Date.now() + 3_600_000).toUTCString()],
+  ])("caps an excessive %s Retry-After delay", async (_kind, retryAfter) => {
+    const directory = await oneFileRelease();
+    const timeout = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation((callback) => {
+        queueMicrotask(callback as () => void);
+        return 0 as unknown as ReturnType<typeof setTimeout>;
+      });
+    const github = fakeGitHub({
+      blobResponse: (_body, attempt) =>
+        attempt === 1
+          ? new Response(JSON.stringify({ message: "slow down" }), {
+              status: 429,
+              headers: {
+                "content-type": "application/json",
+                "retry-after": retryAfter,
+              },
+            })
+          : jsonResponse(
+              { sha: "6c70bcfe4d48d15f8a6531d6b491e65d641a377c" },
+              201,
+            ),
+    });
+
+    await pushRelease({
+      directory,
+      token: "token",
+      owner: "mapper",
+      repo: "notes",
+      fetchImpl: github.fetchImpl,
+    });
+
+    expect(timeout).toHaveBeenCalledWith(expect.any(Function), 60_000);
+    timeout.mockRestore();
+  });
+
   it("uploads no more than four blobs concurrently", async () => {
     const directory = await mkdtemp(join(tmpdir(), "earth-stories-release-"));
     for (let index = 0; index < 7; index += 1)
@@ -543,6 +582,135 @@ describe("pushRelease", () => {
     });
 
     expect(maximum).toBe(4);
+  });
+
+  it("waits for sibling uploads to stop and emits no progress after one fails", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "earth-stories-release-"));
+    for (let index = 0; index < 7; index += 1)
+      await writeFile(join(directory, `file-${index}.txt`), `file ${index}`);
+    const progress: Array<{ uploaded: number; skipped: number }> = [];
+    let started = 0;
+    let aborted = 0;
+    let releaseFirstFailure: (() => void) | undefined;
+    const allWorkersStarted = new Promise<void>((resolve) => {
+      releaseFirstFailure = resolve;
+    });
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/git/ref/heads/gh-pages"))
+          return jsonResponse({ message: "Not Found" }, 404);
+        if (!url.endsWith("/git/blobs"))
+          throw new Error(
+            `Unexpected request: ${init?.method ?? "GET"} ${url}`,
+          );
+
+        started += 1;
+        if (started === 4) releaseFirstFailure?.();
+        const body = init?.body as ReadableStream<Uint8Array>;
+        if (started === 1) {
+          await allWorkersStarted;
+          await body.cancel("server rejected upload");
+          return jsonResponse({ message: "blob refused" }, 500);
+        }
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => {
+              aborted += 1;
+              void body.cancel("sibling upload failed");
+              reject(new Error("aborted sibling upload"));
+            },
+            { once: true },
+          );
+        });
+      },
+    ) as unknown as typeof fetch;
+
+    await expect(
+      pushRelease({
+        directory,
+        token: "token",
+        owner: "mapper",
+        repo: "notes",
+        fetchImpl,
+        onProgress: (update) => progress.push(update),
+      }),
+    ).rejects.toThrow(/blob refused/);
+    const progressAtFailure = [...progress];
+    await new Promise((done) => setTimeout(done, 10));
+
+    expect(started).toBe(4);
+    expect(aborted).toBe(3);
+    expect(progress).toEqual(progressAtFailure);
+    expect(progress).toEqual([{ uploaded: 0, skipped: 0 }]);
+  });
+
+  it("sends blob JSON as a cancellable stream on an early rejection", async () => {
+    const directory = await oneFileRelease();
+    let cancelled = false;
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/git/ref/heads/gh-pages"))
+          return jsonResponse({ message: "Not Found" }, 404);
+        if (!url.endsWith("/git/blobs"))
+          throw new Error(
+            `Unexpected request: ${init?.method ?? "GET"} ${url}`,
+          );
+        expect(init?.body).toBeInstanceOf(ReadableStream);
+        expect(typeof init?.body).not.toBe("string");
+        const reader = (init?.body as ReadableStream<Uint8Array>).getReader();
+        const first = await reader.read();
+        expect(new TextDecoder().decode(first.value)).toBe('{"content":"');
+        await reader.cancel("server stopped reading");
+        cancelled = true;
+        return jsonResponse({ message: "payload rejected" }, 413);
+      },
+    ) as unknown as typeof fetch;
+
+    await expect(
+      pushRelease({
+        directory,
+        token: "token",
+        owner: "mapper",
+        repo: "notes",
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/payload rejected/);
+    expect(cancelled).toBe(true);
+  });
+
+  it("reports a file read failure from the streamed upload body", async () => {
+    const directory = await oneFileRelease();
+    let removed = false;
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/git/ref/heads/gh-pages")) {
+          await rm(join(directory, "index.html"));
+          removed = true;
+          return jsonResponse({ message: "Not Found" }, 404);
+        }
+        if (!url.endsWith("/git/blobs"))
+          throw new Error(
+            `Unexpected request: ${init?.method ?? "GET"} ${url}`,
+          );
+        await new Response(init?.body).text();
+        throw new Error("stream unexpectedly succeeded");
+      },
+    ) as unknown as typeof fetch;
+
+    await expect(
+      pushRelease({
+        directory,
+        token: "token",
+        owner: "mapper",
+        repo: "notes",
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/Uploading index.html failed.*ENOENT/);
+    expect(removed).toBe(true);
   });
 
   it("never exposes the token through URLs, errors, or progress", async () => {

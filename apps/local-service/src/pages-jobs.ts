@@ -260,22 +260,28 @@ export class PagesJobs {
 
         const branch = context.existing?.branch ?? DEFAULT_PAGES_BRANCH;
         this.#note(snapshot, "uploading", "Uploading the release…");
-        await this.#deps.pushRelease({
-          directory: built.directory,
-          token: identity.token,
-          owner: identity.login,
-          repo: context.repo,
-          branch,
-          onProgress: ({ uploaded, skipped }) => {
-            const uploadedLabel = uploaded === 1 ? "file" : "files";
-            const skippedLabel = skipped === 1 ? "file" : "files";
-            this.#note(
-              snapshot,
-              "uploading",
-              `Uploaded ${uploaded} ${uploadedLabel}; skipped ${skipped} unchanged ${skippedLabel}.`,
-            );
-          },
-        });
+        let acceptingUploadProgress = true;
+        try {
+          await this.#deps.pushRelease({
+            directory: built.directory,
+            token: identity.token,
+            owner: identity.login,
+            repo: context.repo,
+            branch,
+            onProgress: ({ uploaded, skipped }) => {
+              if (!acceptingUploadProgress) return;
+              const uploadedLabel = uploaded === 1 ? "file" : "files";
+              const skippedLabel = skipped === 1 ? "file" : "files";
+              this.#note(
+                snapshot,
+                "uploading",
+                `Uploaded ${uploaded} ${uploadedLabel}; skipped ${skipped} unchanged ${skippedLabel}.`,
+              );
+            },
+          });
+        } finally {
+          acceptingUploadProgress = false;
+        }
 
         this.#note(snapshot, "enabling-pages", "Turning on GitHub Pages…");
         await this.#deps.enablePages({

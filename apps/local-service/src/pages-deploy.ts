@@ -151,6 +151,7 @@ interface HashedReleaseFile extends ReleaseFile {
 }
 
 const MAX_RATE_LIMIT_RETRIES = 3;
+const MAX_RETRY_DELAY_MS = 60_000;
 
 function safeMessage(value: unknown, token: string): string {
   const message = value instanceof Error ? value.message : String(value);
@@ -161,9 +162,37 @@ function retryDelay(response: Response): number | null {
   const header = response.headers.get("retry-after");
   if (header === null) return response.status === 429 ? 1_000 : null;
   const seconds = Number(header);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+  if (Number.isFinite(seconds))
+    return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, seconds * 1_000));
   const date = Date.parse(header);
-  return Number.isNaN(date) ? 1_000 : Math.max(0, date - Date.now());
+  return Number.isNaN(date)
+    ? 1_000
+    : Math.min(MAX_RETRY_DELAY_MS, Math.max(0, date - Date.now()));
+}
+
+function waitForRetry(ms: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal)
+    return new Promise((done) => {
+      setTimeout(done, ms);
+    });
+  if (signal.aborted)
+    return Promise.reject(
+      signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
+    );
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(
+        signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
+      );
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 async function githubObjectRequest({
@@ -193,7 +222,7 @@ async function githubObjectRequest({
       (response.status === 403 || response.status === 429) && delay !== null;
     if (rateLimited && attempt < MAX_RATE_LIMIT_RETRIES) {
       await response.body?.cancel();
-      await new Promise((done) => setTimeout(done, delay));
+      await waitForRetry(delay, init?.signal);
       continue;
     }
     if (rateLimited)
@@ -317,38 +346,54 @@ async function uploadMissingBlobs(
   const skipped = files.length - missing.length;
   let uploaded = 0;
   let next = 0;
+  let failed = false;
+  let failure: unknown;
+  const uploads = new AbortController();
   options.onProgress?.({ uploaded, skipped });
 
   async function worker(): Promise<void> {
-    for (;;) {
+    while (!uploads.signal.aborted) {
       const index = next++;
       const file = missing[index];
       if (!file) return;
-      const response = await githubObjectRequest({
-        fetchImpl,
-        token: options.token,
-        url: endpoint,
-        operation: `Uploading ${file.path}`,
-        init: { method: "POST" },
-        body: () => base64BlobBody(file.absolute),
-      });
-      const result = await responseJson<{ sha?: unknown }>(
-        response,
-        `Uploading ${file.path}`,
-        options.token,
-      );
-      if (result.sha !== file.sha)
-        throw new Error(
-          `Uploading ${file.path} returned a blob SHA that did not match the local file.`,
+      if (uploads.signal.aborted) return;
+      try {
+        const response = await githubObjectRequest({
+          fetchImpl,
+          token: options.token,
+          url: endpoint,
+          operation: `Uploading ${file.path}`,
+          init: { method: "POST", signal: uploads.signal },
+          body: () => base64BlobBody(file.absolute),
+        });
+        if (uploads.signal.aborted) return;
+        const result = await responseJson<{ sha?: unknown }>(
+          response,
+          `Uploading ${file.path}`,
+          options.token,
         );
-      uploaded += 1;
-      options.onProgress?.({ uploaded, skipped });
+        if (uploads.signal.aborted) return;
+        if (result.sha !== file.sha)
+          throw new Error(
+            `Uploading ${file.path} returned a blob SHA that did not match the local file.`,
+          );
+        uploaded += 1;
+        options.onProgress?.({ uploaded, skipped });
+      } catch (cause) {
+        if (!failed) {
+          failed = true;
+          failure = cause;
+          uploads.abort(cause);
+        }
+        return;
+      }
     }
   }
 
   await Promise.all(
     Array.from({ length: Math.min(4, missing.length) }, () => worker()),
   );
+  if (failed) throw failure;
 }
 
 async function createTree(

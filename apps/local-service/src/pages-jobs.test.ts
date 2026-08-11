@@ -182,6 +182,28 @@ describe("PagesJobs", () => {
     ]);
   });
 
+  it("ignores uploader progress callbacks after the upload has failed", async () => {
+    let reportProgress:
+      ((progress: { uploaded: number; skipped: number }) => void) | undefined;
+    const deps = dependencies({
+      pushRelease: vi.fn(async (options) => {
+        reportProgress = options.onProgress;
+        options.onProgress?.({ uploaded: 1, skipped: 0 });
+        throw new Error("blob upload failed");
+      }),
+    });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    const finished = await settle(jobs, id);
+    const eventCount = finished.events.length;
+
+    reportProgress?.({ uploaded: 2, skipped: 0 });
+
+    expect(finished.status).toBe("failed");
+    expect(finished.events).toHaveLength(eventCount);
+    expect(finished.events.at(-1)?.message).toBe("blob upload failed");
+  });
+
   it("keeps the existing repository and URL when republishing", async () => {
     const deps = dependencies({
       readPublishRecord: vi.fn(async () => ({
