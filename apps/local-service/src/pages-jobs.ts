@@ -1,0 +1,334 @@
+import type { ProjectStore } from "@earth-stories/project-store";
+import {
+  buildLatestPublication,
+  preflightPublication,
+} from "@earth-stories/publisher";
+import { checkShareLink } from "./share-health.js";
+import {
+  resolveToken,
+  type DeviceCodePrompt,
+  type GitHubIdentity,
+} from "./github-auth.js";
+import {
+  DEFAULT_PAGES_BRANCH,
+  enablePages,
+  ensureRepository,
+  pagesUrl,
+  pushRelease,
+  slugRepoName,
+  waitForPages,
+} from "./pages-deploy.js";
+import {
+  checkEstimatedSize,
+  checkReleaseLimits,
+  inspectRelease,
+} from "./publish-limits.js";
+import {
+  readPublishRecord,
+  writePublishRecord,
+  type PublishRecord,
+} from "./publish-record.js";
+
+export type PublishJobStatus = "queued" | "running" | "succeeded" | "failed";
+
+export type PublishStage =
+  | "signing-in"
+  | "checking"
+  | "building"
+  | "preparing-repository"
+  | "uploading"
+  | "enabling-pages"
+  | "waiting-for-site"
+  | "verifying"
+  | "done";
+
+export interface PublishJobEvent {
+  stage: PublishStage;
+  severity: "info" | "warning";
+  message: string;
+  at: string;
+}
+
+export interface PublishJobSnapshot {
+  id: string;
+  projectId: string;
+  status: PublishJobStatus;
+  stage: PublishStage;
+  events: PublishJobEvent[];
+  deviceCode: DeviceCodePrompt | null;
+  url: string | null;
+  record: PublishRecord | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PagesJobsDependencies {
+  resolveToken: typeof resolveToken;
+  preflight: typeof preflightPublication;
+  build: typeof buildLatestPublication;
+  ensureRepository: typeof ensureRepository;
+  pushRelease: typeof pushRelease;
+  enablePages: typeof enablePages;
+  waitForPages: typeof waitForPages;
+  checkShareLink: typeof checkShareLink;
+  inspectRelease: typeof inspectRelease;
+  readPublishRecord: typeof readPublishRecord;
+  writePublishRecord: typeof writePublishRecord;
+  viewerDirectory?: string;
+  withLock?: <T>(projectId: string, operation: () => Promise<T>) => Promise<T>;
+}
+
+const defaults = (): PagesJobsDependencies => ({
+  resolveToken,
+  preflight: preflightPublication,
+  build: buildLatestPublication,
+  ensureRepository,
+  pushRelease,
+  enablePages,
+  waitForPages,
+  checkShareLink,
+  inspectRelease,
+  readPublishRecord,
+  writePublishRecord,
+});
+
+export interface StartPublishInput {
+  repo?: unknown;
+  mapSnapshots?: unknown;
+}
+
+/**
+ * Runs GitHub Pages publishes as polled background jobs, because a publish
+ * takes minutes: the release is built, pushed, and then waited on while Pages
+ * performs its own build. Mirrors the conversion-job shape the editor already
+ * knows how to poll.
+ */
+export class PagesJobs {
+  readonly #jobs = new Map<string, PublishJobSnapshot>();
+  readonly #store: ProjectStore;
+  readonly #deps: PagesJobsDependencies;
+
+  constructor(store: ProjectStore, deps: Partial<PagesJobsDependencies> = {}) {
+    this.#store = store;
+    this.#deps = { ...defaults(), ...deps };
+  }
+
+  get(id: string): PublishJobSnapshot | null {
+    return this.#jobs.get(id) ?? null;
+  }
+
+  async record(projectId: string): Promise<PublishRecord | null> {
+    await this.#store.read(projectId);
+    return this.#deps.readPublishRecord(this.#store.projectPath(projectId));
+  }
+
+  async create(
+    projectId: string,
+    input: StartPublishInput = {},
+  ): Promise<PublishJobSnapshot> {
+    const project = await this.#store.read(projectId);
+    const existing = await this.#deps.readPublishRecord(
+      this.#store.projectPath(projectId),
+    );
+    const requested =
+      typeof input.repo === "string" && input.repo.trim()
+        ? slugRepoName(input.repo)
+        : (existing?.repo ?? slugRepoName(project.metadata.title));
+    const snapshots =
+      input.mapSnapshots &&
+      typeof input.mapSnapshots === "object" &&
+      input.mapSnapshots !== null
+        ? (input.mapSnapshots as Record<string, string>)
+        : undefined;
+
+    const now = new Date().toISOString();
+    const snapshot: PublishJobSnapshot = {
+      id: crypto.randomUUID(),
+      projectId,
+      status: "queued",
+      stage: "signing-in",
+      events: [],
+      deviceCode: null,
+      url: null,
+      record: null,
+      error: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.#jobs.set(snapshot.id, snapshot);
+    void this.#run(snapshot, { repo: requested, existing, snapshots });
+    return snapshot;
+  }
+
+  #note(
+    snapshot: PublishJobSnapshot,
+    stage: PublishStage,
+    message: string,
+    severity: "info" | "warning" = "info",
+  ): void {
+    snapshot.stage = stage;
+    snapshot.events.push({
+      stage,
+      severity,
+      message,
+      at: new Date().toISOString(),
+    });
+    snapshot.updatedAt = new Date().toISOString();
+  }
+
+  async #run(
+    snapshot: PublishJobSnapshot,
+    context: {
+      repo: string;
+      existing: PublishRecord | null;
+      snapshots?: Record<string, string>;
+    },
+  ): Promise<void> {
+    const projectDirectory = this.#store.projectPath(snapshot.projectId);
+    const withLock =
+      this.#deps.withLock ?? (<T>(_id: string, run: () => Promise<T>) => run());
+    snapshot.status = "running";
+    snapshot.updatedAt = new Date().toISOString();
+
+    try {
+      await withLock(snapshot.projectId, async () => {
+        this.#note(snapshot, "signing-in", "Signing in to GitHub…");
+        const identity: GitHubIdentity = await this.#deps.resolveToken({
+          onDeviceCode: (prompt) => {
+            snapshot.deviceCode = prompt;
+            this.#note(
+              snapshot,
+              "signing-in",
+              `Enter code ${prompt.userCode} at ${prompt.verificationUri} to continue.`,
+            );
+          },
+        });
+        snapshot.deviceCode = null;
+        this.#note(
+          snapshot,
+          "checking",
+          `Signed in as ${identity.login}. Checking the story…`,
+        );
+
+        const preflight = await this.#deps.preflight(projectDirectory);
+        if (!preflight.ready)
+          throw new Error(
+            "Fix the blocking publication problems before publishing to the web.",
+          );
+        const estimate = checkEstimatedSize(
+          preflight.estimatedIncludedBytes,
+          preflight.profile,
+        );
+        if (estimate.blocked) throw new Error(estimate.message ?? "");
+        if (estimate.message)
+          this.#note(snapshot, "checking", estimate.message, "warning");
+
+        const url = pagesUrl(identity.login, context.repo);
+        snapshot.url = url;
+        this.#note(snapshot, "building", `Building the release for ${url}`);
+        const built = await this.#deps.build({
+          projectDirectory,
+          viewerDirectory: this.#deps.viewerDirectory,
+          mapSnapshots: context.snapshots,
+          publicationUrl: url,
+        });
+
+        const limits = checkReleaseLimits(
+          await this.#deps.inspectRelease(built.directory),
+        );
+        if (limits.blocked) throw new Error(limits.message ?? "");
+        if (limits.message)
+          this.#note(snapshot, "building", limits.message, "warning");
+
+        this.#note(
+          snapshot,
+          "preparing-repository",
+          `Preparing github.com/${identity.login}/${context.repo}`,
+        );
+        await this.#deps.ensureRepository({
+          token: identity.token,
+          owner: identity.login,
+          repo: context.repo,
+          expectExisting:
+            context.existing?.repo === context.repo &&
+            context.existing.owner === identity.login,
+        });
+
+        const branch = context.existing?.branch ?? DEFAULT_PAGES_BRANCH;
+        this.#note(snapshot, "uploading", "Uploading the release…");
+        await this.#deps.pushRelease({
+          directory: built.directory,
+          token: identity.token,
+          owner: identity.login,
+          repo: context.repo,
+          branch,
+        });
+
+        this.#note(snapshot, "enabling-pages", "Turning on GitHub Pages…");
+        await this.#deps.enablePages({
+          token: identity.token,
+          owner: identity.login,
+          repo: context.repo,
+          branch,
+        });
+
+        this.#note(
+          snapshot,
+          "waiting-for-site",
+          "Waiting for GitHub to build the site. The first build takes a minute or two…",
+        );
+        const served = await this.#deps.waitForPages(url);
+        if (!served)
+          this.#note(
+            snapshot,
+            "waiting-for-site",
+            "GitHub is still building the site. The link will start working shortly.",
+            "warning",
+          );
+
+        if (served) {
+          this.#note(snapshot, "verifying", "Checking how the link will look…");
+          const health = await this.#deps.checkShareLink(url);
+          for (const problem of health.problems)
+            this.#note(
+              snapshot,
+              "verifying",
+              problem.resolution
+                ? `${problem.message} ${problem.resolution}`
+                : problem.message,
+              "warning",
+            );
+        }
+
+        const record: PublishRecord = {
+          owner: identity.login,
+          repo: context.repo,
+          url,
+          branch,
+          buildId: built.manifest.build.id,
+          publishedAt: new Date().toISOString(),
+        };
+        await this.#deps.writePublishRecord(projectDirectory, record);
+        snapshot.record = record;
+        snapshot.status = "succeeded";
+        this.#note(snapshot, "done", `Published at ${url}`);
+      });
+    } catch (cause) {
+      snapshot.status = "failed";
+      snapshot.deviceCode = null;
+      snapshot.error =
+        cause instanceof Error
+          ? cause.message
+          : "The story could not be published.";
+      snapshot.events.push({
+        stage: snapshot.stage,
+        severity: "warning",
+        message: snapshot.error,
+        at: new Date().toISOString(),
+      });
+    } finally {
+      snapshot.updatedAt = new Date().toISOString();
+    }
+  }
+}

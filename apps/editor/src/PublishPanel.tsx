@@ -33,6 +33,7 @@ import {
   downloadMapSnapshots,
 } from "./captureSnapshots";
 import { ShareRehearsal } from "./ShareRehearsal";
+import { PublishToWeb } from "./PublishToWeb";
 
 interface Props {
   open: boolean;
@@ -454,6 +455,13 @@ export function PublishPanel({
             {loading ? "Building…" : "Build publication"}
           </ActionButton>
         </section>
+
+        <PublishToWeb
+          project={project}
+          disabled={!canBuild}
+          onBusyChange={setShareBusy}
+          onPublished={onRefreshPreflight}
+        />
 
         {cardWarning ? (
           <StatusNotice tone="warning">{cardWarning}</StatusNotice>

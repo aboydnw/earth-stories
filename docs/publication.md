@@ -125,6 +125,42 @@ the same failures that otherwise only show up after posting publicly. Localhost
 URLs work, so a release served on this computer can be rehearsed before it is
 deployed; other private-network addresses cannot be checked and say so.
 
+## Publish to GitHub Pages
+
+The publication workshop can put a story on GitHub Pages, free hosting the
+author owns. Earth Stories signs in with the GitHub CLI when this computer
+already has it, and otherwise runs GitHub's device flow: the panel shows a code
+to enter at `github.com/login/device`, which needs no git or CLI knowledge. The
+resulting token is stored at `~/.earth-stories/credentials.json` with mode
+`0600`, deliberately outside every project directory, because project
+directories get exported, zipped, and pushed to a public repository.
+
+The published address is `https://<account>.github.io/<repo>/`. It is known
+before the first push, so the release is built with that URL already in its
+share metadata — on this path there is no paste-your-URL-and-export-again
+rebake. Re-publishing reuses the recorded repository, so the address stays
+stable and links already shared keep working. The location is recorded in
+`.earth-stories/publish.json` beside the project.
+
+Only the built `publication/` folder is uploaded, never the project directory
+with its `story.json` and backups. Each publish force-pushes a single orphan
+commit into the `gh-pages` branch, matching the latest-only lifecycle below:
+the repository does not accumulate history for map data that is replaced
+wholesale each build. A `.nojekyll` marker is added so Pages serves the release
+as-is.
+
+GitHub Pages caps a site at 1 GB and rejects any file over 100 MB. Earth
+Stories checks the preflight estimate before building and measures the built
+release before uploading, naming the file that is too large. Stories that
+exceed the ceiling are usually on the `portable` profile, which copies COG,
+PMTiles, and GeoParquet data into the release; the `connected` profile keeps
+that data at its source.
+
+The first Pages build takes a minute or two. Earth Stories waits, reports each
+stage, and then runs the same published-link check described above. If GitHub
+is still building when the wait ends, the publish still succeeds and says the
+link will start working shortly.
+
 ## Latest-only lifecycle
 
 A build is assembled in a temporary sibling directory. The service moves the
