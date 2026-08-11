@@ -13,6 +13,16 @@ export interface CoverRect {
   sHeight: number;
 }
 
+interface ReadyMapCanvas {
+  canvas: HTMLCanvasElement;
+  map: HTMLElement;
+}
+
+interface ReadableMapLayer {
+  canvas: HTMLCanvasElement;
+  attribution: string;
+}
+
 /**
  * Chooses the source rectangle that fills a card without distorting the
  * capture, cropping the longer axis evenly on both sides.
@@ -89,12 +99,23 @@ function ellipsize(
   return `${truncated}…`;
 }
 
-function readyMapCanvas(root: ParentNode): HTMLCanvasElement | null {
-  for (const canvas of root.querySelectorAll<HTMLCanvasElement>(
-    ".story-map canvas",
-  ))
-    if (canvas.width > 0 && canvas.height > 0) return canvas;
+function readyMapCanvas(root: ParentNode): ReadyMapCanvas | null {
+  for (const map of root.querySelectorAll<HTMLElement>(".story-map")) {
+    const canvas = map.querySelector<HTMLCanvasElement>("canvas");
+    if (canvas && canvas.width > 0 && canvas.height > 0) return { canvas, map };
+  }
   return null;
+}
+
+export function mapAttribution(map: ParentNode): string {
+  const values = [
+    ...map.querySelectorAll<HTMLElement>(
+      ".story-map__attribution, .maplibregl-ctrl-attrib",
+    ),
+  ]
+    .map((element) => (element.textContent ?? "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  return [...new Set(values)].join(" · ");
 }
 
 /**
@@ -104,7 +125,7 @@ function readyMapCanvas(root: ParentNode): HTMLCanvasElement | null {
  * taint has to be caught here, while the story card can still fall back to its
  * scrim alone.
  */
-function readableMapLayer(root: ParentNode): HTMLCanvasElement | null {
+function readableMapLayer(root: ParentNode): ReadableMapLayer | null {
   const source = readyMapCanvas(root);
   if (!source) return null;
   const layer = document.createElement("canvas");
@@ -112,10 +133,13 @@ function readableMapLayer(root: ParentNode): HTMLCanvasElement | null {
   layer.height = SHARE_CARD_HEIGHT;
   const context = layer.getContext("2d");
   if (!context) return null;
-  const { sx, sy, sWidth, sHeight } = coverRect(source.width, source.height);
+  const { sx, sy, sWidth, sHeight } = coverRect(
+    source.canvas.width,
+    source.canvas.height,
+  );
   try {
     context.drawImage(
-      source,
+      source.canvas,
       sx,
       sy,
       sWidth,
@@ -129,7 +153,7 @@ function readableMapLayer(root: ParentNode): HTMLCanvasElement | null {
   } catch {
     return null;
   }
-  return layer;
+  return { canvas: layer, attribution: mapAttribution(source.map) };
 }
 
 /**
@@ -155,7 +179,7 @@ export async function captureShareCard(
   context.fillRect(0, 0, SHARE_CARD_WIDTH, SHARE_CARD_HEIGHT);
 
   const mapLayer = readableMapLayer(root);
-  if (mapLayer) context.drawImage(mapLayer, 0, 0);
+  if (mapLayer) context.drawImage(mapLayer.canvas, 0, 0);
 
   const scrim = context.createLinearGradient(
     0,
@@ -167,6 +191,22 @@ export async function captureShareCard(
   scrim.addColorStop(1, "rgba(16,26,25,.92)");
   context.fillStyle = scrim;
   context.fillRect(0, 0, SHARE_CARD_WIDTH, SHARE_CARD_HEIGHT);
+
+  if (mapLayer?.attribution) {
+    context.font = "500 19px system-ui, sans-serif";
+    const maxCreditWidth = SHARE_CARD_WIDTH - TITLE_MARGIN * 2;
+    const measureCredit = (value: string) => context.measureText(value).width;
+    const credit =
+      measureCredit(mapLayer.attribution) > maxCreditWidth
+        ? ellipsize(mapLayer.attribution, measureCredit, maxCreditWidth)
+        : mapLayer.attribution;
+    const creditWidth = context.measureText(credit).width;
+    context.fillStyle = "rgba(16,26,25,.92)";
+    context.fillRect(TITLE_MARGIN - 12, 28, creditWidth + 24, 38);
+    context.fillStyle = "#fdfbf7";
+    context.textBaseline = "middle";
+    context.fillText(credit, TITLE_MARGIN, 47);
+  }
 
   const heading = title.trim() || "Untitled story";
   context.font = "600 58px Georgia, serif";

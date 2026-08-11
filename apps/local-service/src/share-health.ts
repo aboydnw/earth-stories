@@ -122,6 +122,27 @@ async function readCapped(
   return { text: Buffer.concat(chunks).toString("utf8"), bytes };
 }
 
+async function readBytesCapped(
+  response: Response,
+  limit: number,
+): Promise<{ data: Buffer; bytes: number; exceeded: boolean }> {
+  const reader = response.body?.getReader();
+  if (!reader) return { data: Buffer.alloc(0), bytes: 0, exceeded: false };
+  const chunks: Uint8Array[] = [];
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > limit) {
+      await reader.cancel();
+      return { data: Buffer.concat(chunks), bytes, exceeded: true };
+    }
+    chunks.push(value);
+  }
+  return { data: Buffer.concat(chunks), bytes, exceeded: false };
+}
+
 /**
  * Fetches a deployed story and reports how its link will unfurl on social
  * platforms, which read static metadata and never execute the page's scripts.
@@ -273,7 +294,8 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
       return report;
     }
     const type = response.headers.get("content-type") ?? "";
-    if (!type.startsWith("image/"))
+    const mediaType = type.split(";", 1)[0]!.trim().toLowerCase();
+    if (mediaType !== "image/png")
       problems.push({
         id: "image-content-type",
         severity: "error",
@@ -281,9 +303,20 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
         resolution: "Configure your host to serve PNG files as image/png.",
       });
     const declared = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declared) && declared > 0) {
+    if (Number.isFinite(declared) && declared > MAX_CARD_BYTES) {
       report.imageBytes = declared;
-      if (declared > MAX_CARD_BYTES)
+      problems.push({
+        id: "image-too-large",
+        severity: "warning",
+        message:
+          "The link preview image is larger than 5 MB and may be skipped.",
+        resolution: "Regenerate the share card at a smaller size.",
+      });
+      await response.body?.cancel();
+    } else {
+      const imageBody = await readBytesCapped(response, MAX_CARD_BYTES);
+      report.imageBytes = imageBody.bytes;
+      if (imageBody.exceeded)
         problems.push({
           id: "image-too-large",
           severity: "warning",
@@ -291,8 +324,15 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
             "The link preview image is larger than 5 MB and may be skipped.",
           resolution: "Regenerate the share card at a smaller size.",
         });
+      else if (!imageBody.bytes || !isValidPng(imageBody.data))
+        problems.push({
+          id: "image-invalid",
+          severity: "error",
+          message: "The link preview image is not a readable PNG.",
+          resolution:
+            "Regenerate the share card, then export and deploy the release again.",
+        });
     }
-    await response.body?.cancel();
   } catch (cause) {
     problems.push({
       id: "image-unreachable",

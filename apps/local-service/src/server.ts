@@ -30,6 +30,7 @@ import {
 import { loadExampleAssetFiles } from "./exampleAssets.js";
 import { isTrustedMutationOrigin } from "./security.js";
 import { checkShareLink, decodeShareCard } from "./share-health.js";
+import { storeShareCard } from "./share-card.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 
@@ -243,24 +244,25 @@ async function streamZip(
   }
 }
 
-const exportLocks = new Map<string, Promise<void>>();
-async function withProjectExportLock<T>(
+const publicationLocks = new Map<string, Promise<void>>();
+async function withProjectPublicationLock<T>(
   projectId: string,
   operation: () => Promise<T>,
 ): Promise<T> {
-  const previous = exportLocks.get(projectId) ?? Promise.resolve();
+  const previous = publicationLocks.get(projectId) ?? Promise.resolve();
   let release!: () => void;
   const current = new Promise<void>((resolveLock) => {
     release = resolveLock;
   });
   const tail = previous.then(() => current);
-  exportLocks.set(projectId, tail);
+  publicationLocks.set(projectId, tail);
   await previous;
   try {
     return await operation();
   } finally {
     release();
-    if (exportLocks.get(projectId) === tail) exportLocks.delete(projectId);
+    if (publicationLocks.get(projectId) === tail)
+      publicationLocks.delete(projectId);
   }
 }
 
@@ -448,6 +450,22 @@ export function createLocalServer(
       const shareCardMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/share-card$/,
       );
+      if (shareCardMatch && request.method === "GET") {
+        const id = decodeURIComponent(shareCardMatch[1]);
+        await store.read(id).catch(() => {
+          throw new Error(`Project "${id}" was not found`);
+        });
+        const card = await readFile(
+          join(store.projectPath(id), SHARE_CARD_SOURCE_FILENAME),
+        );
+        response.writeHead(200, {
+          "content-type": "image/png",
+          "content-length": card.byteLength,
+          "cache-control": "no-store",
+        });
+        response.end(card);
+        return;
+      }
       if (shareCardMatch && request.method === "POST") {
         const id = decodeURIComponent(shareCardMatch[1]);
         await store.read(id).catch(() => {
@@ -457,9 +475,8 @@ export function createLocalServer(
           image?: unknown;
         } | null;
         const card = decodeShareCard(body?.image);
-        await writeFile(
-          join(store.projectPath(id), SHARE_CARD_SOURCE_FILENAME),
-          card,
+        await withProjectPublicationLock(id, () =>
+          storeShareCard(store.projectPath(id), card),
         );
         json(response, 200, { bytes: card.byteLength });
         return;
@@ -494,7 +511,7 @@ export function createLocalServer(
           typeof body.publicationUrl === "string" && body.publicationUrl.trim()
             ? body.publicationUrl.trim()
             : PUBLICATION_URL_PLACEHOLDER;
-        await withProjectExportLock(id, async () => {
+        await withProjectPublicationLock(id, async () => {
           const latest = await buildLatestPublication({
             projectDirectory: store.projectPath(id),
             viewerDirectory: VIEWER_DIRECTORY,

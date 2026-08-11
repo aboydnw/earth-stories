@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { coverRect, wrapLines } from "./captureShareCard";
+import { coverRect, mapAttribution, wrapLines } from "./captureShareCard";
 
 const measure = (value: string) => value.length * 10;
 
@@ -54,5 +55,19 @@ describe("wrapLines", () => {
 
   it("returns nothing for blank text", () => {
     expect(wrapLines("   ", measure, 400)).toEqual([]);
+  });
+});
+
+describe("mapAttribution", () => {
+  it("combines authored data and basemap credits without duplicates", () => {
+    const map = document.createElement("div");
+    map.innerHTML = `
+      <span class="story-map__attribution">Coastal Observatory</span>
+      <span class="maplibregl-ctrl-attrib">© OpenStreetMap contributors</span>
+      <span class="story-map__attribution">Coastal Observatory</span>
+    `;
+    expect(mapAttribution(map)).toBe(
+      "Coastal Observatory · © OpenStreetMap contributors",
+    );
   });
 });

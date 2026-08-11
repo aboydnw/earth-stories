@@ -21,8 +21,11 @@ const page = (body: string) =>
     headers: { "content-type": "text/html" },
   });
 
-const image = (headers: Record<string, string>) =>
-  new Response("binary", { status: 200, headers });
+const image = (headers: Record<string, string>, body?: BodyInit | null) =>
+  new Response(body ?? Buffer.from(VALID_PNG_BASE64, "base64"), {
+    status: 200,
+    headers,
+  });
 
 function shareHtml(overrides: Record<string, string | null> = {}) {
   const tags: Record<string, string | null> = {
@@ -84,7 +87,7 @@ describe("checkShareLink", () => {
     const report = await checkShareLink("https://example.org/story/");
     expect(report.reachable).toBe(true);
     expect(report.title).toBe("Field Notes");
-    expect(report.imageBytes).toBe(180000);
+    expect(report.imageBytes).toBeGreaterThan(0);
     expect(report.problems).toEqual([]);
   });
 
@@ -124,6 +127,46 @@ describe("checkShareLink", () => {
     const report = await checkShareLink("https://example.org/story/");
     expect(report.problems).toContainEqual(
       expect.objectContaining({ id: "image-content-type" }),
+    );
+  });
+
+  it("flags an empty preview image even when its content type is PNG", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith(".png")
+        ? image({ "content-type": "image/png" }, Buffer.alloc(0))
+        : page(shareHtml()),
+    );
+    const report = await checkShareLink("https://example.org/story/");
+    expect(report.problems).toContainEqual(
+      expect.objectContaining({ id: "image-invalid", severity: "error" }),
+    );
+  });
+
+  it("flags corrupt bytes served as a PNG", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith(".png")
+        ? image({ "content-type": "image/png" }, Buffer.from("not a png"))
+        : page(shareHtml()),
+    );
+    const report = await checkShareLink("https://example.org/story/");
+    expect(report.problems).toContainEqual(
+      expect.objectContaining({ id: "image-invalid", severity: "error" }),
+    );
+  });
+
+  it("measures and caps a chunked preview image without Content-Length", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith(".png")
+        ? image(
+            { "content-type": "image/png" },
+            Buffer.alloc(5 * 1024 * 1024 + 1),
+          )
+        : page(shareHtml()),
+    );
+    const report = await checkShareLink("https://example.org/story/");
+    expect(report.imageBytes).toBeGreaterThan(5 * 1024 * 1024);
+    expect(report.problems).toContainEqual(
+      expect.objectContaining({ id: "image-too-large", severity: "warning" }),
     );
   });
 

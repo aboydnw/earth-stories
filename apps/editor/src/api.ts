@@ -292,6 +292,11 @@ export async function uploadShareCard(
   });
 }
 
+export function shareCardUrl(projectId: string, version = 0): string {
+  const path = `/api/projects/${encodeURIComponent(projectId)}/share-card`;
+  return version ? `${path}?v=${version}` : path;
+}
+
 export async function checkShareLink(url: string): Promise<ShareLinkReport> {
   return request("/api/share/link-health", {
     method: "POST",

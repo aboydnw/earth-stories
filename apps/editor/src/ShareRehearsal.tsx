@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { ImageSquare, LinkSimple } from "@phosphor-icons/react";
 import type { StoryProject } from "@earth-stories/story-schema";
-import { shareDescription } from "@earth-stories/publisher/share";
+import {
+  shareDescription,
+  withHttpScheme,
+} from "@earth-stories/publisher/share";
 import {
   ActionButton,
   PublicationFinding,
@@ -13,6 +16,7 @@ import { captureShareCard } from "./captureShareCard";
 interface Props {
   project: StoryProject;
   publicationUrl: string;
+  cardUrl?: string | null;
   disabled: boolean;
   onBusyChange?: (busy: boolean) => void;
   onCardSaved?: () => void;
@@ -20,7 +24,9 @@ interface Props {
 
 function hostLabel(url: string): string {
   try {
-    return new URL(url).hostname.replace(/^www\./, "").toUpperCase();
+    return new URL(withHttpScheme(url.trim())).hostname
+      .replace(/^www\./, "")
+      .toUpperCase();
   } catch {
     return "YOUR-DOMAIN.ORG";
   }
@@ -29,11 +35,12 @@ function hostLabel(url: string): string {
 export function ShareRehearsal({
   project,
   publicationUrl,
+  cardUrl = null,
   disabled,
   onBusyChange,
   onCardSaved,
 }: Props) {
-  const [card, setCard] = useState<string | null>(null);
+  const [renderedCard, setRenderedCard] = useState<string | null>(null);
   const [report, setReport] = useState<
     (ShareLinkReport & { checkedUrl: string }) | null
   >(null);
@@ -43,6 +50,7 @@ export function ShareRehearsal({
 
   const title = project.metadata.title.trim() || "Untitled story";
   const description = shareDescription(project);
+  const card = renderedCard ?? cardUrl;
   const trimmedUrl = publicationUrl.trim();
   const currentReport = report?.checkedUrl === trimmedUrl ? report : null;
 
@@ -58,9 +66,9 @@ export function ShareRehearsal({
     try {
       const image = await captureShareCard(title);
       const { bytes } = await uploadShareCard(project.id, image);
-      setCard(image);
+      setRenderedCard(image);
       setNotice(
-        `Link preview image saved (${Math.round(bytes / 1024)} KB). Export again to include it in the release.`,
+        `Link preview image saved (${Math.round(bytes / 1024)} KB). It will be included in the next build.`,
       );
       onCardSaved?.();
     } catch (cause) {
@@ -96,46 +104,27 @@ export function ShareRehearsal({
 
   return (
     <section className="share-rehearsal">
-      <h3>Share kit</h3>
+      <h3>Link preview</h3>
       <p>
-        This is how your link will look when a reader sees it. Social platforms
-        read the published page’s metadata and never run its scripts.
+        A representative preview of the title, summary, and image social
+        platforms read from the published page.
       </p>
-      <div className="share-previews">
-        <figure className="share-preview share-preview--linkedin">
-          <div className="share-preview__image">
-            {card ? (
-              <img src={card} alt="" />
-            ) : (
-              <span>
-                <ImageSquare size={28} /> No link preview image yet
-              </span>
-            )}
-          </div>
-          <figcaption>
-            <small>{hostLabel(publicationUrl)}</small>
-            <strong>{title}</strong>
-            {description ? <span>{description}</span> : null}
-          </figcaption>
-          <span className="share-preview__label">LinkedIn</span>
-        </figure>
-        <figure className="share-preview share-preview--slack">
-          <figcaption>
-            <small>{hostLabel(publicationUrl)}</small>
-            <strong>{title}</strong>
-            {description ? <span>{description}</span> : null}
-            {card ? <img src={card} alt="" /> : null}
-          </figcaption>
-          <span className="share-preview__label">Slack</span>
-        </figure>
-      </div>
-      {description ? null : (
-        <PublicationFinding
-          severity="warning"
-          message="A shared link will show no summary beneath its title."
-          resolution="Add a story description, or narrative text to the first chapter."
-        />
-      )}
+      <figure className="share-preview">
+        <div className="share-preview__image">
+          {card ? (
+            <img src={card} alt="" />
+          ) : (
+            <span>
+              <ImageSquare size={28} /> Created automatically when you build
+            </span>
+          )}
+        </div>
+        <figcaption>
+          <small>{hostLabel(publicationUrl)}</small>
+          <strong>{title}</strong>
+          {description ? <span>{description}</span> : null}
+        </figcaption>
+      </figure>
       <div className="share-actions">
         <ActionButton
           variant="surface"
@@ -146,8 +135,8 @@ export function ShareRehearsal({
           {busy === "card"
             ? "Rendering link preview image…"
             : card
-              ? "Render link preview image again"
-              : "Render link preview image"}
+              ? "Refresh preview image"
+              : "Create preview image"}
         </ActionButton>
         <ActionButton
           variant="surface"

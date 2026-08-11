@@ -41,12 +41,14 @@ function rehearsal(
   url = "",
   onBusyChange?: (busy: boolean) => void,
   onCardSaved?: () => void,
+  cardUrl?: string,
 ) {
   return render(
     <EarthStoriesProvider>
       <ShareRehearsal
         project={{ ...project, ...overrides }}
         publicationUrl={url}
+        cardUrl={cardUrl}
         disabled={false}
         onBusyChange={onBusyChange}
         onCardSaved={onCardSaved}
@@ -58,23 +60,26 @@ function rehearsal(
 describe("ShareRehearsal", () => {
   it("previews the story title and summary as readers will see it", () => {
     rehearsal({}, "https://example.org/field-notes");
-    expect(screen.getAllByText(project.metadata.title).length).toBeGreaterThan(
-      0,
-    );
-    expect(screen.getAllByText("EXAMPLE.ORG").length).toBe(2);
+    expect(screen.getByText(project.metadata.title)).toBeTruthy();
+    expect(screen.getByText("EXAMPLE.ORG")).toBeTruthy();
   });
 
-  it("warns when the story offers no summary for the preview", () => {
-    rehearsal({
-      metadata: { ...project.metadata, description: "" },
-      chapters: project.chapters.map((chapter) => ({
-        ...chapter,
-        narrative: "",
-      })),
-    });
-    expect(
-      screen.getByText("A shared link will show no summary beneath its title."),
-    ).toBeTruthy();
+  it("normalizes a scheme-less URL for the preview domain", () => {
+    rehearsal({}, "example.org/field-notes");
+    expect(screen.getByText("EXAMPLE.ORG")).toBeTruthy();
+  });
+
+  it("shows a persisted card when the workshop is reopened", () => {
+    const view = rehearsal(
+      {},
+      "https://example.org/field-notes",
+      undefined,
+      undefined,
+      "/api/projects/field-notes/share-card",
+    );
+    expect(view.container.querySelector("img")?.getAttribute("src")).toBe(
+      "/api/projects/field-notes/share-card",
+    );
   });
 
   it("cannot check a link before the author supplies a URL", () => {
@@ -91,7 +96,7 @@ describe("ShareRehearsal", () => {
     vi.mocked(uploadShareCard).mockResolvedValue({ bytes: 204800 });
     rehearsal();
     await userEvent.click(
-      screen.getByRole("button", { name: /render link preview image/i }),
+      screen.getByRole("button", { name: /create preview image/i }),
     );
     await waitFor(() =>
       expect(uploadShareCard).toHaveBeenCalledWith(
@@ -108,7 +113,7 @@ describe("ShareRehearsal", () => {
     const onCardSaved = vi.fn();
     rehearsal({}, "", undefined, onCardSaved);
     await userEvent.click(
-      screen.getByRole("button", { name: /render link preview image/i }),
+      screen.getByRole("button", { name: /create preview image/i }),
     );
     await waitFor(() => expect(onCardSaved).toHaveBeenCalled());
   });
@@ -186,7 +191,7 @@ describe("ShareRehearsal", () => {
     const onBusyChange = vi.fn();
     rehearsal({}, "", onBusyChange);
     await userEvent.click(
-      screen.getByRole("button", { name: /render link preview image/i }),
+      screen.getByRole("button", { name: /create preview image/i }),
     );
     await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(true));
     expect(onBusyChange).not.toHaveBeenCalledWith(false);

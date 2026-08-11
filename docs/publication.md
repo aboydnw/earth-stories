@@ -6,11 +6,14 @@ Earth Stories separates authoring from publication. Saving updates the editable
 
 ## Preflight
 
-The publication workshop reports blocking contract, reference, path, and
+Opening the publication workshop automatically runs current checks. The
+workshop reports blocking contract, reference, path, and
 missing-file errors; accessibility and incomplete-narrative warnings; connected
 resources; included and connected asset counts; estimated included data size;
 and map chapters that the archive will preserve as snapshots. The compiler
 remains authoritative, and the interface cannot bypass blocking findings.
+Errors remain visible next to the primary build action. Non-blocking warnings
+are collapsed for review so they do not compete with the recommended path.
 
 Browser guidance and server preflight share stable structural, narrative, and
 provenance finding IDs. The server adds filesystem containment, missing-file,
@@ -38,8 +41,9 @@ HTML also prints them beside each captured or unavailable visualization.
 
 ## Publication profiles
 
-Choose a profile in the publication workshop. Profiles are release defaults,
-not project types, so authors can switch without rebuilding their story.
+Profiles live under **Release settings** in the publication workshop. They are
+release defaults, not project types, so authors can switch without rebuilding
+their story.
 
 - **Connected** keeps public COG, PMTiles, GeoParquet, and XYZ resources at
   their source. Local project files remain included.
@@ -54,6 +58,12 @@ the eventual host must support HTTP byte ranges. Offline publication remains a
 separate future profile.
 
 ## Outputs
+
+The workshop presents one recommended action: **Build publication**. It creates
+the deployable folder and, when needed, creates and stores the link preview
+image before the build. ZIP, archival HTML, and embed code remain available
+under **More output options**. Chapter captures and post-deployment link checks
+have their own collapsed sections, keeping the normal release path short.
 
 ### Latest folder
 
@@ -105,9 +115,11 @@ can be pasted with or without `https://`; query strings, fragments, and
 trailing slashes are dropped from the canonical share URL.
 
 The workshop renders the link preview image from the first ready map chapter
-behind a scrim carrying the story title, and stores it beside `story.json` so it
-survives the next build. Stories without a usable map still get a card from the
-scrim alone. "Check published link" fetches a deployed story and reports missing
+behind a scrim carrying the story title and visible map attribution, and stores
+it beside `story.json` so it survives future workshop sessions and builds. The
+recommended build creates a missing image automatically. Stories without a
+usable map still get a card from the scrim alone. "Check published link" fetches
+a deployed story and reports missing
 metadata, an unresolved placeholder, or a preview image platforms cannot fetch —
 the same failures that otherwise only show up after posting publicly. Localhost
 URLs work, so a release served on this computer can be rehearsed before it is

@@ -6,6 +6,7 @@ import {
   DownloadSimple,
   FolderOpen,
   Globe,
+  ImageSquare,
   Warning,
   X,
 } from "@phosphor-icons/react";
@@ -18,7 +19,13 @@ import {
   ReadinessSummary,
   StatusNotice,
 } from "@earth-stories/ui";
-import { exportProject, type ExportFormat } from "./api";
+import {
+  exportProject,
+  shareCardUrl,
+  uploadShareCard,
+  type ExportFormat,
+} from "./api";
+import { captureShareCard } from "./captureShareCard";
 import type { PublicationReadinessState } from "./usePublicationReadiness";
 import {
   captureMapSnapshots,
@@ -40,38 +47,47 @@ interface Props {
   localReadiness: AuthoringReadiness;
   unsaved: boolean;
 }
-const formats: Array<{
-  id: ExportFormat;
+
+const secondaryFormats: Array<{
+  id: Exclude<ExportFormat, "folder">;
   title: string;
   description: string;
   icon: typeof DownloadSimple;
 }> = [
   {
     id: "zip",
-    title: "Static ZIP",
-    description:
-      "Interactive site, assets, archive and embed files in one download.",
+    title: "Download ZIP",
+    description: "A portable copy of the complete publication folder.",
     icon: DownloadSimple,
   },
   {
-    id: "folder",
-    title: "Latest folder",
-    description: "Build the publication folder beside your project files.",
-    icon: FolderOpen,
-  },
-  {
     id: "archive",
-    title: "Archival HTML",
+    title: "Download archival HTML",
     description: "One self-contained preservation copy with map snapshots.",
     icon: Archive,
   },
   {
     id: "embed",
-    title: "Embed code",
-    description: "Create an iframe for the deployed publication’s embed page.",
+    title: "Create embed code",
+    description: "An iframe for the deployed publication’s embed page.",
     icon: Globe,
   },
 ];
+
+const publicationProfiles = [
+  [
+    "connected",
+    "Connected",
+    "Keep public data at its source for a smaller release.",
+  ],
+  [
+    "portable",
+    "Portable",
+    "Copy compatible COG, PMTiles, and GeoParquet data into the release.",
+  ],
+  ["custom", "Custom", "Use each asset’s publication data policy."],
+] as const;
+
 function bytes(value: number) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
@@ -92,32 +108,57 @@ export function PublishPanel({
   const preflight = preflightState.result;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cardWarning, setCardWarning] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [lastFormat, setLastFormat] = useState<ExportFormat | null>(null);
   const [snippet, setSnippet] = useState("");
   const [resultBuildId, setResultBuildId] = useState<string | null>(null);
   const [publicationUrl, setPublicationUrl] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
+  const [cardVersion, setCardVersion] = useState(0);
   const [busyLabel, setBusyLabel] = useState(
     "Building and validating the latest publication…",
   );
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
+  const onRefreshRef = useRef(onRefreshPreflight);
   onCloseRef.current = onClose;
+  onRefreshRef.current = onRefreshPreflight;
+
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setCardWarning(null);
     setResult(null);
+    setLastFormat(null);
     setResultBuildId(null);
   }, [open, project.id, project.metadata.updated]);
+
+  useEffect(() => {
+    setPublicationUrl("");
+    setSnippet("");
+    setCardVersion(0);
+  }, [project.id]);
+
+  useEffect(() => {
+    if (
+      open &&
+      !unsaved &&
+      (preflightState.status === "idle" || preflightState.status === "stale")
+    )
+      onRefreshRef.current();
+  }, [open, preflightState.status, unsaved]);
+
   useEffect(() => {
     if (!open || !panelRef.current) return;
     const previousFocus = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
-    const focusable = () => [
-      ...panel.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-      ),
-    ];
+    const focusable = () =>
+      [
+        ...panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), summary, [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      ].filter((element) => !element.closest("details:not([open])"));
     focusable()[0]?.focus();
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -149,48 +190,9 @@ export function PublishPanel({
       previousFocus?.focus();
     };
   }, [open]);
+
   if (!open) return null;
-  async function run(format: ExportFormat) {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    setResultBuildId(null);
-    setBusyLabel("Building and validating the latest publication…");
-    try {
-      const saved = await onBeforeExport();
-      if (!saved) return;
-      const mapSnapshots = await captureMapSnapshots();
-      const response = await exportProject(saved.id, format, {
-        mapSnapshots,
-        publicationUrl,
-      });
-      setResultBuildId(response.buildId ?? null);
-      if (response.blob && response.filename) {
-        const href = URL.createObjectURL(response.blob);
-        const anchor = document.createElement("a");
-        anchor.href = href;
-        anchor.download = response.filename;
-        anchor.click();
-        URL.revokeObjectURL(href);
-        setResult(`Downloaded ${response.filename}`);
-      } else if (format === "folder")
-        setResult(`Latest publication built at ${response.directory}`);
-      else if (format === "embed") {
-        setSnippet(response.snippet ?? "");
-        setResult(
-          "Embed code is ready. Deploy the latest publication folder before using it.",
-        );
-      }
-      onRefreshPreflight();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Export failed");
-    } finally {
-      setLoading(false);
-    }
-  }
-  async function copySnippet() {
-    if (snippet) await navigator.clipboard.writeText(snippet);
-  }
+
   const currentServerResult =
     !unsaved && preflightState.status === "ready" ? preflight : null;
   const findings = currentServerResult?.issues ?? localReadiness.findings;
@@ -202,6 +204,133 @@ export function PublishPanel({
     : warnings.length || !currentServerResult
       ? "review"
       : "ready";
+  const canBuild =
+    !loading &&
+    !shareBusy &&
+    !unsaved &&
+    preflightState.status === "ready" &&
+    Boolean(preflight?.ready);
+  const hasShareCard = Boolean(
+    currentServerResult &&
+    !currentServerResult.issues.some(({ id }) => id === "share-card"),
+  );
+  const persistedCard =
+    hasShareCard || cardVersion ? shareCardUrl(project.id, cardVersion) : null;
+
+  async function prepareShareCard(saved: StoryProject) {
+    if (hasShareCard || cardVersion) return;
+    setBusyLabel("Creating the link preview image…");
+    try {
+      const image = await captureShareCard(saved.metadata.title);
+      await uploadShareCard(saved.id, image);
+      setCardVersion((version) => version + 1);
+    } catch (cause) {
+      setCardWarning(
+        cause instanceof Error
+          ? `The release will use no preview image: ${cause.message}`
+          : "The release will use no preview image because it could not be created.",
+      );
+    }
+  }
+
+  async function run(format: ExportFormat) {
+    setLoading(true);
+    setError(null);
+    setCardWarning(null);
+    setResult(null);
+    setLastFormat(null);
+    setResultBuildId(null);
+    setSnippet("");
+    try {
+      const saved = await onBeforeExport();
+      if (!saved) return;
+      await prepareShareCard(saved);
+      setBusyLabel("Building and validating the latest publication…");
+      const mapSnapshots = await captureMapSnapshots();
+      const response = await exportProject(saved.id, format, {
+        mapSnapshots,
+        publicationUrl,
+      });
+      setLastFormat(format);
+      setResultBuildId(response.buildId ?? null);
+      if (response.blob && response.filename) {
+        const href = URL.createObjectURL(response.blob);
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.download = response.filename;
+        anchor.click();
+        URL.revokeObjectURL(href);
+        setResult(`Downloaded ${response.filename}`);
+      } else if (format === "folder")
+        setResult(`Publication built at ${response.directory}`);
+      else if (format === "embed") {
+        setSnippet(response.snippet ?? "");
+        setResult("Embed code is ready.");
+      }
+      onRefreshRef.current();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Export failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function downloadStillImages() {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setLastFormat(null);
+    setBusyLabel("Capturing attributed chapter images…");
+    try {
+      const count = await downloadMapSnapshots(project.metadata.title);
+      setResult(
+        count
+          ? `Downloaded ${count} attributed chapter image${count === 1 ? "" : "s"}`
+          : "No ready map chapters could be captured.",
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Chapter images could not be captured.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function downloadAnimatedImages() {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    setLastFormat(null);
+    setBusyLabel(
+      "Recording animated map chapters. This takes a few seconds for each chapter…",
+    );
+    try {
+      const { count, format } = await downloadAnimatedMapCaptures(
+        project.metadata.title,
+      );
+      setResult(
+        count
+          ? `Downloaded ${count} animated ${format.toUpperCase()} chapter capture${count === 1 ? "" : "s"}.`
+          : "No ready map chapters could be recorded.",
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Animated chapter captures could not be recorded.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function copySnippet() {
+    if (snippet) await navigator.clipboard.writeText(snippet);
+  }
+
   return (
     <div className="publish-backdrop" role="presentation">
       <section
@@ -213,8 +342,12 @@ export function PublishPanel({
       >
         <header>
           <div>
-            <p>Publication workshop</p>
-            <h2 id="publish-title">Build the latest release</h2>
+            <p>Publish</p>
+            <h2 id="publish-title">Build your release</h2>
+            <span>
+              Create the deployable folder first. Other outputs stay available
+              when you need them.
+            </span>
           </div>
           <ActionButton
             variant="ghost"
@@ -224,97 +357,37 @@ export function PublishPanel({
             <X size={20} />
           </ActionButton>
         </header>
-        <div className="publish-summary">
-          <div>
-            <strong>
-              {preflight ? bytes(preflight.estimatedIncludedBytes) : "—"}
-            </strong>
-            <span>included data</span>
-          </div>
-          <div>
-            <strong>{preflight?.includedAssets ?? "—"}</strong>
-            <span>included assets</span>
-          </div>
-          <div>
-            <strong>{preflight?.connectedAssets ?? "—"}</strong>
-            <span>connected assets</span>
-          </div>
+
+        <div className="publish-readiness">
+          <ReadinessSummary
+            status={readinessStatus}
+            errors={errors.length}
+            warnings={warnings.length}
+            loading={preflightState.status === "loading" && !preflight}
+            stale={
+              unsaved ||
+              preflightState.status === "stale" ||
+              (preflightState.status === "loading" && Boolean(preflight))
+            }
+          />
+          <ActionButton
+            variant="ghost"
+            className="publish-refresh"
+            disabled={unsaved || preflightState.status === "loading"}
+            onClick={onRefreshPreflight}
+          >
+            {unsaved ? "Save to check" : "Refresh checks"}
+          </ActionButton>
         </div>
-        <ReadinessSummary
-          status={readinessStatus}
-          errors={errors.length}
-          warnings={warnings.length}
-          loading={preflightState.status === "loading" && !preflight}
-          stale={
-            unsaved ||
-            preflightState.status === "stale" ||
-            (preflightState.status === "loading" && Boolean(preflight))
-          }
-        />
-        <ActionButton
-          variant="ghost"
-          disabled={unsaved || preflightState.status === "loading"}
-          onClick={onRefreshPreflight}
-        >
-          {unsaved
-            ? "Save before running publication checks"
-            : preflightState.status === "idle"
-              ? "Run publication checks"
-              : "Refresh publication checks"}
-        </ActionButton>
+
         {preflightState.error ? (
           <StatusNotice tone="danger">{preflightState.error}</StatusNotice>
         ) : null}
-        <fieldset className="publication-profiles">
-          <legend>Publication profile</legend>
-          {(
-            [
-              [
-                "connected",
-                "Connected",
-                "Keep public data at its source for a smaller release.",
-              ],
-              [
-                "portable",
-                "Portable",
-                "Copy compatible COG, PMTiles, and GeoParquet data into the release.",
-              ],
-              ["custom", "Custom", "Use each asset’s publication data policy."],
-            ] as const
-          ).map(([id, title, description]) => (
-            <label key={id}>
-              <input
-                type="radio"
-                name="publication-profile"
-                value={id}
-                checked={project.publication.profile === id}
-                disabled={loading || unsaved}
-                onChange={() => {
-                  setLoading(true);
-                  setError(null);
-                  void onProfileChange(id)
-                    .then(() => undefined)
-                    .catch((cause: unknown) =>
-                      setError(
-                        cause instanceof Error
-                          ? cause.message
-                          : "The publication profile could not be updated.",
-                      ),
-                    )
-                    .finally(() => setLoading(false));
-                }}
-              />
-              <span>
-                <strong>{title}</strong>
-                <small>{description}</small>
-              </span>
-            </label>
-          ))}
-        </fieldset>
+
         {errors.length ? (
           <div className="publish-issues publish-issues--error">
             <h3>
-              <Warning weight="fill" /> Fix before exporting
+              <Warning weight="fill" /> Fix before building
             </h3>
             {errors.map((issue) => (
               <PublicationFinding
@@ -326,162 +399,54 @@ export function PublishPanel({
             ))}
           </div>
         ) : null}
+
         {warnings.length ? (
-          <div className="publish-issues">
-            <h3>
-              <Warning /> Review before sharing
-            </h3>
-            {warnings.map((issue) => (
-              <PublicationFinding
-                key={issue.id}
-                severity="warning"
-                message={issue.message}
-                resolution={issue.resolution}
-              />
-            ))}
-          </div>
+          <details className="publish-disclosure publish-disclosure--warnings">
+            <summary>
+              <span>
+                <Warning /> Review {warnings.length} optional warning
+                {warnings.length === 1 ? "" : "s"}
+              </span>
+              <small>Warnings do not prevent a build</small>
+            </summary>
+            <div className="publish-disclosure__body">
+              {warnings.map((issue) => (
+                <PublicationFinding
+                  key={issue.id}
+                  severity="warning"
+                  message={issue.message}
+                  resolution={issue.resolution}
+                />
+              ))}
+            </div>
+          </details>
         ) : null}
-        {information.length ? (
-          <div className="publish-issues publish-issues--info">
-            <h3>Publication details</h3>
-            {information.map((issue) => (
-              <PublicationFinding
-                key={issue.id}
-                severity="info"
-                message={issue.message}
-                resolution={issue.resolution}
-              />
-            ))}
+
+        <section className="publish-primary" aria-labelledby="primary-output">
+          <div>
+            <p>Recommended output</p>
+            <h3 id="primary-output">Publication folder</h3>
+            <span>
+              The complete interactive story, ready to upload to a static host.
+            </span>
           </div>
-        ) : null}
-        <div className="publish-formats">
-          {formats.map(({ id, title, description, icon: Icon }) => (
-            <ActionButton
-              variant="surface"
-              key={id}
-              disabled={
-                loading ||
-                shareBusy ||
-                unsaved ||
-                preflightState.status !== "ready" ||
-                !preflight?.ready
-              }
-              onClick={() => void run(id)}
-            >
-              <Icon size={22} weight="duotone" />
-              <strong>{title}</strong>
-              <span>{description}</span>
-            </ActionButton>
-          ))}
-        </div>
-        <ActionButton
-          variant="surface"
-          className="chapter-image-export"
-          disabled={loading}
-          onClick={() => {
-            setLoading(true);
-            setError(null);
-            setResult(null);
-            setBusyLabel("Capturing attributed chapter images…");
-            void downloadMapSnapshots(project.metadata.title)
-              .then((count) =>
-                setResult(
-                  count
-                    ? `Downloaded ${count} attributed chapter image${count === 1 ? "" : "s"}`
-                    : "No ready map chapters could be captured.",
-                ),
-              )
-              .catch((cause: unknown) =>
-                setError(
-                  cause instanceof Error
-                    ? cause.message
-                    : "Chapter images could not be captured.",
-                ),
-              )
-              .finally(() => setLoading(false));
-          }}
-        >
-          <DownloadSimple size={18} /> Download attributed chapter images
-        </ActionButton>
-        <ActionButton
-          variant="surface"
-          className="chapter-image-export"
-          disabled={loading}
-          onClick={() => {
-            setLoading(true);
-            setError(null);
-            setResult(null);
-            setBusyLabel(
-              "Recording animated map chapters. This takes a few seconds for each chapter…",
-            );
-            void downloadAnimatedMapCaptures(project.metadata.title)
-              .then(({ count, format }) =>
-                setResult(
-                  count
-                    ? `Downloaded ${count} animated ${format.toUpperCase()} chapter capture${count === 1 ? "" : "s"}.`
-                    : "No ready map chapters could be recorded.",
-                ),
-              )
-              .catch((cause: unknown) =>
-                setError(
-                  cause instanceof Error
-                    ? cause.message
-                    : "Animated chapter captures could not be recorded.",
-                ),
-              )
-              .finally(() => setLoading(false));
-          }}
-        >
-          <DownloadSimple size={18} /> Record animated map chapters
-        </ActionButton>
-        <label className="publication-url">
-          Deployed publication URL{" "}
-          <input
-            type="url"
-            value={publicationUrl}
-            onChange={(event) => setPublicationUrl(event.target.value)}
-            placeholder="https://example.org/my-story"
-          />
-          <small>
-            Paste this once you deploy, then export again so link previews carry
-            your real URL.
-          </small>
-        </label>
-        <ShareRehearsal
-          project={project}
-          publicationUrl={publicationUrl}
-          disabled={loading}
-          onBusyChange={setShareBusy}
-          onCardSaved={onRefreshPreflight}
-        />
-        {snippet ? (
-          <div className="embed-result">
-            <textarea
-              readOnly
-              value={snippet}
-              rows={5}
-              onClick={(event) => event.currentTarget.select()}
-            />
-            <button onClick={() => void copySnippet()}>
-              <Copy size={16} /> Copy iframe
-            </button>
-          </div>
+          <ActionButton
+            className="publish-primary__action button button--primary"
+            disabled={!canBuild}
+            onClick={() => void run("folder")}
+          >
+            <FolderOpen size={20} weight="duotone" />
+            {loading ? "Building…" : "Build publication"}
+          </ActionButton>
+        </section>
+
+        {cardWarning ? (
+          <StatusNotice tone="warning">{cardWarning}</StatusNotice>
         ) : null}
         {error ? (
           <StatusNotice className="publish-result" tone="danger">
             {error}
           </StatusNotice>
-        ) : null}
-        {result ? (
-          <div className="publish-completion">
-            <StatusNotice className="publish-result" tone="success">
-              <CheckCircle weight="fill" /> {result}
-            </StatusNotice>
-            <p>
-              {resultBuildId ? `Build ${resultBuildId}. ` : ""}Open or deploy
-              the output, then verify it at its public URL.
-            </p>
-          </div>
         ) : null}
         {loading ? (
           <div className="publish-progress">
@@ -492,6 +457,205 @@ export function PublishPanel({
             />
           </div>
         ) : null}
+        {result ? (
+          <div className="publish-completion">
+            <StatusNotice className="publish-result" tone="success">
+              <CheckCircle weight="fill" /> {result}
+            </StatusNotice>
+            {lastFormat ? (
+              <p>
+                {resultBuildId ? `Build ${resultBuildId}. ` : ""}
+                Deploy the output, then verify it at its public URL.
+              </p>
+            ) : null}
+            {lastFormat === "folder" ? (
+              <ActionButton
+                variant="surface"
+                disabled={loading}
+                onClick={() => void run("zip")}
+              >
+                <DownloadSimple size={18} /> Download ZIP
+              </ActionButton>
+            ) : null}
+          </div>
+        ) : null}
+
+        <details className="publish-disclosure">
+          <summary>
+            <span>Release settings</span>
+            <small>
+              {project.publication.profile} ·{" "}
+              {preflight
+                ? bytes(preflight.estimatedIncludedBytes)
+                : "size pending"}
+            </small>
+          </summary>
+          <div className="publish-disclosure__body">
+            <div className="publish-summary">
+              <div>
+                <strong>
+                  {preflight ? bytes(preflight.estimatedIncludedBytes) : "—"}
+                </strong>
+                <span>included data</span>
+              </div>
+              <div>
+                <strong>{preflight?.includedAssets ?? "—"}</strong>
+                <span>included assets</span>
+              </div>
+              <div>
+                <strong>{preflight?.connectedAssets ?? "—"}</strong>
+                <span>connected assets</span>
+              </div>
+            </div>
+            <fieldset className="publication-profiles">
+              <legend>Data delivery</legend>
+              {publicationProfiles.map(([id, title, description]) => (
+                <label key={id}>
+                  <input
+                    type="radio"
+                    name="publication-profile"
+                    value={id}
+                    checked={project.publication.profile === id}
+                    disabled={loading || unsaved}
+                    onChange={() => {
+                      setLoading(true);
+                      setError(null);
+                      void onProfileChange(id)
+                        .then(() => undefined)
+                        .catch((cause: unknown) =>
+                          setError(
+                            cause instanceof Error
+                              ? cause.message
+                              : "The data delivery setting could not be updated.",
+                          ),
+                        )
+                        .finally(() => setLoading(false));
+                    }}
+                  />
+                  <span>
+                    <strong>{title}</strong>
+                    <small>{description}</small>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            {information.length ? (
+              <div className="publish-details-list">
+                <h3>Release details</h3>
+                {information.map((issue) => (
+                  <PublicationFinding
+                    key={issue.id}
+                    severity="info"
+                    message={issue.message}
+                    resolution={issue.resolution}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </details>
+
+        <details className="publish-disclosure">
+          <summary>
+            <span>More output options</span>
+            <small>ZIP, archival HTML, and embed code</small>
+          </summary>
+          <div className="publish-disclosure__body publish-secondary-actions">
+            {secondaryFormats.map(({ id, title, description, icon: Icon }) => (
+              <ActionButton
+                variant="surface"
+                key={id}
+                disabled={!canBuild}
+                onClick={() => void run(id)}
+              >
+                <Icon size={19} weight="duotone" />
+                <span>
+                  <strong>{title}</strong>
+                  <small>{description}</small>
+                </span>
+              </ActionButton>
+            ))}
+            {snippet ? (
+              <div className="embed-result">
+                <textarea
+                  readOnly
+                  value={snippet}
+                  rows={5}
+                  onClick={(event) => event.currentTarget.select()}
+                />
+                <button onClick={() => void copySnippet()}>
+                  <Copy size={16} /> Copy iframe
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </details>
+
+        <details className="publish-disclosure">
+          <summary>
+            <span>Export chapter media</span>
+            <small>Still images and short map recordings</small>
+          </summary>
+          <div className="publish-disclosure__body publish-secondary-actions">
+            <ActionButton
+              variant="surface"
+              disabled={loading}
+              onClick={() => void downloadStillImages()}
+            >
+              <ImageSquare size={19} />
+              <span>
+                <strong>Download attributed images</strong>
+                <small>PNG captures of ready map chapters.</small>
+              </span>
+            </ActionButton>
+            <ActionButton
+              variant="surface"
+              disabled={loading}
+              onClick={() => void downloadAnimatedImages()}
+            >
+              <DownloadSimple size={19} />
+              <span>
+                <strong>Record animated maps</strong>
+                <small>Six-second MP4 or WebM chapter captures.</small>
+              </span>
+            </ActionButton>
+          </div>
+        </details>
+
+        <details className="publish-disclosure publish-share-tools">
+          <summary>
+            <span>Verify and share after deployment</span>
+            <small>Preview and test the public link</small>
+          </summary>
+          <div className="publish-disclosure__body">
+            <label className="publication-url">
+              Deployed publication URL
+              <input
+                type="text"
+                inputMode="url"
+                value={publicationUrl}
+                onChange={(event) => setPublicationUrl(event.target.value)}
+                placeholder="https://example.org/my-story"
+              />
+              <small>
+                If you know the final URL, enter it before the final build so
+                link previews use the public address.
+              </small>
+            </label>
+            <ShareRehearsal
+              key={project.id}
+              project={project}
+              publicationUrl={publicationUrl}
+              cardUrl={persistedCard}
+              disabled={loading}
+              onBusyChange={setShareBusy}
+              onCardSaved={() => {
+                setCardVersion((version) => version + 1);
+                onRefreshRef.current();
+              }}
+            />
+          </div>
+        </details>
       </section>
     </div>
   );

@@ -154,23 +154,7 @@ describe("editor readiness guidance", () => {
     );
   });
 
-  it("blocks sharing until preview review and publication checks are current", () => {
-    expect(workflowStages(readiness(), { previewReviewed: false })).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: "sharing", state: "blocked" }),
-      ]),
-    );
-    expect(
-      workflowStages(readiness(), { previewReviewed: true, preflight: idle }),
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: "publish", state: "current" }),
-        expect.objectContaining({ id: "sharing", state: "blocked" }),
-      ]),
-    );
-  });
-
-  it("renders a sharing stage driven by sharing findings without holding publish back", () => {
+  it("keeps sharing findings inside Publish instead of adding a workflow stage", () => {
     const stages = workflowStages(readiness(), {
       previewReviewed: true,
       preflight: {
@@ -201,7 +185,6 @@ describe("editor readiness guidance", () => {
       "data",
       "preview",
       "publish",
-      "sharing",
     ]);
     expect(stages).toEqual(
       expect.arrayContaining([
@@ -209,11 +192,6 @@ describe("editor readiness guidance", () => {
           id: "publish",
           state: "complete",
           description: "Ready",
-        }),
-        expect.objectContaining({
-          id: "sharing",
-          state: "current",
-          description: "Needs review",
         }),
       ]),
     );

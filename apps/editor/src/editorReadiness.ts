@@ -15,22 +15,22 @@ export interface GuidanceAction {
   chapterId?: string;
 }
 
-const labels: Record<ReadinessArea, string> = {
+type WorkflowArea = Exclude<ReadinessArea, "sharing">;
+
+const labels: Record<WorkflowArea, string> = {
   story: "Story",
   chapters: "Chapters",
   data: "Data",
   preview: "Preview",
   publish: "Publish",
-  sharing: "Sharing",
 };
 
-const workflowOrder: ReadinessArea[] = [
+const workflowOrder: WorkflowArea[] = [
   "story",
   "chapters",
   "data",
   "preview",
   "publish",
-  "sharing",
 ];
 
 export function workflowStages(
@@ -45,7 +45,6 @@ export function workflowStages(
   if (readiness.manifest && !options.previewReviewed) {
     states.preview = "current";
     states.publish = "blocked";
-    states.sharing = "blocked";
     descriptions.preview = "Review again";
   } else if (readiness.manifest) {
     const serverFindings =
@@ -54,18 +53,13 @@ export function workflowStages(
         : null;
     if (!serverFindings) {
       states.publish = "current";
-      states.sharing = "blocked";
       descriptions.publish = "Checks required";
     } else {
-      const sharingFindings = serverFindings.filter(
-        ({ area }) => area === "sharing",
-      );
       const publishFindings = serverFindings.filter(
         ({ area }) => area !== "sharing",
       );
       if (publishFindings.some(({ severity }) => severity === "error")) {
         states.publish = "blocked";
-        states.sharing = "blocked";
       } else {
         if (publishFindings.some(({ severity }) => severity === "warning")) {
           states.publish = "current";
@@ -73,13 +67,6 @@ export function workflowStages(
         } else {
           states.publish = "complete";
           descriptions.publish = "Ready";
-        }
-        if (sharingFindings.some(({ severity }) => severity !== "info")) {
-          states.sharing = "current";
-          descriptions.sharing = "Needs review";
-        } else {
-          states.sharing = "complete";
-          descriptions.sharing = "Ready";
         }
       }
     }
