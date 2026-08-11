@@ -271,8 +271,14 @@ describe("compileProject", () => {
         sourceId: "cloud",
         overlaySourceIds: ["time"],
         keyframes: [
-          { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
-          { center: [1, 1], zoom: 4, bearing: 20, pitch: 45 },
+          { center: [0, 0], zoom: 2, bearing: 0, pitch: 0, caption: "Start" },
+          {
+            center: [1, 1],
+            zoom: 4,
+            bearing: 20,
+            pitch: 45,
+            caption: "Finish",
+          },
         ],
         scrollLength: 1,
       },
@@ -280,7 +286,11 @@ describe("compileProject", () => {
     const result = compileProject(fixture);
     expect(
       result.chapters.find((chapter) => chapter.id === "fly"),
-    ).toMatchObject({ type: "flyover", overlayAssetIds: ["time"] });
+    ).toMatchObject({
+      type: "flyover",
+      overlayAssetIds: ["time"],
+      keyframes: [{ caption: "Start" }, { caption: "Finish" }],
+    });
     expect(result.assets.find((asset) => asset.id === "time")).toMatchObject({
       kind: "zarr",
       delivery: "connected",

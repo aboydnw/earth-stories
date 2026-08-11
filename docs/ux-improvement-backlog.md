@@ -11,6 +11,11 @@ The implementation plan for items 1, 2, 3, and 10 is in
 Those items shipped together in
 [`devlog/2026-08-08-guidance-readiness-provenance.md`](devlog/2026-08-08-guidance-readiness-provenance.md).
 
+Items 4, 5, 7, 8, and the camera-focused part of 9 are implemented by
+[`plans/chapter-editing-workflow.md`](plans/chapter-editing-workflow.md). The
+same work also ships a focused overlay picker, single-URL video editing, and a
+captured-view flyover path editor with captions.
+
 ## Recommended roadmap
 
 | #   | Idea                                                       | Effort      | Expected impact |
@@ -103,6 +108,15 @@ Begin from place, change, reader takeaway, audience, and available evidence.
 Propose an editable chapter outline, map states, captions, evidence gaps, and
 transitions for scene-by-scene approval in a reader-faithful preview. Keep all
 suggestions transparent and reversible.
+
+### Shipped workflow extensions
+
+- Overlay editing lists selected layers first and opens a focused picker for
+  additions.
+- Video chapters accept a single YouTube or Vimeo URL and keep legacy URL/embed
+  disagreements visible until the author reconciles them.
+- Flyovers use captured map views, ordered cards, captions, presets, scrub
+  preview, discontinuity warnings, and minimum-path protection.
 
 ## Additional divergent ideas retained for reference
 

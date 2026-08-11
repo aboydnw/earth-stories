@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   cameraSchema,
   createDefaultSourceProvenance,
+  flyoverKeyframeSchema,
   sourceProvenanceSchema,
 } from "./project.js";
 
@@ -146,7 +147,7 @@ export const publicationChapterSchema = z.discriminatedUnion("type", [
     type: z.literal("flyover"),
     assetId: z.string().min(1).nullable(),
     overlayAssetIds: z.array(z.string().min(1)),
-    keyframes: z.array(cameraSchema).min(2),
+    keyframes: z.array(flyoverKeyframeSchema).min(2),
     scrollLength: z.number().min(0.5).max(5),
   }),
 ]);

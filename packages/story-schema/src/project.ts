@@ -73,6 +73,10 @@ export const cameraSchema = z.object({
   buildings: z.boolean().optional(),
 });
 
+export const flyoverKeyframeSchema = cameraSchema.extend({
+  caption: z.string().default(""),
+});
+
 const sourceBaseSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -261,7 +265,7 @@ export const projectChapterSchema = z.discriminatedUnion("type", [
     type: z.literal("flyover"),
     sourceId: z.string().min(1).nullable().default(null),
     overlaySourceIds: z.array(z.string().min(1)).default([]),
-    keyframes: z.array(cameraSchema).min(2),
+    keyframes: z.array(flyoverKeyframeSchema).min(2),
     scrollLength: z.number().min(0.5).max(5).default(1),
   }),
 ]);
@@ -325,6 +329,7 @@ export function parseStoryProject(value: unknown): StoryProject {
 }
 
 export type Camera = z.infer<typeof cameraSchema>;
+export type FlyoverKeyframe = z.infer<typeof flyoverKeyframeSchema>;
 export type ProjectSource = z.infer<typeof projectSourceSchema>;
 export type ProjectDataAsset = z.infer<typeof projectDataAssetSchema>;
 export type ProjectChapter = z.infer<typeof projectChapterSchema>;

@@ -268,6 +268,39 @@ describe("publication hardening", () => {
     expect(archive).toContain("Quote &quot;A&quot;: 4");
   });
 
+  it("preserves flyover keyframe captions in the archival fallback", async () => {
+    const { project } = await setup();
+    const story = storyProjectSchema.parse(await readProject(project));
+    const map = story.chapters.find(
+      (chapter) => chapter.type === "map" || chapter.type === "scrolly",
+    );
+    if (!map || !("camera" in map)) throw new Error("Map fixture missing");
+    story.chapters.push({
+      id: "captioned-flight",
+      type: "flyover",
+      title: "Captioned flight",
+      narrative: "A flight through the study area.",
+      sourceId: map.sourceId,
+      overlaySourceIds: [],
+      scrollLength: 1,
+      keyframes: [
+        { ...map.camera, caption: "River mouth" },
+        {
+          ...map.camera,
+          center: [map.camera.center[0] + 1, map.camera.center[1] + 1],
+          caption: "Upper watershed",
+        },
+      ],
+    });
+    const archive = await buildArchivalHtml({
+      project: story,
+      manifest: compileProject(story),
+      projectDirectory: project,
+    });
+    expect(archive).toContain("River mouth");
+    expect(archive).toContain("Upper watershed");
+  });
+
   it("rejects unsafe archive links and malformed map snapshot data", async () => {
     const { project } = await setup();
     const story = await readProject(project);

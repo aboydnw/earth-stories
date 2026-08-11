@@ -10,12 +10,14 @@ export function CopcOverlay({
   onError,
   onReady,
   autoFit = false,
+  onFitCameraChange,
 }: {
   asset: PublicationAsset;
   map: MapLibreMap | null;
   onError: (message: string) => void;
   onReady?: () => void;
   autoFit?: boolean;
+  onFitCameraChange?: () => void;
 }) {
   useEffect(() => {
     let active = true;
@@ -49,7 +51,10 @@ export function CopcOverlay({
           readyFallback = null;
           if (moveEndHandler) map.off("moveend", moveEndHandler);
           moveEndHandler = null;
-          if (active) onReady?.();
+          if (active) {
+            onReady?.();
+            onFitCameraChange?.();
+          }
         };
         moveEndHandler = finishReady;
         map.once("moveend", moveEndHandler);
@@ -83,6 +88,7 @@ export function CopcOverlay({
     onError,
     onReady,
     autoFit,
+    onFitCameraChange,
   ]);
   return null;
 }

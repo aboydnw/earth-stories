@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Camera } from "@earth-stories/story-schema";
-import { cameraCommand, FLY_TO_DURATION_MS } from "./mapCamera.js";
+import {
+  cameraCommand,
+  FLY_TO_DURATION_MS,
+  runProgrammaticMove,
+  resolveMapInteraction,
+} from "./mapCamera.js";
 
 const camera: Camera = {
   center: [10, 20],
@@ -27,5 +32,53 @@ describe("cameraCommand", () => {
   it("jumps for instant and reduced-motion transitions", () => {
     expect(cameraCommand(camera, "instant", false).method).toBe("jumpTo");
     expect(cameraCommand(camera, "fly-to", true).method).toBe("jumpTo");
+  });
+
+  it("marks a move as programmatic until moveend and registers first", () => {
+    const order: string[] = [];
+    let finish: (() => void) | null = null;
+    const map = {
+      once: (_event: "moveend", listener: () => void) => {
+        order.push("listen");
+        finish = listener;
+      },
+      off: () => undefined,
+    };
+    const programmatic = { current: false };
+
+    const cleanup = runProgrammaticMove(
+      map,
+      programmatic,
+      () => {
+        order.push("move");
+        expect(programmatic.current).toBe(true);
+      },
+      () => order.push("complete"),
+    );
+
+    expect(order).toEqual(["listen", "move"]);
+    expect(programmatic.current).toBe(true);
+    (finish as (() => void) | null)?.();
+    expect(programmatic.current).toBe(false);
+    expect(order).toEqual(["listen", "move", "complete"]);
+    cleanup();
+  });
+
+  it("separates interaction from following camera props with controlled compatibility", () => {
+    expect(resolveMapInteraction({ controlled: false })).toEqual({
+      interactive: true,
+      followCamera: false,
+    });
+    expect(resolveMapInteraction({ controlled: true })).toEqual({
+      interactive: false,
+      followCamera: true,
+    });
+    expect(
+      resolveMapInteraction({
+        controlled: true,
+        interactive: true,
+        followCamera: true,
+      }),
+    ).toEqual({ interactive: true, followCamera: true });
   });
 });

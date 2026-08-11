@@ -1,7 +1,11 @@
 import { useEffect, useRef } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { Camera } from "@earth-stories/story-schema";
-import { cameraCommand, prefersReducedMotion } from "./mapCamera.js";
+import {
+  cameraCommand,
+  prefersReducedMotion,
+  runProgrammaticMove,
+} from "./mapCamera.js";
 
 export function useMapCamera({
   map,
@@ -39,17 +43,10 @@ export function useMapCamera({
     if (applied.current === signature) return;
     applied.current = signature;
     const command = cameraCommand(camera, transition, prefersReducedMotion());
-    map.stop();
-    programmatic.current = true;
-    map[command.method](command.options);
-    if (command.method === "jumpTo") programmatic.current = false;
-    const finish = () => {
-      programmatic.current = false;
-    };
-    map.once("moveend", finish);
-    return () => {
-      map.off("moveend", finish);
-    };
+    return runProgrammaticMove(map, programmatic, () => {
+      map.stop();
+      map[command.method](command.options);
+    });
   }, [
     camera.center[0],
     camera.center[1],

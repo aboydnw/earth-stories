@@ -13,6 +13,7 @@ describe("ChapterAddMenu", () => {
     render(
       <ChapterAddMenu
         open
+        canAddMap={false}
         canAddImage={false}
         canAddChart={false}
         onToggle={toggle}
@@ -33,12 +34,41 @@ describe("ChapterAddMenu", () => {
     );
     await userEvent.keyboard("{End}");
     expect(document.activeElement).toBe(
-      screen.getByRole("menuitem", { name: /flyover/i }),
+      screen.getByRole("menuitem", { name: /more chapter types/i }),
     );
-    expect(
-      screen.getByRole("menuitem", { name: /image/i }).hasAttribute("disabled"),
-    ).toBe(true);
+    expect(screen.queryByRole("menuitem", { name: /^video/i })).toBeNull();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.getByRole("menuitem", { name: /^flyover/i })).toBeTruthy();
     await userEvent.keyboard("{Home}{Enter}");
     expect(addProse).toHaveBeenCalledOnce();
+  });
+
+  it("routes missing media prerequisites to data instead of a disabled choice", async () => {
+    const addData = vi.fn();
+    render(
+      <ChapterAddMenu
+        open
+        canAddMap={false}
+        canAddImage={false}
+        canAddChart={false}
+        onToggle={() => undefined}
+        onAddDataForType={addData}
+        onAddProse={() => undefined}
+        onAddScrolly={() => undefined}
+        onAddMap={() => undefined}
+        onAddImage={() => undefined}
+        onAddVideo={() => undefined}
+        onAddChart={() => undefined}
+        onAddFlyover={() => undefined}
+      />,
+    );
+    await userEvent.click(screen.getByRole("menuitem", { name: /image/i }));
+    expect(addData).toHaveBeenCalledWith("image");
+    await userEvent.click(screen.getByRole("menuitem", { name: /^map/i }));
+    expect(addData).toHaveBeenCalledWith("map");
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: /guided tour/i }),
+    );
+    expect(addData).toHaveBeenCalledWith("scrolly");
   });
 });

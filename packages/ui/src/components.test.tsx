@@ -13,6 +13,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import {
   ConfirmDialog,
+  CollapsibleSection,
   EarthStoriesProvider,
   FormField,
   IconButton,
@@ -139,5 +140,36 @@ describe("shared product controls", () => {
     expect(screen.getByText("12 errors")).toBeTruthy();
     expect(screen.getByText("23 warnings")).toBeTruthy();
     expect(screen.getByText(/refresh required/)).toBeTruthy();
+  });
+
+  it("summarizes collapsed settings, exposes issues, and preserves field values", async () => {
+    product(
+      <CollapsibleSection
+        title="Layers"
+        description="Sources drawn above the main map"
+        summary="2 overlays"
+        issue="Needs attention"
+        defaultOpen
+      >
+        <TextInput aria-label="Layer label" defaultValue="Flood extent" />
+      </CollapsibleSection>,
+    );
+    const trigger = screen.getByRole("button", { name: /Layers/ });
+    expect(trigger.textContent).toContain("2 overlays");
+    expect(trigger.textContent).toContain("Needs attention");
+    expect(screen.getByText("Sources drawn above the main map")).toBeTruthy();
+
+    await userEvent.clear(screen.getByRole("textbox", { name: "Layer label" }));
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Layer label" }),
+      "Observed flood",
+    );
+    await userEvent.click(trigger);
+    await userEvent.click(trigger);
+
+    expect(
+      (screen.getByRole("textbox", { name: "Layer label" }) as HTMLInputElement)
+        .value,
+    ).toBe("Observed flood");
   });
 });

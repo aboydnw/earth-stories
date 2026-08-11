@@ -55,7 +55,7 @@ describe("deriveAuthoringReadiness", () => {
       }),
     );
     expect(result.findings.filter(({ id }) => id === "compile")).toHaveLength(
-      1,
+      0,
     );
     expect(result.stages.publish).toBe("blocked");
   });
@@ -100,6 +100,27 @@ describe("deriveAuthoringReadiness", () => {
     expect(result.stages.sharing).toBe("current");
   });
 
+  it("keeps a newly created placeholder video blocked until a real URL is entered", async () => {
+    const project = await fixture();
+    project.chapters = [
+      {
+        id: "video",
+        type: "video",
+        title: "Video",
+        narrative: "Context",
+        provider: "youtube",
+        videoId: "VIDEO_ID",
+        originalUrl: "https://www.youtube.com/watch?v=VIDEO_ID",
+      },
+    ];
+    expect(deriveAuthoringReadiness(project).findings).toContainEqual(
+      expect.objectContaining({
+        id: "chapter-fields-video",
+        severity: "error",
+      }),
+    );
+  });
+
   it("stays quiet about sharing when a chapter narrative can stand in", async () => {
     const project = await fixture();
     project.metadata.description = "";
@@ -108,7 +129,7 @@ describe("deriveAuthoringReadiness", () => {
     expect(result.stages.sharing).toBe("complete");
   });
 
-  it("catches a compiler failure once", async () => {
+  it("attributes incompatible chapter sources without a generic compile error", async () => {
     const project = await fixture();
     const source = project.sources[0]!;
     project.sources = [
@@ -125,6 +146,54 @@ describe("deriveAuthoringReadiness", () => {
     ];
     const result = deriveAuthoringReadiness(project);
     expect(result.manifest).toBeNull();
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        id: "chapter-source-kind-sites",
+        chapterId: "sites",
+        resourceId: source.id,
+      }),
+    );
+    expect(result.findings.filter(({ id }) => id === "compile")).toHaveLength(
+      0,
+    );
+  });
+
+  it("attributes deterministic delivery and remote URL failures to sources", async () => {
+    const project = await fixture();
+    project.sources[0]!.delivery = "connected";
+    const local = deriveAuthoringReadiness(project);
+    expect(local.findings).toContainEqual(
+      expect.objectContaining({
+        id: "source-publication-survey-sites",
+        area: "data",
+        severity: "error",
+        resourceId: "survey-sites",
+      }),
+    );
+    expect(local.findings.some(({ id }) => id === "compile")).toBe(false);
+
+    project.sources[0] = {
+      ...project.sources[0]!,
+      kind: "cog",
+      locator: "https://localhost/private.tif",
+      delivery: "connected",
+    };
+    const remote = deriveAuthoringReadiness(project);
+    expect(remote.findings).toContainEqual(
+      expect.objectContaining({
+        id: "source-publication-survey-sites",
+        resourceId: "survey-sites",
+        message: "Remote assets cannot use private or local network hosts.",
+      }),
+    );
+    expect(remote.findings.some(({ id }) => id === "compile")).toBe(false);
+  });
+
+  it("keeps the generic compile finding for unexpected invalid project state", async () => {
+    const project = await fixture();
+    project.publication.theme =
+      "unknown" as StoryProject["publication"]["theme"];
+    const result = deriveAuthoringReadiness(project);
     expect(result.findings.filter(({ id }) => id === "compile")).toHaveLength(
       1,
     );

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultSourceProvenance,
   parseStoryProject,
+  projectChapterSchema,
   sourceProvenanceSchema,
   projectSourceSchema,
   storyProjectSchema,
@@ -149,5 +150,22 @@ describe("storyProjectSchema", () => {
     expect(() =>
       parseStoryProject({ schema: "earth-stories/project/v99" }),
     ).toThrow("Unsupported Earth Stories project schema");
+  });
+
+  it("defaults legacy flyover keyframe captions independently", () => {
+    const flyover = projectChapterSchema.parse({
+      id: "flight",
+      type: "flyover",
+      title: "Flight",
+      narrative: "Follow the route",
+      keyframes: [
+        { center: [0, 0], zoom: 2, bearing: 0, pitch: 20 },
+        { center: [1, 1], zoom: 3, bearing: 45, pitch: 30 },
+      ],
+    });
+    if (flyover.type !== "flyover") throw new Error("Expected flyover");
+    expect(flyover.keyframes.map(({ caption }) => caption)).toEqual(["", ""]);
+    flyover.keyframes[0]!.caption = "First view";
+    expect(flyover.keyframes[1]!.caption).toBe("");
   });
 });

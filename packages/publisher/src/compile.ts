@@ -10,7 +10,7 @@ import {
   publicationManifestSchema,
   storyProjectSchema,
 } from "@earth-stories/story-schema";
-import { validateRemoteUrl } from "./remote-url.js";
+import { projectCompileIssues } from "./compileValidation.js";
 
 export const RUNTIME_VERSION = "0.1.0";
 
@@ -163,7 +163,6 @@ function compileAsset(
   });
   const requestedDelivery = source.delivery;
   const profileDelivery = (locator: string) => {
-    if (/^https?:\/\//.test(locator)) validateRemoteUrl(locator);
     if (requestedDelivery !== "auto") return requestedDelivery;
     if (
       profile === "portable" &&
@@ -279,7 +278,6 @@ function compileAsset(
         ...specialized(),
       };
     case "zarr":
-      validateRemoteUrl(source.locator);
       return {
         id: source.id,
         label: source.label,
@@ -418,67 +416,8 @@ function compileChapter(chapter: ProjectChapter): PublicationChapter {
 
 export function compileProject(input: unknown): PublicationManifest {
   const project = storyProjectSchema.parse(input);
-  const sources = new Map(project.sources.map((source) => [source.id, source]));
-  for (const chapter of project.chapters) {
-    if (chapter.type === "prose" || chapter.type === "video") continue;
-    if ("overlaySourceIds" in chapter) {
-      for (const overlayId of chapter.overlaySourceIds ?? []) {
-        const overlay = sources.get(overlayId);
-        if (!overlay)
-          throw new Error(
-            `Chapter "${chapter.title}" references missing overlay ${overlayId}`,
-          );
-        if (overlay.kind === "image" || overlay.kind === "csv")
-          throw new Error(
-            `Chapter "${chapter.title}" requires geospatial overlays`,
-          );
-      }
-    }
-    const sourceId = chapter.sourceId;
-    if (!sourceId && chapter.type === "flyover") continue;
-    const source = sourceId ? sources.get(sourceId) : undefined;
-    if (!source)
-      throw new Error(
-        `Chapter "${chapter.title}" references missing source ${sourceId}`,
-      );
-    if (chapter.type === "image" && source.kind !== "image")
-      throw new Error(
-        `Image chapter "${chapter.title}" requires an image source`,
-      );
-    if (chapter.type === "chart" && source.kind !== "csv")
-      throw new Error(`Chart chapter "${chapter.title}" requires a CSV source`);
-    if (
-      (chapter.type === "map" ||
-        chapter.type === "scrolly" ||
-        chapter.type === "flyover") &&
-      (source.kind === "image" || source.kind === "csv")
-    )
-      throw new Error(
-        `Map chapter "${chapter.title}" requires a geospatial source`,
-      );
-  }
-  for (const source of project.sources) {
-    if (
-      (source.kind === "local-geojson" ||
-        source.kind === "image" ||
-        source.kind === "csv" ||
-        (source.kind === "copc" && !/^https?:\/\//i.test(source.locator)) ||
-        (source.kind === "trajectory" &&
-          !/^https?:\/\//i.test(source.locator))) &&
-      source.delivery === "connected"
-    )
-      throw new Error(
-        `Local source "${source.label}" cannot use connected delivery`,
-      );
-    if (source.kind === "xyz" && source.delivery === "included")
-      throw new Error(
-        `XYZ source "${source.label}" cannot be included because it represents many remote tiles`,
-      );
-    if (source.kind === "zarr" && source.delivery === "included")
-      throw new Error(
-        `Zarr source "${source.label}" cannot be included yet because it is a multi-file store`,
-      );
-  }
+  const [issue] = projectCompileIssues(project);
+  if (issue) throw new Error(issue.message);
   const projectDigest = digestProject(project);
   const assets = project.sources.map((source) =>
     compileAsset(source, project.publication.profile),

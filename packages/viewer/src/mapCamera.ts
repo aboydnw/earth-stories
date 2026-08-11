@@ -2,6 +2,21 @@ import type { Camera } from "@earth-stories/story-schema";
 
 export const FLY_TO_DURATION_MS = 2_500;
 
+export function resolveMapInteraction({
+  controlled = false,
+  interactive,
+  followCamera,
+}: {
+  controlled?: boolean;
+  interactive?: boolean;
+  followCamera?: boolean;
+}) {
+  return {
+    interactive: interactive ?? !controlled,
+    followCamera: followCamera ?? controlled,
+  };
+}
+
 export function cameraCommand(
   camera: Camera,
   transition: "fly-to" | "instant",
@@ -26,4 +41,26 @@ export function prefersReducedMotion() {
     typeof window !== "undefined" &&
     window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
   );
+}
+
+export function runProgrammaticMove(
+  map: {
+    once: (event: "moveend", listener: () => void) => unknown;
+    off: (event: "moveend", listener: () => void) => unknown;
+  },
+  programmatic: { current: boolean },
+  move: () => void,
+  onComplete?: () => void,
+) {
+  const finish = () => {
+    programmatic.current = false;
+    onComplete?.();
+  };
+  programmatic.current = true;
+  map.once("moveend", finish);
+  move();
+  return () => {
+    map.off("moveend", finish);
+    programmatic.current = false;
+  };
 }

@@ -330,13 +330,53 @@ export function CollapsibleSection({
   title,
   children,
   defaultOpen = false,
-}: PropsWithChildren<{ title: string; defaultOpen?: boolean }>) {
+  description,
+  summary,
+  issue,
+}: PropsWithChildren<{
+  title: string;
+  defaultOpen?: boolean;
+  description?: ReactNode;
+  summary?: ReactNode;
+  issue?: ReactNode;
+}>) {
   return (
     <Collapsible.Root defaultOpen={defaultOpen}>
       <Collapsible.Trigger asChild>
-        <Button variant="ghost" width="full" justifyContent="space-between">
-          {title}
-          <CaretDown />
+        <Button
+          className="es-collapsible-section__trigger"
+          variant="ghost"
+          width="full"
+          height="auto"
+          py="3"
+          justifyContent="space-between"
+          textAlign="start"
+        >
+          <Box minW="0">
+            <Flex align="center" gap="2" wrap="wrap">
+              <Text fontWeight="semibold">{title}</Text>
+              {issue ? (
+                <Text
+                  color="status.warning.fg"
+                  fontSize="xs"
+                  fontWeight="semibold"
+                >
+                  {issue}
+                </Text>
+              ) : null}
+            </Flex>
+            {description ? (
+              <Text color="fg.muted" fontSize="sm" mt="1">
+                {description}
+              </Text>
+            ) : null}
+            {summary ? (
+              <Text color="fg.muted" fontSize="xs" mt="1">
+                {summary}
+              </Text>
+            ) : null}
+          </Box>
+          <CaretDown aria-hidden="true" />
         </Button>
       </Collapsible.Trigger>
       <Collapsible.Content>
