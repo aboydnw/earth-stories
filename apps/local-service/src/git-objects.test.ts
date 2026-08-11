@@ -1,16 +1,35 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   blobSha,
   collectReleaseFiles,
   encodeBase64Stream,
 } from "./git-objects.js";
 
+const temporaryDirectories: string[] = [];
+
+async function fixtureDirectory(prefix: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories.splice(0).map((directory) =>
+      rm(directory, {
+        recursive: true,
+        force: true,
+      }),
+    ),
+  );
+});
+
 describe("blobSha", () => {
   it("matches Git's object ID for an empty blob", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "earth-stories-objects-"));
+    const directory = await fixtureDirectory("earth-stories-objects-");
     const path = join(directory, "empty.txt");
     await writeFile(path, "");
 
@@ -20,7 +39,7 @@ describe("blobSha", () => {
   });
 
   it("hashes binary bytes without text conversion", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "earth-stories-objects-"));
+    const directory = await fixtureDirectory("earth-stories-objects-");
     const path = join(directory, "binary.bin");
     await writeFile(path, Buffer.from([0, 255, 1, 127, 128, 10]));
 
@@ -30,7 +49,7 @@ describe("blobSha", () => {
   });
 
   it("preserves CRLF bytes when hashing", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "earth-stories-objects-"));
+    const directory = await fixtureDirectory("earth-stories-objects-");
     const path = join(directory, "crlf.txt");
     await writeFile(path, "line one\r\nline two\r\n");
 
@@ -42,15 +61,19 @@ describe("blobSha", () => {
 
 describe("collectReleaseFiles", () => {
   it("returns sorted portable paths and excludes every .git directory", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "earth-stories-release-"));
+    const directory = await fixtureDirectory("earth-stories-release-");
     await mkdir(join(directory, "nested", ".git"), { recursive: true });
     await mkdir(join(directory, ".git"), { recursive: true });
+    await mkdir(join(directory, ".GIT"), { recursive: true });
+    await mkdir(join(directory, "nested", ".Git"), { recursive: true });
     await writeFile(join(directory, "z-last.txt"), "z");
     await writeFile(join(directory, "nested", "b.txt"), "b");
     await writeFile(join(directory, "nested", "a.txt"), "a");
     await writeFile(join(directory, "a-first.txt"), "a");
     await writeFile(join(directory, ".git", "config"), "root secret");
     await writeFile(join(directory, "nested", ".git", "config"), "secret");
+    await writeFile(join(directory, ".GIT", "config"), "case secret");
+    await writeFile(join(directory, "nested", ".Git", "config"), "secret");
 
     expect(await collectReleaseFiles(directory)).toEqual([
       {
@@ -75,7 +98,7 @@ describe("collectReleaseFiles", () => {
 
 describe("encodeBase64Stream", () => {
   it("matches reference base64 across multiple emitted chunks", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "earth-stories-base64-"));
+    const directory = await fixtureDirectory("earth-stories-base64-");
     const path = join(directory, "large.bin");
     const contents = Buffer.allocUnsafe(3 * 1024 * 1024 + 5);
     for (let index = 0; index < contents.length; index += 1)

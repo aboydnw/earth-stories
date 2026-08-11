@@ -8,6 +8,9 @@ import {
 const API_ROOT = "https://api.github.com";
 const COMMIT_AUTHOR_NAME = "Earth Stories";
 const COMMIT_AUTHOR_EMAIL = "earth-stories@users.noreply.github.com";
+const REPOSITORY_SEED_PATH = ".earth-stories-seed";
+const REPOSITORY_SEED_CONTENT =
+  "RWFydGggU3RvcmllcyBwdWJsaWNhdGlvbiByZXBvc2l0b3J5Cg==";
 export const DEFAULT_PAGES_BRANCH = "gh-pages";
 
 export interface GitHubRequestOptions {
@@ -60,6 +63,49 @@ export interface EnsureRepositoryOptions extends GitHubRequestOptions {
   expectExisting?: boolean;
 }
 
+async function initializeEmptyRepository(
+  options: EnsureRepositoryOptions,
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  const endpoint = `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/contents/${REPOSITORY_SEED_PATH}`;
+  let response: Response;
+  try {
+    response = await fetchImpl(endpoint, {
+      method: "PUT",
+      headers: apiHeaders(options.token),
+      body: JSON.stringify({
+        message: "Initialize Earth Stories repository",
+        content: REPOSITORY_SEED_CONTENT,
+      }),
+    });
+  } catch (cause) {
+    throw new Error(
+      `The repository default branch could not be initialized: ${safeMessage(cause, options.token)}`,
+    );
+  }
+  if (!response.ok) {
+    const detail = safeMessage(await readError(response), options.token);
+    if (response.status === 422) {
+      try {
+        const existing = await fetchImpl(endpoint, {
+          headers: apiHeaders(options.token),
+        });
+        if (existing.ok) {
+          await existing.body?.cancel();
+          return;
+        }
+        await existing.body?.cancel();
+      } catch {
+        // Report the original initialization failure below.
+      }
+    }
+    throw new Error(
+      `The repository default branch could not be initialized (${response.status}).${detail ? ` ${detail}` : ""}`,
+    );
+  }
+  await response.body?.cancel();
+}
+
 /**
  * Makes sure a repository is available to publish into, creating it when it
  * does not exist. A repository that already holds something other than a
@@ -93,13 +139,17 @@ export async function ensureRepository(
       throw new Error(
         `You already have a repository named "${options.repo}" with files in it. Choose another name so nothing is overwritten.`,
       );
+    if (empty) await initializeEmptyRepository(options, fetchImpl);
     return { created: false };
   }
 
-  if (existing.status !== 404)
+  if (existing.status !== 404) {
+    const detail = safeMessage(await readError(existing), options.token);
     throw new Error(
-      `GitHub could not be reached (${existing.status}). ${await readError(existing)}`.trim(),
+      `GitHub could not be reached (${existing.status}). ${detail}`.trim(),
     );
+  }
+  await existing.body?.cancel();
 
   const created = await fetchImpl(`${API_ROOT}/user/repos`, {
     method: "POST",
@@ -114,10 +164,14 @@ export async function ensureRepository(
       has_wiki: false,
     }),
   });
-  if (!created.ok)
+  if (!created.ok) {
+    const detail = safeMessage(await readError(created), options.token);
     throw new Error(
-      `The repository could not be created (${created.status}). ${await readError(created)}`.trim(),
+      `The repository could not be created (${created.status}). ${detail}`.trim(),
     );
+  }
+  await created.body?.cancel();
+  await initializeEmptyRepository(options, fetchImpl);
   return { created: true };
 }
 
@@ -225,10 +279,12 @@ async function githubObjectRequest({
       await waitForRetry(delay, init?.signal);
       continue;
     }
-    if (rateLimited)
+    if (rateLimited) {
+      await response.body?.cancel();
       throw new Error(
         `${operation} failed because GitHub's rate limit remained active after ${attempt + 1} attempts.`,
       );
+    }
     return response;
   }
 }
@@ -289,7 +345,10 @@ async function readExistingBlobs(
     url: `${root}/ref/heads/${encodeURIComponent(branch)}`,
     operation: "Reading the publication branch",
   });
-  if (ref.status === 404) return new Set();
+  if (ref.status === 404) {
+    await ref.body?.cancel();
+    return new Set();
+  }
   const refBody = await responseJson<{ object?: { sha?: unknown } }>(
     ref,
     "Reading the publication branch",
@@ -469,8 +528,12 @@ async function forceUpdateRef(
     init: { method: "PATCH" },
     body: jsonBody({ sha: commit, force: true }),
   });
-  if (updated.ok) return;
-  if (updated.status !== 404)
+  if (updated.ok) {
+    await updated.body?.cancel();
+    return;
+  }
+  if (updated.status === 404) await updated.body?.cancel();
+  else
     await responseJson(
       updated,
       "Updating the publication branch",
@@ -485,7 +548,8 @@ async function forceUpdateRef(
     init: { method: "POST" },
     body: jsonBody({ ref: `refs/heads/${branch}`, sha: commit }),
   });
-  if (!created.ok)
+  if (created.ok) await created.body?.cancel();
+  else
     await responseJson(
       created,
       "Creating the publication branch",
@@ -541,11 +605,15 @@ export async function enablePages(options: EnablePagesOptions): Promise<void> {
     headers: apiHeaders(options.token),
     body: JSON.stringify({ source }),
   });
-  if (created.ok || created.status === 201) return;
+  if (created.ok || created.status === 201) {
+    await created.body?.cancel();
+    return;
+  }
   if (created.status !== 409 && created.status !== 422)
     throw new Error(
       `GitHub Pages could not be enabled (${created.status}). ${await readError(created)}`.trim(),
     );
+  await created.body?.cancel();
 
   const updated = await fetchImpl(endpoint, {
     method: "PUT",
@@ -556,6 +624,7 @@ export async function enablePages(options: EnablePagesOptions): Promise<void> {
     throw new Error(
       `GitHub Pages could not be updated (${updated.status}). ${await readError(updated)}`.trim(),
     );
+  await updated.body?.cancel();
 }
 
 export interface WaitForPagesOptions {

@@ -18,6 +18,18 @@ const jsonResponse = (value: unknown, status = 200) =>
     headers: { "content-type": "application/json" },
   });
 
+function cancellableResponse(status: number, onCancel: () => void): Response {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("unused response body"));
+    },
+    cancel() {
+      onCancel();
+    },
+  });
+  return new Response(body, { status });
+}
+
 async function releaseDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "earth-stories-release-"));
   await writeFile(join(directory, "index.html"), "<html></html>");
@@ -42,6 +54,7 @@ interface RecordedRequest {
 interface FakeGitHubOptions {
   existingBlobs?: string[];
   truncated?: boolean;
+  readRefResponse?: Response;
   blobResponse?: (
     body: Record<string, unknown>,
     attempt: number,
@@ -49,6 +62,7 @@ interface FakeGitHubOptions {
   treeResponse?: Response | Error;
   commitResponse?: Response | Error;
   refResponse?: Response;
+  createRefResponse?: Response;
 }
 
 function fakeGitHub(options: FakeGitHubOptions = {}) {
@@ -78,9 +92,12 @@ function fakeGitHub(options: FakeGitHubOptions = {}) {
       });
 
       if (url.endsWith("/git/ref/heads/gh-pages"))
-        return branchExists
-          ? jsonResponse({ object: { sha: "previous-commit" } })
-          : jsonResponse({ message: "Not Found" }, 404);
+        return (
+          options.readRefResponse ??
+          (branchExists
+            ? jsonResponse({ object: { sha: "previous-commit" } })
+            : jsonResponse({ message: "Not Found" }, 404))
+        );
       if (url.endsWith("/git/commits/previous-commit"))
         return jsonResponse({ tree: { sha: "previous-tree" } });
       if (url.endsWith("/git/trees/previous-tree?recursive=1"))
@@ -118,7 +135,8 @@ function fakeGitHub(options: FakeGitHubOptions = {}) {
             ? jsonResponse({}, 200)
             : jsonResponse({ message: "Not Found" }, 404))
         );
-      if (url.endsWith("/git/refs")) return jsonResponse({}, 201);
+      if (url.endsWith("/git/refs"))
+        return options.createRefResponse ?? jsonResponse({}, 201);
       throw new Error(`Unexpected request: ${method} ${url}`);
     },
   ) as unknown as typeof fetch;
@@ -153,10 +171,13 @@ describe("pagesUrl", () => {
 describe("ensureRepository", () => {
   it("creates the repository when it does not exist", async () => {
     const fetchImpl = vi.fn(
-      async (input: RequestInfo | URL, init?: RequestInit) =>
-        init?.method === "POST"
-          ? jsonResponse({ name: "field-notes" }, 201)
-          : jsonResponse({ message: "Not Found" }, 404),
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST")
+          return jsonResponse({ name: "field-notes" }, 201);
+        if (init?.method === "PUT")
+          return jsonResponse({ commit: { sha: "seed" } }, 201);
+        return jsonResponse({ message: "Not Found" }, 404);
+      },
     ) as unknown as typeof fetch;
     const result = await ensureRepository({
       token: "t",
@@ -168,8 +189,14 @@ describe("ensureRepository", () => {
   });
 
   it("adopts an empty repository the author already owns", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ owner: { login: "mapper" }, size: 0 }),
+    const methods: string[] = [];
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        methods.push(init?.method ?? "GET");
+        return init?.method === "PUT"
+          ? jsonResponse({ commit: { sha: "seed" } }, 201)
+          : jsonResponse({ owner: { login: "mapper" }, size: 0 });
+      },
     ) as unknown as typeof fetch;
     await expect(
       ensureRepository({
@@ -179,6 +206,7 @@ describe("ensureRepository", () => {
         fetchImpl,
       }),
     ).resolves.toEqual({ created: false });
+    expect(methods).toEqual(["GET", "PUT"]);
   });
 
   it("refuses to overwrite an unrelated repository with files in it", async () => {
@@ -223,6 +251,164 @@ describe("ensureRepository", () => {
       }),
     ).rejects.toThrow(/belongs to someone else/);
   });
+
+  it.each(["new", "adopted"] as const)(
+    "seeds a %s empty repository before creating the orphan Pages branch",
+    async (kind) => {
+      const directory = await oneFileRelease();
+      const token = "ghp_private_value";
+      const requests: RecordedRequest[] = [];
+      let repositoryExists = kind === "adopted";
+      let defaultBranchExists = false;
+      const fetchImpl = vi.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const method = init?.method ?? "GET";
+          const body = init?.body
+            ? (JSON.parse(await new Response(init.body).text()) as Record<
+                string,
+                unknown
+              >)
+            : null;
+          requests.push({
+            url,
+            method,
+            body,
+            authorization: new Headers(init?.headers).get("authorization"),
+          });
+
+          if (url.endsWith("/repos/mapper/notes") && method === "GET")
+            return repositoryExists
+              ? jsonResponse({ owner: { login: "mapper" }, size: 0 })
+              : jsonResponse({ message: "Not Found" }, 404);
+          if (url.endsWith("/user/repos")) {
+            repositoryExists = true;
+            return jsonResponse({ name: "notes" }, 201);
+          }
+          if (url.endsWith("/contents/.earth-stories-seed")) {
+            defaultBranchExists = true;
+            return jsonResponse({ commit: { sha: "seed-commit" } }, 201);
+          }
+          if (url.endsWith("/git/ref/heads/gh-pages"))
+            return jsonResponse({ message: "Not Found" }, 404);
+          if (url.endsWith("/git/blobs")) {
+            const contents = Buffer.from(String(body?.content), "base64");
+            const sha = createHash("sha1")
+              .update(`blob ${contents.length}\0`)
+              .update(contents)
+              .digest("hex");
+            return jsonResponse({ sha }, 201);
+          }
+          if (url.endsWith("/git/trees"))
+            return jsonResponse({ sha: "publication-tree" }, 201);
+          if (url.endsWith("/git/commits"))
+            return jsonResponse({ sha: "publication-commit" }, 201);
+          if (method === "PATCH")
+            return jsonResponse({ message: "Not Found" }, 404);
+          if (url.endsWith("/git/refs"))
+            return defaultBranchExists
+              ? jsonResponse({}, 201)
+              : jsonResponse(
+                  { message: "Cannot create the first branch through refs" },
+                  422,
+                );
+          throw new Error(`Unexpected request: ${method} ${url}`);
+        },
+      ) as unknown as typeof fetch;
+
+      await ensureRepository({
+        token,
+        owner: "mapper",
+        repo: "notes",
+        fetchImpl,
+      });
+      await expect(
+        pushRelease({
+          directory,
+          token,
+          owner: "mapper",
+          repo: "notes",
+          fetchImpl,
+        }),
+      ).resolves.toEqual({ branch: "gh-pages" });
+
+      const seed = requests.find(({ url }) =>
+        url.endsWith("/contents/.earth-stories-seed"),
+      );
+      expect(seed?.method).toBe("PUT");
+      expect(seed?.body).toEqual({
+        message: "Initialize Earth Stories repository",
+        content: "RWFydGggU3RvcmllcyBwdWJsaWNhdGlvbiByZXBvc2l0b3J5Cg==",
+      });
+      expect(seed?.body).not.toHaveProperty("branch");
+      const publicationCommit = requests.find(({ url }) =>
+        url.endsWith("/git/commits"),
+      );
+      expect(publicationCommit?.body).not.toHaveProperty("parents");
+      expect(
+        requests.findIndex(({ url }) =>
+          url.endsWith("/contents/.earth-stories-seed"),
+        ),
+      ).toBeLessThan(
+        requests.findIndex(({ url }) => url.endsWith("/git/refs")),
+      );
+      for (const request of requests) {
+        expect(request.authorization).toBe(`Bearer ${token}`);
+        expect(request.url).not.toContain(token);
+      }
+    },
+  );
+
+  it("redacts the token when default-branch initialization fails", async () => {
+    const token = "ghp_seed_secret";
+    const fetchImpl = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) =>
+        init?.method === "PUT"
+          ? jsonResponse({ message: `seed denied for ${token}` }, 500)
+          : jsonResponse({ owner: { login: "mapper" }, size: 0 }),
+    ) as unknown as typeof fetch;
+
+    const error = await ensureRepository({
+      token,
+      owner: "mapper",
+      repo: "notes",
+      fetchImpl,
+    }).catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/default branch.*500/i);
+    expect((error as Error).message).not.toContain(token);
+  });
+
+  it("reuses an existing seed after an interrupted first publish", async () => {
+    const methods: string[] = [];
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        methods.push(`${method} ${url}`);
+        if (url.endsWith("/contents/.earth-stories-seed"))
+          return method === "PUT"
+            ? jsonResponse({ message: "sha was not supplied" }, 422)
+            : jsonResponse({ name: ".earth-stories-seed" });
+        return jsonResponse({ owner: { login: "mapper" }, size: 0 });
+      },
+    ) as unknown as typeof fetch;
+
+    await expect(
+      ensureRepository({
+        token: "token",
+        owner: "mapper",
+        repo: "notes",
+        fetchImpl,
+      }),
+    ).resolves.toEqual({ created: false });
+    expect(methods.map((entry) => entry.split(" ")[0])).toEqual([
+      "GET",
+      "PUT",
+      "GET",
+    ]);
+  });
 });
 
 describe("pushRelease", () => {
@@ -234,11 +420,10 @@ describe("pushRelease", () => {
       body: Record<string, unknown> | null;
       authorization: string | null;
     }> = [];
-    const blobShas = [
-      "6c70bcfe4d48d15f8a6531d6b491e65d641a377c",
-      "19b11ce5720568a56161a0339ef3960adb768551",
-    ];
-    let blobIndex = 0;
+    const shaByContent: Record<string, string> = {
+      "PGh0bWw+PC9odG1sPg==": "6c70bcfe4d48d15f8a6531d6b491e65d641a377c",
+      cG5n: "19b11ce5720568a56161a0339ef3960adb768551",
+    };
     const fetchImpl = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
@@ -260,7 +445,10 @@ describe("pushRelease", () => {
         if (url.endsWith("/git/ref/heads/gh-pages"))
           return jsonResponse({ message: "Not Found" }, 404);
         if (url.endsWith("/git/blobs"))
-          return jsonResponse({ sha: blobShas[blobIndex++] }, 201);
+          return jsonResponse(
+            { sha: shaByContent[String(body?.content)] },
+            201,
+          );
         if (url.endsWith("/git/trees"))
           return jsonResponse({ sha: "tree-sha" }, 201);
         if (url.endsWith("/git/commits"))
@@ -488,15 +676,28 @@ describe("pushRelease", () => {
 
   it("names the rate limit after bounded retries are exhausted", async () => {
     const directory = await oneFileRelease();
+    let cancelled = 0;
     const github = fakeGitHub({
       blobResponse: () =>
-        new Response(JSON.stringify({ message: "slow down" }), {
-          status: 429,
-          headers: {
-            "content-type": "application/json",
-            "retry-after": "0",
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode('{"message":"slow down"}'),
+              );
+            },
+            cancel() {
+              cancelled += 1;
+            },
+          }),
+          {
+            status: 429,
+            headers: {
+              "content-type": "application/json",
+              "retry-after": "0",
+            },
           },
-        }),
+        ),
     });
 
     await expect(
@@ -511,7 +712,50 @@ describe("pushRelease", () => {
     expect(
       github.requests.filter(({ url }) => url.endsWith("/git/blobs")),
     ).toHaveLength(4);
+    expect(cancelled).toBe(4);
   });
+
+  it.each(["create", "update"] as const)(
+    "cancels terminal ref responses after a successful %s",
+    async (mode) => {
+      const directory = await oneFileRelease();
+      const cancelled: string[] = [];
+      const github = fakeGitHub(
+        mode === "create"
+          ? {
+              readRefResponse: cancellableResponse(404, () =>
+                cancelled.push("read-missing"),
+              ),
+              refResponse: cancellableResponse(404, () =>
+                cancelled.push("update-missing"),
+              ),
+              createRefResponse: cancellableResponse(201, () =>
+                cancelled.push("create-success"),
+              ),
+            }
+          : {
+              existingBlobs: [],
+              refResponse: cancellableResponse(200, () =>
+                cancelled.push("update-success"),
+              ),
+            },
+      );
+
+      await pushRelease({
+        directory,
+        token: "token",
+        owner: "mapper",
+        repo: "notes",
+        fetchImpl: github.fetchImpl,
+      });
+
+      expect(cancelled).toEqual(
+        mode === "create"
+          ? ["read-missing", "update-missing", "create-success"]
+          : ["update-success"],
+      );
+    },
+  );
 
   it.each([
     ["numeric", "3600"],

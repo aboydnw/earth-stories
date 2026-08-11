@@ -24,7 +24,7 @@ export async function collectReleaseFiles(
 
   async function walk(current: string): Promise<void> {
     for (const entry of await readdir(current, { withFileTypes: true })) {
-      if (entry.name === ".git") continue;
+      if (entry.name.toLowerCase() === ".git") continue;
       const absolute = join(current, entry.name);
       if (entry.isDirectory()) {
         await walk(absolute);
