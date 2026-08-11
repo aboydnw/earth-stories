@@ -390,7 +390,11 @@ describe("ensureRepository", () => {
         if (url.endsWith("/contents/.earth-stories-seed"))
           return method === "PUT"
             ? jsonResponse({ message: "sha was not supplied" }, 422)
-            : jsonResponse({ name: ".earth-stories-seed" });
+            : jsonResponse({
+                type: "file",
+                encoding: "base64",
+                content: "RWFydGggU3RvcmllcyBwdWJsaWNhdGlvbiByZXBvc2l0b3J5Cg==",
+              });
         return jsonResponse({ owner: { login: "mapper" }, size: 0 });
       },
     ) as unknown as typeof fetch;
@@ -408,6 +412,219 @@ describe("ensureRepository", () => {
       "PUT",
       "GET",
     ]);
+  });
+
+  it.each(["seed-only", "gh-pages"] as const)(
+    "safely resumes an interrupted %s publish without a local record",
+    async (interruption) => {
+      const directory = await oneFileRelease();
+      const requests: RecordedRequest[] = [];
+      let repositoryExists = false;
+      let seedContent: string | null = null;
+      let ghPagesExists = false;
+      let publicationCommits = 0;
+      const indexSha = "6c70bcfe4d48d15f8a6531d6b491e65d641a377c";
+      const fetchImpl = vi.fn(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          const method = init?.method ?? "GET";
+          const body = init?.body
+            ? (JSON.parse(await new Response(init.body).text()) as Record<
+                string,
+                unknown
+              >)
+            : null;
+          requests.push({
+            url,
+            method,
+            body,
+            authorization: new Headers(init?.headers).get("authorization"),
+          });
+
+          if (url.endsWith("/repos/mapper/notes") && method === "GET")
+            return repositoryExists
+              ? jsonResponse({
+                  owner: { login: "mapper" },
+                  size: seedContent || ghPagesExists ? 1 : 0,
+                })
+              : jsonResponse({ message: "Not Found" }, 404);
+          if (url.endsWith("/user/repos")) {
+            repositoryExists = true;
+            return jsonResponse({ name: "notes" }, 201);
+          }
+          if (url.endsWith("/contents/.earth-stories-seed")) {
+            if (method === "PUT") {
+              seedContent = String(body?.content);
+              return jsonResponse({ commit: { sha: "seed-commit" } }, 201);
+            }
+            return seedContent
+              ? jsonResponse({
+                  type: "file",
+                  encoding: "base64",
+                  content: `${seedContent.slice(0, 32)}\n${seedContent.slice(32)}`,
+                })
+              : jsonResponse({ message: "Not Found" }, 404);
+          }
+          if (url.endsWith("/git/ref/heads/gh-pages"))
+            return ghPagesExists
+              ? jsonResponse({ object: { sha: "old-commit" } })
+              : jsonResponse({ message: "Not Found" }, 404);
+          if (url.endsWith("/git/commits/old-commit"))
+            return jsonResponse({ tree: { sha: "old-tree" } });
+          if (url.endsWith("/git/trees/old-tree?recursive=1"))
+            return jsonResponse({
+              truncated: false,
+              tree: [
+                {
+                  path: "index.html",
+                  mode: "100644",
+                  type: "blob",
+                  sha: indexSha,
+                },
+              ],
+            });
+          if (url.endsWith("/git/blobs"))
+            return jsonResponse({ sha: indexSha }, 201);
+          if (url.endsWith("/git/trees"))
+            return jsonResponse({ sha: `tree-${publicationCommits + 1}` }, 201);
+          if (url.endsWith("/git/commits")) {
+            publicationCommits += 1;
+            return jsonResponse({ sha: `commit-${publicationCommits}` }, 201);
+          }
+          if (method === "PATCH")
+            return ghPagesExists
+              ? jsonResponse({}, 200)
+              : jsonResponse({ message: "Not Found" }, 404);
+          if (url.endsWith("/git/refs")) {
+            if (!seedContent)
+              return jsonResponse({ message: "No default branch" }, 422);
+            ghPagesExists = true;
+            return jsonResponse({}, 201);
+          }
+          throw new Error(`Unexpected request: ${method} ${url}`);
+        },
+      ) as unknown as typeof fetch;
+
+      await ensureRepository({
+        token: "token",
+        owner: "mapper",
+        repo: "notes",
+        fetchImpl,
+      });
+      if (interruption === "gh-pages")
+        await pushRelease({
+          directory,
+          token: "token",
+          owner: "mapper",
+          repo: "notes",
+          fetchImpl,
+        });
+
+      await expect(
+        ensureRepository({
+          token: "token",
+          owner: "mapper",
+          repo: "notes",
+          expectExisting: false,
+          fetchImpl,
+        }),
+      ).resolves.toEqual({ created: false });
+      await pushRelease({
+        directory,
+        token: "token",
+        owner: "mapper",
+        repo: "notes",
+        fetchImpl,
+      });
+
+      expect(
+        requests.filter(
+          ({ url, method }) =>
+            url.endsWith("/contents/.earth-stories-seed") && method === "PUT",
+        ),
+      ).toHaveLength(1);
+      expect(
+        requests.filter(
+          ({ url, method }) =>
+            url.endsWith("/contents/.earth-stories-seed") && method === "GET",
+        ),
+      ).toHaveLength(1);
+      expect(ghPagesExists).toBe(true);
+      expect(publicationCommits).toBe(interruption === "gh-pages" ? 2 : 1);
+    },
+  );
+
+  it.each([
+    {
+      name: "missing",
+      response: () => jsonResponse({ message: "Not Found" }, 404),
+    },
+    {
+      name: "wrong",
+      response: () =>
+        jsonResponse({
+          type: "file",
+          encoding: "base64",
+          content: "d3JvbmcK",
+        }),
+    },
+    {
+      name: "malformed",
+      response: () =>
+        jsonResponse({
+          type: "file",
+          encoding: "base64",
+          content: "%%%not-base64%%%",
+        }),
+    },
+  ])(
+    "refuses a nonempty repository with a $name seed marker",
+    async ({ response }) => {
+      let markerRequests = 0;
+      const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith("/contents/.earth-stories-seed")) {
+          markerRequests += 1;
+          return response();
+        }
+        return jsonResponse({ owner: { login: "mapper" }, size: 1 });
+      }) as unknown as typeof fetch;
+
+      await expect(
+        ensureRepository({
+          token: "token",
+          owner: "mapper",
+          repo: "notes",
+          expectExisting: false,
+          fetchImpl,
+        }),
+      ).rejects.toThrow(/Choose another name/);
+      expect(markerRequests).toBe(1);
+    },
+  );
+
+  it("redacts a token echoed by a failed interrupted-publish probe", async () => {
+    const token = "ghp_probe_secret";
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      return url.endsWith("/contents/.earth-stories-seed")
+        ? jsonResponse({ message: `probe denied for ${token}` }, 500)
+        : jsonResponse({ owner: { login: "mapper" }, size: 1 });
+    }) as unknown as typeof fetch;
+
+    const error = await ensureRepository({
+      token,
+      owner: "mapper",
+      repo: "notes",
+      expectExisting: false,
+      fetchImpl,
+    }).catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/verify.*interrupted/i);
+    expect((error as Error).message).not.toContain(token);
+    for (const url of urls) expect(url).not.toContain(token);
   });
 });
 

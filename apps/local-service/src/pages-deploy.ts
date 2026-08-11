@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import {
   blobSha,
   collectReleaseFiles,
@@ -63,11 +64,67 @@ export interface EnsureRepositoryOptions extends GitHubRequestOptions {
   expectExisting?: boolean;
 }
 
+function repositorySeedEndpoint(options: EnsureRepositoryOptions): string {
+  return `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/contents/${REPOSITORY_SEED_PATH}`;
+}
+
+function matchesRepositorySeed(value: unknown): boolean {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    (value as { type?: unknown }).type !== "file" ||
+    (value as { encoding?: unknown }).encoding !== "base64" ||
+    typeof (value as { content?: unknown }).content !== "string"
+  )
+    return false;
+  const normalized = (value as { content: string }).content.replace(/\s/g, "");
+  if (
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      normalized,
+    )
+  )
+    return false;
+  return Buffer.from(normalized, "base64").equals(
+    Buffer.from(REPOSITORY_SEED_CONTENT, "base64"),
+  );
+}
+
+async function hasValidRepositorySeed(
+  options: EnsureRepositoryOptions,
+  fetchImpl: typeof fetch,
+): Promise<boolean> {
+  let response: Response;
+  try {
+    response = await fetchImpl(repositorySeedEndpoint(options), {
+      headers: apiHeaders(options.token),
+    });
+  } catch (cause) {
+    throw new Error(
+      `GitHub could not verify an interrupted Earth Stories publish: ${safeMessage(cause, options.token)}`,
+    );
+  }
+  if (response.status === 404) {
+    await response.body?.cancel();
+    return false;
+  }
+  if (!response.ok) {
+    const detail = safeMessage(await readError(response), options.token);
+    throw new Error(
+      `GitHub could not verify an interrupted Earth Stories publish (${response.status}).${detail ? ` ${detail}` : ""}`,
+    );
+  }
+  try {
+    return matchesRepositorySeed(await response.json());
+  } catch {
+    return false;
+  }
+}
+
 async function initializeEmptyRepository(
   options: EnsureRepositoryOptions,
   fetchImpl: typeof fetch,
 ): Promise<void> {
-  const endpoint = `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/contents/${REPOSITORY_SEED_PATH}`;
+  const endpoint = repositorySeedEndpoint(options);
   let response: Response;
   try {
     response = await fetchImpl(endpoint, {
@@ -85,20 +142,11 @@ async function initializeEmptyRepository(
   }
   if (!response.ok) {
     const detail = safeMessage(await readError(response), options.token);
-    if (response.status === 422) {
-      try {
-        const existing = await fetchImpl(endpoint, {
-          headers: apiHeaders(options.token),
-        });
-        if (existing.ok) {
-          await existing.body?.cancel();
-          return;
-        }
-        await existing.body?.cancel();
-      } catch {
-        // Report the original initialization failure below.
-      }
-    }
+    if (
+      response.status === 422 &&
+      (await hasValidRepositorySeed(options, fetchImpl))
+    )
+      return;
     throw new Error(
       `The repository default branch could not be initialized (${response.status}).${detail ? ` ${detail}` : ""}`,
     );
@@ -135,10 +183,13 @@ export async function ensureRepository(
         `The repository ${options.owner}/${options.repo} belongs to someone else. Choose another name.`,
       );
     const empty = body.size === 0;
-    if (!options.expectExisting && !empty)
-      throw new Error(
-        `You already have a repository named "${options.repo}" with files in it. Choose another name so nothing is overwritten.`,
-      );
+    if (!options.expectExisting && !empty) {
+      const interrupted = await hasValidRepositorySeed(options, fetchImpl);
+      if (!interrupted)
+        throw new Error(
+          `You already have a repository named "${options.repo}" with files in it. Choose another name so nothing is overwritten.`,
+        );
+    }
     if (empty) await initializeEmptyRepository(options, fetchImpl);
     return { created: false };
   }
