@@ -32,6 +32,14 @@ vi.mock("./ShareRehearsal", () => ({
     <div data-testid="share-rehearsal" data-card-url={cardUrl ?? ""} />
   ),
 }));
+vi.mock("./PublishToWeb", () => ({
+  PublishToWeb: ({ disabled }: { disabled?: boolean }) => (
+    <div
+      data-testid="publish-to-web"
+      data-disabled={String(disabled ?? false)}
+    />
+  ),
+}));
 
 import { exportProject, uploadShareCard } from "./api";
 import { captureShareCard } from "./captureShareCard";

@@ -33,6 +33,7 @@ import {
   downloadMapSnapshots,
 } from "./captureSnapshots";
 import { ShareRehearsal } from "./ShareRehearsal";
+import { PublishToWeb } from "./PublishToWeb";
 
 interface Props {
   open: boolean;
@@ -115,6 +116,7 @@ export function PublishPanel({
   const [resultBuildId, setResultBuildId] = useState<string | null>(null);
   const [publicationUrl, setPublicationUrl] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
+  const [publishBusy, setPublishBusy] = useState(false);
   const [cardVersion, setCardVersion] = useState(0);
   const [busyLabel, setBusyLabel] = useState(
     "Building and validating the latest publication…",
@@ -139,6 +141,7 @@ export function PublishPanel({
     setSnippet("");
     setCardVersion(0);
     setShareBusy(false);
+    setPublishBusy(false);
   }, [project.id]);
 
   useEffect(() => {
@@ -214,6 +217,7 @@ export function PublishPanel({
   const canBuild =
     !loading &&
     !shareBusy &&
+    !publishBusy &&
     !unsaved &&
     preflightState.status === "ready" &&
     Boolean(preflight?.ready);
@@ -454,6 +458,13 @@ export function PublishPanel({
             {loading ? "Building…" : "Build publication"}
           </ActionButton>
         </section>
+
+        <PublishToWeb
+          project={project}
+          disabled={!canBuild}
+          onBusyChange={setPublishBusy}
+          onPublished={onRefreshPreflight}
+        />
 
         {cardWarning ? (
           <StatusNotice tone="warning">{cardWarning}</StatusNotice>

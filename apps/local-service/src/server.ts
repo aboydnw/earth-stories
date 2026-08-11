@@ -33,6 +33,7 @@ import { checkShareLink, decodeShareCard } from "./share-health.js";
 import { storeShareCard } from "./share-card.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { ConversionJobs } from "./conversion-jobs.js";
+import { PagesJobs } from "./pages-jobs.js";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.EARTH_STORIES_PORT ?? 4317);
@@ -286,6 +287,10 @@ export function createLocalServer(
       repositoryRoot: REPOSITORY_DIRECTORY,
     }),
   ),
+  pagesJobs = new PagesJobs(store, {
+    viewerDirectory: VIEWER_DIRECTORY,
+    withLock: withProjectPublicationLock,
+  }),
 ) {
   return createServer(async (request, response) => {
     response.setHeader("x-content-type-options", "nosniff");
@@ -479,6 +484,48 @@ export function createLocalServer(
           storeShareCard(store.projectPath(id), card),
         );
         json(response, 200, { bytes: card.byteLength });
+        return;
+      }
+
+      const publishMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/publish$/,
+      );
+      if (publishMatch && request.method === "POST") {
+        const projectId = decodeURIComponent(publishMatch[1]);
+        json(
+          response,
+          202,
+          await pagesJobs.create(
+            projectId,
+            (await readOptionalJson(request)) as {
+              repo?: unknown;
+              mapSnapshots?: unknown;
+            },
+          ),
+        );
+        return;
+      }
+      const publishRecordMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/publish-record$/,
+      );
+      if (publishRecordMatch && request.method === "GET") {
+        json(response, 200, {
+          record: await pagesJobs.record(
+            decodeURIComponent(publishRecordMatch[1]),
+          ),
+        });
+        return;
+      }
+      const publishJobMatch = url.pathname.match(
+        /^\/api\/publish-jobs\/([^/]+)$/,
+      );
+      if (publishJobMatch && request.method === "GET") {
+        const job = pagesJobs.get(decodeURIComponent(publishJobMatch[1]));
+        if (!job) {
+          json(response, 404, { error: "Publish job not found" });
+          return;
+        }
+        json(response, 200, job);
         return;
       }
 

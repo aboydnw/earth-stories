@@ -297,6 +297,78 @@ export function shareCardUrl(projectId: string, version = 0): string {
   return version ? `${path}?v=${version}` : path;
 }
 
+export type PublishStage =
+  | "signing-in"
+  | "checking"
+  | "building"
+  | "preparing-repository"
+  | "uploading"
+  | "enabling-pages"
+  | "waiting-for-site"
+  | "verifying"
+  | "done";
+
+export interface PublishJobEvent {
+  stage: PublishStage;
+  severity: "info" | "warning";
+  message: string;
+  at: string;
+}
+
+export interface PublishRecord {
+  owner: string;
+  repo: string;
+  url: string;
+  branch: string;
+  buildId: string | null;
+  publishedAt: string;
+}
+
+export interface PublishJob {
+  id: string;
+  projectId: string;
+  status: "queued" | "running" | "succeeded" | "failed";
+  stage: PublishStage;
+  events: PublishJobEvent[];
+  deviceCode: {
+    verificationUri: string;
+    userCode: string;
+    expiresInSeconds: number;
+  } | null;
+  url: string | null;
+  record: PublishRecord | null;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function startPublish(
+  projectId: string,
+  options: {
+    repo?: string;
+    mapSnapshots?: Record<string, string>;
+  } = {},
+): Promise<PublishJob> {
+  return request(`/api/projects/${encodeURIComponent(projectId)}/publish`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(options),
+  });
+}
+
+export async function getPublishJob(jobId: string): Promise<PublishJob> {
+  return request(`/api/publish-jobs/${encodeURIComponent(jobId)}`);
+}
+
+export async function getPublishRecord(
+  projectId: string,
+): Promise<PublishRecord | null> {
+  const body = await request<{ record: PublishRecord | null }>(
+    `/api/projects/${encodeURIComponent(projectId)}/publish-record`,
+  );
+  return body.record;
+}
+
 export async function checkShareLink(url: string): Promise<ShareLinkReport> {
   return request("/api/share/link-health", {
     method: "POST",
