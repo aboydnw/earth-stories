@@ -66,7 +66,11 @@ export function runProgrammaticMove(
   };
   programmatic.current = true;
   map.once("moveend", finish);
-  if (fallbackMs !== undefined) fallback = setTimeout(finish, fallbackMs);
+  if (fallbackMs !== undefined)
+    fallback = setTimeout(() => {
+      fallback = null;
+      programmatic.current = false;
+    }, fallbackMs);
   move();
   return () => {
     if (fallback !== null) clearTimeout(fallback);
