@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { platform, tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { credentialsPath, resolveToken } from "./github-auth.js";
 import type { CommandRunner } from "./command-runner.js";
@@ -8,6 +8,11 @@ import type { CommandRunner } from "./command-runner.js";
 const nowhere: CommandRunner = async () => {
   throw new Error("gh is not installed");
 };
+
+function isInside(parent: string, child: string): boolean {
+  const path = relative(parent, child);
+  return Boolean(path) && !path.startsWith("..") && !isAbsolute(path);
+}
 
 const jsonResponse = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), {
@@ -26,7 +31,10 @@ describe("credentialsPath", () => {
   it("stays outside any project directory", () => {
     const path = credentialsPath();
     expect(path).toContain(".earth-stories");
-    expect(relative(process.cwd(), path)).toMatch(/^\.\.(?:[\\/]|$)/);
+    expect(isInside(process.cwd(), path)).toBe(false);
+    expect(isInside(join(process.cwd(), "earth-stories-projects"), path)).toBe(
+      false,
+    );
   });
 });
 
