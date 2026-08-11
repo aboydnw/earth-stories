@@ -22,7 +22,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "storybook": "storybook dev -p 6006",
-    "storybook:build": "storybook build"
+    "storybook:build": "storybook build",
+    "test:publishing:no-git": "node scripts/test-publishing-no-git.mjs"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "^10.5.6",
