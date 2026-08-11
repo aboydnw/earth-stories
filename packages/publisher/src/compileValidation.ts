@@ -51,7 +51,9 @@ export function chapterCompileIssues(
       code: "missing-source",
       chapterId: chapter.id,
       resourceId: sourceId ?? undefined,
-      message: `Chapter "${chapter.title}" references missing source ${sourceId}`,
+      message: sourceId
+        ? `Chapter "${chapter.title}" references missing source ${sourceId}`
+        : `Chapter "${chapter.title}" has no source selected`,
     });
     return issues;
   }
@@ -79,7 +81,7 @@ export function chapterCompileIssues(
       code: "incompatible-source",
       chapterId: chapter.id,
       resourceId: source.id,
-      message: `Map chapter "${chapter.title}" requires a geospatial source`,
+      message: `${chapter.type[0]!.toUpperCase()}${chapter.type.slice(1)} chapter "${chapter.title}" requires a geospatial source`,
     });
   return issues;
 }
@@ -107,6 +109,7 @@ export function sourceCompileIssue(
     source.kind === "pmtiles" ||
     source.kind === "geoparquet" ||
     source.kind === "cog" ||
+    source.kind === "xyz" ||
     source.kind === "zarr" ||
     source.kind === "trajectory" ||
     source.kind === "copc"

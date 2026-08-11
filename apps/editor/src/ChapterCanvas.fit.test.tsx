@@ -12,6 +12,12 @@ vi.mock("@earth-stories/viewer", async () => {
   const React = await import("react");
   return {
     StoryViewer: () => <div>Story preview</div>,
+    usesLegacyAutomaticFit: (value: Camera) =>
+      value.center[0] === 0 &&
+      value.center[1] === 20 &&
+      value.zoom === 1.5 &&
+      value.bearing === 0 &&
+      value.pitch === 0,
     FocusedChapterViewer: (props: {
       chapterId: string;
       fitRequestToken?: string;

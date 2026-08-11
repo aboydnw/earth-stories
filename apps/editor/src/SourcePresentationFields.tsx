@@ -174,8 +174,11 @@ export function SourcePresentationFields({
                   : [];
                 if (
                   entries.some(
-                    ([key, color]) =>
-                      !key || !color || !/^#[0-9a-f]{6}$/i.test(color),
+                    (entry) =>
+                      entry.length !== 2 ||
+                      !entry[0] ||
+                      !entry[1] ||
+                      !/^#[0-9a-f]{6}$/i.test(entry[1]),
                   )
                 ) {
                   setCategoryError("Use value=#rrggbb pairs.");

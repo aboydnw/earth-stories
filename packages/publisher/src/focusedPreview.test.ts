@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   defaultSourceProvenance,
+  projectSourceSchema,
   storyProjectSchema,
 } from "@earth-stories/story-schema";
 import { compileFocusedChapter } from "./focusedPreview.js";
@@ -68,5 +69,29 @@ describe("compileFocusedChapter", () => {
     if (invalid.status !== "error") throw new Error("Expected compile error");
     expect(invalid.code).toBe("compile-failed");
     expect(invalid.message).toContain("references missing source");
+  });
+
+  it("includes every overlay source used by the focused chapter", async () => {
+    const project = await fixture();
+    const selected = project.chapters.find(({ id }) => id === "sites");
+    if (!selected || selected.type !== "map")
+      throw new Error("Fixture map chapter is missing");
+    const overlay = projectSourceSchema.parse({
+      ...project.sources[0],
+      id: "flood-overlay",
+      label: "Flood overlay",
+      path: "data/flood-overlay.geojson",
+    });
+    project.sources.push(overlay);
+    selected.overlaySourceIds = [overlay.id];
+
+    const result = compileFocusedChapter(project, selected.id);
+
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") throw new Error("Expected focused preview");
+    expect(result.manifest.assets.map(({ id }) => id)).toEqual([
+      "survey-sites",
+      "flood-overlay",
+    ]);
   });
 });

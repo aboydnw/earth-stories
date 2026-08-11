@@ -49,6 +49,16 @@ describe("resolvePreviewManifest", () => {
       sizeBytes: null,
       provenance: defaultSourceProvenance,
     });
+    project.sources.push({
+      id: "rain",
+      kind: "cog",
+      label: "Rain",
+      locator: "https://example.org/rain.tif",
+      delivery: "connected",
+      attribution: null,
+      sizeBytes: null,
+      provenance: defaultSourceProvenance,
+    });
 
     const resolved = resolvePreviewManifest(project, compileProject(project));
 
@@ -58,5 +68,22 @@ describe("resolvePreviewManifest", () => {
     expect(resolved.assets.find(({ id }) => id === "time")?.href).toBe(
       "https://example.org/time.zarr",
     );
+    expect(resolved.assets.find(({ id }) => id === "rain")?.href).toBe(
+      "/api/projects/field-notes/sources/rain/content",
+    );
+  });
+
+  it("rejects traversal segments in included source paths", async () => {
+    const project = storyProjectSchema.parse(
+      JSON.parse(await readFile(fixturePath, "utf8")) as unknown,
+    );
+    const survey = project.sources.find(({ id }) => id === "survey-sites");
+    if (!survey || survey.kind !== "local-geojson")
+      throw new Error("Fixture local source is missing");
+    survey.path = "../private.geojson";
+
+    expect(() =>
+      resolvePreviewManifest(project, compileProject(project)),
+    ).toThrow(/path traversal/i);
   });
 });

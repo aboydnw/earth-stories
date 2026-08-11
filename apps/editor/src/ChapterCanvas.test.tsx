@@ -97,4 +97,30 @@ describe("ChapterCanvas", () => {
       ).disabled,
     ).toBe(true);
   });
+
+  it("reports a non-default saved camera as a ready view", () => {
+    const mapChapter: ProjectChapter = {
+      id: "map",
+      type: "map",
+      title: "Map",
+      narrative: "",
+      sourceId: "source",
+      overlaySourceIds: [],
+      camera: { center: [-76, 39], zoom: 8, bearing: 10, pitch: 20 },
+    };
+    render(
+      <ChapterCanvas
+        mode="chapter"
+        onModeChange={() => undefined}
+        selectedChapter={mapChapter}
+        focusedManifest={manifest}
+        fullManifest={manifest}
+        savedCamera={mapChapter.camera}
+        onCameraCommit={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("View ready")).toBeTruthy();
+    expect(screen.queryByText("Using automatic fit")).toBeNull();
+  });
 });

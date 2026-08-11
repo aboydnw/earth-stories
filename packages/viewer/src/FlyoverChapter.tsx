@@ -31,19 +31,13 @@ export function FlyoverChapter({
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(0);
-  const [activeCamera, setActiveCamera] = useState<Camera>(
-    chapter.keyframes[0]!,
-  );
   useEffect(() => {
     setProgress(0);
   }, [chapter.id]);
-  useEffect(() => {
-    setActiveCamera(
-      cameraOverride ??
-        interpolateFlyover(chapter.keyframes, Math.min(1, progress)) ??
-        chapter.keyframes[0]!,
-    );
-  }, [cameraOverride, chapter.keyframes, progress]);
+  const activeCamera: Camera =
+    cameraOverride ??
+    interpolateFlyover(chapter.keyframes, Math.min(1, progress)) ??
+    chapter.keyframes[0]!;
   const update = useCallback((nextProgress: number) => {
     setProgress((current) => {
       const quantized = Math.round(nextProgress * 1_000) / 1_000;
@@ -55,7 +49,7 @@ export function FlyoverChapter({
     chapter.keyframes.length - 1,
     Math.floor(progress * (chapter.keyframes.length - 1)),
   );
-  const caption = chapter.keyframes[activeIndex]?.caption.trim();
+  const caption = chapter.keyframes[activeIndex]?.caption?.trim();
   const mapChapter = {
     ...chapter,
     type: "map" as const,

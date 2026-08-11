@@ -1,8 +1,8 @@
 import type {
   PublicationManifest,
-  ProjectChapter,
   StoryProject,
 } from "@earth-stories/story-schema";
+import { referencedSourceIds } from "./chapterSources.js";
 import { compileProject } from "./compile.js";
 import { projectCompileIssues } from "./compileValidation.js";
 import { shareDescription } from "./share.js";
@@ -27,14 +27,6 @@ export interface AuthoringReadiness {
   manifest: PublicationManifest | null;
   findings: ReadinessFinding[];
   stages: Record<ReadinessArea, ReadinessStageState>;
-}
-
-function referencedSourceIds(chapter: ProjectChapter): string[] {
-  if (chapter.type === "prose" || chapter.type === "video") return [];
-  return [
-    ...(chapter.sourceId ? [chapter.sourceId] : []),
-    ...("overlaySourceIds" in chapter ? (chapter.overlaySourceIds ?? []) : []),
-  ];
 }
 
 function ageInDays(value: string, now: Date): number | null {
@@ -163,7 +155,7 @@ export function deriveAuthoringReadiness(
   }
 
   const compileIssues = projectCompileIssues(project);
-  for (const issue of compileIssues) {
+  for (const [index, issue] of compileIssues.entries()) {
     if (issue.code === "invalid-source")
       findings.push({
         id: `source-publication-${issue.resourceId}`,
@@ -173,7 +165,7 @@ export function deriveAuthoringReadiness(
         message: issue.message,
         resolution: "Choose a compatible publication delivery or source URL.",
       });
-    if (issue.code === "incompatible-overlay")
+    else if (issue.code === "incompatible-overlay")
       findings.push({
         id: `chapter-overlay-kind-${issue.chapterId}-${issue.resourceId}`,
         area: "data",
@@ -182,6 +174,20 @@ export function deriveAuthoringReadiness(
         resourceId: issue.resourceId,
         message: issue.message,
         resolution: "Choose a geospatial source for this overlay.",
+      });
+    else if (
+      !["missing-source", "missing-overlay", "incompatible-source"].includes(
+        issue.code,
+      )
+    )
+      findings.push({
+        id: `compile-${issue.code}-${issue.chapterId ?? issue.resourceId ?? index}`,
+        area: issue.resourceId ? "data" : "preview",
+        severity: "error",
+        chapterId: issue.chapterId,
+        resourceId: issue.resourceId,
+        message: issue.message,
+        resolution: "Repair the referenced chapter or source before exporting.",
       });
   }
 

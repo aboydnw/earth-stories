@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type {
-  PublicationAsset,
-  PublicationChapter,
-} from "@earth-stories/story-schema";
+import type { PublicationChapter } from "@earth-stories/story-schema";
+import { publicationAsset } from "./testFixtures.js";
 
 vi.mock("react-map-gl/maplibre", async () => {
   const React = await import("react");
@@ -47,12 +45,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const asset = {
+const asset = publicationAsset({
   id: "geo",
   kind: "geojson",
   label: "GeoJSON",
   href: "data/geo.json",
-  attribution: null,
+  delivery: "included",
   presentation: {
     opacity: 1,
     color: "#000000",
@@ -69,7 +67,7 @@ const asset = {
     filterProperty: null,
     filterValue: null,
   },
-} as PublicationAsset;
+});
 const chapter = {
   id: "map",
   type: "map",
@@ -117,7 +115,9 @@ describe("MapChapter", () => {
         onFitAvailabilityChange={onFitAvailabilityChange}
       />,
     );
-    await Promise.resolve();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(fetchMock).toHaveBeenCalledOnce();
 
     onFitAvailabilityChange.mockClear();

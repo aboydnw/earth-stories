@@ -43,8 +43,8 @@ export function useMapCamera({
     if (applied.current === signature) return;
     applied.current = signature;
     const command = cameraCommand(camera, transition, prefersReducedMotion());
+    map.stop();
     return runProgrammaticMove(map, programmatic, () => {
-      map.stop();
       map[command.method](command.options);
     });
   }, [

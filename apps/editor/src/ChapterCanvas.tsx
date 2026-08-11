@@ -4,17 +4,17 @@ import type {
   ProjectChapter,
   PublicationManifest,
 } from "@earth-stories/story-schema";
-import { FocusedChapterViewer, StoryViewer } from "@earth-stories/viewer";
+import { LEGACY_DEFAULT_CAMERA } from "@earth-stories/story-schema";
+import {
+  FocusedChapterViewer,
+  StoryViewer,
+  usesLegacyAutomaticFit,
+} from "@earth-stories/viewer";
 import { useChapterCameraDraft } from "./useChapterCameraDraft";
 
 export type CanvasMode = "chapter" | "story";
 
-const fallbackCamera: Camera = {
-  center: [0, 20],
-  zoom: 1.5,
-  bearing: 0,
-  pitch: 0,
-};
+const fallbackCamera: Camera = LEGACY_DEFAULT_CAMERA;
 
 export function ChapterCanvas({
   mode,
@@ -61,13 +61,7 @@ export function ChapterCanvas({
   const mapBound =
     selectedChapter?.type === "map" || selectedChapter?.type === "scrolly";
   const interactiveMap = mapBound || selectedChapter?.type === "flyover";
-  const automaticFit =
-    mapBound &&
-    chapterCamera.center[0] === 0 &&
-    chapterCamera.center[1] === 20 &&
-    chapterCamera.zoom === 1.5 &&
-    chapterCamera.bearing === 0 &&
-    chapterCamera.pitch === 0;
+  const automaticFit = mapBound && usesLegacyAutomaticFit(chapterCamera);
   const fitScope = mapBound
     ? `${selectedChapter.id}:${selectedChapter.sourceId}`
     : "";

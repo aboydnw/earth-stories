@@ -43,6 +43,14 @@ export function resolvePreviewManifest(
           href: `/api/projects/${encodeURIComponent(project.id)}/sources/${encodeURIComponent(source.id)}/content`,
         };
       if (asset.delivery !== "included" || !path) return asset;
+      const pathSegments = path.split("/");
+      if (
+        !/^https?:\/\//i.test(path) &&
+        pathSegments.some((segment) => segment === "." || segment === "..")
+      )
+        throw new Error(
+          `Source "${source.label}" contains a path traversal segment.`,
+        );
       return {
         ...asset,
         href: /^https?:\/\//i.test(path)

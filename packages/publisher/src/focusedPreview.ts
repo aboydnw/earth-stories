@@ -1,9 +1,9 @@
 import type {
   PublicationManifest,
-  ProjectChapter,
   StoryProject,
 } from "@earth-stories/story-schema";
 import { compileProject } from "./compile.js";
+import { referencedSourceIds } from "./chapterSources.js";
 
 export type FocusedPreviewResult =
   | { status: "ready"; manifest: PublicationManifest }
@@ -12,15 +12,6 @@ export type FocusedPreviewResult =
       code: "missing-chapter" | "compile-failed";
       message: string;
     };
-
-function referencedSourceIds(chapter: ProjectChapter) {
-  if (chapter.type === "prose" || chapter.type === "video")
-    return new Set<string>();
-  return new Set([
-    ...(chapter.sourceId ? [chapter.sourceId] : []),
-    ...("overlaySourceIds" in chapter ? (chapter.overlaySourceIds ?? []) : []),
-  ]);
-}
 
 export function compileFocusedChapter(
   project: StoryProject,
@@ -34,7 +25,7 @@ export function compileFocusedChapter(
       message: "The selected chapter is no longer available.",
     };
 
-  const sourceIds = referencedSourceIds(chapter);
+  const sourceIds = new Set(referencedSourceIds(chapter));
   const focusedProject: StoryProject = {
     ...project,
     chapters: [structuredClone(chapter)],

@@ -42,7 +42,16 @@ describe("ChapterRail", () => {
         chapters={chapters}
         activeChapterId="intro"
         mode="chapter"
-        readiness={{ map: { tone: "error", label: "Choose data" } }}
+        readiness={{
+          map: {
+            tone: "error",
+            label: "Choose data",
+            findings: [
+              { message: "The selected source is missing." },
+              { message: "Choose an existing source." },
+            ],
+          },
+        }}
         onWorkspace={() => undefined}
         onStory={() => undefined}
         onStoryData={() => undefined}
@@ -55,9 +64,15 @@ describe("ChapterRail", () => {
       />,
     );
 
-    await user.click(
-      screen.getByRole("button", { name: /changing shoreline/i }),
+    const chapterLink = screen.getByRole("button", {
+      name: /changing shoreline/i,
+    });
+    const descriptionId = chapterLink.getAttribute("aria-describedby");
+    expect(descriptionId).toBeTruthy();
+    expect(document.getElementById(descriptionId!)?.textContent).toContain(
+      "The selected source is missing. Choose an existing source.",
     );
+    await user.click(chapterLink);
 
     expect(onSelectChapter).toHaveBeenCalledWith("map");
     expect(onRequestRegion).toHaveBeenCalledWith("edit");

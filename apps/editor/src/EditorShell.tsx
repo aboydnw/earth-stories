@@ -70,6 +70,7 @@ export function EditorShell({
             className={`chapter-editor-shell__panel chapter-editor-shell__panel--${region}`}
             id={`editor-region-${region}`}
             role="tabpanel"
+            tabIndex={0}
             aria-labelledby={`editor-tab-${region}`}
           >
             {content[region]}

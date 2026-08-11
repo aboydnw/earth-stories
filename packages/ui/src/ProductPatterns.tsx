@@ -352,11 +352,15 @@ export function CollapsibleSection({
           justifyContent="space-between"
           textAlign="start"
         >
-          <Box minW="0">
-            <Flex align="center" gap="2" wrap="wrap">
-              <Text fontWeight="semibold">{title}</Text>
+          <Box as="span" display="block" minW="0">
+            <Flex as="span" display="flex" align="center" gap="2" wrap="wrap">
+              <Text as="span" display="block" fontWeight="semibold">
+                {title}
+              </Text>
               {issue ? (
                 <Text
+                  as="span"
+                  display="block"
                   color="status.warning.fg"
                   fontSize="xs"
                   fontWeight="semibold"
@@ -366,12 +370,24 @@ export function CollapsibleSection({
               ) : null}
             </Flex>
             {description ? (
-              <Text color="fg.muted" fontSize="sm" mt="1">
+              <Text
+                as="span"
+                display="block"
+                color="fg.muted"
+                fontSize="sm"
+                mt="1"
+              >
                 {description}
               </Text>
             ) : null}
             {summary ? (
-              <Text color="fg.muted" fontSize="xs" mt="1">
+              <Text
+                as="span"
+                display="block"
+                color="fg.muted"
+                fontSize="xs"
+                mt="1"
+              >
                 {summary}
               </Text>
             ) : null}

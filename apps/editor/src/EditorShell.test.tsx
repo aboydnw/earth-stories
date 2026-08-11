@@ -55,8 +55,8 @@ describe("EditorShell", () => {
     expect(screen.queryByText("Chapter rail")).toBeNull();
     expect(screen.getByText("Map canvas")).toBeTruthy();
     expect(screen.queryByText("Chapter fields")).toBeNull();
-    expect(screen.getByRole("tabpanel").getAttribute("id")).toBe(
-      "editor-region-canvas",
-    );
+    const panel = screen.getByRole("tabpanel");
+    expect(panel.getAttribute("id")).toBe("editor-region-canvas");
+    expect(panel.getAttribute("tabindex")).toBe("0");
   });
 });

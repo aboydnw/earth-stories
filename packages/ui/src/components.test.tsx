@@ -154,7 +154,10 @@ describe("shared product controls", () => {
         <TextInput aria-label="Layer label" defaultValue="Flood extent" />
       </CollapsibleSection>,
     );
-    const trigger = screen.getByRole("button", { name: /Layers/ });
+    const trigger = screen.getByRole("button", {
+      name: "Layers Needs attention Sources drawn above the main map 2 overlays",
+    });
+    expect(trigger.querySelector("div, p")).toBeNull();
     expect(trigger.textContent).toContain("2 overlays");
     expect(trigger.textContent).toContain("Needs attention");
     expect(screen.getByText("Sources drawn above the main map")).toBeTruthy();
@@ -164,8 +167,9 @@ describe("shared product controls", () => {
       screen.getByRole("textbox", { name: "Layer label" }),
       "Observed flood",
     );
-    await userEvent.click(trigger);
-    await userEvent.click(trigger);
+    trigger.focus();
+    await userEvent.keyboard(" ");
+    await userEvent.keyboard("{Enter}");
 
     expect(
       (screen.getByRole("textbox", { name: "Layer label" }) as HTMLInputElement)

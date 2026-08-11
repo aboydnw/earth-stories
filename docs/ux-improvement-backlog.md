@@ -109,7 +109,7 @@ Propose an editable chapter outline, map states, captions, evidence gaps, and
 transitions for scene-by-scene approval in a reader-faithful preview. Keep all
 suggestions transparent and reversible.
 
-### Shipped workflow extensions
+## Shipped workflow extensions
 
 - Overlay editing lists selected layers first and opens a focused picker for
   additions.

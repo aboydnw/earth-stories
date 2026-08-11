@@ -17,6 +17,7 @@ import { CopcOverlay } from "./CopcOverlay.js";
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   finishMove = undefined;
   flyToPointCloud.mockClear();
 });
@@ -52,5 +53,43 @@ describe("CopcOverlay", () => {
     await waitFor(() => expect(flyToPointCloud).toHaveBeenCalledWith("cloud"));
     act(() => finishMove?.());
     expect(onFitCameraChange).toHaveBeenCalledOnce();
+  });
+
+  it("marks the overlay ready without committing an intermediate fallback camera", async () => {
+    vi.useFakeTimers();
+    const onReady = vi.fn();
+    const onFitCameraChange = vi.fn();
+    const map = {
+      addControl: vi.fn(),
+      removeControl: vi.fn(),
+      once: vi.fn((_event: string, handler: () => void) => {
+        finishMove = handler;
+      }),
+      off: vi.fn(),
+    };
+    render(
+      <CopcOverlay
+        asset={
+          {
+            id: "cloud",
+            kind: "copc",
+            href: "data/cloud.copc.laz",
+            copc: { colorMode: "elevation", pointSize: 2 },
+          } as PublicationAsset
+        }
+        map={map as never}
+        onError={() => undefined}
+        onReady={onReady}
+        autoFit
+        onFitCameraChange={onFitCameraChange}
+      />,
+    );
+
+    await act(async () => undefined);
+    expect(flyToPointCloud).toHaveBeenCalledWith("cloud");
+    act(() => vi.advanceTimersByTime(1_250));
+    expect(onReady).toHaveBeenCalledOnce();
+    expect(onFitCameraChange).not.toHaveBeenCalled();
+    expect(map.off).toHaveBeenCalledWith("moveend", finishMove);
   });
 });

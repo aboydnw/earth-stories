@@ -8,7 +8,7 @@ import {
   TextT,
   VideoCamera,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 export function ChapterAddMenu({
   open,
@@ -40,6 +40,7 @@ export function ChapterAddMenu({
   onAddDataForType?: (type: "map" | "scrolly" | "image" | "chart") => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreId = useId();
   useEffect(() => {
     if (!open) setMoreOpen(false);
   }, [open]);
@@ -110,6 +111,7 @@ export function ChapterAddMenu({
                 ? "Scroll through a locked map scene"
                 : "Add map data for this chapter"
             }
+            disabled={!canAddMap && !onAddDataForType}
             onClick={() =>
               canAddMap ? onAddScrolly() : onAddDataForType?.("scrolly")
             }
@@ -118,8 +120,11 @@ export function ChapterAddMenu({
             icon={<MapTrifold size={17} />}
             title="Map"
             description={
-              canAddMap ? "Interactive map and data" : "Add map data first"
+              canAddMap
+                ? "Interactive map and data"
+                : "Add map data for this chapter"
             }
+            disabled={!canAddMap && !onAddDataForType}
             onClick={() => (canAddMap ? onAddMap() : onAddDataForType?.("map"))}
           />
           <MenuItem
@@ -130,6 +135,7 @@ export function ChapterAddMenu({
                 ? "Imported image with caption"
                 : "Import an image first"
             }
+            disabled={!canAddImage && !onAddDataForType}
             onClick={() =>
               canAddImage ? onAddImage() : onAddDataForType?.("image")
             }
@@ -138,13 +144,17 @@ export function ChapterAddMenu({
             icon={<CaretDown size={17} />}
             title="More chapter types"
             description="Video, chart, and flyover"
+            id={`${moreId}-trigger`}
+            ariaExpanded={moreOpen}
+            ariaControls={`${moreId}-group`}
             onClick={() => setMoreOpen((value) => !value)}
           />
           {moreOpen ? (
             <div
               className="chapter-add__specialist"
               role="group"
-              aria-label="More chapter types"
+              id={`${moreId}-group`}
+              aria-labelledby={`${moreId}-trigger`}
             >
               <MenuItem
                 icon={<VideoCamera size={17} />}
@@ -160,6 +170,7 @@ export function ChapterAddMenu({
                     ? "Visualize imported CSV data"
                     : "Add CSV data for this chapter"
                 }
+                disabled={!canAddChart && !onAddDataForType}
                 onClick={() =>
                   canAddChart ? onAddChart() : onAddDataForType?.("chart")
                 }
@@ -183,16 +194,30 @@ function MenuItem({
   title,
   description,
   disabled,
+  id,
+  ariaExpanded,
+  ariaControls,
   onClick,
 }: {
   icon: ReactNode;
   title: string;
   description: string;
   disabled?: boolean;
+  id?: string;
+  ariaExpanded?: boolean;
+  ariaControls?: string;
   onClick: () => void;
 }) {
   return (
-    <button role="menuitem" type="button" disabled={disabled} onClick={onClick}>
+    <button
+      role="menuitem"
+      type="button"
+      id={id}
+      disabled={disabled}
+      aria-expanded={ariaExpanded}
+      aria-controls={ariaControls}
+      onClick={onClick}
+    >
       {icon}
       <span>
         <strong>{title}</strong>

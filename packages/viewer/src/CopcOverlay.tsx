@@ -46,20 +46,32 @@ export function CopcOverlay({
           onReady?.();
           return;
         }
-        const finishReady = () => {
+        let ready = false;
+        const clearReadyWait = () => {
           if (readyFallback !== null) window.clearTimeout(readyFallback);
           readyFallback = null;
           if (moveEndHandler) map.off("moveend", moveEndHandler);
           moveEndHandler = null;
+        };
+        const finishMove = () => {
+          if (ready) return;
+          ready = true;
+          clearReadyWait();
           if (active) {
             onReady?.();
             onFitCameraChange?.();
           }
         };
-        moveEndHandler = finishReady;
+        const finishReadyFallback = () => {
+          if (ready) return;
+          ready = true;
+          clearReadyWait();
+          if (active) onReady?.();
+        };
+        moveEndHandler = finishMove;
         map.once("moveend", moveEndHandler);
         control.flyToPointCloud(pointCloud.id);
-        readyFallback = window.setTimeout(finishReady, 1_250);
+        readyFallback = window.setTimeout(finishReadyFallback, 1_250);
       })
       .catch((cause: unknown) => {
         if (!active) {

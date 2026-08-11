@@ -5,6 +5,7 @@ import type {
   PublicationAsset,
   PublicationChapter,
 } from "@earth-stories/story-schema";
+import { LEGACY_DEFAULT_CAMERA } from "@earth-stories/story-schema";
 import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
 import { VisualizationProvenance } from "./VisualizationProvenance.js";
 
@@ -23,11 +24,11 @@ export type ChapterComposition =
 
 export function usesLegacyAutomaticFit(camera: Camera) {
   return (
-    camera.center[0] === 0 &&
-    camera.center[1] === 20 &&
-    camera.zoom === 1.5 &&
-    camera.bearing === 0 &&
-    camera.pitch === 0
+    camera.center[0] === LEGACY_DEFAULT_CAMERA.center[0] &&
+    camera.center[1] === LEGACY_DEFAULT_CAMERA.center[1] &&
+    camera.zoom === LEGACY_DEFAULT_CAMERA.zoom &&
+    camera.bearing === LEGACY_DEFAULT_CAMERA.bearing &&
+    camera.pitch === LEGACY_DEFAULT_CAMERA.pitch
   );
 }
 
@@ -137,7 +138,7 @@ export function PublicationChapterRenderer({
       ) : null}
       {chapter.type === "flyover" ? (
         <StoryMapHydrationBoundary
-          eager={snapshotMode}
+          eager={snapshotMode || composition === "authoring-map"}
           fallback={
             <div className="story-map story-map--loading story-map--flyover-placeholder">
               Preparing flyover…

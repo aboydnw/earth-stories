@@ -504,6 +504,7 @@ export function MapChapter({
               });
             }
           : undefined,
+        1_250,
       );
     },
     [programmaticCamera],

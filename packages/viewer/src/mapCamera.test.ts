@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Camera } from "@earth-stories/story-schema";
 import {
   cameraCommand,
@@ -15,6 +15,7 @@ const camera: Camera = {
 };
 
 describe("cameraCommand", () => {
+  afterEach(() => vi.useRealTimers());
   it("uses a fixed fly-to duration", () => {
     expect(cameraCommand(camera, "fly-to", false)).toEqual({
       method: "flyTo",
@@ -42,7 +43,7 @@ describe("cameraCommand", () => {
         order.push("listen");
         finish = listener;
       },
-      off: () => undefined,
+      off: vi.fn(),
     };
     const programmatic = { current: false };
 
@@ -62,6 +63,28 @@ describe("cameraCommand", () => {
     expect(programmatic.current).toBe(false);
     expect(order).toEqual(["listen", "move", "complete"]);
     cleanup();
+    expect(map.off).toHaveBeenCalledWith("moveend", finish);
+    expect(programmatic.current).toBe(false);
+  });
+
+  it("clears a programmatic move with an optional fallback timeout", () => {
+    vi.useFakeTimers();
+    let finish: (() => void) | null = null;
+    const map = {
+      once: vi.fn((_event: "moveend", listener: () => void) => {
+        finish = listener;
+      }),
+      off: vi.fn(),
+    };
+    const programmatic = { current: false };
+    const onComplete = vi.fn();
+
+    runProgrammaticMove(map, programmatic, () => undefined, onComplete, 1_250);
+    vi.advanceTimersByTime(1_250);
+
+    expect(programmatic.current).toBe(false);
+    expect(map.off).toHaveBeenCalledWith("moveend", finish);
+    expect(onComplete).toHaveBeenCalledOnce();
   });
 
   it("separates interaction from following camera props with controlled compatibility", () => {

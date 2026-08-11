@@ -73,6 +73,13 @@ export const cameraSchema = z.object({
   buildings: z.boolean().optional(),
 });
 
+export const LEGACY_DEFAULT_CAMERA: Camera = {
+  center: [0, 20],
+  zoom: 1.5,
+  bearing: 0,
+  pitch: 0,
+};
+
 export const flyoverKeyframeSchema = cameraSchema.extend({
   caption: z.string().default(""),
 });

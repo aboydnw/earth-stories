@@ -83,6 +83,9 @@ export function ChapterRail({
           const status = readiness[chapter.id];
           const StatusIcon =
             status?.tone === "ready" ? CheckCircle : WarningCircle;
+          const readinessDescriptionId = status?.findings?.length
+            ? `chapter-readiness-${chapter.id}`
+            : undefined;
           return (
             <div
               className={active ? "chapter-item is-active" : "chapter-item"}
@@ -92,6 +95,7 @@ export function ChapterRail({
                 type="button"
                 className="chapter-link"
                 aria-current={active ? "page" : undefined}
+                aria-describedby={readinessDescriptionId}
                 onClick={() => {
                   onSelectChapter(chapter.id);
                   onRequestRegion("edit");
@@ -109,6 +113,16 @@ export function ChapterRail({
                       .join("\n")}
                   >
                     <StatusIcon size={12} aria-hidden="true" /> {status.label}
+                    {readinessDescriptionId ? (
+                      <span
+                        className="chapter-item__readiness-detail"
+                        id={readinessDescriptionId}
+                      >
+                        {status
+                          .findings!.map(({ message }) => message)
+                          .join(" ")}
+                      </span>
+                    ) : null}
                   </small>
                 ) : null}
               </button>

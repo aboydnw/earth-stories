@@ -7,7 +7,7 @@ import { ChapterAddMenu } from "./ChapterAddMenu";
 afterEach(cleanup);
 
 describe("ChapterAddMenu", () => {
-  it("supports arrow navigation, disabled prerequisites, and selection", async () => {
+  it("supports arrow navigation, the nested group, and selection", async () => {
     const addProse = vi.fn();
     const toggle = vi.fn();
     render(
@@ -37,7 +37,15 @@ describe("ChapterAddMenu", () => {
       screen.getByRole("menuitem", { name: /more chapter types/i }),
     );
     expect(screen.queryByRole("menuitem", { name: /^video/i })).toBeNull();
+    expect(
+      screen.getByRole("menuitem", { name: /^map/i }).hasAttribute("disabled"),
+    ).toBe(true);
+    const more = screen.getByRole("menuitem", {
+      name: /more chapter types/i,
+    });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
     await userEvent.keyboard("{Enter}");
+    expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("menuitem", { name: /^flyover/i })).toBeTruthy();
     await userEvent.keyboard("{Home}{Enter}");
     expect(addProse).toHaveBeenCalledOnce();

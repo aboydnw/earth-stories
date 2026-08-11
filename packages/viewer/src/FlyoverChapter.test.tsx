@@ -107,4 +107,24 @@ describe("FlyoverChapter", () => {
       previewZoom,
     );
   });
+
+  it("accepts legacy keyframes without captions", () => {
+    const legacy = {
+      ...chapter,
+      keyframes: chapter.keyframes.map(
+        ({ caption: _caption, ...camera }) => camera,
+      ),
+    } as unknown as Extract<PublicationChapter, { type: "flyover" }>;
+
+    expect(() =>
+      render(
+        <FlyoverChapter
+          chapter={legacy}
+          asset={null}
+          overlayAssets={[]}
+          basemapStyle="https://example.com/style.json"
+        />,
+      ),
+    ).not.toThrow();
+  });
 });

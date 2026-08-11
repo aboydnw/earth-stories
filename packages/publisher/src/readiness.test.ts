@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  projectSourceSchema,
   storyProjectSchema,
   type StoryProject,
 } from "@earth-stories/story-schema";
@@ -172,12 +173,14 @@ describe("deriveAuthoringReadiness", () => {
     );
     expect(local.findings.some(({ id }) => id === "compile")).toBe(false);
 
-    project.sources[0] = {
-      ...project.sources[0]!,
+    project.sources[0] = projectSourceSchema.parse({
+      id: "survey-sites",
       kind: "cog",
+      label: "Survey sites",
       locator: "https://localhost/private.tif",
       delivery: "connected",
-    };
+      provenance: project.sources[0]!.provenance,
+    });
     const remote = deriveAuthoringReadiness(project);
     expect(remote.findings).toContainEqual(
       expect.objectContaining({
