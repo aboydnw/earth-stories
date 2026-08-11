@@ -6,6 +6,7 @@ import {
   type ConversionOperation,
   type StoryProject,
 } from "@earth-stories/story-schema";
+import type { ReadinessArea } from "@earth-stories/publisher/readiness";
 
 export interface ProjectSummary {
   id: string;
@@ -24,7 +25,7 @@ export interface ImportedAsset {
 }
 export interface PreflightIssue {
   id: string;
-  area: "story" | "chapters" | "data" | "preview" | "publish";
+  area: ReadinessArea;
   severity: "error" | "warning" | "info";
   message: string;
   resolution?: string;

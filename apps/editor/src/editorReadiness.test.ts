@@ -154,6 +154,55 @@ describe("editor readiness guidance", () => {
     );
   });
 
+  it("renders a sharing stage driven by sharing findings without holding publish back", () => {
+    const stages = workflowStages(readiness(), {
+      previewReviewed: true,
+      preflight: {
+        ...idle,
+        status: "ready",
+        result: {
+          ready: true,
+          issues: [
+            {
+              id: "share-card",
+              area: "sharing",
+              severity: "warning",
+              message: "This story has no usable link preview image.",
+            },
+          ],
+          projectId: "p",
+          buildId: "b",
+          estimatedIncludedBytes: 0,
+          includedAssets: 0,
+          connectedAssets: 0,
+          profile: "connected",
+        },
+      },
+    });
+    expect(stages.map(({ id }) => id)).toEqual([
+      "story",
+      "chapters",
+      "data",
+      "preview",
+      "publish",
+      "sharing",
+    ]);
+    expect(stages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "publish",
+          state: "complete",
+          description: "Ready",
+        }),
+        expect.objectContaining({
+          id: "sharing",
+          state: "current",
+          description: "Needs review",
+        }),
+      ]),
+    );
+  });
+
   it("routes current server blockers before warnings and publish", () => {
     expect(
       action({

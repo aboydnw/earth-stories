@@ -450,10 +450,13 @@ export function createLocalServer(
       );
       if (shareCardMatch && request.method === "POST") {
         const id = decodeURIComponent(shareCardMatch[1]);
+        await store.read(id).catch(() => {
+          throw new Error(`Project "${id}" was not found`);
+        });
         const body = (await readJson(request, MAX_SHARE_CARD_BODY_BYTES)) as {
           image?: unknown;
-        };
-        const card = decodeShareCard(body.image);
+        } | null;
+        const card = decodeShareCard(body?.image);
         await writeFile(
           join(store.projectPath(id), SHARE_CARD_SOURCE_FILENAME),
           card,

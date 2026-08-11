@@ -1,4 +1,9 @@
-import { authorizedFetch, isValidPng } from "@earth-stories/publisher";
+import {
+  authorizedFetch,
+  isPrivateNetworkHost,
+  isValidPng,
+  withHttpScheme,
+} from "@earth-stories/publisher";
 
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
 const MAX_CARD_BYTES = 5 * 1024 * 1024;
@@ -35,7 +40,7 @@ export function decodeShareCard(value: unknown): Buffer {
     /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/,
   )?.[1];
   if (!encoded) throw new Error("Send the share card as a PNG data URL");
-  if (encoded.length > Math.ceil((MAX_CARD_BYTES * 4) / 3))
+  if (encoded.length > 4 * Math.ceil(MAX_CARD_BYTES / 3))
     throw new Error("The share card is larger than 5 MB");
   const buffer = Buffer.from(encoded, "base64");
   if (buffer.byteLength > MAX_CARD_BYTES)
@@ -44,13 +49,35 @@ export function decodeShareCard(value: unknown): Buffer {
   return buffer;
 }
 
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "::1" ||
+    /^127\./.test(host)
+  );
+}
+
+/**
+ * Fetches a URL for the user-initiated link check. Loopback addresses use a
+ * plain fetch so authors can rehearse against a story served on this computer;
+ * everything else keeps the SSRF-guarded fetch used for remote assets.
+ */
+function shareFetch(url: URL, init: RequestInit): Promise<Response> {
+  return isLoopbackHost(url.hostname)
+    ? fetch(url, init)
+    : authorizedFetch(url.toString(), init);
+}
+
 function metaContent(html: string, key: string): string | null {
   const pattern = new RegExp(
     `<meta[^>]*(?:property|name)\\s*=\\s*["']${key}["'][^>]*>`,
     "i",
   );
   const tag = html.match(pattern)?.[0];
-  const content = tag?.match(/content\s*=\s*["']([^"']*)["']/i)?.[1];
+  const matched = tag?.match(/content\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+  const content = matched?.[1] ?? matched?.[2];
   return content?.trim() ? decodeEntities(content.trim()) : null;
 }
 
@@ -89,7 +116,12 @@ async function readCapped(
  * platforms, which read static metadata and never execute the page's scripts.
  */
 export async function checkShareLink(url: string): Promise<ShareLinkReport> {
-  const parsed = new URL(url);
+  let parsed: URL;
+  try {
+    parsed = new URL(withHttpScheme(url.trim()));
+  } catch {
+    throw new Error(`The URL "${url.trim()}" is not a web address`);
+  }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
     throw new Error("Publication URL must use HTTP or HTTPS");
 
@@ -104,9 +136,24 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
     problems,
   };
 
+  if (
+    !isLoopbackHost(parsed.hostname) &&
+    isPrivateNetworkHost(parsed.hostname)
+  ) {
+    problems.push({
+      id: "private-host",
+      severity: "error",
+      message:
+        "This URL is on a private network, so it cannot be checked from here.",
+      resolution:
+        "Check the story at its public URL, or serve it on this computer and use a localhost address.",
+    });
+    return report;
+  }
+
   let html = "";
   try {
-    const response = await authorizedFetch(parsed.toString(), {
+    const response = await shareFetch(parsed, {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
@@ -188,7 +235,7 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
   report.imageUrl = imageUrl.toString();
 
   try {
-    const response = await authorizedFetch(imageUrl.toString(), {
+    const response = await shareFetch(imageUrl, {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
@@ -233,7 +280,12 @@ export async function checkShareLink(url: string): Promise<ShareLinkReport> {
 
   const width = Number(metaContent(html, "og:image:width"));
   const height = Number(metaContent(html, "og:image:height"));
-  if (Number.isFinite(width) && Number.isFinite(height) && height > 0) {
+  if (
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+  ) {
     const ratio = width / height;
     if (Math.abs(ratio - CARD_ASPECT) > ASPECT_TOLERANCE)
       problems.push({

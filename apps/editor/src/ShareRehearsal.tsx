@@ -15,6 +15,7 @@ interface Props {
   publicationUrl: string;
   disabled: boolean;
   onBusyChange?: (busy: boolean) => void;
+  onCardSaved?: () => void;
 }
 
 function hostLabel(url: string): string {
@@ -30,6 +31,7 @@ export function ShareRehearsal({
   publicationUrl,
   disabled,
   onBusyChange,
+  onCardSaved,
 }: Props) {
   const [card, setCard] = useState<string | null>(null);
   const [report, setReport] = useState<
@@ -60,6 +62,7 @@ export function ShareRehearsal({
       setNotice(
         `Link preview image saved (${Math.round(bytes / 1024)} KB). Export again to include it in the release.`,
       );
+      onCardSaved?.();
     } catch (cause) {
       setError(
         cause instanceof Error

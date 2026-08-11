@@ -30,6 +30,7 @@ const workflowOrder: ReadinessArea[] = [
   "data",
   "preview",
   "publish",
+  "sharing",
 ];
 
 export function workflowStages(
@@ -53,14 +54,32 @@ export function workflowStages(
     if (!serverFindings) {
       states.publish = "current";
       descriptions.publish = "Checks required";
-    } else if (serverFindings.some(({ severity }) => severity === "error")) {
-      states.publish = "blocked";
-    } else if (serverFindings.some(({ severity }) => severity === "warning")) {
-      states.publish = "current";
-      descriptions.publish = "Needs review";
     } else {
-      states.publish = "complete";
-      descriptions.publish = "Ready";
+      const sharingFindings = serverFindings.filter(
+        ({ area }) => area === "sharing",
+      );
+      const publishFindings = serverFindings.filter(
+        ({ area }) => area !== "sharing",
+      );
+      if (publishFindings.some(({ severity }) => severity === "error")) {
+        states.publish = "blocked";
+        states.sharing = "blocked";
+      } else {
+        if (publishFindings.some(({ severity }) => severity === "warning")) {
+          states.publish = "current";
+          descriptions.publish = "Needs review";
+        } else {
+          states.publish = "complete";
+          descriptions.publish = "Ready";
+        }
+        if (sharingFindings.some(({ severity }) => severity !== "info")) {
+          states.sharing = "current";
+          descriptions.sharing = "Needs review";
+        } else {
+          states.sharing = "complete";
+          descriptions.sharing = "Ready";
+        }
+      }
     }
   }
   return workflowOrder.map((id) => ({

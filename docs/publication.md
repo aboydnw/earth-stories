@@ -100,14 +100,18 @@ publication URL is unknown while the story is still local. Builds therefore
 default to the same `{{PUBLICATION_URL}}` placeholder the embed snippet uses.
 Once the story is deployed, enter the URL in the publication workshop and export
 again: the release is rebuilt with real absolute URLs throughout. There is no
-in-place rewrite, because each build replaces the whole release folder.
+in-place rewrite, because each build replaces the whole release folder. The URL
+can be pasted with or without `https://`; query strings, fragments, and
+trailing slashes are dropped from the canonical share URL.
 
 The workshop renders the link preview image from the first ready map chapter
 behind a scrim carrying the story title, and stores it beside `story.json` so it
 survives the next build. Stories without a usable map still get a card from the
 scrim alone. "Check published link" fetches a deployed story and reports missing
 metadata, an unresolved placeholder, or a preview image platforms cannot fetch —
-the same failures that otherwise only show up after posting publicly.
+the same failures that otherwise only show up after posting publicly. Localhost
+URLs work, so a release served on this computer can be rehearsed before it is
+deployed; other private-network addresses cannot be checked and say so.
 
 ## Latest-only lifecycle
 

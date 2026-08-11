@@ -114,20 +114,47 @@ describe("buildShareKit", () => {
     ).toThrow();
   });
 
-  it("rejects a publication URL carrying a query string or fragment", async () => {
+  it("drops query strings and fragments from the publication URL", async () => {
+    const project = await fixture();
+    const withQuery = buildShareKit({
+      project,
+      publicationUrl: "https://example.org/story?preview=1",
+    });
+    expect(withQuery.metaTags).toContain(
+      'property="og:url" content="https://example.org/story/"',
+    );
+    const withFragment = buildShareKit({
+      project,
+      publicationUrl: "https://example.org/story#intro",
+    });
+    expect(withFragment.metaTags).not.toContain("#intro");
+  });
+
+  it("accepts a publication URL pasted without a scheme", async () => {
+    const project = await fixture();
+    const kit = buildShareKit({ project, publicationUrl: "example.org/story" });
+    expect(kit.metaTags).toContain(
+      'property="og:url" content="https://example.org/story/"',
+    );
+  });
+
+  it("names the publication URL when it is not a web address", async () => {
     const project = await fixture();
     expect(() =>
-      buildShareKit({
-        project,
-        publicationUrl: "https://example.org/story?preview=1",
-      }),
-    ).toThrow();
-    expect(() =>
-      buildShareKit({
-        project,
-        publicationUrl: "https://example.org/story#intro",
-      }),
-    ).toThrow();
+      buildShareKit({ project, publicationUrl: "not a url at all" }),
+    ).toThrow(/publication URL/);
+  });
+});
+
+describe("injectShareMeta", () => {
+  it("keeps replacement patterns in titles literal when re-injecting", async () => {
+    const project = await fixture();
+    project.metadata.title = "Maps $& more";
+    const kit = buildShareKit({ project });
+    const once = injectShareMeta("<html><head></head></html>", kit.metaTags);
+    const twice = injectShareMeta(once, kit.metaTags);
+    expect(twice).toBe(once);
+    expect(twice).toContain("Maps $&amp; more");
   });
 });
 

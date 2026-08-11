@@ -1,6 +1,11 @@
 import type { StoryProject } from "@earth-stories/story-schema";
+import { escapeAttribute } from "./html.js";
+import {
+  PUBLICATION_URL_PLACEHOLDER,
+  normalizePublicationUrl,
+} from "./publication-url.js";
 
-export const PUBLICATION_URL_PLACEHOLDER = "{{PUBLICATION_URL}}";
+export * from "./publication-url.js";
 export const SHARE_CARD_PATH = "share/card-1.png";
 export const SHARE_POST_TEXT_PATH = "share/post-text.md";
 export const SHARE_CARD_SOURCE_FILENAME = "share-card.png";
@@ -20,14 +25,6 @@ export interface ShareKit {
   description: string | null;
   metaTags: string;
   postText: string;
-}
-
-function escapeAttribute(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 }
 
 function collapseWhitespace(value: string): string {
@@ -54,19 +51,6 @@ export function shareDescription(project: StoryProject): string | null {
     if (narrative) return truncate(narrative, DESCRIPTION_LIMIT);
   }
   return null;
-}
-
-function normalizeBase(publicationUrl: string): string {
-  if (publicationUrl === PUBLICATION_URL_PLACEHOLDER)
-    return PUBLICATION_URL_PLACEHOLDER;
-  const parsed = new URL(publicationUrl);
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
-    throw new Error("Publication URL must use HTTP or HTTPS");
-  if (parsed.search || parsed.hash)
-    throw new Error(
-      "Publication URL must not include a query string or fragment",
-    );
-  return parsed.toString().replace(/\/+$/, "");
 }
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -146,7 +130,7 @@ export function buildShareKit({
   project,
   publicationUrl = PUBLICATION_URL_PLACEHOLDER,
 }: ShareKitOptions): ShareKit {
-  const base = normalizeBase(publicationUrl);
+  const base = normalizePublicationUrl(publicationUrl);
   const title = project.metadata.title.trim();
   const description = shareDescription(project);
   const cardUrl = `${base}/${SHARE_CARD_PATH}`;
@@ -210,7 +194,7 @@ export function injectShareMeta(html: string, metaTags: string): string {
   const existing = new RegExp(
     `${SHARE_MARKER_START}[\\s\\S]*?${SHARE_MARKER_END}`,
   );
-  if (existing.test(html)) return html.replace(existing, metaTags);
+  if (existing.test(html)) return html.replace(existing, () => metaTags);
   const headClose = html.search(/<\/head\s*>/i);
   if (headClose !== -1)
     return `${html.slice(0, headClose)}${metaTags}${html.slice(headClose)}`;

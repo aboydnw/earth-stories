@@ -40,6 +40,7 @@ function rehearsal(
   overrides: Partial<StoryProject> = {},
   url = "",
   onBusyChange?: (busy: boolean) => void,
+  onCardSaved?: () => void,
 ) {
   return render(
     <EarthStoriesProvider>
@@ -48,6 +49,7 @@ function rehearsal(
         publicationUrl={url}
         disabled={false}
         onBusyChange={onBusyChange}
+        onCardSaved={onCardSaved}
       />
     </EarthStoriesProvider>,
   );
@@ -98,6 +100,17 @@ describe("ShareRehearsal", () => {
       ),
     );
     expect(await screen.findByText(/200 KB/)).toBeTruthy();
+  });
+
+  it("asks for a readiness refresh once a card is saved", async () => {
+    vi.mocked(captureShareCard).mockResolvedValue("data:image/png;base64,AAA");
+    vi.mocked(uploadShareCard).mockResolvedValue({ bytes: 204800 });
+    const onCardSaved = vi.fn();
+    rehearsal({}, "", undefined, onCardSaved);
+    await userEvent.click(
+      screen.getByRole("button", { name: /render link preview image/i }),
+    );
+    await waitFor(() => expect(onCardSaved).toHaveBeenCalled());
   });
 
   it("reports problems found on the published link", async () => {

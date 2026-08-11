@@ -229,7 +229,7 @@ export async function preflightPublication(
     if (card.isFile() && card.size > 0)
       cardReadable = isValidPng(await readFile(cardPath));
   } catch {
-    /* Reported below. */
+    cardReadable = false;
   }
   if (!cardReadable)
     issues.push({

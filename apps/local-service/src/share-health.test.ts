@@ -155,4 +155,65 @@ describe("checkShareLink", () => {
   it("rejects a URL that is not HTTP or HTTPS", async () => {
     await expect(checkShareLink("ftp://example.org/story")).rejects.toThrow();
   });
+
+  it("reads metadata containing apostrophes without truncating it", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith(".png")
+        ? image({ "content-type": "image/png" })
+        : page(
+            shareHtml({
+              "og:title": "'Tis the Coastline",
+              "og:description": "It's a coastline, mapped.",
+            }),
+          ),
+    );
+    const report = await checkShareLink("https://example.org/story/");
+    expect(report.title).toBe("'Tis the Coastline");
+    expect(report.description).toBe("It's a coastline, mapped.");
+    expect(report.problems).toEqual([]);
+  });
+
+  it("skips the aspect check when a dimension is missing", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith(".png")
+        ? image({ "content-type": "image/png" })
+        : page(shareHtml({ "og:image:width": null })),
+    );
+    const report = await checkShareLink("https://example.org/story/");
+    expect(report.problems).toEqual([]);
+  });
+
+  it("accepts a URL pasted without a scheme", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith(".png")
+        ? image({ "content-type": "image/png", "content-length": "180000" })
+        : page(shareHtml()),
+    );
+    const report = await checkShareLink("example.org/story/");
+    expect(report.reachable).toBe(true);
+    expect(report.problems).toEqual([]);
+  });
+
+  it("checks a story served on this computer", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+      String(input).endsWith(".png")
+        ? image({ "content-type": "image/png" })
+        : page(
+            shareHtml({
+              "og:image": "http://localhost:8080/story/share/card-1.png",
+            }),
+          ),
+    );
+    const report = await checkShareLink("http://localhost:8080/story/");
+    expect(report.reachable).toBe(true);
+    expect(report.problems).toEqual([]);
+  });
+
+  it("explains that private-network URLs cannot be checked", async () => {
+    const report = await checkShareLink("http://192.168.1.20/story/");
+    expect(report.reachable).toBe(false);
+    expect(report.problems).toContainEqual(
+      expect.objectContaining({ id: "private-host", severity: "error" }),
+    );
+  });
 });

@@ -452,6 +452,7 @@ export function PublishPanel({
           publicationUrl={publicationUrl}
           disabled={loading}
           onBusyChange={setShareBusy}
+          onCardSaved={onRefreshPreflight}
         />
         {snippet ? (
           <div className="embed-result">
