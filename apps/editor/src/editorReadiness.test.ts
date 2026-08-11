@@ -29,6 +29,9 @@ function readiness(
       publish: findings.some(({ severity }) => severity === "error")
         ? "blocked"
         : "current",
+      sharing: findings.some(({ severity }) => severity === "error")
+        ? "blocked"
+        : "current",
     },
   };
 }
@@ -141,6 +144,49 @@ describe("editor readiness guidance", () => {
         },
       }),
     ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "publish",
+          state: "complete",
+          description: "Ready",
+        }),
+      ]),
+    );
+  });
+
+  it("keeps sharing findings inside Publish instead of adding a workflow stage", () => {
+    const stages = workflowStages(readiness(), {
+      previewReviewed: true,
+      preflight: {
+        ...idle,
+        status: "ready",
+        result: {
+          ready: true,
+          issues: [
+            {
+              id: "share-card",
+              area: "sharing",
+              severity: "warning",
+              message: "This story has no usable link preview image.",
+            },
+          ],
+          projectId: "p",
+          buildId: "b",
+          estimatedIncludedBytes: 0,
+          includedAssets: 0,
+          connectedAssets: 0,
+          profile: "connected",
+        },
+      },
+    });
+    expect(stages.map(({ id }) => id)).toEqual([
+      "story",
+      "chapters",
+      "data",
+      "preview",
+      "publish",
+    ]);
+    expect(stages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: "publish",

@@ -6,6 +6,7 @@ import {
   type ConversionOperation,
   type StoryProject,
 } from "@earth-stories/story-schema";
+import type { ReadinessArea } from "@earth-stories/publisher/readiness";
 
 export interface ProjectSummary {
   id: string;
@@ -24,7 +25,7 @@ export interface ImportedAsset {
 }
 export interface PreflightIssue {
   id: string;
-  area: "story" | "chapters" | "data" | "preview" | "publish";
+  area: ReadinessArea;
   severity: "error" | "warning" | "info";
   message: string;
   resolution?: string;
@@ -261,6 +262,47 @@ export async function getPublicationPreflight(
   return request(
     `/api/projects/${encodeURIComponent(projectId)}/export/preflight`,
   );
+}
+
+export interface ShareLinkProblem {
+  id: string;
+  severity: "error" | "warning";
+  message: string;
+  resolution?: string;
+}
+
+export interface ShareLinkReport {
+  url: string;
+  reachable: boolean;
+  title: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  imageBytes: number | null;
+  problems: ShareLinkProblem[];
+}
+
+export async function uploadShareCard(
+  projectId: string,
+  image: string,
+): Promise<{ bytes: number }> {
+  return request(`/api/projects/${encodeURIComponent(projectId)}/share-card`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ image }),
+  });
+}
+
+export function shareCardUrl(projectId: string, version = 0): string {
+  const path = `/api/projects/${encodeURIComponent(projectId)}/share-card`;
+  return version ? `${path}?v=${version}` : path;
+}
+
+export async function checkShareLink(url: string): Promise<ShareLinkReport> {
+  return request("/api/share/link-health", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
 }
 
 export async function exportProject(

@@ -1,15 +1,10 @@
+import { escapeAttribute } from "./html.js";
+import { normalizePublicationUrl } from "./publication-url.js";
+
 export interface EmbedOptions {
   publicationUrl: string;
   title: string;
   height?: number;
-}
-
-function escapeAttribute(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 }
 
 export function createEmbedSnippet({
@@ -17,12 +12,7 @@ export function createEmbedSnippet({
   title,
   height = 700,
 }: EmbedOptions): string {
-  const base = publicationUrl.replace(/\/+$/, "");
-  if (base !== "{{PUBLICATION_URL}}") {
-    const parsed = new URL(base);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
-      throw new Error("Publication URL must use HTTP or HTTPS");
-  }
+  const base = normalizePublicationUrl(publicationUrl);
   const src = `${base}/embed.html`;
   return `<iframe src="${escapeAttribute(src)}" style="width:100%;height:100vh;min-height:500px;border:0" height="${height}" title="${escapeAttribute(title)}" loading="lazy" allowfullscreen></iframe>`;
 }

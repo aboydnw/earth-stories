@@ -25,6 +25,11 @@ import { preflightPublication } from "./preflight.js";
 import { deriveAuthoringReadiness } from "./readiness.js";
 import { verifyPublication } from "./verify.js";
 
+const VALID_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQcLAAAAEcAJlbA0QyAAAAAElFTkSuQmCC",
+  "base64",
+);
+
 const temporary: string[] = [];
 afterEach(async () =>
   Promise.all(
@@ -116,6 +121,42 @@ describe("publication hardening", () => {
     await expect(
       readFile(join(first.directory, "obsolete.txt"), "utf8"),
     ).rejects.toThrow();
+  });
+
+  it("emits a share kit that a later export rebakes with the real URL", async () => {
+    const { project, viewer } = await setup();
+    await writeFile(join(project, "share-card.png"), VALID_PNG);
+    const placeheld = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+    });
+    expect(
+      await readFile(join(placeheld.directory, "index.html"), "utf8"),
+    ).toContain('content="{{PUBLICATION_URL}}/share/card-1.png"');
+    expect(
+      await readFile(
+        join(placeheld.directory, "share", "post-text.md"),
+        "utf8",
+      ),
+    ).toContain("{{PUBLICATION_URL}}");
+    expect(
+      await readFile(join(placeheld.directory, "share", "card-1.png")),
+    ).toEqual(VALID_PNG);
+    expect(
+      await readFile(join(placeheld.directory, "embed.html"), "utf8"),
+    ).not.toContain("og:title");
+
+    const deployed = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+      publicationUrl: "https://example.org/field-notes/",
+    });
+    const html = await readFile(join(deployed.directory, "index.html"), "utf8");
+    expect(html).toContain(
+      'content="https://example.org/field-notes/share/card-1.png"',
+    );
+    expect(html).not.toContain("{{PUBLICATION_URL}}");
+    expect(html.match(/og:title/g)).toHaveLength(1);
   });
 
   it("blocks a publication with a missing included asset", async () => {

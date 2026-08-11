@@ -34,7 +34,7 @@ function decodeDataUrl(dataUrl: string): Uint8Array {
   return Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
 }
 
-async function waitForMap(map: HTMLElement): Promise<void> {
+export async function waitForMap(map: HTMLElement): Promise<void> {
   if (map.dataset.mapReady === "true") return;
   await new Promise<void>((resolve) => {
     const observer = new MutationObserver(() => {

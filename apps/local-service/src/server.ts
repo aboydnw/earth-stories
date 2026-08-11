@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { access, readFile, readdir, stat } from "node:fs/promises";
+import { access, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
@@ -17,6 +17,8 @@ import {
   createEmbedSnippet,
   discoverRemoteSource,
   preflightPublication,
+  PUBLICATION_URL_PLACEHOLDER,
+  SHARE_CARD_SOURCE_FILENAME,
 } from "@earth-stories/publisher";
 import { Zip, ZipDeflate } from "fflate";
 import { parseByteRange } from "./range.js";
@@ -27,6 +29,8 @@ import {
 } from "./examples.js";
 import { loadExampleAssetFiles } from "./exampleAssets.js";
 import { isTrustedMutationOrigin } from "./security.js";
+import { checkShareLink, decodeShareCard } from "./share-health.js";
+import { storeShareCard } from "./share-card.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 
@@ -38,6 +42,7 @@ const PROJECTS_DIRECTORY = resolve(
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_ASSET_BYTES = 5 * 1024 * 1024 * 1024;
 const MAX_EXPORT_BODY_BYTES = 50 * 1024 * 1024;
+const MAX_SHARE_CARD_BODY_BYTES = 8 * 1024 * 1024;
 const REPOSITORY_DIRECTORY = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../../..",
@@ -78,10 +83,11 @@ function json(response: ServerResponse, status: number, value: unknown): void {
   response.end(`${JSON.stringify(value)}\n`);
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
-  return JSON.parse(
-    (await readBody(request, MAX_BODY_BYTES)).toString("utf8"),
-  ) as unknown;
+async function readJson(
+  request: IncomingMessage,
+  limit = MAX_BODY_BYTES,
+): Promise<unknown> {
+  return JSON.parse((await readBody(request, limit)).toString("utf8"));
 }
 
 async function readOptionalJson(
@@ -238,24 +244,25 @@ async function streamZip(
   }
 }
 
-const exportLocks = new Map<string, Promise<void>>();
-async function withProjectExportLock<T>(
+const publicationLocks = new Map<string, Promise<void>>();
+async function withProjectPublicationLock<T>(
   projectId: string,
   operation: () => Promise<T>,
 ): Promise<T> {
-  const previous = exportLocks.get(projectId) ?? Promise.resolve();
+  const previous = publicationLocks.get(projectId) ?? Promise.resolve();
   let release!: () => void;
   const current = new Promise<void>((resolveLock) => {
     release = resolveLock;
   });
   const tail = previous.then(() => current);
-  exportLocks.set(projectId, tail);
+  publicationLocks.set(projectId, tail);
   await previous;
   try {
     return await operation();
   } finally {
     release();
-    if (exportLocks.get(projectId) === tail) exportLocks.delete(projectId);
+    if (publicationLocks.get(projectId) === tail)
+      publicationLocks.delete(projectId);
   }
 }
 
@@ -440,6 +447,52 @@ export function createLocalServer(
         );
         return;
       }
+      const shareCardMatch = url.pathname.match(
+        /^\/api\/projects\/([^/]+)\/share-card$/,
+      );
+      if (shareCardMatch && request.method === "GET") {
+        const id = decodeURIComponent(shareCardMatch[1]);
+        await store.read(id).catch(() => {
+          throw new Error(`Project "${id}" was not found`);
+        });
+        const card = await readFile(
+          join(store.projectPath(id), SHARE_CARD_SOURCE_FILENAME),
+        );
+        response.writeHead(200, {
+          "content-type": "image/png",
+          "content-length": card.byteLength,
+          "cache-control": "no-store",
+        });
+        response.end(card);
+        return;
+      }
+      if (shareCardMatch && request.method === "POST") {
+        const id = decodeURIComponent(shareCardMatch[1]);
+        await store.read(id).catch(() => {
+          throw new Error(`Project "${id}" was not found`);
+        });
+        const body = (await readJson(request, MAX_SHARE_CARD_BODY_BYTES)) as {
+          image?: unknown;
+        } | null;
+        const card = decodeShareCard(body?.image);
+        await withProjectPublicationLock(id, () =>
+          storeShareCard(store.projectPath(id), card),
+        );
+        json(response, 200, { bytes: card.byteLength });
+        return;
+      }
+
+      if (
+        url.pathname === "/api/share/link-health" &&
+        request.method === "POST"
+      ) {
+        const body = (await readJson(request)) as { url?: unknown };
+        if (typeof body.url !== "string")
+          throw new Error("Enter the URL where you published the story");
+        json(response, 200, await checkShareLink(body.url));
+        return;
+      }
+
       const exportMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/export$/,
       );
@@ -454,11 +507,16 @@ export function createLocalServer(
           typeof body.mapSnapshots === "object" && body.mapSnapshots !== null
             ? (body.mapSnapshots as Record<string, string>)
             : undefined;
-        await withProjectExportLock(id, async () => {
+        const publicationUrl =
+          typeof body.publicationUrl === "string" && body.publicationUrl.trim()
+            ? body.publicationUrl.trim()
+            : PUBLICATION_URL_PLACEHOLDER;
+        await withProjectPublicationLock(id, async () => {
           const latest = await buildLatestPublication({
             projectDirectory: store.projectPath(id),
             viewerDirectory: VIEWER_DIRECTORY,
             mapSnapshots: snapshots,
+            publicationUrl,
           });
           if (format === "folder") {
             json(response, 200, {
@@ -484,11 +542,6 @@ export function createLocalServer(
             return;
           }
           if (format === "embed") {
-            const publicationUrl =
-              typeof body.publicationUrl === "string" &&
-              body.publicationUrl.trim()
-                ? body.publicationUrl.trim()
-                : "{{PUBLICATION_URL}}";
             json(response, 200, {
               format,
               directory: latest.directory,

@@ -15,13 +15,23 @@ export interface GuidanceAction {
   chapterId?: string;
 }
 
-const labels: Record<ReadinessArea, string> = {
+type WorkflowArea = Exclude<ReadinessArea, "sharing">;
+
+const labels: Record<WorkflowArea, string> = {
   story: "Story",
   chapters: "Chapters",
   data: "Data",
   preview: "Preview",
   publish: "Publish",
 };
+
+const workflowOrder: WorkflowArea[] = [
+  "story",
+  "chapters",
+  "data",
+  "preview",
+  "publish",
+];
 
 export function workflowStages(
   readiness: AuthoringReadiness,
@@ -44,17 +54,24 @@ export function workflowStages(
     if (!serverFindings) {
       states.publish = "current";
       descriptions.publish = "Checks required";
-    } else if (serverFindings.some(({ severity }) => severity === "error")) {
-      states.publish = "blocked";
-    } else if (serverFindings.some(({ severity }) => severity === "warning")) {
-      states.publish = "current";
-      descriptions.publish = "Needs review";
     } else {
-      states.publish = "complete";
-      descriptions.publish = "Ready";
+      const publishFindings = serverFindings.filter(
+        ({ area }) => area !== "sharing",
+      );
+      if (publishFindings.some(({ severity }) => severity === "error")) {
+        states.publish = "blocked";
+      } else {
+        if (publishFindings.some(({ severity }) => severity === "warning")) {
+          states.publish = "current";
+          descriptions.publish = "Needs review";
+        } else {
+          states.publish = "complete";
+          descriptions.publish = "Ready";
+        }
+      }
     }
   }
-  return (Object.keys(labels) as ReadinessArea[]).map((id) => ({
+  return workflowOrder.map((id) => ({
     id,
     label: labels[id],
     state: states[id],

@@ -23,6 +23,7 @@ const local: AuthoringReadiness = {
     data: "optional",
     preview: "complete",
     publish: "current",
+    sharing: "current",
   },
 };
 

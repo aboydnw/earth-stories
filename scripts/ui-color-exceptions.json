@@ -54,5 +54,40 @@
     "context": "context.fillStyle = \"rgba(255,255,255,.92)\"",
     "domain": "rendering-boundary",
     "reason": "Concrete canvas overlay color for generated snapshots."
+  },
+  {
+    "file": "apps/editor/src/captureShareCard.ts",
+    "value": "#1d2b2a",
+    "context": "context.fillStyle = \"#1d2b2a\"",
+    "domain": "rendering-boundary",
+    "reason": "Concrete canvas ground color behind a generated link preview image."
+  },
+  {
+    "file": "apps/editor/src/captureShareCard.ts",
+    "value": "rgba(16,26,25,0)",
+    "context": "scrim.addColorStop(0, \"rgba(16,26,25,0)\")",
+    "domain": "rendering-boundary",
+    "reason": "Concrete canvas scrim gradient for generated link preview images."
+  },
+  {
+    "file": "apps/editor/src/captureShareCard.ts",
+    "value": "rgba(16,26,25,.92)",
+    "context": "scrim.addColorStop(1, \"rgba(16,26,25,.92)\")",
+    "domain": "rendering-boundary",
+    "reason": "Concrete canvas scrim gradient for generated link preview images."
+  },
+  {
+    "file": "apps/editor/src/captureShareCard.ts",
+    "value": "#fdfbf7",
+    "context": "context.fillStyle = \"#fdfbf7\"",
+    "domain": "rendering-boundary",
+    "reason": "Concrete canvas title color for generated link preview images."
+  },
+  {
+    "file": "apps/editor/src/captureShareCard.ts",
+    "value": "rgba(16,26,25,.92)",
+    "context": "context.fillStyle = \"rgba(16,26,25,.92)\"",
+    "domain": "rendering-boundary",
+    "reason": "Concrete canvas background keeps generated-card attribution legible."
   }
 ]

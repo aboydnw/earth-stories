@@ -4,9 +4,10 @@ import type {
   StoryProject,
 } from "@earth-stories/story-schema";
 import { compileProject } from "./compile.js";
+import { shareDescription } from "./share.js";
 
 export type ReadinessArea =
-  "story" | "chapters" | "data" | "preview" | "publish";
+  "story" | "chapters" | "data" | "preview" | "publish" | "sharing";
 export type ReadinessSeverity = "error" | "warning" | "info";
 export type ReadinessStageState =
   "complete" | "current" | "optional" | "blocked";
@@ -198,6 +199,16 @@ export function deriveAuthoringReadiness(
       });
   }
 
+  if (!shareDescription(project))
+    findings.push({
+      id: "share-description",
+      area: "sharing",
+      severity: "warning",
+      message: "A shared link will show no summary beneath its title.",
+      resolution:
+        "Add a story description, or narrative text to the first chapter.",
+    });
+
   let manifest: PublicationManifest | null = null;
   try {
     manifest = compileProject(project);
@@ -233,6 +244,9 @@ export function deriveAuthoringReadiness(
   const publishWarnings = findings.some(
     ({ severity }) => severity === "warning",
   );
+  const sharingIncomplete = findings.some(
+    ({ area, severity }) => area === "sharing" && severity !== "info",
+  );
 
   return {
     manifest,
@@ -259,6 +273,11 @@ export function deriveAuthoringReadiness(
       publish: publishBlocked
         ? "blocked"
         : publishWarnings
+          ? "current"
+          : "complete",
+      sharing: publishBlocked
+        ? "blocked"
+        : sharingIncomplete
           ? "current"
           : "complete",
     },

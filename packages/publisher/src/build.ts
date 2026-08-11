@@ -27,6 +27,13 @@ import {
 } from "./preflight.js";
 import { containedRealPath } from "./paths.js";
 import { authorizedFetch } from "./remote-fetch.js";
+import {
+  buildShareKit,
+  injectShareMeta,
+  SHARE_CARD_PATH,
+  SHARE_CARD_SOURCE_FILENAME,
+  SHARE_POST_TEXT_PATH,
+} from "./share.js";
 import { verifyPublication } from "./verify.js";
 
 const MAX_REMOTE_ASSET_BYTES = 2 * 1024 * 1024 * 1024;
@@ -53,6 +60,7 @@ export interface BuildPublicationOptions {
   outputDirectory: string;
   viewerDirectory?: string;
   mapSnapshots?: Record<string, string>;
+  publicationUrl?: string;
 }
 
 export interface LatestPublication {
@@ -207,11 +215,37 @@ function reportHtml(manifest: PublicationManifest): string {
   return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Publication report</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:16px/1.55 system-ui;color:#332b27}h1,h2{font-family:Georgia,serif}code{background:#f2ede7;padding:2px 5px}</style><body><h1>Publication report</h1><p><strong>${escapeHtml(manifest.metadata.title)}</strong></p><p>Build <code>${escapeHtml(manifest.build.id)}</code> · Runtime ${escapeHtml(manifest.build.runtimeVersion)} · Profile ${escapeHtml(manifest.publication.profile)}</p><h2>Hosting requirements</h2><p>${escapeHtml(manifest.hostingRequirements.join(", "))}</p><h2>Included assets</h2>${list(included)}<h2>Connected data assets</h2>${list(connected)}<h2>All external dependencies</h2><ul>${dependencies}</ul><p>External dependencies must remain publicly accessible for the story to work.</p></body></html>`;
 }
 
+async function writeShareKit(
+  project: StoryProject,
+  projectDirectory: string,
+  outputDirectory: string,
+  publicationUrl: string | undefined,
+): Promise<void> {
+  const kit = buildShareKit({ project, publicationUrl });
+  const indexPath = join(outputDirectory, "index.html");
+  await writeFile(
+    indexPath,
+    injectShareMeta(await readFile(indexPath, "utf8"), kit.metaTags),
+  );
+  await mkdir(join(outputDirectory, dirname(SHARE_POST_TEXT_PATH)), {
+    recursive: true,
+  });
+  await writeFile(join(outputDirectory, SHARE_POST_TEXT_PATH), kit.postText);
+  const card = join(projectDirectory, SHARE_CARD_SOURCE_FILENAME);
+  try {
+    await cp(card, join(outputDirectory, SHARE_CARD_PATH));
+  } catch (cause) {
+    if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT"))
+      throw cause;
+  }
+}
+
 export async function buildPublication({
   projectDirectory,
   outputDirectory,
   viewerDirectory,
   mapSnapshots,
+  publicationUrl,
 }: BuildPublicationOptions): Promise<PublicationManifest> {
   const projectPath = join(projectDirectory, "story.json");
   const project = storyProjectSchema.parse(
@@ -241,6 +275,13 @@ export async function buildPublication({
     );
   }
 
+  await writeShareKit(
+    project,
+    projectDirectory,
+    outputDirectory,
+    publicationUrl,
+  );
+
   await writeFile(
     join(outputDirectory, "publication.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -265,7 +306,7 @@ export async function buildPublication({
   );
   await writeFile(
     join(outputDirectory, "README.txt"),
-    `${manifest.metadata.title}\n\nUpload every file in this directory to the same static website directory. Open index.html through a static web server.\n\nInteractive story: index.html\n${viewerDirectory ? "Embeddable story: embed.html\nEmbed instructions: EMBED.txt\n" : ""}Archival edition: archival.html\nBuild: ${manifest.build.id}\nProject: ${basename(projectDirectory)}\nManifest: publication.json\nReport: publication-report.html\n`,
+    `${manifest.metadata.title}\n\nUpload every file in this directory to the same static website directory. Open index.html through a static web server.\n\nInteractive story: index.html\n${viewerDirectory ? "Embeddable story: embed.html\nEmbed instructions: EMBED.txt\n" : ""}Archival edition: archival.html\nLink preview text: ${SHARE_POST_TEXT_PATH}\nBuild: ${manifest.build.id}\nProject: ${basename(projectDirectory)}\nManifest: publication.json\nReport: publication-report.html\n`,
   );
   return manifest;
 }
@@ -325,6 +366,7 @@ async function buildLatestPublicationUnlocked(
     });
     const verification = await verifyPublication(temporary, manifest, {
       requireEmbed: Boolean(options.viewerDirectory),
+      requireShareKit: true,
     });
     await writeFile(
       join(temporary, "publication-verification.json"),

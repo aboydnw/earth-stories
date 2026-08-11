@@ -7,6 +7,7 @@ import type {
 import { storyProjectSchema } from "@earth-stories/story-schema";
 import { containedRealPath } from "./paths.js";
 import { authorizedFetch } from "./remote-fetch.js";
+import { isValidPng, SHARE_CARD_SOURCE_FILENAME } from "./share.js";
 import {
   deriveAuthoringReadiness,
   type ReadinessArea,
@@ -220,6 +221,24 @@ export async function preflightPublication(
         "This portable release still has connected exceptions, such as its basemap or XYZ tiles.",
       resolution:
         "Review the dependency report. Earth Stories does not claim offline support yet.",
+    });
+  const cardPath = join(projectDirectory, SHARE_CARD_SOURCE_FILENAME);
+  let cardReadable = false;
+  try {
+    const card = await stat(cardPath);
+    if (card.isFile() && card.size > 0)
+      cardReadable = isValidPng(await readFile(cardPath));
+  } catch {
+    cardReadable = false;
+  }
+  if (!cardReadable)
+    issues.push({
+      id: "share-card",
+      area: "sharing",
+      severity: "warning",
+      message: "This story has no usable link preview image.",
+      resolution:
+        "Generate a share card so the link shows artwork instead of a bare URL.",
     });
   const deduplicated = [
     ...new Map(issues.map((issue) => [issue.id, issue])).values(),
