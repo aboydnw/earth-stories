@@ -124,6 +124,19 @@ describe("PublishPanel", () => {
     ).toBeTruthy();
   });
 
+  it("keeps collapsed disclosure summaries inside the keyboard focus trap", async () => {
+    panel();
+    const close = screen.getByRole("button", {
+      name: /close publication workshop/i,
+    });
+    const lastSummary = screen
+      .getByText("Verify and share after deployment")
+      .closest("summary");
+    expect(document.activeElement).toBe(close);
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(lastSummary);
+  });
+
   it("runs current publication checks when opened without a result", () => {
     const onRefreshPreflight = vi.fn();
     panel({
@@ -194,5 +207,52 @@ describe("PublishPanel", () => {
     expect(screen.getByTestId("share-rehearsal").dataset.cardUrl).toBe(
       `/api/projects/${project.id}/share-card`,
     );
+  });
+
+  it("trims the deployed URL before adding it to a build", async () => {
+    vi.mocked(captureMapSnapshots).mockResolvedValue({});
+    vi.mocked(exportProject).mockResolvedValue({
+      directory: "/tmp/publication",
+    });
+    panel();
+    await userEvent.click(
+      screen.getByText("Verify and share after deployment"),
+    );
+    await userEvent.type(
+      screen.getByLabelText(/deployed publication url/i),
+      "  example.org/story  ",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    await waitFor(() =>
+      expect(exportProject).toHaveBeenCalledWith(project.id, "folder", {
+        mapSnapshots: {},
+        publicationUrl: "example.org/story",
+      }),
+    );
+  });
+
+  it("reports clipboard failures without an unhandled rejection", async () => {
+    vi.mocked(captureMapSnapshots).mockResolvedValue({});
+    vi.mocked(exportProject).mockResolvedValue({
+      snippet: '<iframe src="https://example.org/embed.html"></iframe>',
+    });
+    panel();
+    await userEvent.click(screen.getByText("More output options"));
+    await userEvent.click(
+      screen.getByRole("button", { name: /create embed code/i }),
+    );
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    await userEvent.click(
+      await screen.findByRole("button", { name: /copy iframe/i }),
+    );
+    expect(
+      await screen.findByText(/embed code could not be copied/i),
+    ).toBeTruthy();
   });
 });

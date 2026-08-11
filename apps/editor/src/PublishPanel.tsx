@@ -138,6 +138,7 @@ export function PublishPanel({
     setPublicationUrl("");
     setSnippet("");
     setCardVersion(0);
+    setShareBusy(false);
   }, [project.id]);
 
   useEffect(() => {
@@ -158,7 +159,13 @@ export function PublishPanel({
         ...panel.querySelectorAll<HTMLElement>(
           'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), summary, [href], [tabindex]:not([tabindex="-1"])',
         ),
-      ].filter((element) => !element.closest("details:not([open])"));
+      ].filter((element) => {
+        const closed = element.closest("details:not([open])");
+        return (
+          !closed ||
+          (element.tagName === "SUMMARY" && element.parentElement === closed)
+        );
+      });
     focusable()[0]?.focus();
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -249,7 +256,7 @@ export function PublishPanel({
       const mapSnapshots = await captureMapSnapshots();
       const response = await exportProject(saved.id, format, {
         mapSnapshots,
-        publicationUrl,
+        publicationUrl: publicationUrl.trim(),
       });
       setLastFormat(format);
       setResultBuildId(response.buildId ?? null);
@@ -328,7 +335,15 @@ export function PublishPanel({
   }
 
   async function copySnippet() {
-    if (snippet) await navigator.clipboard.writeText(snippet);
+    if (!snippet) return;
+    try {
+      await navigator.clipboard.writeText(snippet);
+      setResult("Embed code copied to the clipboard.");
+    } catch {
+      setError(
+        "The embed code could not be copied. Select and copy it manually.",
+      );
+    }
   }
 
   return (
