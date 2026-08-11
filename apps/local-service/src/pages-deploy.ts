@@ -1,7 +1,9 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { runCommand, type CommandRunner } from "./command-runner.js";
+import {
+  blobSha,
+  collectReleaseFiles,
+  encodeBase64Stream,
+  type ReleaseFile,
+} from "./git-objects.js";
 
 const API_ROOT = "https://api.github.com";
 const COMMIT_AUTHOR_NAME = "Earth Stories";
@@ -126,45 +128,349 @@ export interface PushReleaseOptions {
   repo: string;
   branch?: string;
   message?: string;
-  run?: CommandRunner;
+  fetchImpl?: typeof fetch;
+  onProgress?: (progress: PushReleaseProgress) => void;
+}
+
+export interface PushReleaseProgress {
+  uploaded: number;
+  skipped: number;
+}
+
+interface GitHubObjectRequest {
+  fetchImpl: typeof fetch;
+  token: string;
+  url: string;
+  operation: string;
+  init?: Omit<RequestInit, "body">;
+  body?: () => BodyInit;
+}
+
+interface HashedReleaseFile extends ReleaseFile {
+  sha: string;
+}
+
+const MAX_RATE_LIMIT_RETRIES = 3;
+
+function safeMessage(value: unknown, token: string): string {
+  const message = value instanceof Error ? value.message : String(value);
+  return token ? message.split(token).join("[REDACTED]") : message;
+}
+
+function retryDelay(response: Response): number | null {
+  const header = response.headers.get("retry-after");
+  if (header === null) return response.status === 429 ? 1_000 : null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+  const date = Date.parse(header);
+  return Number.isNaN(date) ? 1_000 : Math.max(0, date - Date.now());
+}
+
+async function githubObjectRequest({
+  fetchImpl,
+  token,
+  url,
+  operation,
+  init,
+  body,
+}: GitHubObjectRequest): Promise<Response> {
+  for (let attempt = 0; ; attempt += 1) {
+    let response: Response;
+    try {
+      const requestInit: RequestInit & { duplex?: "half" } = {
+        ...init,
+        headers: apiHeaders(token),
+        body: body?.(),
+      };
+      if (body) requestInit.duplex = "half";
+      response = await fetchImpl(url, requestInit);
+    } catch (cause) {
+      throw new Error(`${operation} failed: ${safeMessage(cause, token)}`);
+    }
+
+    const delay = retryDelay(response);
+    const rateLimited =
+      (response.status === 403 || response.status === 429) && delay !== null;
+    if (rateLimited && attempt < MAX_RATE_LIMIT_RETRIES) {
+      await response.body?.cancel();
+      await new Promise((done) => setTimeout(done, delay));
+      continue;
+    }
+    if (rateLimited)
+      throw new Error(
+        `${operation} failed because GitHub's rate limit remained active after ${attempt + 1} attempts.`,
+      );
+    return response;
+  }
+}
+
+function jsonBody(value: unknown): () => BodyInit {
+  return () => JSON.stringify(value);
+}
+
+function base64BlobBody(path: string): BodyInit {
+  const encoder = new TextEncoder();
+  const chunks = (async function* () {
+    yield encoder.encode('{"content":"');
+    for await (const chunk of encodeBase64Stream(path))
+      yield encoder.encode(chunk);
+    yield encoder.encode('\",\"encoding\":\"base64\"}');
+  })();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const next = await chunks.next();
+      if (next.done) controller.close();
+      else controller.enqueue(next.value);
+    },
+    async cancel() {
+      await chunks.return(undefined);
+    },
+  });
+}
+
+async function responseJson<T>(
+  response: Response,
+  operation: string,
+  token: string,
+): Promise<T> {
+  if (!response.ok) {
+    const detail = safeMessage(await readError(response), token);
+    throw new Error(
+      `${operation} failed (${response.status}).${detail ? ` ${detail}` : ""}`,
+    );
+  }
+  try {
+    return (await response.json()) as T;
+  } catch (cause) {
+    throw new Error(
+      `${operation} returned an invalid response: ${safeMessage(cause, token)}`,
+    );
+  }
+}
+
+async function readExistingBlobs(
+  options: PushReleaseOptions,
+  branch: string,
+): Promise<Set<string>> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const root = `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git`;
+  const ref = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/ref/heads/${encodeURIComponent(branch)}`,
+    operation: "Reading the publication branch",
+  });
+  if (ref.status === 404) return new Set();
+  const refBody = await responseJson<{ object?: { sha?: unknown } }>(
+    ref,
+    "Reading the publication branch",
+    options.token,
+  );
+  if (typeof refBody.object?.sha !== "string")
+    throw new Error("Reading the publication branch returned no commit SHA.");
+
+  const commit = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/commits/${encodeURIComponent(refBody.object.sha)}`,
+    operation: "Reading the previous publication commit",
+  });
+  const commitBody = await responseJson<{ tree?: { sha?: unknown } }>(
+    commit,
+    "Reading the previous publication commit",
+    options.token,
+  );
+  if (typeof commitBody.tree?.sha !== "string")
+    throw new Error(
+      "Reading the previous publication commit returned no tree SHA.",
+    );
+
+  const tree = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/trees/${encodeURIComponent(commitBody.tree.sha)}?recursive=1`,
+    operation: "Reading the previous publication tree",
+  });
+  const treeBody = await responseJson<{
+    truncated?: unknown;
+    tree?: Array<{ type?: unknown; sha?: unknown }>;
+  }>(tree, "Reading the previous publication tree", options.token);
+  if (treeBody.truncated === true) return new Set();
+  return new Set(
+    (treeBody.tree ?? [])
+      .filter(
+        (entry): entry is { type: "blob"; sha: string } =>
+          entry.type === "blob" && typeof entry.sha === "string",
+      )
+      .map(({ sha }) => sha),
+  );
+}
+
+async function uploadMissingBlobs(
+  options: PushReleaseOptions,
+  files: HashedReleaseFile[],
+  existing: Set<string>,
+): Promise<void> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const endpoint = `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/blobs`;
+  const missing = files.filter(({ sha }) => !existing.has(sha));
+  const skipped = files.length - missing.length;
+  let uploaded = 0;
+  let next = 0;
+  options.onProgress?.({ uploaded, skipped });
+
+  async function worker(): Promise<void> {
+    for (;;) {
+      const index = next++;
+      const file = missing[index];
+      if (!file) return;
+      const response = await githubObjectRequest({
+        fetchImpl,
+        token: options.token,
+        url: endpoint,
+        operation: `Uploading ${file.path}`,
+        init: { method: "POST" },
+        body: () => base64BlobBody(file.absolute),
+      });
+      const result = await responseJson<{ sha?: unknown }>(
+        response,
+        `Uploading ${file.path}`,
+        options.token,
+      );
+      if (result.sha !== file.sha)
+        throw new Error(
+          `Uploading ${file.path} returned a blob SHA that did not match the local file.`,
+        );
+      uploaded += 1;
+      options.onProgress?.({ uploaded, skipped });
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(4, missing.length) }, () => worker()),
+  );
+}
+
+async function createTree(
+  options: PushReleaseOptions,
+  files: HashedReleaseFile[],
+): Promise<string> {
+  const response = await githubObjectRequest({
+    fetchImpl: options.fetchImpl ?? fetch,
+    token: options.token,
+    url: `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/trees`,
+    operation: "Creating the publication tree",
+    init: { method: "POST" },
+    body: jsonBody({
+      tree: [
+        ...files.map(({ path, sha }) => ({
+          path,
+          mode: "100644",
+          type: "blob",
+          sha,
+        })),
+        { path: ".nojekyll", mode: "100644", type: "blob", content: "" },
+      ],
+    }),
+  });
+  const result = await responseJson<{ sha?: unknown }>(
+    response,
+    "Creating the publication tree",
+    options.token,
+  );
+  if (typeof result.sha !== "string")
+    throw new Error("Creating the publication tree returned no SHA.");
+  return result.sha;
+}
+
+async function createCommit(
+  options: PushReleaseOptions,
+  tree: string,
+): Promise<string> {
+  const response = await githubObjectRequest({
+    fetchImpl: options.fetchImpl ?? fetch,
+    token: options.token,
+    url: `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/commits`,
+    operation: "Creating the publication commit",
+    init: { method: "POST" },
+    body: jsonBody({
+      message: options.message ?? "Publish Earth Story",
+      tree,
+      author: { name: COMMIT_AUTHOR_NAME, email: COMMIT_AUTHOR_EMAIL },
+    }),
+  });
+  const result = await responseJson<{ sha?: unknown }>(
+    response,
+    "Creating the publication commit",
+    options.token,
+  );
+  if (typeof result.sha !== "string")
+    throw new Error("Creating the publication commit returned no SHA.");
+  return result.sha;
+}
+
+async function forceUpdateRef(
+  options: PushReleaseOptions,
+  branch: string,
+  commit: string,
+): Promise<void> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const root = `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git`;
+  const updated = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/refs/heads/${encodeURIComponent(branch)}`,
+    operation: "Updating the publication branch",
+    init: { method: "PATCH" },
+    body: jsonBody({ sha: commit, force: true }),
+  });
+  if (updated.ok) return;
+  if (updated.status !== 404)
+    await responseJson(
+      updated,
+      "Updating the publication branch",
+      options.token,
+    );
+
+  const created = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/refs`,
+    operation: "Creating the publication branch",
+    init: { method: "POST" },
+    body: jsonBody({ ref: `refs/heads/${branch}`, sha: commit }),
+  });
+  if (!created.ok)
+    await responseJson(
+      created,
+      "Creating the publication branch",
+      options.token,
+    );
 }
 
 /**
- * Force-pushes the built release as a single orphan commit. The release is
- * copied into a temporary directory first, so no git metadata is ever written
- * into the project folder and nothing outside `publication/` can be uploaded.
+ * Uploads the built release as Git objects and force-replaces the Pages branch
+ * with one orphan commit. File contents are streamed and unchanged blobs from
+ * the previous publication are reused.
  */
 export async function pushRelease(
   options: PushReleaseOptions,
 ): Promise<{ branch: string }> {
-  const run = options.run ?? runCommand;
-  const branch = options.branch ?? DEFAULT_PAGES_BRANCH;
-  const remote = `https://x-access-token:${options.token}@github.com/${options.owner}/${options.repo}.git`;
-  const secrets = [options.token, remote];
-  const workspace = await mkdtemp(join(tmpdir(), "earth-stories-publish-"));
-
   try {
-    await cp(options.directory, workspace, { recursive: true });
-    await rm(join(workspace, ".git"), { recursive: true, force: true });
-    await writeFile(join(workspace, ".nojekyll"), "");
-    const git = (args: string[]) =>
-      run({ executable: "git", args, cwd: workspace, secrets });
-
-    await git(["init", "-b", branch]);
-    await git(["add", "-A"]);
-    await git([
-      "-c",
-      `user.name=${COMMIT_AUTHOR_NAME}`,
-      "-c",
-      `user.email=${COMMIT_AUTHOR_EMAIL}`,
-      "commit",
-      "-m",
-      options.message ?? "Publish Earth Story",
-    ]);
-    await git(["push", "--force", remote, `${branch}:${branch}`]);
+    const branch = options.branch ?? DEFAULT_PAGES_BRANCH;
+    const files: HashedReleaseFile[] = [];
+    for (const file of (await collectReleaseFiles(options.directory)).filter(
+      ({ path }) => path !== ".nojekyll",
+    ))
+      files.push({ ...file, sha: await blobSha(file.absolute) });
+    const existing = await readExistingBlobs(options, branch);
+    await uploadMissingBlobs(options, files, existing);
+    const tree = await createTree(options, files);
+    const commit = await createCommit(options, tree);
+    await forceUpdateRef(options, branch, commit);
     return { branch };
-  } finally {
-    await rm(workspace, { recursive: true, force: true });
+  } catch (cause) {
+    throw new Error(safeMessage(cause, options.token));
   }
 }
 

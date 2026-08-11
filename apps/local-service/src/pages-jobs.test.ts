@@ -161,6 +161,27 @@ describe("PagesJobs", () => {
     expect(deps.writePublishRecord).not.toHaveBeenCalled();
   });
 
+  it("adds upload progress events while blobs are transferred", async () => {
+    const deps = dependencies({
+      pushRelease: vi.fn(async (options) => {
+        options.onProgress?.({ uploaded: 0, skipped: 2 });
+        options.onProgress?.({ uploaded: 1, skipped: 2 });
+        return { branch: "gh-pages" };
+      }),
+    });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    const finished = await settle(jobs, id);
+    const uploadEvents = finished.events.filter(
+      ({ stage }) => stage === "uploading",
+    );
+    expect(uploadEvents.map(({ message }) => message)).toEqual([
+      "Uploading the release…",
+      "Uploaded 0 files; skipped 2 unchanged files.",
+      "Uploaded 1 file; skipped 2 unchanged files.",
+    ]);
+  });
+
   it("keeps the existing repository and URL when republishing", async () => {
     const deps = dependencies({
       readPublishRecord: vi.fn(async () => ({
@@ -215,10 +236,15 @@ describe("PagesJobs", () => {
   });
 
   it("never puts the token in a job event", async () => {
-    const deps = dependencies();
+    const deps = dependencies({
+      pushRelease: vi.fn(async () => {
+        throw new Error("upload failed with ghp_secret");
+      }),
+    });
     const jobs = new PagesJobs(store, deps);
     const { id } = await jobs.create("story-1");
     const finished = await settle(jobs, id);
+    expect(finished.error).not.toContain("ghp_secret");
     for (const event of finished.events)
       expect(event.message).not.toContain("ghp_secret");
   });

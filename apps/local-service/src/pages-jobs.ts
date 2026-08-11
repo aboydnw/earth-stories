@@ -189,6 +189,7 @@ export class PagesJobs {
     const projectDirectory = this.#store.projectPath(snapshot.projectId);
     const withLock =
       this.#deps.withLock ?? (<T>(_id: string, run: () => Promise<T>) => run());
+    let token: string | null = null;
     snapshot.status = "running";
     snapshot.updatedAt = new Date().toISOString();
 
@@ -204,6 +205,7 @@ export class PagesJobs {
           );
         },
       });
+      token = identity.token;
       snapshot.deviceCode = null;
       await withLock(snapshot.projectId, async () => {
         this.#note(
@@ -264,6 +266,15 @@ export class PagesJobs {
           owner: identity.login,
           repo: context.repo,
           branch,
+          onProgress: ({ uploaded, skipped }) => {
+            const uploadedLabel = uploaded === 1 ? "file" : "files";
+            const skippedLabel = skipped === 1 ? "file" : "files";
+            this.#note(
+              snapshot,
+              "uploading",
+              `Uploaded ${uploaded} ${uploadedLabel}; skipped ${skipped} unchanged ${skippedLabel}.`,
+            );
+          },
         });
 
         this.#note(snapshot, "enabling-pages", "Turning on GitHub Pages…");
@@ -318,10 +329,13 @@ export class PagesJobs {
     } catch (cause) {
       snapshot.status = "failed";
       snapshot.deviceCode = null;
-      snapshot.error =
+      const message =
         cause instanceof Error
           ? cause.message
           : "The story could not be published.";
+      snapshot.error = token
+        ? message.split(token).join("[REDACTED]")
+        : message;
       snapshot.events.push({
         stage: snapshot.stage,
         severity: "warning",
