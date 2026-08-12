@@ -753,6 +753,7 @@ __metadata:
     "@earth-stories/project-store": "workspace:*"
     "@earth-stories/publisher": "workspace:*"
     "@earth-stories/story-schema": "workspace:*"
+    esbuild: "npm:~0.28.0"
     fflate: "npm:^0.8.2"
     tsx: "npm:^4.20.5"
   languageName: unknown

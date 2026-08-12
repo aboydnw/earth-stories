@@ -1,7 +1,11 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
 import { runCommand, type CommandRunner } from "./command-runner.js";
+import {
+  FileCredentialStore,
+  credentialsPath,
+  type CredentialStore,
+} from "./credentials.js";
+
+export { credentialsPath } from "./credentials.js";
 
 export const GITHUB_SCOPES = "public_repo";
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
@@ -29,50 +33,11 @@ export interface ResolveTokenOptions {
   run?: CommandRunner;
   fetchImpl?: typeof fetch;
   credentialsPath?: string;
+  store?: CredentialStore;
   clientId?: string;
   onDeviceCode?: (prompt: DeviceCodePrompt) => void;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   signal?: AbortSignal;
-}
-
-/**
- * Location of the stored token. Deliberately under the home directory rather
- * than a project folder: project folders are exported, zipped, and pushed to a
- * public repository, and a token must never be able to reach a release.
- */
-export function credentialsPath(): string {
-  return join(homedir(), ".earth-stories", "credentials.json");
-}
-
-interface StoredCredentials {
-  token?: unknown;
-  login?: unknown;
-}
-
-async function readStored(path: string): Promise<GitHubIdentity | null> {
-  try {
-    const parsed = JSON.parse(
-      await readFile(path, "utf8"),
-    ) as StoredCredentials;
-    if (typeof parsed.token !== "string" || !parsed.token) return null;
-    if (typeof parsed.login !== "string" || !parsed.login) return null;
-    return { token: parsed.token, login: parsed.login, source: "stored" };
-  } catch {
-    return null;
-  }
-}
-
-async function writeStored(
-  path: string,
-  identity: GitHubIdentity,
-): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(
-    path,
-    `${JSON.stringify({ token: identity.token, login: identity.login }, null, 2)}\n`,
-    { mode: 0o600 },
-  );
-  await chmod(path, 0o600);
 }
 
 async function resolveLogin(
@@ -280,7 +245,9 @@ export async function resolveToken(
 ): Promise<GitHubIdentity> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const run = options.run ?? runCommand;
-  const path = options.credentialsPath ?? credentialsPath();
+  const store =
+    options.store ??
+    new FileCredentialStore(options.credentialsPath ?? credentialsPath());
   const sleep =
     options.sleep ??
     ((ms: number, signal?: AbortSignal) =>
@@ -302,10 +269,11 @@ export async function resolveToken(
       }));
   throwIfAborted(options.signal);
 
-  const stored = await readStored(path);
+  const stored = await store.read();
   if (stored) {
     const login = await resolveLogin(stored.token, fetchImpl, options.signal);
     if (login) return { token: stored.token, login, source: "stored" };
+    await store.clear();
   }
 
   const ghToken = await tokenFromGhCli(run, options.signal);
@@ -332,6 +300,6 @@ export async function resolveToken(
   if (!login)
     throw new Error("GitHub signed in but did not return an account name.");
   const identity: GitHubIdentity = { token, login, source: "device" };
-  await writeStored(path, identity);
+  await store.write({ token: identity.token, login: identity.login });
   return identity;
 }

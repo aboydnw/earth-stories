@@ -1,17 +1,9 @@
 import { constants } from "node:fs";
 import { access, mkdir, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
+import type { CredentialStore } from "./credentials.js";
 
-export interface StoredCredentials {
-  token: string;
-  login: string;
-}
-
-export interface CredentialStore {
-  read(): Promise<StoredCredentials | null>;
-  write(value: StoredCredentials): Promise<void>;
-  clear(): Promise<void>;
-}
+export type { CredentialStore, StoredCredentials } from "./credentials.js";
 
 export interface ServiceLimits {
   maxBodyBytes: number;

@@ -10,6 +10,7 @@ import { runCommand } from "./command-runner.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { PagesJobs } from "./pages-jobs.js";
+import { resolveToken } from "./github-auth.js";
 import { createLocalServer, withProjectPublicationLock } from "./server.js";
 
 export type LocalServiceStartupCode =
@@ -219,6 +220,8 @@ export function beginLocalService(
     const pagesJobs = new PagesJobs(store, {
       viewerDirectory: resolved.viewerDirectory,
       withLock: withProjectPublicationLock,
+      resolveToken: (options) =>
+        resolveToken({ ...options, store: resolved.credentials }),
     });
     await store.initialize();
     if (startup.signal.aborted) throw closedBeforeReady(startup.signal);

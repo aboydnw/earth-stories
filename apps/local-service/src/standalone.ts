@@ -1,14 +1,9 @@
 import { platform } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CredentialStore, LocalServiceConfig } from "./config.js";
+import type { LocalServiceConfig } from "./config.js";
+import { FileCredentialStore } from "./credentials.js";
 import { startLocalService } from "./runtime.js";
-
-const unusedCredentials: CredentialStore = {
-  read: async () => null,
-  write: async () => undefined,
-  clear: async () => undefined,
-};
 
 export function resolveStandaloneConfig(
   environment: NodeJS.ProcessEnv = process.env,
@@ -46,7 +41,7 @@ export function resolveStandaloneConfig(
       workerDirectory: join(repositoryDirectory, "conversion/worker"),
       pixiHome: null,
     },
-    credentials: unusedCredentials,
+    credentials: new FileCredentialStore(),
     capabilityToken: null,
   };
 }
@@ -85,3 +80,7 @@ const entrypoint = process.argv[1]
   ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
   : false;
 if (entrypoint) void runStandalone();
+
+export * from "./config.js";
+export * from "./credentials.js";
+export * from "./runtime.js";

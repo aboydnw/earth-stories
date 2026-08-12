@@ -4,6 +4,7 @@ import { isAbsolute, join, relative } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { credentialsPath, resolveToken } from "./github-auth.js";
 import type { CommandRunner } from "./command-runner.js";
+import type { CredentialStore, StoredCredentials } from "./credentials.js";
 
 const nowhere: CommandRunner = async () => {
   throw new Error("gh is not installed");
@@ -39,6 +40,80 @@ describe("credentialsPath", () => {
 });
 
 describe("resolveToken", () => {
+  it("reads and clears an invalid token through the injected store", async () => {
+    let stored: StoredCredentials | null = {
+      token: "expired-token",
+      login: "old-login",
+    };
+    let clears = 0;
+    const store: CredentialStore = {
+      read: async () => stored,
+      write: async (value) => {
+        stored = value;
+      },
+      clear: async () => {
+        clears += 1;
+        stored = null;
+      },
+    };
+
+    const identity = await resolveToken({
+      store,
+      run: async () => ({ stdout: "fresh-token\n", stderr: "" }),
+      fetchImpl: vi.fn(async (_input, init) =>
+        String(new Headers(init?.headers).get("authorization")).includes(
+          "expired-token",
+        )
+          ? jsonResponse({ message: "Bad credentials" }, 401)
+          : userResponse("mapper"),
+      ) as typeof fetch,
+    });
+
+    expect(clears).toBe(1);
+    expect(identity).toEqual({
+      token: "fresh-token",
+      login: "mapper",
+      source: "gh",
+    });
+  });
+
+  it("persists a device token through the injected store", async () => {
+    let stored: StoredCredentials | null = null;
+    const store: CredentialStore = {
+      read: async () => stored,
+      write: async (value) => {
+        stored = value;
+      },
+      clear: async () => {
+        stored = null;
+      },
+    };
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/login/device/code"))
+        return jsonResponse({
+          device_code: "device-code",
+          user_code: "WXYZ-1234",
+          verification_uri: "https://github.com/login/device",
+          expires_in: 900,
+          interval: 1,
+        });
+      if (url.endsWith("/login/oauth/access_token"))
+        return jsonResponse({ access_token: "device-token" });
+      return userResponse("mapper");
+    }) as unknown as typeof fetch;
+
+    await resolveToken({
+      store,
+      clientId: "client-id",
+      run: nowhere,
+      fetchImpl,
+      sleep: async () => undefined,
+    });
+
+    expect(stored).toEqual({ token: "device-token", login: "mapper" });
+  });
+
   it("cancels an in-flight GitHub request with the caller signal", async () => {
     const controller = new AbortController();
     let requestStarted!: () => void;

@@ -143,6 +143,34 @@ describe("createLocalServer", () => {
           import.meta.url,
         ).href
       );
+      await import(
+        /* @vite-ignore */ new URL(
+          "./credentials.js?import-safe",
+          import.meta.url,
+        ).href
+      );
+      await import(
+        /* @vite-ignore */ new URL(
+          "./github-auth.js?import-safe",
+          import.meta.url,
+        ).href
+      );
+      await import(
+        /* @vite-ignore */ new URL(
+          "./runtime.js?public-import-safe",
+          import.meta.url,
+        ).href
+      );
+      await import(
+        /* @vite-ignore */ new URL(
+          "./standalone.js?import-safe",
+          import.meta.url,
+        ).href
+      );
+      await import(
+        /* @vite-ignore */ new URL("./index.js?import-safe", import.meta.url)
+          .href
+      );
     } finally {
       if (previous === undefined) delete process.env.EARTH_STORIES_PROJECTS_DIR;
       else process.env.EARTH_STORIES_PROJECTS_DIR = previous;
