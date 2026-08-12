@@ -36,6 +36,7 @@ import { checkShareLink, decodeShareCard } from "./share-health.js";
 import { storeShareCard } from "./share-card.js";
 import {
   canonicalizeRequestPath,
+  loadImmutableEditorPaths,
   serveEditorFile,
   staticNotFound,
 } from "./static.js";
@@ -269,6 +270,7 @@ export function createLocalServer(
   },
   internal: {
     testOnlyDisableTrustedMutationOrigin?: boolean;
+    testOnlyBeforeStaticIdentityCheck?: (path: string) => Promise<void>;
     testOnlyAfterStaticOpen?: (path: string) => Promise<void>;
   } = {},
 ): Server {
@@ -278,6 +280,9 @@ export function createLocalServer(
   );
   const conversionJobs = jobs.conversion;
   const pagesJobs = jobs.pages;
+  const immutableEditorPaths = config.editorDirectory
+    ? loadImmutableEditorPaths(config.editorDirectory)
+    : Promise.resolve(new Set<string>());
   let server: Server;
   server = createServer(async (request, response) => {
     response.setHeader("x-content-type-options", "nosniff");
@@ -712,13 +717,18 @@ export function createLocalServer(
           staticNotFound(response);
           return;
         }
+        const immutablePaths = await immutableEditorPaths;
         const exactPath = canonicalPath === "/" ? "/index.html" : canonicalPath;
         const exactResult = await serveEditorFile(
           request,
           response,
           config.editorDirectory,
           exactPath,
-          { afterOpen: internal.testOnlyAfterStaticOpen },
+          {
+            beforeIdentityCheck: internal.testOnlyBeforeStaticIdentityCheck,
+            afterOpen: internal.testOnlyAfterStaticOpen,
+            immutablePaths,
+          },
         );
         if (exactResult === "served") return;
         if (exactResult === "rejected") {
@@ -733,7 +743,9 @@ export function createLocalServer(
             config.editorDirectory,
             "/index.html",
             {
+              beforeIdentityCheck: internal.testOnlyBeforeStaticIdentityCheck,
               afterOpen: internal.testOnlyAfterStaticOpen,
+              immutablePaths,
             },
           )) === "served"
         )

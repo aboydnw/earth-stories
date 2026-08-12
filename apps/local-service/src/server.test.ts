@@ -328,8 +328,23 @@ describe("createLocalServer", () => {
         "assets/app.01234567.js": "0123456789",
         "assets/index-cNtA-444.js": "vite hash with hyphen",
         "assets/GeoParquetOverlay-HsoHMYXt.js": "vite mixed-case hash",
-        "assets/editor-shell.js": "ordinary hyphenated name",
+        "assets/editor-style.css": "declared css",
+        "assets/editor-logo.svg": "declared asset",
+        "assets/editor-settings.js": "ordinary hyphenated name",
+        "assets/index-ZZZZ9999.js": "undeclared vite-looking name",
         "assets/readme.txt": "ordinary",
+        ".vite/manifest.json": JSON.stringify({
+          "index.html": {
+            file: "assets/index-cNtA-444.js",
+            css: ["assets/editor-style.css"],
+            assets: ["assets/editor-logo.svg"],
+            imports: ["_GeoParquetOverlay.ts"],
+          },
+          "_GeoParquetOverlay.ts": {
+            file: "assets/GeoParquetOverlay-HsoHMYXt.js",
+          },
+          "legacy.ts": { file: "assets/app.01234567.js" },
+        }),
       },
     });
     const { createLocalServer } = await import("./server.js");
@@ -351,14 +366,22 @@ describe("createLocalServer", () => {
       for (const path of [
         "/assets/index-cNtA-444.js",
         "/assets/GeoParquetOverlay-HsoHMYXt.js",
+        "/assets/editor-style.css",
+        "/assets/editor-logo.svg",
       ]) {
         const viteAsset = await fetch(`${base}${path}`);
         expect(viteAsset.headers.get("cache-control")).toBe(
           "public, max-age=31536000, immutable",
         );
       }
-      const ordinaryHyphenated = await fetch(`${base}/assets/editor-shell.js`);
+      const ordinaryHyphenated = await fetch(
+        `${base}/assets/editor-settings.js`,
+      );
       expect(ordinaryHyphenated.headers.get("cache-control")).toBe("no-cache");
+      const undeclaredViteName = await fetch(
+        `${base}/assets/index-ZZZZ9999.js`,
+      );
+      expect(undeclaredViteName.headers.get("cache-control")).toBe("no-cache");
 
       const full = await fetch(`${base}/assets/readme.txt`);
       const etag = full.headers.get("etag");
@@ -388,6 +411,32 @@ describe("createLocalServer", () => {
     }
   });
 
+  it("uses no-cache when the Vite manifest is absent or malformed", async () => {
+    for (const manifest of [undefined, "not json"]) {
+      const { config, store, jobs } = await setup({
+        editorFiles: {
+          "index.html": "editor shell",
+          "assets/index-cNtA-444.js": "hash-looking asset",
+          ...(manifest === undefined
+            ? {}
+            : { ".vite/manifest.json": manifest }),
+        },
+      });
+      const { createLocalServer } = await import("./server.js");
+      const server = createLocalServer(store, config, jobs);
+      const port = await listen(server);
+      try {
+        const response = await fetch(
+          `http://127.0.0.1:${port}/assets/index-cNtA-444.js`,
+        );
+        expect(response.status).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("no-cache");
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
   it("streams the validated opened file when its pathname is swapped", async () => {
     const { config, store, jobs, root, editorDirectory } = await setup({
       editorFiles: { "race.txt": "inside bytes" },
@@ -409,6 +458,32 @@ describe("createLocalServer", () => {
       expect(await readFile(target, "utf8")).toBe("outside bytes");
       expect(response.status).toBe(200);
       expect(await response.text()).toBe("inside bytes");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("rejects a pathname swapped before opened-file identity validation", async () => {
+    const { config, store, jobs, root, editorDirectory } = await setup({
+      editorFiles: { "race-before.txt": "inside bytes" },
+    });
+    const outside = join(root, "outside-before.txt");
+    const target = join(editorDirectory!, "race-before.txt");
+    await writeFile(outside, "outside bytes");
+    const { createLocalServer } = await import("./server.js");
+    const server = createLocalServer(store, config, jobs, {
+      testOnlyBeforeStaticIdentityCheck: async (openedPath) => {
+        if (openedPath !== target) return;
+        await rename(target, join(editorDirectory!, "opened-before.txt"));
+        await symlink(outside, target);
+      },
+    });
+    const port = await listen(server);
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/race-before.txt`);
+      expect(await readFile(target, "utf8")).toBe("outside bytes");
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("Not found\n");
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
