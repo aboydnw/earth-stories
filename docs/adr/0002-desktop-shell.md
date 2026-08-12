@@ -20,15 +20,25 @@ raw logs are not dependencies of this ADR.
 
 ## Provisional decision
 
-Keep the desktop-shell decision open. The Linux evidence supports continuing
-with the copied-manifest Pixi design: exact-version, checksum-verified Pixi can
-install locked environments and run the real conversion worker without observed
-modification of the modeled packaged resources. A single-file ESM service
-bundle also starts and completes the core project API lifecycle in Electron,
-but current resource-root assumptions and the absence of editor serving prevent
-that bundle from being a package-ready desktop service. The evidence does not
-decide Electron versus Tauri and does not satisfy the desktop spike's acceptance
-criteria.
+Proceed with Electron for the next desktop design iteration, provisionally. It
+is the only shell exercised in this spike: Electron 43.4.0 ran the bundled
+service with its embedded Node 24.18.1, avoiding a second Node runtime or a
+sidecar boundary. Tauri remains the named alternative and supports packaged
+external binaries as
+[sidecars](https://v2.tauri.app/develop/sidecar/), but this service would still
+need a Node/Python executable boundary and Tauri would not by itself make
+downloaded conda executables acceptable to macOS hardened runtime.
+
+This choice is not acceptance of the desktop architecture. It expires if the
+notarized macOS probe cannot execute the locked Pixi environment without
+weakening runtime protections, or if any quantitative revisit trigger below is
+crossed. The Linux evidence supports continuing with the copied-manifest Pixi
+design: exact-version, checksum-verified Pixi installed locked environments and
+ran the real conversion worker without observed modification of the modeled
+packaged resources. A single-file ESM service bundle also started and completed
+the core project API lifecycle in Electron, but current resource-root
+assumptions and the absence of editor serving prevent that bundle from being a
+package-ready desktop service.
 
 Any implementation that advances from this spike must copy and digest-verify
 both `pixi.toml` and `pixi.lock`, restore mismatched copies before execution, use
@@ -182,7 +192,8 @@ env PIXI_HOME=./scratch-userData/tools/pixi-home-raster \
 ```
 
 The worker returned `status: succeeded`, rio-cogeo 5.4.2, no warnings, and a
-1,304-byte output in 8.44 s wall time. The independent command reported
+1,304-byte output in 8.44 s wall time, 3.41 s user time, 0.27 s system time,
+and 108,676 KiB maximum RSS. The independent command reported
 `tiny-output.cog.tif is a valid cloud optimized GeoTIFF`.
 
 The worker source was executed from the repository rather than from a bundled
@@ -215,6 +226,11 @@ repository workspace dependencies and the third-party packages `fflate`,
 which cannot be converted into application JavaScript and are resolved by
 Electron's embedded Node runtime:
 
+The ignored development installation's Electron package tree was 328,595,366 B
+apparent. Its `dist` directory was 327,450,682 B, including the 221,064,440 B
+Electron executable and 2,731,688 B `libffmpeg.so`. These are unpacked
+development-runtime footprints, not a compressed, signed installer measurement.
+
 ```text
 module
 node:assert, node:async_hooks, node:buffer, node:child_process, node:console
@@ -234,8 +250,9 @@ alias above is the tested configuration.
 Running from the ignored spike directory, which contained the bundle but no
 TypeScript service sources and invoked neither `tsx` nor a TypeScript loader,
 returned HTTP 200 from `/health`. That standalone smoke used host Node 22.22.0
-only as an additional compatibility observation; the measurements below use
-Electron's actual embedded Node 24.18.1.
+only as an additional compatibility observation: bundle import to responsive
+health was 149.705 ms and process `VmRSS` was 85,948 KiB. The target-runtime
+measurements below use Electron's actual embedded Node 24.18.1.
 
 ### Electron execution and API results
 
@@ -277,6 +294,7 @@ through the service's `server.close` callback to the process exit event.
 |      2 |           256.334 ms | 211,771,392 B (201.96 MiB) |         0.527 ms |
 |      3 |           210.205 ms | 211,943,424 B (202.13 MiB) |         1.055 ms |
 | Median |           225.680 ms | 211,771,392 B (201.96 MiB) |         0.668 ms |
+|   Mean |           230.740 ms | 211,720,875 B (201.91 MiB) |         0.750 ms |
 
 These are development-runtime measurements with a warm Electron download and
 host page cache, not packaged installer or end-user performance measurements.
@@ -313,6 +331,134 @@ Phase 1 must therefore:
 - retain the tested ESM/CommonJS bridge or remove the bundled CommonJS dynamic
   require before treating the service artifact as production-ready.
 
+## Redistribution inventory
+
+`Yes`, `no`, and `unresolved` below are evidence dispositions, not legal
+opinions. `Yes` means the identified license and required notice action are
+available; counsel still owns the release review.
+
+| Item or group                                                    | Delivered by                                                                           | License evidence and source                                                                                                                                                                                                                                                                                                                                          | Required release action                                                                                                                                                                                                                                                          | Disposition          |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| Electron 43.4.0                                                  | Installer                                                                              | Electron's official [MIT license](https://github.com/electron/electron/blob/main/LICENSE); the installed distribution contained the same 1,096 B `LICENSE`                                                                                                                                                                                                           | Ship the Electron copyright and MIT text                                                                                                                                                                                                                                         | Yes                  |
+| Chromium, Node, native libraries, and `libffmpeg.so` in Electron | Installer                                                                              | The measured Electron distribution included a 19,956,019 B `LICENSES.chromium.html`; Electron documents that it [embeds Chromium and Node](https://www.electronjs.org/docs/latest/)                                                                                                                                                                                  | Preserve `LICENSES.chromium.html` verbatim in the application and installer notices; have counsel review codec/patent exposure separately because copyright notices do not answer patent availability by territory                                                               | Unresolved           |
+| Pixi 0.76.1                                                      | Lazy, direct user download in the tested design; installer only if that design changes | Official Pixi repository identifies [BSD-3-Clause](https://github.com/prefix-dev/pixi/)                                                                                                                                                                                                                                                                              | Keep the BSD copyright, conditions, and disclaimer in third-party notices if Earth Stories bundles, mirrors, or redistributes Pixi; retain pinned checksum verification either way                                                                                               | Yes                  |
+| Locked Linux `core` environment, 30 records                      | Lazy user download from conda-forge                                                    | Exact builds, declared license identifiers, and artifact URLs are in the tracked [`pixi.lock`](../../pixi.lock); the installed metadata confirmed the same URLs                                                                                                                                                                                                      | Generate an SBOM and notice bundle from each target platform's final package records; review the copyleft and exception-bearing packages below before any mirroring, offline cache, or installer bundling                                                                        | Unresolved           |
+| Locked Linux `raster` environment, 98 records                    | Lazy user download from conda-forge                                                    | Exact builds, declared license identifiers, and artifact URLs are in the tracked [`pixi.lock`](../../pixi.lock); installed metadata included native GDAL/PROJ/GEOS and codec libraries                                                                                                                                                                               | Same as `core`; do not treat lazy download as permission to omit product disclosure or future offline-bundle review                                                                                                                                                              | Unresolved           |
+| Checked-in `Satoshi-Variable.woff2` in UI and viewer             | Installer and every offline publication                                                | Both 42,588 B files are byte-identical (SHA-256 `e739aff9b4d02c264341d6d4872edcda28e79373aeda936f659566a1cd3eb47f`) and entered in commit `8739d9b`; no tracked license or provenance file was found. Fontshare's official [ITF FFL](https://www.fontshare.com/licenses/itf-ffl) permits broad use but restricts distribution of the font files beyond defined uses. | Do not release either artifact with this binary. Document the exact original download, font classification and license; obtain written redistribution permission if required, or replace the font with one whose tracked license covers installer and publication redistribution | No — release blocker |
+
+The installed `core` records were `_openmp_mutex`, `annotated-types`, `bzip2`,
+`ca-certificates`, `icu`, `ld_impl_linux-64`, `libexpat`, `libffi`, `libgcc`,
+`libgomp`, `liblzma`, `libnsl`, `libsqlite`, `libstdcxx`, `libuuid`,
+`libxcrypt`, `libzlib`, `ncurses`, `openssl`, `pydantic`, `pydantic-core`,
+`python`, `python_abi`, `readline`, `tk`, `typing-extensions`,
+`typing-inspection`, `typing_extensions`, `tzdata`, and `zstd`. All were also
+present in `raster`.
+
+The 98 `raster` metadata records grouped by their declared strings as follows:
+30 MIT; 23 BSD-3-Clause; 7 GPL-3.0-only WITH GCC-exception-3.1; 3 each
+Apache-2.0, BSD-2-Clause, LGPL-2.1-only, and Zlib; 2 each GPL-2.0-or-later,
+GPL-3.0-only, ISC, LGPL-2.1-or-later, MPL-1.1, PSF-2.0, and `blessing`; and one
+each 0BSD, Apache-2.0 OR BSD-3-Clause, BSD-2-Clause OR GPL-2.0-or-later, HPND,
+IJG AND BSD-3-Clause AND Zlib, LicenseRef-Public-Domain, Python-2.0, TCL, X11
+AND BSD-3-Clause, `bzip2-1.0.6`, `curl`, and `zlib-acknowledgement`. The
+attention set is:
+
+- GPL-3.0-only: `ld_impl_linux-64`, `readline`;
+- GPL-3.0-only WITH GCC-exception-3.1: `libgcc`, `libgcc-ng`, `libgfortran`,
+  `libgfortran5`, `libgomp`, `libstdcxx`, `libstdcxx-ng`;
+- GPL-2.0-or-later: `librttopo`, `lzo`; dual BSD-2-Clause OR
+  GPL-2.0-or-later: `libev`;
+- LGPL: `geos`, `keyutils`, `libiconv`, `libnsl`, `libxcrypt`; and
+- MPL-1.1: `freexl`, `libspatialite`.
+
+This preserves the metadata's exception and alternative-license wording. It
+does not assert that any particular combination is automatically
+redistributable. The production SBOM must also inventory the final editor,
+viewer, and bundled-service JavaScript dependency graph; this spike did not
+produce a release installer from which to capture that graph.
+
+## Entitlements and external signing gates
+
+No entitlements were applied or tested on Linux. Linux execution used
+`--no-sandbox` solely because the throwaway Electron install lacked a configured
+SUID helper; production must not use that switch.
+
+No macOS entitlement has been tested. The signed probe must begin with hardened
+runtime and the renderer's likely `com.apple.security.cs.allow-jit`, then record
+the entitlement on every signed executable. Apple's notarization guidance says
+hardened runtime is required and describes JIT as a targeted exception
+([notarization guidance](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)). Do not add
+`com.apple.security.cs.allow-unsigned-executable-memory` or
+`com.apple.security.cs.disable-library-validation` merely to make the probe
+pass; Apple describes library validation as an important hardening feature and
+subjects disabled applications to extra Gatekeeper checks
+([entitlement documentation](https://developer.apple.com/documentation/BundleResources/Entitlements/com.apple.security.cs.disable-library-validation)).
+Developer ID credentials, notarization, quarantine behavior, code-signature
+integrity after provisioning, and downloaded Pixi/conda execution are unresolved
+external gates.
+
+Windows Authenticode signing is also an unresolved external gate. The current
+CA/Browser Forum requirements say code-signing private keys issued since June
+2023 must be generated, stored, and used in a qualifying hardware crypto module
+([baseline requirements](https://cabforum.org/working-groups/code-signing/requirements/)). Select and procure an HSM-backed signing service, then test a
+signed installer on a clean Windows x64 host.
+
+## Spike-question evidence matrix
+
+| Question                                                                            | Evidence                                                                                                                                                                                                                            | Result                                                                      |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Can a notarized hardened-runtime macOS build run downloaded conda binaries?         | No macOS host, Developer ID signing, notarization, entitlement, quarantine, or clean-machine run occurred                                                                                                                           | Open — architecture gate                                                    |
+| Does copied-manifest Pixi work from real packaged resources on all three platforms? | Linux x64 installed `core` and `raster`, ran a real COG conversion, detected/restored tampering, and left the permission-modeled resources unchanged; Windows and macOS were not run, and the worker still came from the repository | Partially answered; open on macOS and Windows                               |
+| Can the service and workspace dependencies be packaged, and what does it cost?      | One 1,871,875 B ESM file with only Node built-ins external ran three Electron API cycles; `/` remained 404 and packaged viewer/example/worker resources were absent                                                                 | Bundle feasibility answered; package-ready same-origin service remains open |
+| Can the redistributed components ship with known obligations?                       | Electron/Pixi notices were identified; conda groups need notice/counsel review; Chromium/codec review is open; Satoshi provenance is absent                                                                                         | No — font blocker and unresolved reviews                                    |
+
+## Revisit triggers and failure path
+
+Replace Electron with a Tauri comparison spike, or revisit the distribution
+architecture, when any of these occurs:
+
+- any compressed, signed installer exceeds 250 MiB before lazy capability
+  downloads;
+- median end-to-end cold launch exceeds 3.0 s across five launches on the
+  declared minimum-spec reference machine;
+- the total Electron process tree exceeds 500 MiB RSS after a representative
+  story has been open and idle for 30 seconds;
+- representative pan/zoom playback falls below 55 frames/s median or has more
+  than 1% of frames slower than 33 ms;
+- the team cannot remain within Electron's latest three supported releases,
+  deliver a critical runtime security update within 7 days and other supported
+  runtime updates within 30 days, or emergency runtime updates average more than
+  one per month for three consecutive months. Electron documents an eight-week
+  major cadence and support for only the latest three stable releases
+  ([release policy](https://www.electronjs.org/docs/latest/tutorial/electron-timelines)); or
+- notarization or signed execution requires disabling the renderer sandbox,
+  disabling library validation, allowing unsigned executable memory, or another
+  comparably broad runtime exception.
+
+If hardened-runtime Pixi execution fails, stop before `desktop-02`; do not waive
+the final trigger. First compare a signed, installer-bundled conversion runtime
+under Electron with the same runtime as a Tauri packaged sidecar. Measure both
+against the 250 MiB ceiling and repeat notarization on a clean Mac. If a signed
+local runtime cannot satisfy both execution and size gates, remove local Pixi
+execution from the desktop design and use a hosted conversion service (with a
+clear offline limitation) rather than shipping weakened runtime protections.
+
+## Next actions
+
+1. Resolve Satoshi provenance or replace it before any installer or offline
+   publication release.
+2. Acquire Developer ID access; run, notarize, install, and convert on a clean
+   Mac while recording entitlements, quarantine, signatures, and the full
+   process tree.
+3. Select an HSM-backed Windows signing service and repeat the packaged-layout
+   conversion on a clean signed Windows x64 installer.
+4. Refactor service lifecycle and resource injection, package the editor/viewer,
+   examples, and worker, then measure signed installer bytes, true cold start,
+   total process-tree RSS, shutdown cleanup, and viewer frame pacing.
+5. Generate per-platform SBOMs and third-party notices from the final installers
+   and lazy environments; send copyleft, codecs/patents, and font terms for
+   counsel review.
+
 ## Gates still open
 
 - A notarized, hardened-runtime macOS build has not been tested. Entitlements,
@@ -322,18 +468,20 @@ Phase 1 must therefore:
   conversion have not been tested.
 - Windows signing and macOS notarization have not been tested or evidenced.
 - Installer size, end-to-end launch cold start, a production-sandboxed desktop
-  launch, renderer-inclusive memory, and viewer/editor performance remain
-  unmeasured.
-- The redistribution-license inventory remains incomplete.
+  launch, total process-tree memory, and viewer frame rate remain unmeasured.
+- The redistribution inventory is recorded, but Satoshi blocks release and the
+  conda, codec/patent, and final per-platform notice reviews remain unresolved.
 - The current capability disclosure numbers need either a clearly named network
   download measurement or revised semantics; extracted environment size is
   materially larger, especially for `core`.
 
 ## Consequences
 
-No shell technology is accepted by this ADR yet, and no later desktop plan may
-claim the packaging spike passed on the strength of the Linux probes alone. The
-probes provide a reproducible Linux baseline and expose cache redirection,
-service lifecycle, ESM interop, and packaged-resource requirements. This ADR
-should be completed or superseded only after the remaining platform, signing,
-installer, renderer, and license gates have evidence.
+Electron is the provisional implementation direction, not an accepted release
+architecture, and no later desktop plan may claim the packaging spike passed on
+the strength of the Linux probes alone. The probes provide a reproducible Linux
+baseline and expose cache redirection, service lifecycle, ESM interop,
+packaged-resource, signing, and notice requirements. `desktop-02` remains gated
+on notarized hardened-runtime Pixi execution. Release additionally remains
+blocked on font provenance and the unresolved per-platform redistribution
+review.
