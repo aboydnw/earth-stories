@@ -108,19 +108,22 @@ describe("desktop session policies", () => {
       string[]
     >;
     expect(headers["X-Frame-Options"]).toEqual(["DENY"]);
-    const policy = headers["Content-Security-Policy"]?.[0] ?? "";
-    expect(policy).toContain("script-src 'self'");
-    expect(policy).not.toMatch(
-      /script-src[^;]*(?:https:|blob:|'unsafe-inline'|'unsafe-eval')/,
+    const directives = Object.fromEntries(
+      (headers["Content-Security-Policy"]?.[0] ?? "")
+        .split(";")
+        .map((directive) => {
+          const [name, ...sources] = directive.trim().split(/\s+/);
+          return [name, sources.join(" ")];
+        }),
     );
-    expect(policy).toContain(
-      "connect-src 'self' http://127.0.0.1:45123 https: blob:",
-    );
-    expect(policy).toContain(
-      "img-src 'self' http://127.0.0.1:45123 https: data: blob:",
-    );
-    expect(policy).toContain("worker-src 'self' blob:");
-    expect(policy).toContain("object-src 'none'");
+    expect(directives).toMatchObject({
+      "script-src": "'self'",
+      "connect-src": "'self' http://127.0.0.1:45123 https:",
+      "img-src": "'self' http://127.0.0.1:45123 https: data:",
+      "worker-src": "'self' blob:",
+      "child-src": "'none'",
+      "object-src": "'none'",
+    });
   });
 });
 
@@ -155,14 +158,20 @@ describe("desktop navigation policy", () => {
     };
   }
 
-  it("allows navigation and new windows at the exact service origin", () => {
+  it("allows navigation at the exact service origin", () => {
     const value = harness();
 
     expect(
       value.navigate("http://127.0.0.1:45123/projects/one"),
     ).not.toHaveBeenCalled();
+    expect(value.openExternal).not.toHaveBeenCalled();
+  });
+
+  it("denies same-origin popups so no unmanaged child window is created", () => {
+    const value = harness();
+
     expect(value.open("http://127.0.0.1:45123/help")).toEqual({
-      action: "allow",
+      action: "deny",
     });
     expect(value.openExternal).not.toHaveBeenCalled();
   });

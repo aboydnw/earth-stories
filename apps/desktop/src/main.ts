@@ -2,7 +2,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { DesktopPaths } from "./paths.js";
-import { registerDesktopIpcHandlers } from "./ipc.js";
+import {
+  registerDesktopIpcHandlers,
+  type DesktopIpcWebContents,
+} from "./ipc.js";
 import { resolveDesktopPaths } from "./paths.js";
 import { DesktopService } from "./service.js";
 import {
@@ -65,7 +68,7 @@ export interface DesktopMainDependencies {
     options: { origin: string; capabilityToken: string },
   ): void;
   installSessionPolicies(session: unknown, options: { origin: string }): void;
-  installIpcHandlers(): void;
+  installIpcHandlers(options: { origin: string; session: unknown }): void;
   createWindow(options: {
     origin: string;
     session: unknown;
@@ -207,13 +210,13 @@ export async function launchDesktopMain(
     return lifecycle;
   }
 
-  dependencies.installIpcHandlers();
   const desktopSession = dependencies.createSession();
   dependencies.installHeaderHook(desktopSession, {
     origin,
     capabilityToken: dependencies.service.capabilityToken,
   });
   dependencies.installSessionPolicies(desktopSession, { origin });
+  dependencies.installIpcHandlers({ origin, session: desktopSession });
   const dimensions = await dependencies.readDimensions(
     dependencies.paths.windowPreferencesFile,
   );
@@ -267,6 +270,7 @@ export async function runElectronDesktop(): Promise<void> {
   await mkdir(paths.logsDirectory, { recursive: true });
   const localService = new DesktopService(paths);
   const pendingFiles: string[] = [];
+  let primaryWebContents: DesktopIpcWebContents | null = null;
 
   activeDesktopLifecycle = await launchDesktopMain({
     paths,
@@ -290,12 +294,15 @@ export async function runElectronDesktop(): Promise<void> {
       },
     },
     createSession: () => session.fromPartition("persist:earth-stories"),
-    installIpcHandlers: () => {
+    installIpcHandlers: ({ origin, session: desktopSession }) => {
       registerDesktopIpcHandlers({
         ipcMain,
         service: localService,
         shell,
         projectsDirectory: paths.projectsDirectory,
+        origin,
+        session: desktopSession,
+        expectedWebContents: () => primaryWebContents,
       });
     },
     installHeaderHook: (desktopSession, options) => {
@@ -328,6 +335,7 @@ export async function runElectronDesktop(): Promise<void> {
           session: desktopSession,
         }) as Electron.BrowserWindowConstructorOptions,
       );
+      primaryWebContents = browserWindow.webContents;
       installNavigationPolicy(
         browserWindow.webContents as unknown as DesktopNavigationTarget,
         { origin, openExternal: (url) => shell.openExternal(url) },

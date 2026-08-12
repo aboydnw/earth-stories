@@ -78,7 +78,11 @@ function harness(
     },
     installHeaderHook: () => events.push("session:hook"),
     installSessionPolicies: () => events.push("session:policies"),
-    installIpcHandlers: () => events.push("ipc:handlers"),
+    installIpcHandlers: (...args: unknown[]) => {
+      const options = args[0] as
+        { origin?: string; session?: { name?: string } } | undefined;
+      events.push(`ipc:handlers:${options?.origin}:${options?.session?.name}`);
+    },
     createWindow: ({ dimensions }) => {
       events.push(`window:create:${dimensions.width}x${dimensions.height}`);
       return {
@@ -131,10 +135,10 @@ describe("launchDesktopMain", () => {
     expect(value.events).toEqual([
       "ready",
       "service:start",
-      "ipc:handlers",
       "session:create",
       "session:hook",
       "session:policies",
+      "ipc:handlers:http://127.0.0.1:45123:desktop-session",
       "window:create:1111x777",
     ]);
   });

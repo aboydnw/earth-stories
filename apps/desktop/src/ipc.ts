@@ -23,6 +23,18 @@ export interface DesktopIpcDependencies {
   service: DesktopIpcService;
   shell: DesktopShell;
   projectsDirectory: string;
+  origin: string;
+  session: unknown;
+  expectedWebContents(): DesktopIpcWebContents | null;
+}
+
+export interface DesktopIpcFrame {
+  url: string;
+}
+
+export interface DesktopIpcWebContents {
+  mainFrame: DesktopIpcFrame;
+  session: unknown;
 }
 
 function requireNoArguments(method: string, args: unknown[]): void {
@@ -60,16 +72,46 @@ function isContainedProjectPath(root: string, candidate: string): boolean {
   return path !== "" && !path.startsWith(`..${sep}`) && path !== "..";
 }
 
+function requireAuthorizedSender(
+  event: unknown,
+  dependencies: DesktopIpcDependencies,
+): void {
+  if (typeof event !== "object" || event === null)
+    throw new Error("IPC is restricted to the authorized desktop renderer.");
+  const sender = "sender" in event ? event.sender : null;
+  const senderFrame = "senderFrame" in event ? event.senderFrame : null;
+  const expected = dependencies.expectedWebContents();
+  if (
+    expected === null ||
+    sender !== expected ||
+    senderFrame !== expected.mainFrame ||
+    expected.session !== dependencies.session ||
+    typeof senderFrame !== "object" ||
+    senderFrame === null ||
+    !("url" in senderFrame) ||
+    typeof senderFrame.url !== "string"
+  )
+    throw new Error("IPC is restricted to the authorized desktop renderer.");
+  try {
+    if (new URL(senderFrame.url).origin !== dependencies.origin)
+      throw new Error("origin mismatch");
+  } catch {
+    throw new Error("IPC is restricted to the authorized desktop renderer.");
+  }
+}
+
 export function registerDesktopIpcHandlers(
   dependencies: DesktopIpcDependencies,
 ): void {
-  dependencies.ipcMain.handle("desktop:choose-workspace", (_event, ...args) => {
+  dependencies.ipcMain.handle("desktop:choose-workspace", (event, ...args) => {
+    requireAuthorizedSender(event, dependencies);
     requireNoArguments("chooseWorkspace", args);
     return null;
   });
   dependencies.ipcMain.handle(
     "desktop:show-project-folder",
-    async (_event, ...args) => {
+    async (event, ...args) => {
+      requireAuthorizedSender(event, dependencies);
       const projectId = requireProjectId(args);
       const projectDirectory =
         await dependencies.service.resolveProjectDirectory(projectId);
@@ -85,7 +127,8 @@ export function registerDesktopIpcHandlers(
   );
   dependencies.ipcMain.handle(
     "desktop:open-external",
-    async (_event, ...args) => {
+    async (event, ...args) => {
+      requireAuthorizedSender(event, dependencies);
       await dependencies.shell.openExternal(requireExternalUrl(args));
     },
   );

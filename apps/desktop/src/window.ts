@@ -54,11 +54,11 @@ function contentSecurityPolicy(origin: string): string {
     "frame-ancestors 'none'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' ${origin} https: blob:`,
-    `img-src 'self' ${origin} https: data: blob:`,
+    `connect-src 'self' ${origin} https:`,
+    `img-src 'self' ${origin} https: data:`,
     "font-src 'self' https: data:",
     "worker-src 'self' blob:",
-    "child-src 'self' blob:",
+    "child-src 'none'",
   ].join("; ");
 }
 
@@ -140,8 +140,8 @@ export function installNavigationPolicy(
     openApprovedExternal(url, options.openExternal);
   });
   target.setWindowOpenHandler(({ url }) => {
-    if (isServiceUrl(url, options.origin)) return { action: "allow" };
-    openApprovedExternal(url, options.openExternal);
+    if (!isServiceUrl(url, options.origin))
+      openApprovedExternal(url, options.openExternal);
     return { action: "deny" };
   });
 }

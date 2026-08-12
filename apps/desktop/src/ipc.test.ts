@@ -5,27 +5,68 @@ function harness(
   resolveProjectDirectory: (projectId: string) => Promise<string> = async (
     projectId,
   ) => `/documents/Earth Stories/${projectId}`,
+  identity: {
+    origin?: string;
+    frameUrl?: string;
+    expectedSession?: object;
+    webContentsSession?: object;
+  } = {},
 ) {
+  const origin = identity.origin ?? "http://127.0.0.1:45123";
+  const expectedSession = identity.expectedSession ?? {
+    name: "desktop-session",
+  };
+  const webContentsSession = identity.webContentsSession ?? expectedSession;
+  const mainFrame = { url: identity.frameUrl ?? `${origin}/projects` };
+  const webContents = { mainFrame, session: webContentsSession };
+  const validEvent = { sender: webContents, senderFrame: mainFrame };
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
   const openExternal = vi.fn(async () => undefined);
   const showItemInFolder = vi.fn();
+  const resolveProject = vi.fn(resolveProjectDirectory);
   registerDesktopIpcHandlers({
     ipcMain: {
       handle: (channel, handler) => handlers.set(channel, handler),
     },
-    service: { resolveProjectDirectory },
+    service: { resolveProjectDirectory: resolveProject },
     shell: { openExternal, showItemInFolder },
     projectsDirectory: "/documents/Earth Stories",
+    origin,
+    session: expectedSession,
+    expectedWebContents: () => webContents,
   });
-  const invoke = async (channel: string, ...args: unknown[]) => {
+  const invokeWithEvent = async (
+    event: unknown,
+    channel: string,
+    ...args: unknown[]
+  ) => {
     const handler = handlers.get(channel);
     if (!handler) throw new Error(`missing handler ${channel}`);
-    return await handler({}, ...args);
+    return await handler(event, ...args);
   };
-  return { handlers, invoke, openExternal, showItemInFolder };
+  const invoke = (channel: string, ...args: unknown[]) =>
+    invokeWithEvent(validEvent, channel, ...args);
+  return {
+    expectedSession,
+    handlers,
+    invoke,
+    invokeWithEvent,
+    mainFrame,
+    openExternal,
+    resolveProject,
+    showItemInFolder,
+    validEvent,
+    webContents,
+  };
 }
 
 describe("desktop IPC", () => {
+  const authorizedCalls = [
+    ["desktop:choose-workspace", []],
+    ["desktop:show-project-folder", ["project-one"]],
+    ["desktop:open-external", ["https://example.com/help"]],
+  ] as const;
+
   it("registers one fixed handler per bridge method", () => {
     expect([...harness().handlers.keys()].sort()).toEqual([
       "desktop:choose-workspace",
@@ -42,6 +83,88 @@ describe("desktop IPC", () => {
       value.invoke("desktop:choose-workspace", "/host/chosen/path"),
     ).rejects.toThrow("chooseWorkspace");
   });
+
+  it.each(authorizedCalls)(
+    "rejects absent sender identity on %s",
+    async (channel, args) => {
+      const value = harness();
+
+      await expect(
+        value.invokeWithEvent(undefined, channel, ...args),
+      ).rejects.toThrow("authorized desktop renderer");
+      expect(value.resolveProject).not.toHaveBeenCalled();
+      expect(value.showItemInFolder).not.toHaveBeenCalled();
+      expect(value.openExternal).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(authorizedCalls)(
+    "rejects an absent sender frame on %s",
+    async (channel, args) => {
+      const value = harness();
+
+      await expect(
+        value.invokeWithEvent(
+          { sender: value.webContents, senderFrame: null },
+          channel,
+          ...args,
+        ),
+      ).rejects.toThrow("authorized desktop renderer");
+      expect(value.resolveProject).not.toHaveBeenCalled();
+      expect(value.openExternal).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(authorizedCalls)(
+    "rejects a mismatched sender origin on %s",
+    async (channel, args) => {
+      const value = harness(undefined, {
+        frameUrl: "http://127.0.0.1:45124/steal",
+      });
+
+      await expect(value.invoke(channel, ...args)).rejects.toThrow(
+        "authorized desktop renderer",
+      );
+      expect(value.resolveProject).not.toHaveBeenCalled();
+      expect(value.openExternal).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(authorizedCalls)(
+    "rejects an unexpected webContents on %s",
+    async (channel, args) => {
+      const value = harness();
+      const unexpected = {
+        mainFrame: value.mainFrame,
+        session: value.expectedSession,
+      };
+
+      await expect(
+        value.invokeWithEvent(
+          { sender: unexpected, senderFrame: value.mainFrame },
+          channel,
+          ...args,
+        ),
+      ).rejects.toThrow("authorized desktop renderer");
+      expect(value.resolveProject).not.toHaveBeenCalled();
+      expect(value.openExternal).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(authorizedCalls)(
+    "rejects an unexpected session on %s",
+    async (channel, args) => {
+      const value = harness(undefined, {
+        webContentsSession: { name: "other-session" },
+      });
+
+      await expect(value.invoke(channel, ...args)).rejects.toThrow(
+        "authorized desktop renderer",
+      );
+      expect(value.resolveProject).not.toHaveBeenCalled();
+      expect(value.openExternal).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     [[]],
