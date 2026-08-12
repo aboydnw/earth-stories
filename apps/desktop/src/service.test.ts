@@ -28,6 +28,10 @@ function localService(origin: string, events: string[] = []): LocalService {
     origin,
     port: Number(new URL(origin).port),
     projectsDirectory: paths.projectsDirectory,
+    resolveProjectDirectory: async (projectId) => {
+      events.push(`resolve:${projectId}`);
+      return `${paths.projectsDirectory}/${projectId}`;
+    },
     activity: () => ({ runningConversions: 0, runningPublishes: 0 }),
     drain: async () => {
       events.push(`drain:${origin}`);
@@ -125,6 +129,21 @@ describe("DesktopService", () => {
       "/documents/Earth Stories",
       "/documents/Another Workspace",
     ]);
+  });
+
+  it("resolves project identifiers through the active local service", async () => {
+    const events: string[] = [];
+    const running = localService("http://127.0.0.1:45123", events);
+    const service = new DesktopService(paths, {
+      begin: () => ({ ready: Promise.resolve(running), close: running.close }),
+      createCapabilityToken: () => "launch-secret",
+    });
+    await service.start();
+
+    await expect(service.resolveProjectDirectory("project-one")).resolves.toBe(
+      "/documents/Earth Stories/project-one",
+    );
+    expect(events).toEqual(["resolve:project-one"]);
   });
 
   it("refuses new work, drains, and closes during repeated shutdown", async () => {

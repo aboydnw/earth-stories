@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ProjectStore } from "@earth-stories/project-store";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CredentialStore, LocalServiceConfig } from "./config.js";
 import {
@@ -77,6 +78,25 @@ describe("startLocalService", () => {
     });
 
     await Promise.all([first.close(), first.close(), second.close()]);
+  });
+
+  it("resolves only an existing validated project identifier", async () => {
+    const value = await config();
+    const store = new ProjectStore(value.projectsDirectory);
+    const project = await store.create({ title: "Reveal Me" });
+    const service = await startLocalService(value);
+
+    await expect(service.resolveProjectDirectory(project.id)).resolves.toBe(
+      join(value.projectsDirectory, project.id),
+    );
+    await expect(service.resolveProjectDirectory("../outside")).rejects.toThrow(
+      "Invalid project ID",
+    );
+    await expect(
+      service.resolveProjectDirectory("missing-project"),
+    ).rejects.toThrow();
+
+    await service.close();
   });
 
   it("closes before readiness without leaving a listener", async () => {

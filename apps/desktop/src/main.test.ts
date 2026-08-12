@@ -77,6 +77,8 @@ function harness(
       return { name: "desktop-session" };
     },
     installHeaderHook: () => events.push("session:hook"),
+    installSessionPolicies: () => events.push("session:policies"),
+    installIpcHandlers: () => events.push("ipc:handlers"),
     createWindow: ({ dimensions }) => {
       events.push(`window:create:${dimensions.width}x${dimensions.height}`);
       return {
@@ -129,8 +131,10 @@ describe("launchDesktopMain", () => {
     expect(value.events).toEqual([
       "ready",
       "service:start",
+      "ipc:handlers",
       "session:create",
       "session:hook",
+      "session:policies",
       "window:create:1111x777",
     ]);
   });

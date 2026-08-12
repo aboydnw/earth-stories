@@ -37,6 +37,7 @@ export interface LocalService {
   origin: string;
   port: number;
   projectsDirectory: string;
+  resolveProjectDirectory(projectId: string): Promise<string>;
   activity(): ServiceActivity;
   drain(options?: { timeoutMs?: number }): Promise<ServiceActivity>;
   close(): Promise<void>;
@@ -249,6 +250,10 @@ export function beginLocalService(
       origin: `http://127.0.0.1:${port}`,
       port,
       projectsDirectory: store.root,
+      resolveProjectDirectory: async (projectId) => {
+        await store.read(projectId);
+        return store.projectPath(projectId);
+      },
       activity,
       drain: (options) =>
         drainJobRegistries(conversionJobs, pagesJobs, options),

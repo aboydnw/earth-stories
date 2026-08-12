@@ -2,8 +2,16 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { DesktopPaths } from "./paths.js";
+import { registerDesktopIpcHandlers } from "./ipc.js";
 import { resolveDesktopPaths } from "./paths.js";
 import { DesktopService } from "./service.js";
+import {
+  createDesktopWindowOptions,
+  installDesktopSessionPolicies,
+  installNavigationPolicy,
+  type DesktopNavigationTarget,
+  type DesktopSessionPolicyTarget,
+} from "./window.js";
 
 let activeDesktopLifecycle: DesktopMainLifecycle | null = null;
 
@@ -56,6 +64,8 @@ export interface DesktopMainDependencies {
     session: unknown,
     options: { origin: string; capabilityToken: string },
   ): void;
+  installSessionPolicies(session: unknown, options: { origin: string }): void;
+  installIpcHandlers(): void;
   createWindow(options: {
     origin: string;
     session: unknown;
@@ -197,11 +207,13 @@ export async function launchDesktopMain(
     return lifecycle;
   }
 
+  dependencies.installIpcHandlers();
   const desktopSession = dependencies.createSession();
   dependencies.installHeaderHook(desktopSession, {
     origin,
     capabilityToken: dependencies.service.capabilityToken,
   });
+  dependencies.installSessionPolicies(desktopSession, { origin });
   const dimensions = await dependencies.readDimensions(
     dependencies.paths.windowPreferencesFile,
   );
@@ -235,7 +247,7 @@ function escapeHtml(value: string): string {
 
 export async function runElectronDesktop(): Promise<void> {
   const electron = await import("electron");
-  const { app, BrowserWindow, session, shell } = electron;
+  const { app, BrowserWindow, ipcMain, session, shell } = electron;
   const ownsSingleInstanceLock = app.requestSingleInstanceLock();
   if (!ownsSingleInstanceLock) {
     app.quit();
@@ -278,6 +290,14 @@ export async function runElectronDesktop(): Promise<void> {
       },
     },
     createSession: () => session.fromPartition("persist:earth-stories"),
+    installIpcHandlers: () => {
+      registerDesktopIpcHandlers({
+        ipcMain,
+        service: localService,
+        shell,
+        projectsDirectory: paths.projectsDirectory,
+      });
+    },
     installHeaderHook: (desktopSession, options) => {
       const value = desktopSession as Electron.Session;
       value.webRequest.onBeforeSendHeaders(
@@ -294,17 +314,24 @@ export async function runElectronDesktop(): Promise<void> {
         },
       );
     },
+    installSessionPolicies: (desktopSession, { origin }) => {
+      installDesktopSessionPolicies(
+        desktopSession as DesktopSessionPolicyTarget,
+        origin,
+      );
+    },
     createWindow: ({ origin, session: desktopSession, dimensions }) => {
-      const browserWindow = new BrowserWindow({
-        ...dimensions,
-        show: false,
-        webPreferences: {
-          session: desktopSession as Electron.Session,
-          nodeIntegration: false,
-          contextIsolation: true,
-          sandbox: true,
-        },
-      });
+      const browserWindow = new BrowserWindow(
+        createDesktopWindowOptions({
+          dimensions,
+          preloadPath: resolve(sourceDirectory, "preload.js"),
+          session: desktopSession,
+        }) as Electron.BrowserWindowConstructorOptions,
+      );
+      installNavigationPolicy(
+        browserWindow.webContents as unknown as DesktopNavigationTarget,
+        { origin, openExternal: (url) => shell.openExternal(url) },
+      );
       void browserWindow.loadURL(origin);
       browserWindow.once("ready-to-show", () => browserWindow.show());
       return {

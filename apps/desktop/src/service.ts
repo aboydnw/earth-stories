@@ -100,6 +100,12 @@ export class DesktopService {
     return this.start();
   }
 
+  async resolveProjectDirectory(projectId: string): Promise<string> {
+    if (!this.#running)
+      throw new Error("Earth Stories local service is not running.");
+    return this.#running.resolveProjectDirectory(projectId);
+  }
+
   shutdown(): Promise<void> {
     if (this.#shutdown) return this.#shutdown;
     this.#shutdown = (async () => {
