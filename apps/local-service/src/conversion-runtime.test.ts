@@ -27,8 +27,10 @@ describe("ConversionRuntime", () => {
     const events: ConversionJobEvent[] = [];
     const runtime = new ConversionRuntime({
       pixi: "/tools/pixi",
-      repositoryRoot: "/repo",
-      ensureExecutable: async () => undefined,
+      manifestDirectory: "/writable/manifest",
+      workerDirectory: "/read-only/worker",
+      pixiHome: "/workspace/pixi-home",
+      bootstrap: async () => undefined,
       run: async (command) => {
         commands.push(command);
         if (command.args[0] === "run")
@@ -58,13 +60,62 @@ describe("ConversionRuntime", () => {
       total: CAPABILITY_DOWNLOAD_ESTIMATES.vector,
     });
     expect(events.filter((event) => event.type === "result")).toHaveLength(2);
+    expect(commands[0]).toMatchObject({
+      cwd: "/writable/manifest",
+      env: { PIXI_HOME: "/workspace/pixi-home" },
+      args: [
+        "install",
+        "--manifest-path",
+        "/writable/manifest/pixi.toml",
+        "-e",
+        "vector",
+      ],
+    });
+    expect(commands[1]).toMatchObject({
+      cwd: "/writable/manifest",
+      env: { PIXI_HOME: "/workspace/pixi-home" },
+      args: [
+        "run",
+        "--manifest-path",
+        "/writable/manifest/pixi.toml",
+        "-e",
+        "vector",
+        "python",
+        "/read-only/worker/worker.py",
+      ],
+    });
+  });
+
+  it("uses the injected bootstrap and omits PIXI_HOME when absent", async () => {
+    const commands: RuntimeCommand[] = [];
+    const bootstraps: string[] = [];
+    const runtime = new ConversionRuntime({
+      pixi: "/missing/pixi",
+      manifestDirectory: "/manifest",
+      workerDirectory: "/workers",
+      pixiHome: null,
+      bootstrap: async (pixi) => void bootstraps.push(pixi),
+      executableExists: async () => false,
+      run: async (command) => {
+        commands.push(command);
+      },
+    });
+
+    await runtime.provision("core", "request-1", () => undefined);
+
+    expect(bootstraps).toEqual(["/missing/pixi"]);
+    expect(commands).toHaveLength(1);
+    expect(commands[0]?.cwd).toBe("/manifest");
+    expect(commands[0]?.env).toBeUndefined();
   });
 
   it("rejects malformed worker events instead of throwing from stdout", async () => {
     const runtime = new ConversionRuntime({
       pixi: "/tools/pixi",
-      repositoryRoot: "/repo",
-      ensureExecutable: async () => undefined,
+      manifestDirectory: "/repo",
+      workerDirectory: "/repo/conversion/worker",
+      pixiHome: null,
+      bootstrap: async () => undefined,
       run: async (command) => {
         if (command.args[0] === "run") command.onStdout?.("not-json\n");
       },

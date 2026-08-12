@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join } from "node:path";
 import {
   CONVERSION_PROTOCOL_VERSION,
   conversionJobEventSchema,
@@ -24,6 +24,8 @@ export const CAPABILITY_DOWNLOAD_ESTIMATES: Record<
 export interface RuntimeCommand {
   executable: string;
   args: string[];
+  cwd: string;
+  env?: Record<string, string>;
   input?: string;
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
@@ -34,7 +36,8 @@ export type RuntimeCommandRunner = (command: RuntimeCommand) => Promise<void>;
 const runCommand: RuntimeCommandRunner = (command) =>
   new Promise((resolveCommand, rejectCommand) => {
     const child = spawn(command.executable, command.args, {
-      cwd: resolve("."),
+      cwd: command.cwd,
+      env: command.env ? { ...process.env, ...command.env } : process.env,
       stdio: ["pipe", "pipe", "pipe"],
     });
     child.stdout.setEncoding("utf8");
@@ -52,35 +55,43 @@ const runCommand: RuntimeCommandRunner = (command) =>
 
 export class ConversionRuntime {
   readonly #pixi: string;
-  readonly #repositoryRoot: string;
+  readonly #manifestDirectory: string;
+  readonly #workerDirectory: string;
+  readonly #environment: Record<string, string> | undefined;
   readonly #run: RuntimeCommandRunner;
   readonly #ensureExecutable: () => Promise<void>;
   readonly #ready = new Set<ConversionCapability>();
 
   constructor(options: {
     pixi: string;
-    repositoryRoot?: string;
+    manifestDirectory: string;
+    workerDirectory: string;
+    pixiHome: string | null;
     run?: RuntimeCommandRunner;
-    ensureExecutable?: () => Promise<void>;
+    bootstrap: (pixiExecutable: string) => Promise<void>;
+    executableExists?: (path: string) => Promise<boolean>;
   }) {
     this.#pixi = options.pixi;
-    this.#repositoryRoot = resolve(options.repositoryRoot ?? ".");
+    this.#manifestDirectory = options.manifestDirectory;
+    this.#workerDirectory = options.workerDirectory;
+    this.#environment = options.pixiHome
+      ? { PIXI_HOME: options.pixiHome }
+      : undefined;
     this.#run = options.run ?? runCommand;
-    this.#ensureExecutable =
-      options.ensureExecutable ??
-      (async () => {
+    const executableExists =
+      options.executableExists ??
+      (async (path: string) => {
         try {
-          await access(this.#pixi);
+          await access(path);
+          return true;
         } catch {
-          await this.#run({
-            executable: process.execPath,
-            args: [
-              resolve(this.#repositoryRoot, "scripts/install-pixi.mjs"),
-              this.#pixi,
-            ],
-          });
+          return false;
         }
       });
+    this.#ensureExecutable = async () => {
+      if (!(await executableExists(this.#pixi)))
+        await options.bootstrap(this.#pixi);
+    };
   }
 
   async provision(
@@ -103,10 +114,12 @@ export class ConversionRuntime {
     });
     await this.#run({
       executable: this.#pixi,
+      cwd: this.#manifestDirectory,
+      env: this.#environment,
       args: [
         "install",
         "--manifest-path",
-        resolve(this.#repositoryRoot, "pixi.toml"),
+        join(this.#manifestDirectory, "pixi.toml"),
         "-e",
         capability,
       ],
@@ -135,14 +148,16 @@ export class ConversionRuntime {
     let parseFailure: unknown;
     await this.#run({
       executable: this.#pixi,
+      cwd: this.#manifestDirectory,
+      env: this.#environment,
       args: [
         "run",
         "--manifest-path",
-        resolve(this.#repositoryRoot, "pixi.toml"),
+        join(this.#manifestDirectory, "pixi.toml"),
         "-e",
         request.capability,
         "python",
-        resolve(this.#repositoryRoot, "conversion/worker/worker.py"),
+        join(this.#workerDirectory, "worker.py"),
       ],
       input: `${JSON.stringify(request)}\n`,
       onStdout: (chunk) => {
