@@ -194,10 +194,10 @@ pipeline, not service bundling or worker-resource packaging.
 ### Runtime selection and bundle configuration
 
 The probe ran on 2026-08-12 UTC on the same Linux x86_64 host described above.
-The official [Electron Releases dashboard](https://releases.electronjs.org/?channel=stable)
-listed Electron 43.4.0, released 2026-08-11, as the newest stable release with
-Chromium 150.0.7871.224 and embedded Node.js 24.18.1. The probe pinned that
-exact Electron version and targeted Node 24.18 in esbuild 0.28.1:
+The official
+[version-specific Electron 43.4.0 release record](https://releases.electronjs.org/release/v43.4.0)
+identifies Chromium 150.0.7871.224 and embedded Node.js 24.18.1. The probe pinned
+that exact Electron version and targeted Node 24.18 in esbuild 0.28.1:
 
 ```sh
 node_modules/.bin/esbuild apps/local-service/src/server.ts \
@@ -262,19 +262,21 @@ three repeats returned `/health` 200, created a project with
 not currently serve the editor, so this probe does not establish same-origin
 editor/API behavior.
 
-Cold start is elapsed time from the first Electron main-module instruction to
-the first responsive `/health` request. Idle RSS is `/proc/self/status` `VmRSS`
-for the Electron main process after the API cycle and one idle second; it
-excludes Xvfb and Electron child processes. Shutdown is elapsed time from
-self-delivered SIGTERM through the service's `server.close` callback to the
-process exit event.
+Main-entry-to-health latency is elapsed time from a timer initialized inside
+`main.mjs`, after its static imports and helper definitions, to the first
+responsive `/health` request. It excludes Xvfb and Electron process launch,
+Electron loading, and main-module work before the timer; it is not an end-to-end
+cold-start measurement. Idle RSS is `/proc/self/status` `VmRSS` for the Electron
+main process after the API cycle and one idle second; it excludes Xvfb and
+Electron child processes. Shutdown is elapsed time from self-delivered SIGTERM
+through the service's `server.close` callback to the process exit event.
 
-| Repeat | Cold start |      Main-process idle RSS | Shutdown cleanup |
-| -----: | ---------: | -------------------------: | ---------------: |
-|      1 | 225.680 ms | 211,447,808 B (201.65 MiB) |         0.668 ms |
-|      2 | 256.334 ms | 211,771,392 B (201.96 MiB) |         0.527 ms |
-|      3 | 210.205 ms | 211,943,424 B (202.13 MiB) |         1.055 ms |
-| Median | 225.680 ms | 211,771,392 B (201.96 MiB) |         0.668 ms |
+| Repeat | Main-entry to health |      Main-process idle RSS | Shutdown cleanup |
+| -----: | -------------------: | -------------------------: | ---------------: |
+|      1 |           225.680 ms | 211,447,808 B (201.65 MiB) |         0.668 ms |
+|      2 |           256.334 ms | 211,771,392 B (201.96 MiB) |         0.527 ms |
+|      3 |           210.205 ms | 211,943,424 B (202.13 MiB) |         1.055 ms |
+| Median |           225.680 ms | 211,771,392 B (201.96 MiB) |         0.668 ms |
 
 These are development-runtime measurements with a warm Electron download and
 host page cache, not packaged installer or end-user performance measurements.
@@ -319,8 +321,9 @@ Phase 1 must therefore:
 - macOS arm64, macOS x64, and Windows x64 packaged-layout provisioning and
   conversion have not been tested.
 - Windows signing and macOS notarization have not been tested or evidenced.
-- Installer size, a production-sandboxed desktop launch, renderer-inclusive
-  memory, and viewer/editor performance remain unmeasured.
+- Installer size, end-to-end launch cold start, a production-sandboxed desktop
+  launch, renderer-inclusive memory, and viewer/editor performance remain
+  unmeasured.
 - The redistribution-license inventory remains incomplete.
 - The current capability disclosure numbers need either a clearly named network
   download measurement or revised semantics; extracted environment size is
