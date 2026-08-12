@@ -42,6 +42,7 @@ function harness(
     hookError?: Error;
     probeError?: Error;
     loadError?: Error;
+    deferredLoad?: boolean;
     closeAllowed?: boolean;
   } = {},
 ) {
@@ -51,6 +52,14 @@ function harness(
   let beforeQuit: ((event: QuitEvent) => void) | undefined;
   let startupErrorClosed: (() => void) | undefined;
   let windowClosed: (() => void) | undefined;
+  let resolveWindowLoad: (() => void) | undefined;
+  let rejectWindowLoad: ((cause: Error) => void) | undefined;
+  const windowLoad = options.deferredLoad
+    ? new Promise<void>((resolve, reject) => {
+        resolveWindowLoad = resolve;
+        rejectWindowLoad = reject;
+      })
+    : null;
   let dimensionsChanged:
     ((dimensions: { width: number; height: number }) => void) | undefined;
   const dependencies: DesktopMainDependencies = {
@@ -103,10 +112,14 @@ function harness(
     createWindow: ({ dimensions }) => {
       events.push(`window:create:${dimensions.width}x${dimensions.height}`);
       return {
-        destroy: () => events.push("window:destroy"),
+        destroy: () => {
+          events.push("window:destroy");
+          windowClosed?.();
+        },
         load: async () => {
           events.push("window:load");
           if (options.loadError) throw options.loadError;
+          if (windowLoad) await windowLoad;
         },
         requestClose: async () => {
           events.push("window:request-close");
@@ -147,6 +160,8 @@ function harness(
     startupErrorClosed: () => startupErrorClosed,
     dimensionsChanged: () => dimensionsChanged,
     closeWindow: () => windowClosed?.(),
+    resolveWindowLoad: () => resolveWindowLoad?.(),
+    rejectWindowLoad: (cause: Error) => rejectWindowLoad?.(cause),
   };
 }
 
@@ -320,6 +335,50 @@ describe("launchDesktopMain", () => {
     expect(value.events).toContain("file:/stories/after-close.earthstory");
     expect(value.events).not.toContain("window:focus");
     expect(value.events).not.toContain("window:restore");
+  });
+
+  it.each(["resolve", "reject"] as const)(
+    "lets a direct close own shutdown while startup load later %ss",
+    async (settlement) => {
+      const value = harness({ deferredLoad: true });
+      const launching = launchDesktopMain(value.dependencies);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      value.closeWindow();
+      value.secondInstance()?.(["electron", "app"]);
+      if (settlement === "resolve") value.resolveWindowLoad();
+      else value.rejectWindowLoad(new Error("load settled after close"));
+      await launching;
+      value.beforeQuit()?.({
+        preventDefault: () => value.events.push("prevent"),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(value.events).not.toContain("window:focus");
+      expect(value.events).not.toContain("window:restore");
+      expect(value.events).not.toContain("window:request-close");
+      expect(
+        value.events.filter((event) => event === "service:shutdown"),
+      ).toHaveLength(1);
+      expect(value.events.filter((event) => event === "quit")).toHaveLength(1);
+      expect(
+        value.events.filter((event) => event.startsWith("error:")),
+      ).toEqual([]);
+    },
+  );
+
+  it("keeps a controlled startup load failure on the startup-error path", async () => {
+    const value = harness({ loadError: new Error("load failed") });
+
+    await launchDesktopMain(value.dependencies);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(
+      value.events.filter((event) => event === "service:shutdown"),
+    ).toHaveLength(1);
+    expect(value.events).toContain("window:destroy");
+    expect(value.events).toContain("error:load failed:/profile/logs");
+    expect(value.events).not.toContain("quit");
   });
 
   it("finishes quitting when service cleanup reports an error", async () => {

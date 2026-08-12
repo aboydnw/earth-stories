@@ -270,6 +270,9 @@ export async function launchDesktopMain(
   let window: DesktopWindow | null = null;
   let shuttingDown = false;
   let allowQuit = false;
+  let windowLoaded = false;
+  let windowClosedDuringStartup = false;
+  let suppressWindowClose = false;
 
   dependencies.app.onSecondInstance((argv) => {
     for (const path of fileArguments(argv))
@@ -338,15 +341,16 @@ export async function launchDesktopMain(
     const dimensions = await dependencies.readDimensions(
       dependencies.paths.windowPreferencesFile,
     );
-    window = dependencies.createWindow({
+    const openedWindow = dependencies.createWindow({
       origin,
       session: desktopSession,
       dimensions,
     });
-    await window.load();
-    const openedWindow = window;
+    window = openedWindow;
     openedWindow.onClosed(() => {
       if (window === openedWindow) window = null;
+      if (suppressWindowClose) return;
+      if (!windowLoaded) windowClosedDuringStartup = true;
       if (shuttingDown || allowQuit) return;
       shuttingDown = true;
       void (async () => {
@@ -355,6 +359,9 @@ export async function launchDesktopMain(
         dependencies.app.quit();
       })();
     });
+    await openedWindow.load();
+    windowLoaded = true;
+    if (window !== openedWindow) return lifecycle;
     const persistence = createDimensionPersistence({
       path: dependencies.paths.windowPreferencesFile,
       write: dependencies.writeDimensions,
@@ -363,6 +370,8 @@ export async function launchDesktopMain(
     });
     window.onDimensionsChanged((next) => persistence.schedule(next));
   } catch (cause) {
+    if (windowClosedDuringStartup) return lifecycle;
+    suppressWindowClose = true;
     window?.destroy();
     window = null;
     await dependencies.service.shutdown().catch(() => undefined);
