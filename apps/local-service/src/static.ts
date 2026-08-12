@@ -151,6 +151,14 @@ export async function serveEditorFile(
     candidate = resolve(root, pathname.replace(/^\/+/, ""));
     if (!contained(root, candidate)) return "rejected";
     handle = await open(candidate, "r");
+    const closeResponseHandle = () => void closeHandle();
+    response.once("finish", closeResponseHandle);
+    response.once("close", closeResponseHandle);
+    response.once("error", closeResponseHandle);
+    if (response.destroyed) {
+      await closeHandle();
+      return "served";
+    }
     const openedInfo = await handle.stat({ bigint: true });
     await internal.beforeIdentityCheck?.(candidate);
     const resolvedPath = await realpath(candidate);
@@ -166,6 +174,7 @@ export async function serveEditorFile(
     await internal.afterOpen?.(candidate);
   } catch (cause) {
     await closeHandle();
+    if (response.destroyed) return "served";
     return handle === null &&
       typeof cause === "object" &&
       cause !== null &&
@@ -175,10 +184,14 @@ export async function serveEditorFile(
       : "rejected";
   }
 
+  if (response.destroyed) {
+    await closeHandle();
+    return "served";
+  }
   const info = await handle.stat().catch(() => null);
   if (!info?.isFile()) {
     await closeHandle();
-    return "missing";
+    return response.destroyed ? "served" : "missing";
   }
   const etag = `"${info.size.toString(16)}-${Math.trunc(info.mtimeMs).toString(16)}"`;
   const headers: Record<string, string | number> = {
@@ -224,18 +237,26 @@ export async function serveEditorFile(
     await closeHandle();
     return "served";
   }
+  if (response.destroyed) {
+    await closeHandle();
+    return "served";
+  }
   const stream = handle.createReadStream({
     ...(range ? { start: range.start, end: range.end } : {}),
     autoClose: false,
   });
   const closeStreamHandle = () => void closeHandle();
-  response.once("finish", closeStreamHandle);
-  response.once("close", closeStreamHandle);
-  response.once("error", closeStreamHandle);
+  stream.once("end", closeStreamHandle);
+  stream.once("close", closeStreamHandle);
   stream.once("error", (cause) => {
     closeStreamHandle();
     response.destroy(cause);
   });
+  if (response.destroyed) {
+    stream.destroy();
+    await closeHandle();
+    return "served";
+  }
   stream.pipe(response);
   return "served";
 }

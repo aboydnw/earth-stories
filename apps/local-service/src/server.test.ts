@@ -3,12 +3,15 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
+  readlink,
+  realpath,
   rename,
   rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
-import type { Server } from "node:http";
+import { request as httpRequest, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -83,6 +86,27 @@ async function listen(server: Server) {
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("not bound");
   return address.port;
+}
+
+async function descriptorFor(path: string): Promise<string | null> {
+  const expected = await realpath(path);
+  for (const descriptor of await readdir("/proc/self/fd")) {
+    const link = `/proc/self/fd/${descriptor}`;
+    const target = await readlink(link).catch(() => null);
+    if (target === expected) return link;
+  }
+  return null;
+}
+
+async function waitUntil(
+  predicate: () => Promise<boolean>,
+  timeoutMs = 500,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await predicate())) {
+    if (Date.now() >= deadline) throw new Error("condition not reached");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 afterEach(async () => {
@@ -488,6 +512,56 @@ describe("createLocalServer", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  it.runIf(process.platform === "linux")(
+    "closes the opened file when the client disconnects during identity validation",
+    async () => {
+      const { config, store, jobs, editorDirectory } = await setup({
+        editorFiles: { "abort.txt": "inside bytes" },
+      });
+      const target = join(editorDirectory!, "abort.txt");
+      let releaseIdentity!: () => void;
+      const identityGate = new Promise<void>((resolve) => {
+        releaseIdentity = resolve;
+      });
+      let opened!: () => void;
+      const openedFile = new Promise<void>((resolve) => {
+        opened = resolve;
+      });
+      const { createLocalServer } = await import("./server.js");
+      const server = createLocalServer(store, config, jobs, {
+        testOnlyBeforeStaticIdentityCheck: async (openedPath) => {
+          if (openedPath !== target) return;
+          opened();
+          await identityGate;
+        },
+      });
+      const port = await listen(server);
+      const request = httpRequest({
+        host: "127.0.0.1",
+        port,
+        path: "/abort.txt",
+      });
+      request.on("error", () => undefined);
+      request.end();
+      try {
+        await openedFile;
+        const descriptor = await descriptorFor(target);
+        expect(descriptor).not.toBeNull();
+        const expectedTarget = await realpath(target);
+        request.destroy();
+        releaseIdentity();
+        await waitUntil(
+          async () =>
+            (await readlink(descriptor!).catch(() => null)) !== expectedTarget,
+        );
+      } finally {
+        request.destroy();
+        releaseIdentity();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    },
+  );
 
   it("applies capability authorization before routing without disclosing the token", async () => {
     const token = "desktop-secret-that-must-not-leak";
