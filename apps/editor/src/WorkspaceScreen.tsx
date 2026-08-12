@@ -1,5 +1,11 @@
 import type { FormEvent } from "react";
-import { MapTrifold, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import {
+  FolderOpen,
+  MapTrifold,
+  PencilSimple,
+  Plus,
+  Trash,
+} from "@phosphor-icons/react";
 import {
   ActionButton,
   ConfirmDialog,
@@ -24,6 +30,7 @@ export function WorkspaceScreen({
   onCreate,
   onOpen,
   onRename,
+  onShowProjectFolder,
   onRequestDelete,
   onConfirmDelete,
   onDismissDelete,
@@ -32,6 +39,7 @@ export function WorkspaceScreen({
   onViewChange,
   selectedDatasetId,
   onDatasetChange,
+  applicationVersion,
 }: {
   projects: ProjectSummary[];
   examples: ExampleCatalog | null;
@@ -44,6 +52,7 @@ export function WorkspaceScreen({
   onCreate: (event: FormEvent) => void;
   onOpen: (id: string) => void;
   onRename: (project: ProjectSummary) => void;
+  onShowProjectFolder?: (id: string) => void;
   onRequestDelete: (project: ProjectSummary) => void;
   onConfirmDelete: () => void;
   onDismissDelete: () => void;
@@ -52,6 +61,7 @@ export function WorkspaceScreen({
   onViewChange: (view: "stories" | "data") => void;
   selectedDatasetId: string | null;
   onDatasetChange: (id: string | null) => void;
+  applicationVersion: string | null;
 }) {
   return (
     <div className="workspace-screen">
@@ -159,6 +169,16 @@ export function WorkspaceScreen({
                     onOpen={() => onOpen(item.id)}
                     actions={
                       <>
+                        {onShowProjectFolder ? (
+                          <IconButton
+                            size="sm"
+                            variant="ghost"
+                            label={`Show project folder for ${item.title}`}
+                            onClick={() => onShowProjectFolder(item.id)}
+                          >
+                            <FolderOpen size={16} />
+                          </IconButton>
+                        ) : null}
                         <IconButton
                           size="sm"
                           variant="ghost"
@@ -211,6 +231,7 @@ export function WorkspaceScreen({
       )}
       <footer className="workspace-footer">
         <span>Built for portable geospatial storytelling</span>
+        {applicationVersion ? <span>Version {applicationVersion}</span> : null}
         <span>No account required</span>
       </footer>
       <ConfirmDialog

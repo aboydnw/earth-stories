@@ -64,6 +64,7 @@ import type { GuidanceDestination } from "./editorReadiness";
 import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
 import { usePublicationReadiness } from "./usePublicationReadiness";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
+import { detectDesktopBridge } from "./desktop";
 
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
@@ -107,6 +108,7 @@ const sourcePath = (source: ProjectSource) =>
       : null;
 
 export function App() {
+  const desktop = detectDesktopBridge();
   const narrativeRef = useRef<HTMLTextAreaElement>(null);
   const previewCamerasRef = useRef(new Map<string, Camera>());
   const routeLoadRef = useRef(0);
@@ -397,6 +399,14 @@ export function App() {
     try {
       activate(await openProject(id));
       navigate({ page: "story", storyId: id, preview: false });
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  async function handleShowProjectFolder(id: string) {
+    if (!desktop) return;
+    try {
+      await desktop.showProjectFolder(id);
     } catch (cause) {
       showError(cause);
     }
@@ -1323,6 +1333,9 @@ export function App() {
         onCreate={handleCreate}
         onOpen={(id) => void handleOpen(id)}
         onRename={(item) => void handleRename(item)}
+        onShowProjectFolder={
+          desktop ? (id) => void handleShowProjectFolder(id) : undefined
+        }
         onRequestDelete={handleDelete}
         onConfirmDelete={() => void confirmDelete()}
         onDismissDelete={() => setDeleteTarget(null)}
@@ -1339,6 +1352,7 @@ export function App() {
               : { page: "stories" },
           );
         }}
+        applicationVersion={desktop?.version ?? null}
       />
     );
 
