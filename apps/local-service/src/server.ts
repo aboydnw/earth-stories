@@ -27,9 +27,14 @@ import {
   findExampleStory,
 } from "./examples.js";
 import { loadExampleAssetFiles } from "./exampleAssets.js";
-import { isTrustedMutationOrigin } from "./security.js";
+import {
+  assertCapabilitySecurity,
+  isTrustedMutationOrigin,
+  requireCapability,
+} from "./security.js";
 import { checkShareLink, decodeShareCard } from "./share-health.js";
 import { storeShareCard } from "./share-card.js";
+import { isSafeEditorPath, serveEditorFile, staticNotFound } from "./static.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 import { PagesJobs } from "./pages-jobs.js";
 import type { ResolvedLocalServiceConfig } from "./config.js";
@@ -258,7 +263,12 @@ export function createLocalServer(
     conversion: ConversionJobs;
     pages: PagesJobs;
   },
+  internal: { testOnlyDisableTrustedMutationOrigin?: boolean } = {},
 ): Server {
+  assertCapabilitySecurity(
+    config.capabilityToken,
+    !internal.testOnlyDisableTrustedMutationOrigin,
+  );
   const conversionJobs = jobs.conversion;
   const pagesJobs = jobs.pages;
   let server: Server;
@@ -270,6 +280,10 @@ export function createLocalServer(
     const url = new URL(request.url ?? "/", `http://${config.host}:${port}`);
 
     try {
+      if (!requireCapability(request, config.capabilityToken)) {
+        json(response, 401, { error: "Unauthorized" });
+        return;
+      }
       if (
         MUTATING_METHODS.has(request.method ?? "") &&
         !isTrustedMutationOrigin(request.headers.origin)
@@ -676,6 +690,40 @@ export function createLocalServer(
         await store.archive(route.id);
         response.writeHead(204, { "cache-control": "no-store" });
         response.end();
+        return;
+      }
+
+      if (
+        config.editorDirectory !== null &&
+        url.pathname !== "/api" &&
+        !url.pathname.startsWith("/api/") &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
+        if (!isSafeEditorPath(url.pathname)) {
+          staticNotFound(response);
+          return;
+        }
+        const exactPath = url.pathname === "/" ? "/index.html" : url.pathname;
+        if (
+          await serveEditorFile(
+            request,
+            response,
+            config.editorDirectory,
+            exactPath,
+          )
+        )
+          return;
+        if (
+          extname(url.pathname) === "" &&
+          (await serveEditorFile(
+            request,
+            response,
+            config.editorDirectory,
+            "/index.html",
+          ))
+        )
+          return;
+        staticNotFound(response);
         return;
       }
 
