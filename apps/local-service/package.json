@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./dist/service.js"
+    ".": {
+      "types": "./src/standalone.ts",
+      "default": "./dist/service.js"
+    }
   },
   "scripts": {
     "build": "node scripts/build.mjs",

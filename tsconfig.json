@@ -8,6 +8,7 @@
     { "path": "packages/publisher" },
     { "path": "apps/editor" },
     { "path": "apps/local-service" },
+    { "path": "apps/desktop" },
     { "path": "apps/viewer" }
   ]
 }
