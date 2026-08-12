@@ -36,6 +36,18 @@ export interface DesktopWindow {
   isMinimized(): boolean;
   restore(): void;
   onDimensionsChanged(listener: (dimensions: WindowDimensions) => void): void;
+  onClosed(listener: () => void): void;
+}
+
+export interface BrowserWindowCloseTarget {
+  isDestroyed(): boolean;
+  close(): void;
+  once(event: "closed", listener: () => void): unknown;
+  removeListener(event: "closed", listener: () => void): unknown;
+  webContents: {
+    once(event: "will-prevent-unload", listener: () => void): unknown;
+    removeListener(event: "will-prevent-unload", listener: () => void): unknown;
+  };
 }
 
 export interface StartupErrorWindow {
@@ -214,6 +226,28 @@ export function createEphemeralSessionPartition(): string {
   return `earth-stories-${randomUUID()}`;
 }
 
+export function requestBrowserWindowClose(
+  browserWindow: BrowserWindowCloseTarget,
+): Promise<boolean> {
+  if (browserWindow.isDestroyed()) return Promise.resolve(true);
+  return new Promise<boolean>((resolveClose) => {
+    const onClosed = () => {
+      browserWindow.webContents.removeListener(
+        "will-prevent-unload",
+        onPrevented,
+      );
+      resolveClose(true);
+    };
+    const onPrevented = () => {
+      browserWindow.removeListener("closed", onClosed);
+      resolveClose(false);
+    };
+    browserWindow.once("closed", onClosed);
+    browserWindow.webContents.once("will-prevent-unload", onPrevented);
+    browserWindow.close();
+  });
+}
+
 function fileArguments(argv: string[]): string[] {
   return argv.filter((argument) => /\.earthstory$/i.test(argument));
 }
@@ -310,6 +344,17 @@ export async function launchDesktopMain(
       dimensions,
     });
     await window.load();
+    const openedWindow = window;
+    openedWindow.onClosed(() => {
+      if (window === openedWindow) window = null;
+      if (shuttingDown || allowQuit) return;
+      shuttingDown = true;
+      void (async () => {
+        await dependencies.service.shutdown().catch(() => undefined);
+        allowQuit = true;
+        dependencies.app.quit();
+      })();
+    });
     const persistence = createDimensionPersistence({
       path: dependencies.paths.windowPreferencesFile,
       write: dependencies.writeDimensions,
@@ -447,23 +492,7 @@ export async function runElectronDesktop(): Promise<void> {
       return {
         destroy: () => browserWindow.destroy(),
         load: () => browserWindow.loadURL(origin).then(() => undefined),
-        requestClose: () =>
-          new Promise<boolean>((resolveClose) => {
-            const onClosed = () => {
-              browserWindow.webContents.removeListener(
-                "will-prevent-unload",
-                onPrevented,
-              );
-              resolveClose(true);
-            };
-            const onPrevented = () => {
-              browserWindow.removeListener("closed", onClosed);
-              resolveClose(false);
-            };
-            browserWindow.once("closed", onClosed);
-            browserWindow.webContents.once("will-prevent-unload", onPrevented);
-            browserWindow.close();
-          }),
+        requestClose: () => requestBrowserWindowClose(browserWindow),
         focus: () => browserWindow.focus(),
         isMinimized: () => browserWindow.isMinimized(),
         restore: () => browserWindow.restore(),
@@ -472,6 +501,14 @@ export async function runElectronDesktop(): Promise<void> {
             const [width, height] = browserWindow.getSize();
             listener({ width, height });
           });
+        },
+        onClosed: (listener) => {
+          const handleClosed = () => {
+            primaryWebContents = null;
+            listener();
+          };
+          if (browserWindow.isDestroyed()) queueMicrotask(handleClosed);
+          else browserWindow.once("closed", handleClosed);
         },
       };
     },

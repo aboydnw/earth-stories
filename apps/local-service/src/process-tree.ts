@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
 export interface ProcessTreeCommand {
   executable: string;
@@ -9,6 +10,31 @@ export interface ProcessTreeCommand {
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
   signal?: AbortSignal;
+}
+
+export interface ProcessTreeRunnerDependencies {
+  platform?: NodeJS.Platform;
+  kill?: typeof process.kill;
+  taskkill?: (pid: number) => Promise<void>;
+  spawn?: ProcessTreeSpawn;
+}
+
+export type ProcessTreeSpawn = (
+  executable: string,
+  args: string[],
+  options: {
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    stdio: ["pipe", "pipe", "pipe"];
+    detached: boolean;
+    windowsHide: boolean;
+  },
+) => ChildProcessWithoutNullStreams;
+
+function abortError(): Error {
+  const cause = new Error("The operation was aborted.");
+  cause.name = "AbortError";
+  return cause;
 }
 
 async function taskkill(pid: number): Promise<void> {
@@ -41,32 +67,48 @@ export async function terminateProcessTree(
 
 export class ProcessTreeRunner {
   readonly #active = new Map<number, Promise<void>>();
+  readonly #platform: NodeJS.Platform;
+  readonly #kill: typeof process.kill;
+  readonly #taskkill: ((pid: number) => Promise<void>) | undefined;
+  readonly #spawn: ProcessTreeSpawn;
+  #terminating = false;
+  #termination: Promise<void> | null = null;
+
+  constructor(dependencies: ProcessTreeRunnerDependencies = {}) {
+    this.#platform = dependencies.platform ?? process.platform;
+    this.#kill = dependencies.kill ?? process.kill;
+    this.#taskkill = dependencies.taskkill;
+    this.#spawn = dependencies.spawn ?? spawn;
+  }
 
   activeCount(): number {
     return this.#active.size;
   }
 
   run(command: ProcessTreeCommand): Promise<void> {
-    const child = spawn(command.executable, command.args, {
+    if (command.signal?.aborted || this.#terminating)
+      return Promise.reject(abortError());
+    const child = this.#spawn(command.executable, command.args, {
       cwd: command.cwd,
       env: command.env ? { ...process.env, ...command.env } : process.env,
       stdio: ["pipe", "pipe", "pipe"],
-      detached: process.platform !== "win32",
+      detached: this.#platform !== "win32",
       windowsHide: true,
     });
     const pid = child.pid;
     const onAbort = () => {
       if (!pid) return;
-      if (process.platform === "win32") child.kill("SIGTERM");
+      if (this.#platform === "win32") child.kill("SIGTERM");
       else {
         try {
-          process.kill(-pid, "SIGTERM");
+          this.#kill(-pid, "SIGTERM");
         } catch {
           // The process tree may have completed between cancellation and kill.
         }
       }
     };
     command.signal?.addEventListener("abort", onAbort, { once: true });
+    if (command.signal?.aborted) onAbort();
     const running = new Promise<void>((resolveCommand, rejectCommand) => {
       child.stdout.setEncoding("utf8");
       child.stderr.setEncoding("utf8");
@@ -87,11 +129,25 @@ export class ProcessTreeRunner {
     return running;
   }
 
-  async forceTerminate(): Promise<void> {
-    const active = [...this.#active.entries()];
-    await Promise.all(
-      active.map(([pid]) => terminateProcessTree(pid).catch(() => undefined)),
-    );
-    await Promise.allSettled(active.map(([, running]) => running));
+  forceTerminate(): Promise<void> {
+    this.#terminating = true;
+    this.#termination ??= this.#terminateActive();
+    return this.#termination;
+  }
+
+  async #terminateActive(): Promise<void> {
+    while (this.#active.size > 0) {
+      const active = [...this.#active.entries()];
+      await Promise.all(
+        active.map(([pid]) =>
+          terminateProcessTree(pid, {
+            platform: this.#platform,
+            kill: this.#kill,
+            taskkill: this.#taskkill,
+          }).catch(() => undefined),
+        ),
+      );
+      await Promise.allSettled(active.map(([, running]) => running));
+    }
   }
 }

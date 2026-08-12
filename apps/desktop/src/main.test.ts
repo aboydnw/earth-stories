@@ -9,6 +9,7 @@ import {
   createEphemeralSessionPartition,
   launchDesktopMain,
   readWindowDimensions,
+  requestBrowserWindowClose,
   requireServiceOrigin,
   writeWindowDimensions,
   type DesktopMainDependencies,
@@ -49,6 +50,7 @@ function harness(
   let openFile: ((path: string) => void) | undefined;
   let beforeQuit: ((event: QuitEvent) => void) | undefined;
   let startupErrorClosed: (() => void) | undefined;
+  let windowClosed: (() => void) | undefined;
   let dimensionsChanged:
     ((dimensions: { width: number; height: number }) => void) | undefined;
   const dependencies: DesktopMainDependencies = {
@@ -108,13 +110,18 @@ function harness(
         },
         requestClose: async () => {
           events.push("window:request-close");
-          return options.closeAllowed ?? true;
+          const allowed = options.closeAllowed ?? true;
+          if (allowed) windowClosed?.();
+          return allowed;
         },
         focus: () => events.push("window:focus"),
         isMinimized: () => true,
         restore: () => events.push("window:restore"),
         onDimensionsChanged: (listener) => {
           dimensionsChanged = listener;
+        },
+        onClosed: (listener) => {
+          windowClosed = listener;
         },
       };
     },
@@ -139,6 +146,7 @@ function harness(
     beforeQuit: () => beforeQuit,
     startupErrorClosed: () => startupErrorClosed,
     dimensionsChanged: () => dimensionsChanged,
+    closeWindow: () => windowClosed?.(),
   };
 }
 
@@ -280,6 +288,40 @@ describe("launchDesktopMain", () => {
     expect(value.events).not.toContain("quit");
   });
 
+  it("drains the service and quits exactly once after a direct window close", async () => {
+    const value = harness();
+    await launchDesktopMain(value.dependencies);
+
+    value.closeWindow();
+    value.beforeQuit()?.({
+      preventDefault: () => value.events.push("prevent"),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(
+      value.events.filter((event) => event === "service:shutdown"),
+    ).toHaveLength(1);
+    expect(value.events.filter((event) => event === "quit")).toHaveLength(1);
+    expect(value.events).not.toContain("window:request-close");
+  });
+
+  it("does not focus a window after it has closed", async () => {
+    const value = harness();
+    await launchDesktopMain(value.dependencies);
+
+    value.closeWindow();
+    value.secondInstance()?.([
+      "electron",
+      "app",
+      "/stories/after-close.earthstory",
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(value.events).toContain("file:/stories/after-close.earthstory");
+    expect(value.events).not.toContain("window:focus");
+    expect(value.events).not.toContain("window:restore");
+  });
+
   it("finishes quitting when service cleanup reports an error", async () => {
     const value = harness({ shutdownError: new Error("close failed") });
     await launchDesktopMain(value.dependencies);
@@ -382,6 +424,25 @@ describe("desktop session partition", () => {
     expect(first).not.toBe(second);
     expect(first.startsWith("persist:")).toBe(false);
     expect(second.startsWith("persist:")).toBe(false);
+  });
+});
+
+describe("browser window close adapter", () => {
+  it("allows an already-destroyed window without waiting or closing again", async () => {
+    const calls: string[] = [];
+    const browserWindow = {
+      isDestroyed: () => true,
+      close: () => calls.push("close"),
+      once: () => calls.push("listen:closed"),
+      removeListener: () => undefined,
+      webContents: {
+        once: () => calls.push("listen:will-prevent-unload"),
+        removeListener: () => undefined,
+      },
+    } as unknown as Parameters<typeof requestBrowserWindowClose>[0];
+
+    await expect(requestBrowserWindowClose(browserWindow)).resolves.toBe(true);
+    expect(calls).toEqual([]);
   });
 });
 
