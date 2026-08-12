@@ -1,12 +1,10 @@
 import { type Server } from "node:http";
-import { join } from "node:path";
 import type { Socket } from "node:net";
 import { ProjectStore } from "@earth-stories/project-store";
 import {
   resolveLocalServiceConfig,
   type LocalServiceConfig,
 } from "./config.js";
-import { runCommand } from "./command-runner.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { PagesJobs } from "./pages-jobs.js";
@@ -47,6 +45,13 @@ export interface LocalService {
 export interface StartingLocalService {
   ready: Promise<LocalService>;
   close(): Promise<void>;
+}
+
+export interface RuntimeDependencies {
+  bootstrapPixi?: (
+    pixiExecutable: string,
+    signal?: AbortSignal,
+  ) => Promise<void>;
 }
 
 export interface DrainableJobRegistry {
@@ -155,6 +160,7 @@ function closedBeforeReady(signal: AbortSignal): Error {
 
 export function beginLocalService(
   config: LocalServiceConfig,
+  dependencies: RuntimeDependencies = {},
 ): StartingLocalService {
   const startup = new AbortController();
   const sockets = new Set<Socket>();
@@ -201,20 +207,7 @@ export function beginLocalService(
         manifestDirectory: resolved.conversion.manifestDirectory,
         workerDirectory: resolved.conversion.workerDirectory,
         pixiHome: resolved.conversion.pixiHome,
-        bootstrap: async (pixiExecutable, signal) => {
-          await runCommand({
-            executable: process.execPath,
-            args: [
-              join(
-                resolved.conversion.manifestDirectory,
-                "scripts/install-pixi.mjs",
-              ),
-              pixiExecutable,
-            ],
-            cwd: resolved.conversion.manifestDirectory,
-            signal,
-          });
-        },
+        bootstrap: dependencies.bootstrapPixi,
       }),
     );
     const pagesJobs = new PagesJobs(store, {
@@ -268,6 +261,7 @@ export function beginLocalService(
 
 export function startLocalService(
   config: LocalServiceConfig,
+  dependencies: RuntimeDependencies = {},
 ): Promise<LocalService> {
-  return beginLocalService(config).ready;
+  return beginLocalService(config, dependencies).ready;
 }

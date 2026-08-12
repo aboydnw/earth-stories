@@ -94,6 +94,27 @@ describe("resolveLocalServiceConfig", () => {
     ).resolves.toMatchObject({ port: 65_535 });
   });
 
+  it.each(["", " ", "\t\n"])(
+    "rejects an empty or whitespace-only capability token %j",
+    async (capabilityToken) => {
+      const config = await fixture();
+      await expect(
+        resolveLocalServiceConfig({ ...config, capabilityToken }),
+      ).rejects.toThrow(
+        "capabilityToken must be null or contain a non-whitespace character.",
+      );
+    },
+  );
+
+  it("preserves every byte of a valid capability token", async () => {
+    const config = await fixture();
+    const capabilityToken = "  desktop secret\t";
+
+    await expect(
+      resolveLocalServiceConfig({ ...config, capabilityToken }),
+    ).resolves.toMatchObject({ capabilityToken });
+  });
+
   it.each([
     ["projectsDirectory", "projects"],
     ["viewerDirectory", "viewer"],

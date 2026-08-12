@@ -42,6 +42,13 @@ describe("local capability policy", () => {
     ).toBe(true);
   });
 
+  it.each(["a", "desktop-secret", "  exact bytes\t"])(
+    "never accepts missing Authorization for configured token %j",
+    (token) => {
+      expect(requireCapability(request(), token)).toBe(false);
+    },
+  );
+
   it("refuses capability mode without trusted mutation-origin enforcement", () => {
     expect(() => assertCapabilitySecurity("desktop-secret", false)).toThrow(
       /trusted.*origin/i,

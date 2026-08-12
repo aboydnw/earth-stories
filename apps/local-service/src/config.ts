@@ -65,6 +65,10 @@ export async function resolveLocalServiceConfig(
     throw new Error(
       "The local service port must be an integer from 0 to 65535.",
     );
+  if (config.capabilityToken !== null && !/\S/.test(config.capabilityToken))
+    throw new Error(
+      "capabilityToken must be null or contain a non-whitespace character.",
+    );
 
   requireAbsolute("projectsDirectory", config.projectsDirectory);
   requireAbsolute("viewerDirectory", config.viewerDirectory);

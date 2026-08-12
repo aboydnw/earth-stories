@@ -70,7 +70,7 @@ export class ConversionRuntime {
     workerDirectory: string;
     pixiHome: string | null;
     run?: RuntimeCommandRunner;
-    bootstrap: (pixiExecutable: string, signal?: AbortSignal) => Promise<void>;
+    bootstrap?: (pixiExecutable: string, signal?: AbortSignal) => Promise<void>;
     executableExists?: (path: string) => Promise<boolean>;
   }) {
     this.#pixi = options.pixi;
@@ -91,8 +91,12 @@ export class ConversionRuntime {
         }
       });
     this.#ensureExecutable = async (signal) => {
-      if (!(await executableExists(this.#pixi)))
-        await options.bootstrap(this.#pixi, signal);
+      if (await executableExists(this.#pixi)) return;
+      if (!options.bootstrap)
+        throw new Error(
+          "Pixi is missing and this service host did not provide a bootstrap.",
+        );
+      await options.bootstrap(this.#pixi, signal);
     };
   }
 

@@ -109,6 +109,22 @@ describe("ConversionRuntime", () => {
     expect(commands[0]?.env).toBeUndefined();
   });
 
+  it("fails clearly when Pixi is missing and no bootstrap was supplied", async () => {
+    const runtime = new ConversionRuntime({
+      pixi: "/missing/pixi",
+      manifestDirectory: "/relocated/manifest",
+      workerDirectory: "/relocated/workers",
+      pixiHome: null,
+      executableExists: async () => false,
+    });
+
+    await expect(
+      runtime.provision("core", "request-1", () => undefined),
+    ).rejects.toThrow(
+      "Pixi is missing and this service host did not provide a bootstrap.",
+    );
+  });
+
   it("rejects malformed worker events instead of throwing from stdout", async () => {
     const runtime = new ConversionRuntime({
       pixi: "/tools/pixi",

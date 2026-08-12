@@ -2,16 +2,22 @@ import { platform } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LocalServiceConfig } from "./config.js";
+import { runCommand, type Command } from "./command-runner.js";
 import { FileCredentialStore } from "./credentials.js";
-import { startLocalService } from "./runtime.js";
+import { startLocalService, type RuntimeDependencies } from "./runtime.js";
+
+type CommandExecutor = (command: Command) => Promise<unknown>;
+
+function defaultRepositoryDirectory(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+}
 
 export function resolveStandaloneConfig(
   environment: NodeJS.ProcessEnv = process.env,
   paths: { repositoryDirectory?: string; cwd?: string } = {},
 ): LocalServiceConfig {
   const repositoryDirectory =
-    paths.repositoryDirectory ??
-    resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+    paths.repositoryDirectory ?? defaultRepositoryDirectory();
   const cwd = paths.cwd ?? process.cwd();
   return {
     host: "127.0.0.1",
@@ -46,9 +52,32 @@ export function resolveStandaloneConfig(
   };
 }
 
+export function createStandaloneRuntimeDependencies(
+  repositoryDirectory: string = defaultRepositoryDirectory(),
+  execute: CommandExecutor = runCommand,
+): RuntimeDependencies {
+  return {
+    bootstrapPixi: async (pixiExecutable, signal) => {
+      await execute({
+        executable: process.execPath,
+        args: [
+          join(repositoryDirectory, "scripts/install-pixi.mjs"),
+          pixiExecutable,
+        ],
+        cwd: repositoryDirectory,
+        signal,
+      });
+    },
+  };
+}
+
 export async function runStandalone(): Promise<void> {
   try {
-    const service = await startLocalService(resolveStandaloneConfig());
+    const repositoryDirectory = defaultRepositoryDirectory();
+    const service = await startLocalService(
+      resolveStandaloneConfig(process.env, { repositoryDirectory }),
+      createStandaloneRuntimeDependencies(repositoryDirectory),
+    );
     process.stdout.write(
       `Earth Stories local service ready at ${service.origin}\nProjects: ${service.projectsDirectory}\n`,
     );

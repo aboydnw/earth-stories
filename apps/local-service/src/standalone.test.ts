@@ -1,7 +1,10 @@
 import { platform } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { resolveStandaloneConfig } from "./standalone.js";
+import {
+  createStandaloneRuntimeDependencies,
+  resolveStandaloneConfig,
+} from "./standalone.js";
 
 describe("resolveStandaloneConfig", () => {
   it("imports without starting the service and preserves every legacy default", () => {
@@ -43,5 +46,30 @@ describe("resolveStandaloneConfig", () => {
     expect(config.projectsDirectory).toBe("/cwd/relative-projects");
     expect(config.viewerDirectory).toBe("/cwd/relative-viewer");
     expect(config.conversion.pixiExecutable).toBe("/cwd/relative-pixi");
+  });
+});
+
+describe("createStandaloneRuntimeDependencies", () => {
+  it("adapts the known repository Pixi installer for the standalone host", async () => {
+    const commands: unknown[] = [];
+    const dependencies = createStandaloneRuntimeDependencies(
+      "/opt/earth-stories",
+      async (command) => void commands.push(command),
+    );
+    const signal = new AbortController().signal;
+
+    await dependencies.bootstrapPixi?.("/tools/pixi", signal);
+
+    expect(commands).toEqual([
+      {
+        executable: process.execPath,
+        args: [
+          resolve("/opt/earth-stories", "scripts/install-pixi.mjs"),
+          "/tools/pixi",
+        ],
+        cwd: "/opt/earth-stories",
+        signal,
+      },
+    ]);
   });
 });
