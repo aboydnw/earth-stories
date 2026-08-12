@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CredentialStore, LocalServiceConfig } from "./config.js";
 import {
+  beginLocalService,
   drainJobRegistries,
   LocalServiceStartupError,
   startLocalService,
@@ -76,6 +77,23 @@ describe("startLocalService", () => {
     });
 
     await Promise.all([first.close(), first.close(), second.close()]);
+  });
+
+  it("closes before readiness without leaving a listener", async () => {
+    const before = (process as unknown as { _getActiveHandles(): unknown[] })
+      ._getActiveHandles()
+      .filter((handle) => handle instanceof Object && "address" in handle);
+    const starting = beginLocalService(await config());
+
+    await expect(
+      Promise.all([starting.close(), starting.close()]),
+    ).resolves.toEqual([undefined, undefined]);
+    await expect(starting.ready).rejects.toThrow(/closed before it was ready/i);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const after = (process as unknown as { _getActiveHandles(): unknown[] })
+      ._getActiveHandles()
+      .filter((handle) => handle instanceof Object && "address" in handle);
+    expect(after).toHaveLength(before.length);
   });
 
   it("closes promptly with an open keep-alive connection", async () => {

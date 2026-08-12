@@ -9,6 +9,7 @@ export interface Command {
   env?: Record<string, string>;
   secrets?: string[];
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 export interface CommandResult {
@@ -43,6 +44,7 @@ export const runCommand: CommandRunner = (command) =>
       cwd: command.cwd,
       env: command.env ? { ...process.env, ...command.env } : process.env,
       stdio: ["ignore", "pipe", "pipe"],
+      signal: command.signal,
     });
     let stdout = "";
     let stderr = "";
@@ -73,13 +75,21 @@ export const runCommand: CommandRunner = (command) =>
     child.stdout.on("data", (chunk: string) => (stdout += chunk));
     child.stderr.on("data", (chunk: string) => (stderr += chunk));
     child.once("error", (cause) =>
-      settle(() =>
+      settle(() => {
+        if (command.signal?.aborted) {
+          rejectCommand(
+            command.signal.reason instanceof Error
+              ? command.signal.reason
+              : new Error("The command was canceled."),
+          );
+          return;
+        }
         rejectCommand(
           new Error(
             `${command.executable} could not be started: ${redact(cause.message, command.secrets)}`,
           ),
-        ),
-      ),
+        );
+      }),
     );
     child.once("close", (code) =>
       settle(() => {

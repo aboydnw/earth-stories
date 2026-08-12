@@ -31,7 +31,7 @@ export interface ResolveTokenOptions {
   credentialsPath?: string;
   clientId?: string;
   onDeviceCode?: (prompt: DeviceCodePrompt) => void;
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   signal?: AbortSignal;
 }
 
@@ -78,6 +78,7 @@ async function writeStored(
 async function resolveLogin(
   token: string,
   fetchImpl: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   try {
     const response = await fetchImpl(USER_URL, {
@@ -86,26 +87,68 @@ async function resolveLogin(
         accept: "application/vnd.github+json",
         "user-agent": "earth-stories",
       },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(signal),
     });
     if (!response.ok) return null;
     const body = (await response.json()) as { login?: unknown };
     return typeof body.login === "string" && body.login ? body.login : null;
   } catch {
+    throwIfAborted(signal);
     return null;
   }
 }
 
-async function tokenFromGhCli(run: CommandRunner): Promise<string | null> {
+function cancellationError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error("GitHub sign-in was canceled.");
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw cancellationError(signal);
+}
+
+function requestSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+async function waitWithSignal(
+  waiting: Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  throwIfAborted(signal);
+  if (!signal) return waiting;
+  await new Promise<void>((resolveWait, rejectWait) => {
+    const onAbort = () => settle(() => rejectWait(cancellationError(signal)));
+    const settle = (finish: () => void) => {
+      signal.removeEventListener("abort", onAbort);
+      finish();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    waiting.then(
+      () => settle(resolveWait),
+      (cause) => settle(() => rejectWait(cause)),
+    );
+  });
+}
+
+async function tokenFromGhCli(
+  run: CommandRunner,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  throwIfAborted(signal);
   try {
     const { stdout } = await run({
       executable: "gh",
       args: ["auth", "token"],
       timeoutMs: GH_CLI_TIMEOUT_MS,
+      signal,
     });
     const token = stdout.trim();
     return token || null;
   } catch {
+    throwIfAborted(signal);
     return null;
   }
 }
@@ -128,7 +171,9 @@ async function postJson<T>(
   url: string,
   body: Record<string, string>,
   fetchImpl: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<T> {
+  throwIfAborted(signal);
   let response: Response;
   try {
     response = await fetchImpl(url, {
@@ -138,9 +183,10 @@ async function postJson<T>(
         "content-type": "application/json",
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(signal),
     });
   } catch {
+    throwIfAborted(signal);
     throw new Error(
       "GitHub did not respond. Check your connection and try again.",
     );
@@ -157,12 +203,14 @@ async function deviceFlow(
     fetchImpl: typeof fetch;
     clientId: string;
     onDeviceCode?: (prompt: DeviceCodePrompt) => void;
+    signal?: AbortSignal;
   },
 ): Promise<string> {
   const start = await postJson<DeviceCodeResponse>(
     DEVICE_CODE_URL,
     { client_id: options.clientId, scope: GITHUB_SCOPES },
     options.fetchImpl,
+    options.signal,
   );
   if (
     typeof start.device_code !== "string" ||
@@ -185,7 +233,10 @@ async function deviceFlow(
       : DEFAULT_POLL_SECONDS;
   const attempts = Math.ceil(expiresInSeconds / intervalSeconds);
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    await options.sleep(intervalSeconds * 1000);
+    await waitWithSignal(
+      options.sleep(intervalSeconds * 1000, options.signal),
+      options.signal,
+    );
     const result = await postJson<AccessTokenResponse>(
       ACCESS_TOKEN_URL,
       {
@@ -194,6 +245,7 @@ async function deviceFlow(
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
       },
       options.fetchImpl,
+      options.signal,
     );
     if (typeof result.access_token === "string" && result.access_token)
       return result.access_token;
@@ -231,17 +283,34 @@ export async function resolveToken(
   const path = options.credentialsPath ?? credentialsPath();
   const sleep =
     options.sleep ??
-    ((ms: number) => new Promise((done) => setTimeout(done, ms)));
+    ((ms: number, signal?: AbortSignal) =>
+      new Promise<void>((resolveSleep, rejectSleep) => {
+        if (signal?.aborted) {
+          rejectSleep(cancellationError(signal));
+          return;
+        }
+        let timer: NodeJS.Timeout;
+        const onAbort = () =>
+          settle(() => rejectSleep(cancellationError(signal!)));
+        const settle = (finish: () => void) => {
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+          finish();
+        };
+        timer = setTimeout(() => settle(resolveSleep), ms);
+        signal?.addEventListener("abort", onAbort, { once: true });
+      }));
+  throwIfAborted(options.signal);
 
   const stored = await readStored(path);
   if (stored) {
-    const login = await resolveLogin(stored.token, fetchImpl);
+    const login = await resolveLogin(stored.token, fetchImpl, options.signal);
     if (login) return { token: stored.token, login, source: "stored" };
   }
 
-  const ghToken = await tokenFromGhCli(run);
+  const ghToken = await tokenFromGhCli(run, options.signal);
   if (ghToken) {
-    const login = await resolveLogin(ghToken, fetchImpl);
+    const login = await resolveLogin(ghToken, fetchImpl, options.signal);
     if (login) return { token: ghToken, login, source: "gh" };
   }
 
@@ -257,8 +326,9 @@ export async function resolveToken(
     clientId,
     sleep,
     onDeviceCode: options.onDeviceCode,
+    signal: options.signal,
   });
-  const login = await resolveLogin(token, fetchImpl);
+  const login = await resolveLogin(token, fetchImpl, options.signal);
   if (!login)
     throw new Error("GitHub signed in but did not return an account name.");
   const identity: GitHubIdentity = { token, login, source: "device" };

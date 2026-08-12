@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import type { Stats } from "node:fs";
 import { basename, extname, relative, resolve } from "node:path";
 import {
   CONVERSION_PROTOCOL_VERSION,
@@ -20,6 +21,10 @@ export interface ConversionJobSnapshot {
   updatedAt: string;
 }
 
+export interface ConversionJobsDependencies {
+  stat(path: string): Promise<Stats>;
+}
+
 const outputExtension = (capability: string, target?: unknown): string => {
   if (capability === "raster") return ".cog.tif";
   if (capability === "multidim") return ".cog.tif";
@@ -35,11 +40,17 @@ export class ConversionJobs {
   readonly #idleWaiters = new Set<() => void>();
   readonly #runtime: ConversionRuntime;
   readonly #store: ProjectStore;
+  readonly #stat: (path: string) => Promise<Stats>;
   #accepting = true;
 
-  constructor(store: ProjectStore, runtime: ConversionRuntime) {
+  constructor(
+    store: ProjectStore,
+    runtime: ConversionRuntime,
+    dependencies: Partial<ConversionJobsDependencies> = {},
+  ) {
     this.#store = store;
     this.#runtime = runtime;
+    this.#stat = dependencies.stat ?? stat;
   }
 
   get(id: string): ConversionJobSnapshot | null {
@@ -86,7 +97,11 @@ export class ConversionJobs {
     if (typeof input.assetPath !== "string" || !input.assetPath)
       throw new Error("Choose a project asset to convert");
     const absoluteInput = this.#store.assetPath(projectId, input.assetPath);
-    const inputInfo = await stat(absoluteInput);
+    const inputInfo = await this.#stat(absoluteInput);
+    if (!this.#accepting)
+      throw new Error(
+        "The local service is shutting down and cannot start new jobs.",
+      );
     if (!inputInfo.isFile()) throw new Error("Conversion input is not a file");
     const options =
       input.options && typeof input.options === "object"

@@ -61,7 +61,7 @@ export class ConversionRuntime {
   readonly #workerDirectory: string;
   readonly #environment: Record<string, string> | undefined;
   readonly #run: RuntimeCommandRunner;
-  readonly #ensureExecutable: () => Promise<void>;
+  readonly #ensureExecutable: (signal?: AbortSignal) => Promise<void>;
   readonly #ready = new Set<ConversionCapability>();
 
   constructor(options: {
@@ -70,7 +70,7 @@ export class ConversionRuntime {
     workerDirectory: string;
     pixiHome: string | null;
     run?: RuntimeCommandRunner;
-    bootstrap: (pixiExecutable: string) => Promise<void>;
+    bootstrap: (pixiExecutable: string, signal?: AbortSignal) => Promise<void>;
     executableExists?: (path: string) => Promise<boolean>;
   }) {
     this.#pixi = options.pixi;
@@ -90,9 +90,9 @@ export class ConversionRuntime {
           return false;
         }
       });
-    this.#ensureExecutable = async () => {
+    this.#ensureExecutable = async (signal) => {
       if (!(await executableExists(this.#pixi)))
-        await options.bootstrap(this.#pixi);
+        await options.bootstrap(this.#pixi, signal);
     };
   }
 
@@ -103,7 +103,7 @@ export class ConversionRuntime {
     signal?: AbortSignal,
   ): Promise<void> {
     if (this.#ready.has(capability)) return;
-    await this.#ensureExecutable();
+    await this.#ensureExecutable(signal);
     const total = CAPABILITY_DOWNLOAD_ESTIMATES[capability];
     onEvent({
       protocol: CONVERSION_PROTOCOL_VERSION,

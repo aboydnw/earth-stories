@@ -74,6 +74,19 @@ describe("runCommand", () => {
     ).rejects.toThrow(/did not finish within/);
   });
 
+  it("aborts a running child cooperatively", async () => {
+    const controller = new AbortController();
+    const running = runCommand({
+      executable: node,
+      args: ["-e", "setInterval(() => {}, 1000)"],
+      timeoutMs: 200,
+      signal: controller.signal,
+    });
+    controller.abort(new Error("stop child"));
+
+    await expect(running).rejects.toThrow(/stop child/);
+  });
+
   it("runs in the requested working directory", async () => {
     const result = await runCommand({
       executable: node,

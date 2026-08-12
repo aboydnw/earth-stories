@@ -43,6 +43,11 @@ export interface LocalService {
   close(): Promise<void>;
 }
 
+export interface StartingLocalService {
+  ready: Promise<LocalService>;
+  close(): Promise<void>;
+}
+
 export interface DrainableJobRegistry {
   activity(): number;
   refuseNewJobs(): void;
@@ -116,7 +121,11 @@ export function toStartupError(
   );
 }
 
-function listen(server: Server, port: number): Promise<number> {
+function listen(
+  server: Server,
+  port: number,
+  signal: AbortSignal,
+): Promise<number> {
   return new Promise((resolveListen, rejectListen) => {
     const onError = (cause: Error) => {
       server.off("listening", onListening);
@@ -133,76 +142,31 @@ function listen(server: Server, port: number): Promise<number> {
     };
     server.once("error", onError);
     server.once("listening", onListening);
-    server.listen(port, "127.0.0.1");
+    server.listen({ port, host: "127.0.0.1", signal });
   });
 }
 
-export async function startLocalService(
+function closedBeforeReady(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error("The local service was closed before it was ready.");
+}
+
+export function beginLocalService(
   config: LocalServiceConfig,
-): Promise<LocalService> {
-  let resolved;
-  try {
-    resolved = await resolveLocalServiceConfig(config);
-  } catch (cause) {
-    throw toStartupError(cause, config.port);
-  }
-
-  const store = new ProjectStore(resolved.projectsDirectory);
-  const conversionJobs = new ConversionJobs(
-    store,
-    new ConversionRuntime({
-      pixi: resolved.conversion.pixiExecutable,
-      manifestDirectory: resolved.conversion.manifestDirectory,
-      workerDirectory: resolved.conversion.workerDirectory,
-      pixiHome: resolved.conversion.pixiHome,
-      bootstrap: async (pixiExecutable) => {
-        await runCommand({
-          executable: process.execPath,
-          args: [
-            join(
-              resolved.conversion.manifestDirectory,
-              "scripts/install-pixi.mjs",
-            ),
-            pixiExecutable,
-          ],
-          cwd: resolved.conversion.manifestDirectory,
-        });
-      },
-    }),
-  );
-  const pagesJobs = new PagesJobs(store, {
-    viewerDirectory: resolved.viewerDirectory,
-    withLock: withProjectPublicationLock,
-  });
-  await store.initialize();
-  const server = createLocalServer(store, resolved, {
-    conversion: conversionJobs,
-    pages: pagesJobs,
-  });
+): StartingLocalService {
+  const startup = new AbortController();
   const sockets = new Set<Socket>();
-  server.on("connection", (socket) => {
-    sockets.add(socket);
-    socket.once("close", () => sockets.delete(socket));
-  });
-
-  let port: number;
-  try {
-    port = await listen(server, resolved.port);
-  } catch (cause) {
-    for (const socket of sockets) socket.destroy();
-    throw toStartupError(cause, resolved.port);
-  }
-
-  const activity = (): ServiceActivity => ({
-    runningConversions: conversionJobs.activity(),
-    runningPublishes: pagesJobs.activity(),
-  });
+  let server: Server | null = null;
   let closePromise: Promise<void> | null = null;
   const close = (): Promise<void> => {
     if (closePromise) return closePromise;
+    startup.abort(
+      new Error("The local service was closed before it was ready."),
+    );
     closePromise = new Promise<void>((resolveClose, rejectClose) => {
       for (const socket of sockets) socket.destroy();
-      if (!server.listening) {
+      if (!server?.listening) {
         resolveClose();
         return;
       }
@@ -218,12 +182,89 @@ export async function startLocalService(
     return closePromise;
   };
 
-  return {
-    origin: `http://127.0.0.1:${port}`,
-    port,
-    projectsDirectory: store.root,
-    activity,
-    drain: (options) => drainJobRegistries(conversionJobs, pagesJobs, options),
-    close,
-  };
+  const ready = (async (): Promise<LocalService> => {
+    let resolved;
+    try {
+      resolved = await resolveLocalServiceConfig(config);
+    } catch (cause) {
+      if (startup.signal.aborted) throw closedBeforeReady(startup.signal);
+      throw toStartupError(cause, config.port);
+    }
+    if (startup.signal.aborted) throw closedBeforeReady(startup.signal);
+
+    const store = new ProjectStore(resolved.projectsDirectory);
+    const conversionJobs = new ConversionJobs(
+      store,
+      new ConversionRuntime({
+        pixi: resolved.conversion.pixiExecutable,
+        manifestDirectory: resolved.conversion.manifestDirectory,
+        workerDirectory: resolved.conversion.workerDirectory,
+        pixiHome: resolved.conversion.pixiHome,
+        bootstrap: async (pixiExecutable, signal) => {
+          await runCommand({
+            executable: process.execPath,
+            args: [
+              join(
+                resolved.conversion.manifestDirectory,
+                "scripts/install-pixi.mjs",
+              ),
+              pixiExecutable,
+            ],
+            cwd: resolved.conversion.manifestDirectory,
+            signal,
+          });
+        },
+      }),
+    );
+    const pagesJobs = new PagesJobs(store, {
+      viewerDirectory: resolved.viewerDirectory,
+      withLock: withProjectPublicationLock,
+    });
+    await store.initialize();
+    if (startup.signal.aborted) throw closedBeforeReady(startup.signal);
+    server = createLocalServer(store, resolved, {
+      conversion: conversionJobs,
+      pages: pagesJobs,
+    });
+    server.on("connection", (socket) => {
+      sockets.add(socket);
+      socket.once("close", () => sockets.delete(socket));
+    });
+
+    let port: number;
+    try {
+      port = await listen(server, resolved.port, startup.signal);
+    } catch (cause) {
+      for (const socket of sockets) socket.destroy();
+      if (startup.signal.aborted) throw closedBeforeReady(startup.signal);
+      throw toStartupError(cause, resolved.port);
+    }
+    if (startup.signal.aborted) {
+      await close();
+      throw closedBeforeReady(startup.signal);
+    }
+
+    const activity = (): ServiceActivity => ({
+      runningConversions: conversionJobs.activity(),
+      runningPublishes: pagesJobs.activity(),
+    });
+
+    return {
+      origin: `http://127.0.0.1:${port}`,
+      port,
+      projectsDirectory: store.root,
+      activity,
+      drain: (options) =>
+        drainJobRegistries(conversionJobs, pagesJobs, options),
+      close,
+    };
+  })();
+
+  return { ready, close };
+}
+
+export function startLocalService(
+  config: LocalServiceConfig,
+): Promise<LocalService> {
+  return beginLocalService(config).ready;
 }

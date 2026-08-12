@@ -39,6 +39,98 @@ describe("credentialsPath", () => {
 });
 
 describe("resolveToken", () => {
+  it("cancels an in-flight GitHub request with the caller signal", async () => {
+    const controller = new AbortController();
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => (requestStarted = resolve));
+    const resolving = resolveToken({
+      credentialsPath: await scratchCredentials(),
+      clientId: "client-id",
+      run: nowhere,
+      signal: controller.signal,
+      fetchImpl: (async (_input, init) => {
+        requestStarted();
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          );
+        });
+      }) as typeof fetch,
+    });
+    await started;
+    controller.abort(new Error("stop request"));
+
+    await expect(resolving).rejects.toThrow(/stop request/);
+  });
+
+  it("cancels an in-flight GitHub CLI lookup", async () => {
+    const controller = new AbortController();
+    let cliStarted!: () => void;
+    const started = new Promise<void>((resolve) => (cliStarted = resolve));
+    const resolving = resolveToken({
+      credentialsPath: await scratchCredentials(),
+      signal: controller.signal,
+      run: async (command) => {
+        cliStarted();
+        if (!command.signal) throw new Error("CLI signal was not supplied");
+        return new Promise((_, reject) =>
+          command.signal?.addEventListener(
+            "abort",
+            () => reject(command.signal?.reason),
+            { once: true },
+          ),
+        );
+      },
+    });
+    await started;
+    controller.abort(new Error("stop CLI"));
+
+    await expect(resolving).rejects.toThrow(/stop CLI/);
+  });
+
+  it("cancels the device-flow wait", async () => {
+    const controller = new AbortController();
+    let promptShown!: () => void;
+    const prompted = new Promise<void>((resolve) => (promptShown = resolve));
+    let waitSignal: AbortSignal | undefined;
+    const resolving = resolveToken({
+      credentialsPath: await scratchCredentials(),
+      clientId: "client-id",
+      run: nowhere,
+      signal: controller.signal,
+      fetchImpl: vi.fn(async (input: RequestInfo | URL) =>
+        String(input).endsWith("/login/device/code")
+          ? jsonResponse({
+              device_code: "device-code",
+              user_code: "WXYZ-1234",
+              verification_uri: "https://github.com/login/device",
+              expires_in: 900,
+              interval: 1,
+            })
+          : jsonResponse({ error: "authorization_pending" }),
+      ) as typeof fetch,
+      sleep: async (_ms, signal) => {
+        waitSignal = signal;
+        return new Promise<void>(() => undefined);
+      },
+      onDeviceCode: () => promptShown(),
+    });
+    await prompted;
+    controller.abort(new Error("stop wait"));
+
+    await expect(
+      Promise.race([
+        resolving,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("cancellation ignored")), 100),
+        ),
+      ]),
+    ).rejects.toThrow(/stop wait/);
+    expect(waitSignal).toBe(controller.signal);
+  });
+
   it("uses a stored token when it still works", async () => {
     const path = await scratchCredentials();
     await writeFile(

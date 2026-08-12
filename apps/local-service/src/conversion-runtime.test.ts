@@ -142,4 +142,24 @@ describe("ConversionRuntime", () => {
 
     expect(signals).toEqual([controller.signal, controller.signal]);
   });
+
+  it("passes cancellation to a missing-Pixi bootstrap", async () => {
+    const controller = new AbortController();
+    let bootstrapSignal: AbortSignal | undefined;
+    const runtime = new ConversionRuntime({
+      pixi: "/missing/pixi",
+      manifestDirectory: "/repo",
+      workerDirectory: "/repo/conversion/worker",
+      pixiHome: null,
+      executableExists: async () => false,
+      bootstrap: async (_pixi, signal) => {
+        bootstrapSignal = signal;
+      },
+      run: async () => undefined,
+    });
+
+    await runtime.execute(request, () => undefined, controller.signal);
+
+    expect(bootstrapSignal).toBe(controller.signal);
+  });
 });

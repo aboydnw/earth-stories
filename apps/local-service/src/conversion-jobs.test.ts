@@ -111,4 +111,50 @@ describe("ConversionJobs", () => {
     await expect(creating).rejects.toThrow(/shutting down/i);
     expect(jobs.activity()).toBe(0);
   });
+
+  it("does not enqueue a request whose file stat overlaps refusal", async () => {
+    const root = await mkdtemp(join(tmpdir(), "earth-stories-jobs-"));
+    const store = new ProjectStore(root);
+    await store.initialize();
+    const project = await store.create({ title: "Conversions" });
+    const asset = join(store.projectPath(project.id), "assets/places.geojson");
+    await mkdir(join(store.projectPath(project.id), "assets"), {
+      recursive: true,
+    });
+    await writeFile(asset, "{}");
+    let enterStat!: () => void;
+    const statEntered = new Promise<void>((resolve) => (enterStat = resolve));
+    let releaseStat!: () => void;
+    const statReleased = new Promise<void>(
+      (resolve) => (releaseStat = resolve),
+    );
+    const jobs = new ConversionJobs(store, {} as ConversionRuntime, {
+      stat: async (path) => {
+        if (path === asset) {
+          enterStat();
+          await statReleased;
+        }
+        return import("node:fs/promises").then((fileSystem) =>
+          fileSystem.stat(path),
+        );
+      },
+    });
+
+    const creating = jobs.create(project.id, {
+      operation: "prepare",
+      capability: "vector",
+      assetPath: "assets/places.geojson",
+    });
+    await Promise.race([
+      statEntered,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("injected stat was not used")), 100),
+      ),
+    ]);
+    jobs.refuseNewJobs();
+    releaseStat();
+
+    await expect(creating).rejects.toThrow(/shutting down/i);
+    expect(jobs.activity()).toBe(0);
+  });
 });
