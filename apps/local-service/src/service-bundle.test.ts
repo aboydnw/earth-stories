@@ -1,11 +1,9 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
-import type { LocalServiceConfig } from "./config.js";
-import type { LocalService } from "./runtime.js";
 
 const exec = promisify(execFile);
 const packageDirectory = resolve("apps/local-service");
@@ -20,7 +18,7 @@ afterAll(async () => {
 });
 
 describe("production service bundle", () => {
-  it("relocates, imports safely, and runs a repository-independent API cycle", async () => {
+  it("runs from a sanitized plain Node child with only the relocated bundle", async () => {
     await exec("yarn", ["workspace", "@earth-stories/local-service", "build"], {
       cwd: resolve("."),
     });
@@ -29,68 +27,64 @@ describe("production service bundle", () => {
     const relocated = join(root, "service.js");
     await cp(join(packageDirectory, "dist/service.js"), relocated);
     await cp(join(packageDirectory, "dist/service.js.map"), `${relocated}.map`);
-    const viewerDirectory = join(root, "viewer");
-    await mkdir(viewerDirectory);
-    const projectsDirectory = join(root, "projects");
-    const before = (process as unknown as { _getActiveHandles(): unknown[] })
-      ._getActiveHandles()
-      .filter((handle) => handle instanceof Object && "address" in handle);
-
-    const bundled = (await import(
-      `${new URL(`file://${relocated}`).href}?fresh`
-    )) as {
-      startLocalService(config: LocalServiceConfig): Promise<LocalService>;
-      FileCredentialStore: new (path: string) => unknown;
-    };
-    const afterImport = (
-      process as unknown as { _getActiveHandles(): unknown[] }
-    )
-      ._getActiveHandles()
-      .filter((handle) => handle instanceof Object && "address" in handle);
-    expect(afterImport).toHaveLength(before.length);
-    expect(bundled.FileCredentialStore).toBeTypeOf("function");
-
-    const service = await bundled.startLocalService({
-      host: "127.0.0.1",
-      port: 0,
-      projectsDirectory,
-      viewerDirectory,
-      editorDirectory: null,
-      conversion: {
-        pixiExecutable: join(root, "pixi"),
-        manifestDirectory: root,
-        workerDirectory: root,
-        pixiHome: null,
-      },
-      credentials: {
-        read: async () => null,
-        write: async () => undefined,
-        clear: async () => undefined,
-      },
-      capabilityToken: null,
+    const harness = join(root, "harness.mjs");
+    await writeFile(
+      harness,
+      `
+import { access, mkdir } from "node:fs/promises";
+import { join } from "node:path";
+const listeningServers = () => process._getActiveHandles().filter((handle) => handle?.constructor?.name === "Server" && handle.listening).length;
+const before = listeningServers();
+const bundled = await import("./service.js");
+const after = listeningServers();
+const projectsDirectory = join(process.cwd(), "projects");
+let workspaceCreatedOnImport = true;
+try { await access(projectsDirectory); } catch { workspaceCreatedOnImport = false; }
+const viewerDirectory = join(process.cwd(), "viewer");
+await mkdir(viewerDirectory);
+const service = await bundled.startLocalService({
+  host: "127.0.0.1", port: 0, projectsDirectory, viewerDirectory,
+  editorDirectory: null,
+  conversion: { pixiExecutable: join(process.cwd(), "pixi"), manifestDirectory: process.cwd(), workerDirectory: process.cwd(), pixiHome: null },
+  credentials: { read: async () => null, write: async () => undefined, clear: async () => undefined },
+  capabilityToken: null,
+});
+let result;
+try {
+  const health = await (await fetch(service.origin + "/health")).json();
+  const createdResponse = await fetch(service.origin + "/api/projects", { method: "POST", headers: { origin: service.origin, "content-type": "application/json" }, body: JSON.stringify({ title: "Relocated child" }) });
+  const created = await createdResponse.json();
+  const read = await (await fetch(service.origin + "/api/projects/" + created.id)).json();
+  result = { before, after, workspaceCreatedOnImport, exported: typeof bundled.FileCredentialStore === "function", health, createStatus: createdResponse.status, title: read.metadata.title };
+} finally { await service.close(); }
+process.stdout.write(JSON.stringify(result) + "\\n");
+`,
+      "utf8",
+    );
+    expect((await readdir(root)).sort()).toEqual([
+      "harness.mjs",
+      "service.js",
+      "service.js.map",
+    ]);
+    const environment = { ...process.env };
+    delete environment.NODE_OPTIONS;
+    delete environment.NODE_PATH;
+    const { stdout, stderr } = await exec(process.execPath, ["harness.mjs"], {
+      cwd: root,
+      env: environment,
+      timeout: 10_000,
     });
-    try {
-      expect(await (await fetch(`${service.origin}/health`)).json()).toEqual({
-        status: "ready",
-        projectsDirectory,
-      });
-      const created = await fetch(`${service.origin}/api/projects`, {
-        method: "POST",
-        headers: {
-          origin: service.origin,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ title: "Relocated bundle" }),
-      });
-      expect(created.status).toBe(201);
-      const project = (await created.json()) as { id: string };
-      expect(
-        await (
-          await fetch(`${service.origin}/api/projects/${project.id}`)
-        ).json(),
-      ).toMatchObject({ metadata: { title: "Relocated bundle" } });
-    } finally {
-      await service.close();
-    }
+    expect(stderr).toBe("");
+    expect(JSON.parse(stdout)).toEqual({
+      before: expect.any(Number),
+      after: expect.any(Number),
+      workspaceCreatedOnImport: false,
+      exported: true,
+      health: { status: "ready", projectsDirectory: join(root, "projects") },
+      createStatus: 201,
+      title: "Relocated child",
+    });
+    const parsed = JSON.parse(stdout) as { before: number; after: number };
+    expect(parsed.after).toBe(parsed.before);
   });
 });

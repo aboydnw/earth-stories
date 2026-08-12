@@ -14,6 +14,8 @@ const USER_URL = "https://api.github.com/user";
 const DEFAULT_POLL_SECONDS = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
 const GH_CLI_TIMEOUT_MS = 15_000;
+const STORED_TOKEN_UNAVAILABLE_MESSAGE =
+  "GitHub could not verify the saved sign-in. Check your connection and try again.";
 
 export type TokenSource = "stored" | "gh" | "device";
 
@@ -40,11 +42,16 @@ export interface ResolveTokenOptions {
   signal?: AbortSignal;
 }
 
+type LoginResolution =
+  | { status: "valid"; login: string }
+  | { status: "invalid" }
+  | { status: "unavailable" };
+
 async function resolveLogin(
   token: string,
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
-): Promise<string | null> {
+): Promise<LoginResolution> {
   try {
     const response = await fetchImpl(USER_URL, {
       headers: {
@@ -54,12 +61,16 @@ async function resolveLogin(
       },
       signal: requestSignal(signal),
     });
-    if (!response.ok) return null;
+    if (response.status === 401 || response.status === 403)
+      return { status: "invalid" };
+    if (!response.ok) return { status: "unavailable" };
     const body = (await response.json()) as { login?: unknown };
-    return typeof body.login === "string" && body.login ? body.login : null;
+    return typeof body.login === "string" && body.login
+      ? { status: "valid", login: body.login }
+      : { status: "unavailable" };
   } catch {
     throwIfAborted(signal);
-    return null;
+    return { status: "unavailable" };
   }
 }
 
@@ -271,15 +282,27 @@ export async function resolveToken(
 
   const stored = await store.read();
   if (stored) {
-    const login = await resolveLogin(stored.token, fetchImpl, options.signal);
-    if (login) return { token: stored.token, login, source: "stored" };
+    const resolved = await resolveLogin(
+      stored.token,
+      fetchImpl,
+      options.signal,
+    );
+    if (resolved.status === "valid")
+      return {
+        token: stored.token,
+        login: resolved.login,
+        source: "stored",
+      };
+    if (resolved.status === "unavailable")
+      throw new Error(STORED_TOKEN_UNAVAILABLE_MESSAGE);
     await store.clear();
   }
 
   const ghToken = await tokenFromGhCli(run, options.signal);
   if (ghToken) {
-    const login = await resolveLogin(ghToken, fetchImpl, options.signal);
-    if (login) return { token: ghToken, login, source: "gh" };
+    const resolved = await resolveLogin(ghToken, fetchImpl, options.signal);
+    if (resolved.status === "valid")
+      return { token: ghToken, login: resolved.login, source: "gh" };
   }
 
   const clientId =
@@ -296,10 +319,14 @@ export async function resolveToken(
     onDeviceCode: options.onDeviceCode,
     signal: options.signal,
   });
-  const login = await resolveLogin(token, fetchImpl, options.signal);
-  if (!login)
+  const resolved = await resolveLogin(token, fetchImpl, options.signal);
+  if (resolved.status !== "valid")
     throw new Error("GitHub signed in but did not return an account name.");
-  const identity: GitHubIdentity = { token, login, source: "device" };
+  const identity: GitHubIdentity = {
+    token,
+    login: resolved.login,
+    source: "device",
+  };
   await store.write({ token: identity.token, login: identity.login });
   return identity;
 }

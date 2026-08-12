@@ -16,4 +16,7 @@ await build({
   sourcesContent: true,
   packages: "bundle",
   external: ["node:*"],
+  banner: {
+    js: 'import { createRequire as __earthStoriesCreateRequire } from "node:module"; const require = __earthStoriesCreateRequire(import.meta.url);',
+  },
 });

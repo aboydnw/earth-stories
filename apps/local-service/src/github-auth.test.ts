@@ -114,6 +114,92 @@ describe("resolveToken", () => {
     expect(stored).toEqual({ token: "device-token", login: "mapper" });
   });
 
+  it.each([
+    {
+      name: "network failure",
+      fetchImpl: async () => {
+        throw new Error("offline");
+      },
+      signal: undefined,
+      message: /connection|respond|verify/i,
+    },
+    {
+      name: "timeout",
+      fetchImpl: async (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          ),
+        ),
+      signal: AbortSignal.timeout(5),
+      message: /timeout|timed out|verify/i,
+    },
+  ])(
+    "retains stored credentials after $name",
+    async ({ fetchImpl, signal, message }) => {
+      const stored = { token: "stored-token", login: "mapper" };
+      let clears = 0;
+      const store: CredentialStore = {
+        read: async () => stored,
+        write: async () => undefined,
+        clear: async () => {
+          clears += 1;
+        },
+      };
+      let cliCalls = 0;
+
+      await expect(
+        resolveToken({
+          store,
+          fetchImpl: fetchImpl as typeof fetch,
+          run: async () => {
+            cliCalls += 1;
+            return { stdout: "fresh-token", stderr: "" };
+          },
+          signal,
+        }),
+      ).rejects.toThrow(message);
+      expect(clears).toBe(0);
+      expect(cliCalls).toBe(0);
+    },
+  );
+
+  it("retains stored credentials after caller cancellation", async () => {
+    const controller = new AbortController();
+    let clears = 0;
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => (requestStarted = resolve));
+    const store: CredentialStore = {
+      read: async () => ({ token: "stored-token", login: "mapper" }),
+      write: async () => undefined,
+      clear: async () => {
+        clears += 1;
+      },
+    };
+    const resolving = resolveToken({
+      store,
+      signal: controller.signal,
+      run: nowhere,
+      fetchImpl: (async (_input, init) => {
+        requestStarted();
+        return new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          ),
+        );
+      }) as typeof fetch,
+    });
+    await started;
+    controller.abort(new Error("stop validation"));
+
+    await expect(resolving).rejects.toThrow(/stop validation/);
+    expect(clears).toBe(0);
+  });
+
   it("cancels an in-flight GitHub request with the caller signal", async () => {
     const controller = new AbortController();
     let requestStarted!: () => void;
