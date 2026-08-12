@@ -5,7 +5,7 @@ import {
   WorkflowGuide,
   type WorkflowStage,
 } from "@earth-stories/ui";
-import type { GuidanceAction, GuidanceDestination } from "./editorReadiness";
+import type { GuidanceAction } from "./editorReadiness";
 
 export function WorkflowStatusMenu({
   stages,
@@ -20,7 +20,7 @@ export function WorkflowStatusMenu({
   errors: number;
   warnings: number;
   onStageSelect: (stageId: string) => void;
-  onGuidance: (destination: GuidanceDestination) => void;
+  onGuidance: (guidance: GuidanceAction) => void;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -101,7 +101,7 @@ export function WorkflowStatusMenu({
               actionLabel={guidance.label}
               onAction={() => {
                 setOpen(false);
-                onGuidance(guidance.destination);
+                onGuidance(guidance);
               }}
             >
               {guidance.message}

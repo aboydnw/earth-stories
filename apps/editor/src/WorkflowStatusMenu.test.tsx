@@ -75,7 +75,9 @@ describe("WorkflowStatusMenu", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Review warnings" }),
     );
-    expect(callbacks.onGuidance).toHaveBeenCalledWith("publish");
+    expect(callbacks.onGuidance).toHaveBeenCalledWith(
+      expect.objectContaining({ destination: "publish", id: "warning" }),
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 

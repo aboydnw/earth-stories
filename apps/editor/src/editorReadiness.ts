@@ -4,6 +4,7 @@ import type {
 } from "@earth-stories/publisher/readiness";
 import type { WorkflowStage } from "@earth-stories/ui";
 import type { PublicationReadinessState } from "./usePublicationReadiness";
+import { rankReadinessFindings } from "./readinessPriority";
 
 export type GuidanceDestination = "save" | ReadinessArea;
 export interface GuidanceAction {
@@ -13,6 +14,7 @@ export interface GuidanceAction {
   destination: GuidanceDestination;
   tone: "neutral" | "warning" | "danger";
   chapterId?: string;
+  resourceId?: string;
 }
 
 type WorkflowArea = Exclude<ReadinessArea, "sharing">;
@@ -82,12 +84,19 @@ export function workflowStages(
 export function nextGuidanceAction(input: {
   readiness: AuthoringReadiness;
   activeChapterId: string | null;
+  activeChapterSourceIds?: string[];
   saveState: "saved" | "changed" | "saving" | "save-error" | "exporting";
   previewReviewed: boolean;
   preflight: PublicationReadinessState;
 }): GuidanceAction {
-  const { readiness, activeChapterId, saveState, previewReviewed, preflight } =
-    input;
+  const {
+    readiness,
+    activeChapterId,
+    activeChapterSourceIds = [],
+    saveState,
+    previewReviewed,
+    preflight,
+  } = input;
   if (saveState === "save-error")
     return {
       id: "save-failure",
@@ -107,22 +116,24 @@ export function nextGuidanceAction(input: {
       destination: "story",
       tone: "danger",
     };
-  const activeBlocker = readiness.findings.find(
-    ({ area, severity, chapterId }) =>
-      area === "chapters" &&
+  const activeBlocker = rankReadinessFindings(readiness.findings).find(
+    ({ severity, chapterId, resourceId }) =>
       severity === "error" &&
-      chapterId === activeChapterId,
+      (chapterId === activeChapterId ||
+        (!chapterId &&
+          Boolean(resourceId && activeChapterSourceIds.includes(resourceId)))),
   );
   if (activeBlocker)
     return {
       id: activeBlocker.id,
-      label: "Fix this chapter",
+      label: activeBlocker.resourceId ? "Fix this source" : "Fix this chapter",
       message: activeBlocker.message,
-      destination: "chapters",
+      destination: activeBlocker.resourceId ? "data" : "chapters",
       chapterId: activeBlocker.chapterId,
+      resourceId: activeBlocker.resourceId,
       tone: "danger",
     };
-  const dataBlocker = readiness.findings.find(
+  const dataBlocker = rankReadinessFindings(readiness.findings).find(
     ({ area, severity }) => area === "data" && severity === "error",
   );
   if (dataBlocker)
@@ -132,6 +143,7 @@ export function nextGuidanceAction(input: {
       message: dataBlocker.message,
       destination: "data",
       chapterId: dataBlocker.chapterId,
+      resourceId: dataBlocker.resourceId,
       tone: "danger",
     };
   if (!readiness.manifest)

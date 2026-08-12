@@ -1,5 +1,4 @@
-import { useCallback, useRef, useState } from "react";
-import type { Map as MapLibreMap } from "maplibre-gl";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   Camera,
   PublicationAsset,
@@ -15,6 +14,8 @@ interface Props {
   overlayAssets: PublicationAsset[];
   basemapStyle: string;
   snapshotMode?: boolean;
+  interactive?: boolean;
+  cameraOverride?: Camera | null;
   onCameraChange?: (camera: Camera) => void;
 }
 
@@ -24,38 +25,35 @@ export function FlyoverChapter({
   overlayAssets,
   basemapStyle,
   snapshotMode = false,
+  interactive = false,
+  cameraOverride,
   onCameraChange,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
-  const map = useRef<MapLibreMap | null>(null);
   const [progress, setProgress] = useState(0);
-  const handleMapReady = useCallback((instance: MapLibreMap | null) => {
-    map.current = instance;
+  useEffect(() => {
+    setProgress(0);
+  }, [chapter.id]);
+  const activeCamera: Camera =
+    cameraOverride ??
+    interpolateFlyover(chapter.keyframes, Math.min(1, progress)) ??
+    chapter.keyframes[0]!;
+  const update = useCallback((nextProgress: number) => {
+    setProgress((current) => {
+      const quantized = Math.round(nextProgress * 1_000) / 1_000;
+      return current === quantized ? current : quantized;
+    });
   }, []);
-  const update = useCallback(
-    (nextProgress: number) => {
-      const camera = interpolateFlyover(chapter.keyframes, nextProgress);
-      if (!camera) return;
-      map.current?.jumpTo({
-        center: camera.center,
-        zoom: camera.zoom,
-        bearing: camera.bearing,
-        pitch: camera.pitch,
-      });
-      onCameraChange?.(camera);
-      setProgress((current) => {
-        const quantized = Math.round(nextProgress * 1_000) / 1_000;
-        return current === quantized ? current : quantized;
-      });
-    },
-    [chapter.keyframes, onCameraChange],
-  );
   useFlyoverScroll(container, chapter.keyframes.length, update);
-  const camera = chapter.keyframes[0]!;
+  const activeIndex = Math.min(
+    chapter.keyframes.length - 1,
+    Math.floor(progress * (chapter.keyframes.length - 1)),
+  );
+  const caption = chapter.keyframes[activeIndex]?.caption?.trim();
   const mapChapter = {
     ...chapter,
     type: "map" as const,
-    camera,
+    camera: activeCamera,
     assetId: chapter.assetId ?? "",
     transition: "instant" as const,
   };
@@ -73,10 +71,16 @@ export function FlyoverChapter({
           asset={asset}
           overlayAssets={overlayAssets}
           basemapStyle={basemapStyle}
-          controlled
+          interactive={interactive}
+          followCamera
           snapshotMode={snapshotMode}
-          onMapReady={handleMapReady}
+          onCameraChange={onCameraChange}
         />
+        {caption ? (
+          <div className="story-flyover__caption" aria-live="polite">
+            {caption}
+          </div>
+        ) : null}
         <div
           className="story-flyover__progress"
           aria-label={`Flyover ${Math.round(progress * 100)}% complete`}

@@ -28,12 +28,32 @@ source, partial project failure, and source usage. Connected means the source
 requires networking. Never display a fallback dataset as though it were the
 stored selection.
 
-## Editor chapters — Provisional
+## Editor chapters — Established
 
 Adding, duplicating, reordering, and deleting preserve the selected chapter and
-preview whenever possible. Disabled actions explain unavailable prerequisites.
-Destructive removal names dependent data effects and remains recoverable where
-the product supports it.
+preview whenever possible. Each row derives one compact status from publisher
+readiness: missing or incompatible data, required type configuration, title,
+narrative, alternative text, then Ready. Disabled actions explain unavailable
+prerequisites. Destructive removal names dependent data effects and remains
+recoverable where the product supports it.
+
+The center canvas has two explicit modes. **Edit chapter** mounts only the
+selected chapter through the viewer-owned renderer; **Preview story** mounts the
+complete reader publication. Moving an authoring map updates the project draft
+after a short pause and offers one-step Undo. `View updated` means the in-memory
+project draft changed; only the global Save action means it is persisted on this
+computer. Exact coordinates are an advanced path—ordinary map composition
+happens directly on the map with Fit and Reset actions.
+
+Chapter-only content and behavior stay in the chapter inspector. Source label,
+delivery, interpretation, shared appearance, filtering, legend, and provenance
+live in Story data and always state that they affect every chapter using the
+source. Secondary chapter controls use task-based disclosure rather than a
+single long settings form.
+
+At 960px and below, Chapters, Canvas, and Edit become keyboard-operable tabs.
+Only the active region mounts, preserving the selected chapter and draft values
+without leaving hidden map runtimes active.
 
 ## Publishing — Established
 

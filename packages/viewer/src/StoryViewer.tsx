@@ -1,21 +1,11 @@
 import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import type { Camera, PublicationManifest } from "@earth-stories/story-schema";
 import { groupChaptersIntoBlocks } from "./chapterBlocks.js";
 import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
 import { VisualizationProvenance } from "./VisualizationProvenance.js";
+import { PublicationChapterRenderer } from "./PublicationChapterRenderer.js";
 import "./viewer.css";
 
-const MapChapter = lazy(async () => {
-  const module = await import("./MapChapter.js");
-  return { default: module.MapChapter };
-});
-const ChartChapter = lazy(async () => ({
-  default: (await import("./ChartChapter.js")).ChartChapter,
-}));
-const FlyoverChapter = lazy(async () => ({
-  default: (await import("./FlyoverChapter.js")).FlyoverChapter,
-}));
 const ScrollytellingBlock = lazy(async () => ({
   default: (await import("./ScrollytellingBlock.js")).ScrollytellingBlock,
 }));
@@ -141,154 +131,18 @@ export function StoryViewer({
             );
           }
           const { chapter, index } = block;
-          const asset =
-            "assetId" in chapter && chapter.assetId
-              ? assets.get(chapter.assetId)
-              : null;
-          const overlayAssets =
-            "overlayAssetIds" in chapter
-              ? chapter.overlayAssetIds.flatMap((id) => {
-                  const overlay = assets.get(id);
-                  return overlay ? [overlay] : [];
-                })
-              : [];
-          const visualizationAssets = [
-            ...(asset ? [asset] : []),
-            ...overlayAssets,
-          ];
           return (
-            <section
-              className={`story-chapter story-chapter--${chapter.type}`}
+            <PublicationChapterRenderer
               key={chapter.id}
-              id={chapter.id}
-              data-chapter-id={chapter.id}
-            >
-              <p className="story-folio">
-                {String(index + 1).padStart(2, "0")}
-              </p>
-              <div className="story-copy">
-                <h2>{chapter.title}</h2>
-                <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
-              </div>
-              {chapter.type === "map" && asset ? (
-                <StoryMapHydrationBoundary
-                  eager={snapshotMode}
-                  fallback={
-                    <div className="story-map story-map--loading">
-                      Preparing map…
-                    </div>
-                  }
-                >
-                  <Suspense
-                    fallback={
-                      <div className="story-map story-map--loading">
-                        Preparing map…
-                      </div>
-                    }
-                  >
-                    <MapChapter
-                      chapter={chapter}
-                      asset={asset}
-                      overlayAssets={overlayAssets}
-                      basemapStyle={manifest.basemap.styleUrl}
-                      autoFit
-                      snapshotMode={snapshotMode}
-                      onCameraChange={(camera) =>
-                        onChapterCameraChange?.(chapter.id, camera)
-                      }
-                    />
-                  </Suspense>
-                </StoryMapHydrationBoundary>
-              ) : null}
-              {chapter.type === "video" ? (
-                <figure className="story-video">
-                  <iframe
-                    src={
-                      chapter.provider === "youtube"
-                        ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(chapter.videoId)}`
-                        : `https://player.vimeo.com/video/${encodeURIComponent(chapter.videoId)}`
-                    }
-                    title={chapter.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                  <figcaption>
-                    <a href={chapter.originalUrl}>Open original video</a>
-                  </figcaption>
-                </figure>
-              ) : null}
-              {chapter.type === "flyover" ? (
-                <StoryMapHydrationBoundary
-                  eager={snapshotMode}
-                  fallback={
-                    <div
-                      className="story-map story-map--loading story-map--flyover-placeholder"
-                      style={{
-                        minHeight: `${Math.max(
-                          120,
-                          chapter.scrollLength *
-                            100 *
-                            (chapter.keyframes.length - 1) +
-                            100,
-                        )}vh`,
-                      }}
-                    >
-                      Preparing flyover…
-                    </div>
-                  }
-                >
-                  <Suspense
-                    fallback={
-                      <div
-                        className="story-map story-map--loading story-map--flyover-placeholder"
-                        style={{
-                          minHeight: `${Math.max(
-                            120,
-                            chapter.scrollLength *
-                              100 *
-                              (chapter.keyframes.length - 1) +
-                              100,
-                          )}vh`,
-                        }}
-                      >
-                        Preparing flyover…
-                      </div>
-                    }
-                  >
-                    <FlyoverChapter
-                      chapter={chapter}
-                      asset={asset ?? null}
-                      overlayAssets={overlayAssets}
-                      basemapStyle={manifest.basemap.styleUrl}
-                      snapshotMode={snapshotMode}
-                      onCameraChange={(camera) =>
-                        onChapterCameraChange?.(chapter.id, camera)
-                      }
-                    />
-                  </Suspense>
-                </StoryMapHydrationBoundary>
-              ) : null}
-              {chapter.type === "image" && asset ? (
-                <figure className="story-image">
-                  <img src={asset.href} alt={chapter.alt} />
-                  <figcaption>{chapter.caption || asset.label}</figcaption>
-                </figure>
-              ) : null}
-              {chapter.type === "chart" && asset ? (
-                <Suspense
-                  fallback={
-                    <div className="story-chart story-map--loading">
-                      Preparing chart…
-                    </div>
-                  }
-                >
-                  <ChartChapter chapter={chapter} asset={asset} />
-                </Suspense>
-              ) : null}
-              {visualizationAssets.length ? (
-                <VisualizationProvenance assets={visualizationAssets} />
-              ) : null}
-            </section>
+              chapter={chapter}
+              index={index}
+              assets={assets}
+              basemapStyle={manifest.basemap.styleUrl}
+              snapshotMode={snapshotMode}
+              onCameraChange={(camera) =>
+                onChapterCameraChange?.(chapter.id, camera)
+              }
+            />
           );
         })}
       </article>

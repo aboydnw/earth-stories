@@ -235,8 +235,14 @@ export async function buildArchivalHtml({
         /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/.test(
           snapshot,
         );
+      const flyoverCaptions =
+        chapter.type === "flyover"
+          ? chapter.keyframes
+              .map(({ caption }) => caption.trim())
+              .filter(Boolean)
+          : [];
       chapters.push(
-        `<section>${heading}${validSnapshot ? `<img src="${escapeHtml(snapshot)}" alt="Map snapshot for ${escapeHtml(chapter.title)}">` : `<div class="unavailable">Map snapshot unavailable.${chapter.type === "flyover" ? ` Flyover contains ${chapter.keyframes.length} camera keyframes.` : ` Camera: ${chapter.camera.center.join(", ")} at zoom ${chapter.camera.zoom}.`}</div>`}${chapterProvenance([chapter.sourceId, ...(chapter.overlaySourceIds ?? [])])}${narrative}</section>`,
+        `<section>${heading}${validSnapshot ? `<img src="${escapeHtml(snapshot)}" alt="Map snapshot for ${escapeHtml(chapter.title)}">` : `<div class="unavailable">Map snapshot unavailable.${chapter.type === "flyover" ? ` Flyover contains ${chapter.keyframes.length} camera keyframes.` : ` Camera: ${chapter.camera.center.join(", ")} at zoom ${chapter.camera.zoom}.`}</div>`}${flyoverCaptions.length ? `<ol class="flyover-captions">${flyoverCaptions.map((caption) => `<li>${escapeHtml(caption)}</li>`).join("")}</ol>` : ""}${chapterProvenance([chapter.sourceId, ...(chapter.overlaySourceIds ?? [])])}${narrative}</section>`,
       );
       continue;
     }

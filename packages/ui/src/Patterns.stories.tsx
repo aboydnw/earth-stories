@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Button, Grid, Stack } from "@chakra-ui/react";
+import { Button, Grid, Input, Stack } from "@chakra-ui/react";
 import {
+  CollapsibleSection,
   ProgressPresentation,
   PublicationFinding,
   SaveStatus,
@@ -148,6 +149,35 @@ export const AuthoringGuidance: Story = {
           metrics="8 chapters · 3 sources"
         />
       </div>
+    </Grid>
+  ),
+};
+
+export const ProgressiveDisclosure: Story = {
+  render: () => (
+    <Grid gap="4" maxW="360px">
+      <CollapsibleSection
+        title="Layers"
+        description="Sources drawn above the main map"
+        summary="2 overlays"
+      >
+        <Stack gap="3">
+          <Input aria-label="First overlay" value="Flood extent" readOnly />
+          <Input
+            aria-label="Second overlay"
+            value="District boundaries"
+            readOnly
+          />
+        </Stack>
+      </CollapsibleSection>
+      <CollapsibleSection
+        title="Exact coordinates"
+        description="Use these values when the map needs a reproducible technical position."
+        summary="Zoom 5.2 · Pitch 35° · Bearing 280°"
+        issue="Needs attention"
+      >
+        <Input aria-label="Zoom" value="5.2" readOnly />
+      </CollapsibleSection>
     </Grid>
   ),
 };

@@ -10,12 +10,14 @@ export function CopcOverlay({
   onError,
   onReady,
   autoFit = false,
+  onFitCameraChange,
 }: {
   asset: PublicationAsset;
   map: MapLibreMap | null;
   onError: (message: string) => void;
   onReady?: () => void;
   autoFit?: boolean;
+  onFitCameraChange?: () => void;
 }) {
   useEffect(() => {
     let active = true;
@@ -44,17 +46,33 @@ export function CopcOverlay({
           onReady?.();
           return;
         }
-        const finishReady = () => {
+        let readinessReported = false;
+        const reportReady = () => {
+          if (!active || readinessReported) return;
+          readinessReported = true;
+          onReady?.();
+        };
+        const clearReadyWait = () => {
           if (readyFallback !== null) window.clearTimeout(readyFallback);
           readyFallback = null;
           if (moveEndHandler) map.off("moveend", moveEndHandler);
           moveEndHandler = null;
-          if (active) onReady?.();
         };
-        moveEndHandler = finishReady;
+        const finishMove = () => {
+          clearReadyWait();
+          if (active) {
+            reportReady();
+            onFitCameraChange?.();
+          }
+        };
+        const finishReadyFallback = () => {
+          readyFallback = null;
+          reportReady();
+        };
+        moveEndHandler = finishMove;
         map.once("moveend", moveEndHandler);
         control.flyToPointCloud(pointCloud.id);
-        readyFallback = window.setTimeout(finishReady, 1_250);
+        readyFallback = window.setTimeout(finishReadyFallback, 1_250);
       })
       .catch((cause: unknown) => {
         if (!active) {
@@ -83,6 +101,7 @@ export function CopcOverlay({
     onError,
     onReady,
     autoFit,
+    onFitCameraChange,
   ]);
   return null;
 }
