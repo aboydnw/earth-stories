@@ -2,6 +2,8 @@ import {
   access,
   mkdtemp,
   mkdir,
+  readFile,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -242,7 +244,13 @@ describe("createLocalServer", () => {
     const server = createLocalServer(store, config, jobs);
     const port = await listen(server);
     try {
-      for (const path of ["/api", "/api/not-a-route"]) {
+      for (const path of [
+        "/api",
+        "/api/not-a-route",
+        "/api%2fprojects",
+        "/api%2Fnot-a-route",
+        "/%61pi%2fnot-a-route",
+      ]) {
         const response = await fetch(`http://127.0.0.1:${port}${path}`);
         expect(response.status).toBe(404);
         expect(response.headers.get("content-type")).toBe(
@@ -287,15 +295,19 @@ describe("createLocalServer", () => {
     const secret = join(root, "secret.txt");
     await writeFile(secret, "outside secret");
     await symlink(secret, join(editorDirectory!, "leak.txt"));
+    await symlink(secret, join(editorDirectory!, "leak"));
     const { createLocalServer } = await import("./server.js");
     const server = createLocalServer(store, config, jobs);
     const port = await listen(server);
     try {
       for (const path of [
         "/leak.txt",
+        "/leak",
         "/..%2fsecret.txt",
         "/%2e%2e%2fsecret.txt",
         "/%2e%2e%2fsecret",
+        "/%252e%252e%252fsecret",
+        "/%25252e%25252e%25252fsecret",
       ]) {
         const response = await fetch(`http://127.0.0.1:${port}${path}`);
         expect(response.status).toBe(404);
@@ -314,6 +326,9 @@ describe("createLocalServer", () => {
       editorFiles: {
         "index.html": "editor shell",
         "assets/app.01234567.js": "0123456789",
+        "assets/index-cNtA-444.js": "vite hash with hyphen",
+        "assets/GeoParquetOverlay-HsoHMYXt.js": "vite mixed-case hash",
+        "assets/editor-shell.js": "ordinary hyphenated name",
         "assets/readme.txt": "ordinary",
       },
     });
@@ -332,6 +347,18 @@ describe("createLocalServer", () => {
         "public, max-age=31536000, immutable",
       );
       expect(await ranged.text()).toBe("2345");
+
+      for (const path of [
+        "/assets/index-cNtA-444.js",
+        "/assets/GeoParquetOverlay-HsoHMYXt.js",
+      ]) {
+        const viteAsset = await fetch(`${base}${path}`);
+        expect(viteAsset.headers.get("cache-control")).toBe(
+          "public, max-age=31536000, immutable",
+        );
+      }
+      const ordinaryHyphenated = await fetch(`${base}/assets/editor-shell.js`);
+      expect(ordinaryHyphenated.headers.get("cache-control")).toBe("no-cache");
 
       const full = await fetch(`${base}/assets/readme.txt`);
       const etag = full.headers.get("etag");
@@ -356,6 +383,32 @@ describe("createLocalServer", () => {
       });
       expect(invalidRange.status).toBe(416);
       expect(invalidRange.headers.get("content-range")).toBe("bytes */8");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("streams the validated opened file when its pathname is swapped", async () => {
+    const { config, store, jobs, root, editorDirectory } = await setup({
+      editorFiles: { "race.txt": "inside bytes" },
+    });
+    const outside = join(root, "outside.txt");
+    const target = join(editorDirectory!, "race.txt");
+    await writeFile(outside, "outside bytes");
+    const { createLocalServer } = await import("./server.js");
+    const server = createLocalServer(store, config, jobs, {
+      testOnlyAfterStaticOpen: async (openedPath) => {
+        if (openedPath !== target) return;
+        await rename(target, join(editorDirectory!, "opened.txt"));
+        await symlink(outside, target);
+      },
+    });
+    const port = await listen(server);
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/race.txt`);
+      expect(await readFile(target, "utf8")).toBe("outside bytes");
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("inside bytes");
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

@@ -34,7 +34,11 @@ import {
 } from "./security.js";
 import { checkShareLink, decodeShareCard } from "./share-health.js";
 import { storeShareCard } from "./share-card.js";
-import { isSafeEditorPath, serveEditorFile, staticNotFound } from "./static.js";
+import {
+  canonicalizeRequestPath,
+  serveEditorFile,
+  staticNotFound,
+} from "./static.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 import { PagesJobs } from "./pages-jobs.js";
 import type { ResolvedLocalServiceConfig } from "./config.js";
@@ -263,7 +267,10 @@ export function createLocalServer(
     conversion: ConversionJobs;
     pages: PagesJobs;
   },
-  internal: { testOnlyDisableTrustedMutationOrigin?: boolean } = {},
+  internal: {
+    testOnlyDisableTrustedMutationOrigin?: boolean;
+    testOnlyAfterStaticOpen?: (path: string) => Promise<void>;
+  } = {},
 ): Server {
   assertCapabilitySecurity(
     config.capabilityToken,
@@ -693,34 +700,42 @@ export function createLocalServer(
         return;
       }
 
+      const canonicalPath = canonicalizeRequestPath(url.pathname);
+      const isApiPath =
+        canonicalPath === "/api" || canonicalPath?.startsWith("/api/");
       if (
         config.editorDirectory !== null &&
-        url.pathname !== "/api" &&
-        !url.pathname.startsWith("/api/") &&
+        !isApiPath &&
         (request.method === "GET" || request.method === "HEAD")
       ) {
-        if (!isSafeEditorPath(url.pathname)) {
+        if (canonicalPath === null) {
           staticNotFound(response);
           return;
         }
-        const exactPath = url.pathname === "/" ? "/index.html" : url.pathname;
-        if (
-          await serveEditorFile(
-            request,
-            response,
-            config.editorDirectory,
-            exactPath,
-          )
-        )
+        const exactPath = canonicalPath === "/" ? "/index.html" : canonicalPath;
+        const exactResult = await serveEditorFile(
+          request,
+          response,
+          config.editorDirectory,
+          exactPath,
+          { afterOpen: internal.testOnlyAfterStaticOpen },
+        );
+        if (exactResult === "served") return;
+        if (exactResult === "rejected") {
+          staticNotFound(response);
           return;
+        }
         if (
-          extname(url.pathname) === "" &&
+          extname(canonicalPath) === "" &&
           (await serveEditorFile(
             request,
             response,
             config.editorDirectory,
             "/index.html",
-          ))
+            {
+              afterOpen: internal.testOnlyAfterStaticOpen,
+            },
+          )) === "served"
         )
           return;
         staticNotFound(response);
