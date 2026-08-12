@@ -1,12 +1,15 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { DesktopPaths } from "./paths.js";
 import {
   capabilityRequestHeaders,
+  createDimensionPersistence,
+  createEphemeralSessionPartition,
   launchDesktopMain,
   readWindowDimensions,
+  requireServiceOrigin,
   writeWindowDimensions,
   type DesktopMainDependencies,
   type QuitEvent,
@@ -34,6 +37,11 @@ function harness(
     startError?: Error;
     shutdownError?: Error;
     launchArguments?: string[];
+    origin?: string;
+    hookError?: Error;
+    probeError?: Error;
+    loadError?: Error;
+    closeAllowed?: boolean;
   } = {},
 ) {
   const events: string[] = [];
@@ -65,7 +73,7 @@ function harness(
       start: async () => {
         events.push("service:start");
         if (options.startError) throw options.startError;
-        return "http://127.0.0.1:45123";
+        return options.origin ?? "http://127.0.0.1:45123";
       },
       shutdown: async () => {
         events.push("service:shutdown");
@@ -76,8 +84,15 @@ function harness(
       events.push("session:create");
       return { name: "desktop-session" };
     },
-    installHeaderHook: () => events.push("session:hook"),
+    installHeaderHook: () => {
+      events.push("session:hook");
+      if (options.hookError) throw options.hookError;
+    },
     installSessionPolicies: () => events.push("session:policies"),
+    probeSession: async () => {
+      events.push("session:probe");
+      if (options.probeError) throw options.probeError;
+    },
     installIpcHandlers: (...args: unknown[]) => {
       const options = args[0] as
         { origin?: string; session?: { name?: string } } | undefined;
@@ -86,6 +101,15 @@ function harness(
     createWindow: ({ dimensions }) => {
       events.push(`window:create:${dimensions.width}x${dimensions.height}`);
       return {
+        destroy: () => events.push("window:destroy"),
+        load: async () => {
+          events.push("window:load");
+          if (options.loadError) throw options.loadError;
+        },
+        requestClose: async () => {
+          events.push("window:request-close");
+          return options.closeAllowed ?? true;
+        },
         focus: () => events.push("window:focus"),
         isMinimized: () => true,
         restore: () => events.push("window:restore"),
@@ -138,8 +162,10 @@ describe("launchDesktopMain", () => {
       "session:create",
       "session:hook",
       "session:policies",
+      "session:probe",
       "ipc:handlers:http://127.0.0.1:45123:desktop-session",
       "window:create:1111x777",
+      "window:load",
     ]);
   });
 
@@ -216,7 +242,7 @@ describe("launchDesktopMain", () => {
     expect(lifecycle.startupErrorWindow).toBeNull();
   });
 
-  it("prevents quit until service work drains and then closes once", async () => {
+  it("asks the renderer to close before draining the service", async () => {
     const value = harness();
     await launchDesktopMain(value.dependencies);
     const quitEvent = { preventDefault: () => value.events.push("prevent") };
@@ -225,12 +251,33 @@ describe("launchDesktopMain", () => {
     value.beforeQuit()?.(quitEvent);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(value.events.slice(-4)).toEqual([
+    expect(value.events.slice(-5)).toEqual([
+      "prevent",
+      "window:request-close",
       "prevent",
       "service:shutdown",
-      "prevent",
       "quit",
     ]);
+  });
+
+  it("keeps the service alive when unsaved renderer state vetoes quit", async () => {
+    const value = harness({ closeAllowed: false });
+    await launchDesktopMain(value.dependencies);
+
+    value.beforeQuit()?.({
+      preventDefault: () => value.events.push("prevent"),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    value.beforeQuit()?.({
+      preventDefault: () => value.events.push("prevent"),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(
+      value.events.filter((event) => event === "window:request-close"),
+    ).toHaveLength(2);
+    expect(value.events).not.toContain("service:shutdown");
+    expect(value.events).not.toContain("quit");
   });
 
   it("finishes quitting when service cleanup reports an error", async () => {
@@ -242,8 +289,9 @@ describe("launchDesktopMain", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(value.events.slice(-3)).toEqual([
+    expect(value.events.slice(-4)).toEqual([
       "prevent",
+      "window:request-close",
       "service:shutdown",
       "quit",
     ]);
@@ -254,9 +302,86 @@ describe("launchDesktopMain", () => {
     await launchDesktopMain(value.dependencies);
 
     value.dimensionsChanged()?.({ width: 1280, height: 900 });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     expect(value.events.at(-1)).toBe("dimensions:1280x900");
+  });
+
+  it.each([
+    "http://localhost:45123",
+    "http://[::1]:45123",
+    "https://127.0.0.1:45123",
+    "http://127.0.0.1",
+    "http://127.0.0.1:0",
+    "http://127.0.0.1:45123/path",
+    "http://127.0.0.1:45123/?query=1",
+    "http://127.0.0.1:45123/#fragment",
+    "http://user:pass@127.0.0.1:45123",
+  ])(
+    "rejects hostile service origin %s before session creation",
+    async (origin) => {
+      const value = harness({ origin });
+
+      await launchDesktopMain(value.dependencies);
+
+      expect(value.events).toEqual([
+        "ready",
+        "service:start",
+        "service:shutdown",
+        "error:The local service reported an invalid origin.:/profile/logs",
+      ]);
+    },
+  );
+
+  it.each(["hook", "probe", "load"] as const)(
+    "closes service and shows startup error when %s fails",
+    async (stage) => {
+      const failure = new Error(`${stage} failed`);
+      const value = harness({
+        hookError: stage === "hook" ? failure : undefined,
+        probeError: stage === "probe" ? failure : undefined,
+        loadError: stage === "load" ? failure : undefined,
+      });
+
+      const lifecycle = await launchDesktopMain(value.dependencies);
+
+      expect(value.events).toContain("service:shutdown");
+      if (stage === "load") expect(value.events).toContain("window:destroy");
+      expect(value.events.at(-1)).toBe(`error:${stage} failed:/profile/logs`);
+      expect(lifecycle.startupErrorWindow).not.toBeNull();
+    },
+  );
+
+  it("preserves the startup cause when cleanup also fails", async () => {
+    const value = harness({
+      origin: "http://localhost:45123",
+      shutdownError: new Error("cleanup failed"),
+    });
+
+    await launchDesktopMain(value.dependencies);
+
+    expect(value.events.at(-1)).toBe(
+      "error:The local service reported an invalid origin.:/profile/logs",
+    );
+  });
+});
+
+describe("service origin", () => {
+  it("accepts only the canonical ephemeral loopback origin", () => {
+    expect(requireServiceOrigin("http://127.0.0.1:45123")).toBe(
+      "http://127.0.0.1:45123",
+    );
+  });
+});
+
+describe("desktop session partition", () => {
+  it("uses a unique non-persisted partition for every launch", () => {
+    const first = createEphemeralSessionPartition();
+    const second = createEphemeralSessionPartition();
+
+    expect(first).not.toBe(second);
+    expect(first.startsWith("persist:")).toBe(false);
+    expect(second.startsWith("persist:")).toBe(false);
   });
 });
 
@@ -291,6 +416,44 @@ describe("window dimensions", () => {
       width: 1400,
       height: 920,
     });
+    expect(await readdir(join(directory, "preferences"))).toEqual([
+      "window.json",
+    ]);
+  });
+
+  it("debounces rapid writes and serializes the latest dimensions", async () => {
+    const writes: string[] = [];
+    const persist = createDimensionPersistence({
+      path: "/profile/window.json",
+      delayMs: 5,
+      write: async (_path, dimensions) => {
+        writes.push(`${dimensions.width}x${dimensions.height}`);
+      },
+      reportError: () => undefined,
+    });
+
+    persist.schedule({ width: 900, height: 700 });
+    persist.schedule({ width: 1000, height: 800 });
+    persist.schedule({ width: 1100, height: 900 });
+    await persist.flush();
+
+    expect(writes).toEqual(["1100x900"]);
+  });
+
+  it("reports preference write failures without rejecting flush", async () => {
+    const errors: unknown[] = [];
+    const persist = createDimensionPersistence({
+      path: "/profile/window.json",
+      delayMs: 0,
+      write: async () => {
+        throw new Error("disk full");
+      },
+      reportError: (cause) => errors.push(cause),
+    });
+
+    persist.schedule({ width: 1100, height: 900 });
+    await expect(persist.flush()).resolves.toBeUndefined();
+    expect(errors).toHaveLength(1);
   });
 });
 

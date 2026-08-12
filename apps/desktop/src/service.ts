@@ -86,7 +86,7 @@ export class DesktopService {
       this.#running = service;
       return service.origin;
     } catch (cause) {
-      await starting.close();
+      await starting.close().catch(() => undefined);
       throw cause;
     } finally {
       if (timer) clearTimeout(timer);
@@ -139,7 +139,13 @@ export class DesktopService {
     if (!running) return;
     this.#running = null;
     try {
-      await running.drain({ timeoutMs: this.#drainTimeoutMs });
+      const residual = await running.drain({ timeoutMs: this.#drainTimeoutMs });
+      if (residual.runningConversions > 0)
+        await running.forceTerminateConversions();
+      if (residual.runningPublishes > 0)
+        console.error(
+          `Earth Stories closed with ${residual.runningPublishes} publication job(s) still settling.`,
+        );
     } finally {
       await running.close();
     }

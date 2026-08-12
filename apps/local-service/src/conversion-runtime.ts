@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -9,6 +8,7 @@ import {
   type ConversionJobEvent,
   type ConversionJobRequest,
 } from "@earth-stories/story-schema";
+import { ProcessTreeRunner } from "./process-tree.js";
 
 export const CAPABILITY_DOWNLOAD_ESTIMATES: Record<
   ConversionCapability,
@@ -34,33 +34,13 @@ export interface RuntimeCommand {
 
 export type RuntimeCommandRunner = (command: RuntimeCommand) => Promise<void>;
 
-const runCommand: RuntimeCommandRunner = (command) =>
-  new Promise((resolveCommand, rejectCommand) => {
-    const child = spawn(command.executable, command.args, {
-      cwd: command.cwd,
-      env: command.env ? { ...process.env, ...command.env } : process.env,
-      stdio: ["pipe", "pipe", "pipe"],
-      signal: command.signal,
-    });
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    if (command.onStdout) child.stdout.on("data", command.onStdout);
-    if (command.onStderr) child.stderr.on("data", command.onStderr);
-    child.once("error", rejectCommand);
-    child.once("exit", (code) =>
-      code === 0
-        ? resolveCommand()
-        : rejectCommand(new Error(`Conversion process exited with ${code}`)),
-    );
-    child.stdin.end(command.input ?? "");
-  });
-
 export class ConversionRuntime {
   readonly #pixi: string;
   readonly #manifestDirectory: string;
   readonly #workerDirectory: string;
   readonly #environment: Record<string, string> | undefined;
   readonly #run: RuntimeCommandRunner;
+  readonly #forceTerminate: () => Promise<void>;
   readonly #ensureExecutable: (signal?: AbortSignal) => Promise<void>;
   readonly #ready = new Set<ConversionCapability>();
 
@@ -70,6 +50,7 @@ export class ConversionRuntime {
     workerDirectory: string;
     pixiHome: string | null;
     run?: RuntimeCommandRunner;
+    forceTerminate?: () => Promise<void>;
     bootstrap?: (pixiExecutable: string, signal?: AbortSignal) => Promise<void>;
     executableExists?: (path: string) => Promise<boolean>;
   }) {
@@ -79,7 +60,10 @@ export class ConversionRuntime {
     this.#environment = options.pixiHome
       ? { PIXI_HOME: options.pixiHome }
       : undefined;
-    this.#run = options.run ?? runCommand;
+    const processTrees = new ProcessTreeRunner();
+    this.#run = options.run ?? ((command) => processTrees.run(command));
+    this.#forceTerminate =
+      options.forceTerminate ?? (() => processTrees.forceTerminate());
     const executableExists =
       options.executableExists ??
       (async (path: string) => {
@@ -98,6 +82,10 @@ export class ConversionRuntime {
         );
       await options.bootstrap(this.#pixi, signal);
     };
+  }
+
+  forceTerminate(): Promise<void> {
+    return this.#forceTerminate();
   }
 
   async provision(

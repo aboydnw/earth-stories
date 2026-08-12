@@ -731,6 +731,7 @@ __metadata:
   dependencies:
     "@earth-stories/local-service": "workspace:*"
     electron: "npm:43.4.0"
+    esbuild: "npm:~0.28.0"
     typescript: "npm:^5.9.2"
   languageName: unknown
   linkType: soft

@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { DesktopPaths } from "./paths.js";
@@ -28,6 +29,9 @@ export interface QuitEvent {
 }
 
 export interface DesktopWindow {
+  destroy(): void;
+  load(): Promise<void>;
+  requestClose(): Promise<boolean>;
   focus(): void;
   isMinimized(): boolean;
   restore(): void;
@@ -68,6 +72,7 @@ export interface DesktopMainDependencies {
     options: { origin: string; capabilityToken: string },
   ): void;
   installSessionPolicies(session: unknown, options: { origin: string }): void;
+  probeSession(session: unknown, options: { origin: string }): Promise<void>;
   installIpcHandlers(options: { origin: string; session: unknown }): void;
   createWindow(options: {
     origin: string;
@@ -132,14 +137,81 @@ export async function writeWindowDimensions(
   if (!validDimension(dimensions.width) || !validDimension(dimensions.height))
     return;
   await mkdir(dirname(path), { recursive: true });
-  await writeFile(
-    path,
-    `${JSON.stringify({
-      width: dimensions.width,
-      height: dimensions.height,
-    })}\n`,
-    "utf8",
-  );
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(
+      temporary,
+      `${JSON.stringify({
+        width: dimensions.width,
+        height: dimensions.height,
+      })}\n`,
+      "utf8",
+    );
+    await rename(temporary, path);
+  } catch (cause) {
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw cause;
+  }
+}
+
+export function createDimensionPersistence(options: {
+  path: string;
+  delayMs?: number;
+  write(path: string, dimensions: WindowDimensions): Promise<void>;
+  reportError(cause: unknown): void;
+}) {
+  let latest: WindowDimensions | null = null;
+  let timer: NodeJS.Timeout | null = null;
+  let writing = Promise.resolve();
+  const persistLatest = async () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    const dimensions = latest;
+    latest = null;
+    if (!dimensions) return;
+    writing = writing.then(() => options.write(options.path, dimensions));
+    await writing.catch((cause) => options.reportError(cause));
+    writing = writing.catch(() => undefined);
+    if (latest) await persistLatest();
+  };
+  return {
+    schedule(dimensions: WindowDimensions) {
+      latest = dimensions;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void persistLatest(), options.delayMs ?? 150);
+      timer.unref?.();
+    },
+    flush: persistLatest,
+  };
+}
+
+export function requireServiceOrigin(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("The local service reported an invalid origin.");
+  }
+  const port = Number(url.port);
+  if (
+    url.protocol !== "http:" ||
+    url.hostname !== "127.0.0.1" ||
+    !Number.isInteger(port) ||
+    port < 1 ||
+    port > 65_535 ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.pathname !== "/" ||
+    url.search !== "" ||
+    url.hash !== "" ||
+    url.origin !== value
+  )
+    throw new Error("The local service reported an invalid origin.");
+  return url.origin;
+}
+
+export function createEphemeralSessionPartition(): string {
+  return `earth-stories-${randomUUID()}`;
 }
 
 function fileArguments(argv: string[]): string[] {
@@ -180,24 +252,20 @@ export async function launchDesktopMain(
     event.preventDefault();
     if (shuttingDown) return;
     shuttingDown = true;
-    void dependencies.service.shutdown().then(
-      () => {
-        allowQuit = true;
-        dependencies.app.quit();
-      },
-      () => {
-        allowQuit = true;
-        dependencies.app.quit();
-      },
-    );
+    void (async () => {
+      if (window && !(await window.requestClose())) {
+        shuttingDown = false;
+        return;
+      }
+      await dependencies.service.shutdown().catch(() => undefined);
+      allowQuit = true;
+      dependencies.app.quit();
+    })();
   });
 
   await dependencies.app.whenReady();
 
-  let origin: string;
-  try {
-    origin = await dependencies.service.start();
-  } catch (cause) {
+  const showStartupError = (cause: unknown) => {
     const errorWindow = dependencies.createStartupErrorWindow({
       message: startupMessage(cause),
       logsDirectory: dependencies.paths.logsDirectory,
@@ -207,30 +275,54 @@ export async function launchDesktopMain(
       if (lifecycle.startupErrorWindow === errorWindow)
         lifecycle.startupErrorWindow = null;
     });
+  };
+
+  let startedOrigin: string;
+  try {
+    startedOrigin = await dependencies.service.start();
+  } catch (cause) {
+    showStartupError(cause);
     return lifecycle;
   }
-
-  const desktopSession = dependencies.createSession();
-  dependencies.installHeaderHook(desktopSession, {
-    origin,
-    capabilityToken: dependencies.service.capabilityToken,
-  });
-  dependencies.installSessionPolicies(desktopSession, { origin });
-  dependencies.installIpcHandlers({ origin, session: desktopSession });
-  const dimensions = await dependencies.readDimensions(
-    dependencies.paths.windowPreferencesFile,
-  );
-  window = dependencies.createWindow({
-    origin,
-    session: desktopSession,
-    dimensions,
-  });
-  window.onDimensionsChanged((next) => {
-    void dependencies.writeDimensions(
+  let origin: string;
+  try {
+    origin = requireServiceOrigin(startedOrigin);
+  } catch (cause) {
+    await dependencies.service.shutdown().catch(() => undefined);
+    showStartupError(cause);
+    return lifecycle;
+  }
+  try {
+    const desktopSession = dependencies.createSession();
+    dependencies.installHeaderHook(desktopSession, {
+      origin,
+      capabilityToken: dependencies.service.capabilityToken,
+    });
+    dependencies.installSessionPolicies(desktopSession, { origin });
+    await dependencies.probeSession(desktopSession, { origin });
+    dependencies.installIpcHandlers({ origin, session: desktopSession });
+    const dimensions = await dependencies.readDimensions(
       dependencies.paths.windowPreferencesFile,
-      next,
     );
-  });
+    window = dependencies.createWindow({
+      origin,
+      session: desktopSession,
+      dimensions,
+    });
+    await window.load();
+    const persistence = createDimensionPersistence({
+      path: dependencies.paths.windowPreferencesFile,
+      write: dependencies.writeDimensions,
+      reportError: (cause) =>
+        console.error("Could not save window size.", cause),
+    });
+    window.onDimensionsChanged((next) => persistence.schedule(next));
+  } catch (cause) {
+    window?.destroy();
+    window = null;
+    await dependencies.service.shutdown().catch(() => undefined);
+    showStartupError(cause);
+  }
   return lifecycle;
 }
 
@@ -269,6 +361,7 @@ export async function runElectronDesktop(): Promise<void> {
   });
   await mkdir(paths.logsDirectory, { recursive: true });
   const localService = new DesktopService(paths);
+  // Routing infrastructure only: the later handoff importer will consume these.
   const pendingFiles: string[] = [];
   let primaryWebContents: DesktopIpcWebContents | null = null;
 
@@ -293,7 +386,8 @@ export async function runElectronDesktop(): Promise<void> {
         app.on("before-quit", (event) => listener(event));
       },
     },
-    createSession: () => session.fromPartition("persist:earth-stories"),
+    createSession: () =>
+      session.fromPartition(createEphemeralSessionPartition()),
     installIpcHandlers: ({ origin, session: desktopSession }) => {
       registerDesktopIpcHandlers({
         ipcMain,
@@ -327,11 +421,20 @@ export async function runElectronDesktop(): Promise<void> {
         origin,
       );
     },
+    probeSession: async (desktopSession, { origin }) => {
+      const response = await (desktopSession as Electron.Session).fetch(
+        `${origin}/health`,
+      );
+      if (!response.ok)
+        throw new Error(
+          `Local service health check failed (${response.status}).`,
+        );
+    },
     createWindow: ({ origin, session: desktopSession, dimensions }) => {
       const browserWindow = new BrowserWindow(
         createDesktopWindowOptions({
           dimensions,
-          preloadPath: resolve(sourceDirectory, "preload.js"),
+          preloadPath: resolve(sourceDirectory, "preload.cjs"),
           session: desktopSession,
         }) as Electron.BrowserWindowConstructorOptions,
       );
@@ -340,9 +443,27 @@ export async function runElectronDesktop(): Promise<void> {
         browserWindow.webContents as unknown as DesktopNavigationTarget,
         { origin, openExternal: (url) => shell.openExternal(url) },
       );
-      void browserWindow.loadURL(origin);
       browserWindow.once("ready-to-show", () => browserWindow.show());
       return {
+        destroy: () => browserWindow.destroy(),
+        load: () => browserWindow.loadURL(origin).then(() => undefined),
+        requestClose: () =>
+          new Promise<boolean>((resolveClose) => {
+            const onClosed = () => {
+              browserWindow.webContents.removeListener(
+                "will-prevent-unload",
+                onPrevented,
+              );
+              resolveClose(true);
+            };
+            const onPrevented = () => {
+              browserWindow.removeListener("closed", onClosed);
+              resolveClose(false);
+            };
+            browserWindow.once("closed", onClosed);
+            browserWindow.webContents.once("will-prevent-unload", onPrevented);
+            browserWindow.close();
+          }),
         focus: () => browserWindow.focus(),
         isMinimized: () => browserWindow.isMinimized(),
         restore: () => browserWindow.restore(),

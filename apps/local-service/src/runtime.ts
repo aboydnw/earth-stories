@@ -40,6 +40,7 @@ export interface LocalService {
   resolveProjectDirectory(projectId: string): Promise<string>;
   activity(): ServiceActivity;
   drain(options?: { timeoutMs?: number }): Promise<ServiceActivity>;
+  forceTerminateConversions(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -257,6 +258,7 @@ export function beginLocalService(
       activity,
       drain: (options) =>
         drainJobRegistries(conversionJobs, pagesJobs, options),
+      forceTerminateConversions: () => conversionJobs.forceTerminate(),
       close,
     };
   })();

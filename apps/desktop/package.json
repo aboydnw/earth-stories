@@ -5,8 +5,9 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc --build",
-    "dev": "yarn workspace @earth-stories/local-service build && yarn workspace @earth-stories/viewer-app build && yarn workspace @earth-stories/editor build && tsc --build && electron dist/main.js --development",
+    "build": "tsc --build && node scripts/build-preload.mjs",
+    "dev": "yarn workspace @earth-stories/local-service build && yarn workspace @earth-stories/viewer-app build && yarn workspace @earth-stories/editor build && yarn build && electron dist/main.js --development",
+    "smoke:electron": "yarn build && xvfb-run -a electron --no-sandbox smoke/electron-smoke.cjs",
     "test": "vitest run src"
   },
   "dependencies": {
@@ -14,6 +15,7 @@
   },
   "devDependencies": {
     "electron": "43.4.0",
+    "esbuild": "~0.28.0",
     "typescript": "^5.9.2"
   }
 }

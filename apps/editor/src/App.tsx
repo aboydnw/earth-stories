@@ -108,7 +108,7 @@ const sourcePath = (source: ProjectSource) =>
       : null;
 
 export function App() {
-  const desktop = detectDesktopBridge();
+  const [desktop] = useState(detectDesktopBridge);
   const narrativeRef = useRef<HTMLTextAreaElement>(null);
   const previewCamerasRef = useRef(new Map<string, Camera>());
   const routeLoadRef = useRef(0);

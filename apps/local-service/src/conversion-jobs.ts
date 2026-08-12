@@ -69,6 +69,11 @@ export class ConversionJobs {
     for (const controller of this.#controllers.values()) controller.abort();
   }
 
+  async forceTerminate(): Promise<void> {
+    await this.#runtime.forceTerminate();
+    await this.whenIdle();
+  }
+
   whenIdle(): Promise<void> {
     if (this.#controllers.size === 0) return Promise.resolve();
     return new Promise((resolveIdle) => this.#idleWaiters.add(resolveIdle));

@@ -32,6 +32,9 @@ function localService(origin: string, events: string[] = []): LocalService {
       events.push(`resolve:${projectId}`);
       return `${paths.projectsDirectory}/${projectId}`;
     },
+    forceTerminateConversions: async () => {
+      events.push(`force:${origin}`);
+    },
     activity: () => ({ runningConversions: 0, runningPublishes: 0 }),
     drain: async () => {
       events.push(`drain:${origin}`);
@@ -92,6 +95,21 @@ describe("DesktopService", () => {
       DesktopServiceReadinessError,
     );
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the readiness failure when incomplete-start cleanup also fails", async () => {
+    const readiness = new Error("readiness failed");
+    const service = new DesktopService(paths, {
+      begin: () => ({
+        ready: Promise.reject(readiness),
+        close: async () => {
+          throw new Error("cleanup failed");
+        },
+      }),
+      createCapabilityToken: () => "launch-secret",
+    });
+
+    await expect(service.start()).rejects.toBe(readiness);
   });
 
   it("drains and closes the old instance before exposing a restarted origin", async () => {
@@ -182,5 +200,27 @@ describe("DesktopService", () => {
     await expect(service.shutdown()).rejects.toThrow("drain failed");
 
     expect(events).toEqual(["drain", "close"]);
+  });
+
+  it("force-terminates residual conversion trees after drain timeout", async () => {
+    const events: string[] = [];
+    const running = localService("http://127.0.0.1:45123", events);
+    running.drain = async () => {
+      events.push("drain");
+      return { runningConversions: 1, runningPublishes: 2 };
+    };
+    const service = new DesktopService(paths, {
+      begin: () => ({ ready: Promise.resolve(running), close: running.close }),
+      createCapabilityToken: () => "launch-secret",
+    });
+    await service.start();
+
+    await service.shutdown();
+
+    expect(events).toEqual([
+      "drain",
+      "force:http://127.0.0.1:45123",
+      "close:http://127.0.0.1:45123",
+    ]);
   });
 });

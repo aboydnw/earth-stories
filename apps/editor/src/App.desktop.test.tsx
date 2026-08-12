@@ -47,6 +47,27 @@ afterEach(() => {
 });
 
 describe("desktop editor controls", () => {
+  it("detects the launch-static desktop bridge only on initial render", async () => {
+    let reads = 0;
+    Object.defineProperty(window, "earthStoriesDesktop", {
+      configurable: true,
+      get: () => {
+        reads += 1;
+        return undefined;
+      },
+    });
+    const rendered = renderApp();
+    await screen.findByText("Desktop story");
+
+    rendered.rerender(
+      <EarthStoriesProvider>
+        <App />
+      </EarthStoriesProvider>,
+    );
+
+    expect(reads).toBe(1);
+  });
+
   it("keeps desktop-only controls and version out of the browser editor", async () => {
     renderApp();
 
