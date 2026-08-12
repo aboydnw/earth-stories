@@ -32,6 +32,7 @@ export interface ResolveTokenOptions {
   clientId?: string;
   onDeviceCode?: (prompt: DeviceCodePrompt) => void;
   sleep?: (ms: number) => Promise<void>;
+  signal?: AbortSignal;
 }
 
 /**

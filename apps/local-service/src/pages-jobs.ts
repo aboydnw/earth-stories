@@ -107,8 +107,11 @@ export interface StartPublishInput {
  */
 export class PagesJobs {
   readonly #jobs = new Map<string, PublishJobSnapshot>();
+  readonly #controllers = new Map<string, AbortController>();
+  readonly #idleWaiters = new Set<() => void>();
   readonly #store: ProjectStore;
   readonly #deps: PagesJobsDependencies;
+  #accepting = true;
 
   constructor(store: ProjectStore, deps: Partial<PagesJobsDependencies> = {}) {
     this.#store = store;
@@ -117,6 +120,23 @@ export class PagesJobs {
 
   get(id: string): PublishJobSnapshot | null {
     return this.#jobs.get(id) ?? null;
+  }
+
+  activity(): number {
+    return this.#controllers.size;
+  }
+
+  refuseNewJobs(): void {
+    this.#accepting = false;
+  }
+
+  cancelRunning(): void {
+    for (const controller of this.#controllers.values()) controller.abort();
+  }
+
+  whenIdle(): Promise<void> {
+    if (this.#controllers.size === 0) return Promise.resolve();
+    return new Promise((resolveIdle) => this.#idleWaiters.add(resolveIdle));
   }
 
   async record(projectId: string): Promise<PublishRecord | null> {
@@ -128,10 +148,18 @@ export class PagesJobs {
     projectId: string,
     input: StartPublishInput = {},
   ): Promise<PublishJobSnapshot> {
+    if (!this.#accepting)
+      throw new Error(
+        "The local service is shutting down and cannot start new jobs.",
+      );
     const project = await this.#store.read(projectId);
     const existing = await this.#deps.readPublishRecord(
       this.#store.projectPath(projectId),
     );
+    if (!this.#accepting)
+      throw new Error(
+        "The local service is shutting down and cannot start new jobs.",
+      );
     const requested =
       typeof input.repo === "string" && input.repo.trim()
         ? slugRepoName(input.repo)
@@ -158,7 +186,13 @@ export class PagesJobs {
       updatedAt: now,
     };
     this.#jobs.set(snapshot.id, snapshot);
-    void this.#run(snapshot, { repo: requested, existing, snapshots });
+    const controller = new AbortController();
+    this.#controllers.set(snapshot.id, controller);
+    void this.#run(
+      snapshot,
+      { repo: requested, existing, snapshots },
+      controller,
+    );
     return snapshot;
   }
 
@@ -185,6 +219,7 @@ export class PagesJobs {
       existing: PublishRecord | null;
       snapshots?: Record<string, string>;
     },
+    controller: AbortController,
   ): Promise<void> {
     const projectDirectory = this.#store.projectPath(snapshot.projectId);
     const withLock =
@@ -196,6 +231,7 @@ export class PagesJobs {
     try {
       this.#note(snapshot, "signing-in", "Signing in to GitHub…");
       const identity: GitHubIdentity = await this.#deps.resolveToken({
+        signal: controller.signal,
         onDeviceCode: (prompt) => {
           snapshot.deviceCode = prompt;
           this.#note(
@@ -205,9 +241,13 @@ export class PagesJobs {
           );
         },
       });
+      if (controller.signal.aborted)
+        throw new Error("Publishing was canceled.");
       token = identity.token;
       snapshot.deviceCode = null;
       await withLock(snapshot.projectId, async () => {
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
         this.#note(
           snapshot,
           "checking",
@@ -215,6 +255,8 @@ export class PagesJobs {
         );
 
         const preflight = await this.#deps.preflight(projectDirectory);
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
         if (!preflight.ready)
           throw new Error(
             "Fix the blocking publication problems before publishing to the web.",
@@ -236,6 +278,8 @@ export class PagesJobs {
           mapSnapshots: context.snapshots,
           publicationUrl: url,
         });
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
 
         const limits = checkReleaseLimits(
           await this.#deps.inspectRelease(built.directory),
@@ -257,6 +301,8 @@ export class PagesJobs {
             context.existing?.repo === context.repo &&
             context.existing.owner === identity.login,
         });
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
 
         const branch = context.existing?.branch ?? DEFAULT_PAGES_BRANCH;
         this.#note(snapshot, "uploading", "Uploading the release…");
@@ -279,6 +325,8 @@ export class PagesJobs {
               );
             },
           });
+          if (controller.signal.aborted)
+            throw new Error("Publishing was canceled.");
         } finally {
           acceptingUploadProgress = false;
         }
@@ -290,6 +338,8 @@ export class PagesJobs {
           repo: context.repo,
           branch,
         });
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
 
         this.#note(
           snapshot,
@@ -297,6 +347,8 @@ export class PagesJobs {
           "Waiting for GitHub to build the site. The first build takes a minute or two…",
         );
         const served = await this.#deps.waitForPages(url);
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
         if (!served)
           this.#note(
             snapshot,
@@ -350,6 +402,11 @@ export class PagesJobs {
       });
     } finally {
       snapshot.updatedAt = new Date().toISOString();
+      this.#controllers.delete(snapshot.id);
+      if (this.#controllers.size === 0) {
+        for (const resolveIdle of this.#idleWaiters) resolveIdle();
+        this.#idleWaiters.clear();
+      }
     }
   }
 }

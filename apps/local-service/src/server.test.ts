@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ProjectStore } from "@earth-stories/project-store";
 import { resolveLocalServiceConfig, type CredentialStore } from "./config.js";
+import { ConversionJobs } from "./conversion-jobs.js";
+import type { ConversionRuntime } from "./conversion-runtime.js";
+import { PagesJobs } from "./pages-jobs.js";
 
 const temporaryDirectories: string[] = [];
 const credentials: CredentialStore = {
@@ -37,7 +40,13 @@ async function setup(limits?: { maxBodyBytes?: number }) {
   });
   const store = new ProjectStore(projectsDirectory);
   await store.initialize();
-  return { config, store };
+  const jobs = {
+    conversion: new ConversionJobs(store, {
+      execute: async () => undefined,
+    } as unknown as ConversionRuntime),
+    pages: new PagesJobs(store, { viewerDirectory }),
+  };
+  return { config, store, jobs };
 }
 
 async function listen(server: Server) {
@@ -96,9 +105,9 @@ describe("createLocalServer", () => {
   });
 
   it("uses the actual bound port when parsing request URLs", async () => {
-    const { config, store } = await setup();
+    const { config, store, jobs } = await setup();
     const { createLocalServer } = await import("./server.js");
-    const server = createLocalServer(store, config);
+    const server = createLocalServer(store, config, jobs);
     const port = await listen(server);
     try {
       const response = await fetch(`http://127.0.0.1:${port}/health`);
@@ -113,9 +122,9 @@ describe("createLocalServer", () => {
   });
 
   it("preserves the body-limit boundary with injected limits", async () => {
-    const { config, store } = await setup({ maxBodyBytes: 12 });
+    const { config, store, jobs } = await setup({ maxBodyBytes: 12 });
     const { createLocalServer } = await import("./server.js");
-    const server = createLocalServer(store, config);
+    const server = createLocalServer(store, config, jobs);
     const port = await listen(server);
     try {
       const accepted = await fetch(`http://127.0.0.1:${port}/api/discover`, {

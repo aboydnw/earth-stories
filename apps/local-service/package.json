@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --import tsx src/server.ts",
-    "start": "node --import tsx src/server.ts"
+    "dev": "node --import tsx src/standalone.ts",
+    "start": "node --import tsx src/standalone.ts"
   },
   "dependencies": {
     "@earth-stories/project-store": "workspace:*",

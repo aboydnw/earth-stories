@@ -29,6 +29,7 @@ export interface RuntimeCommand {
   input?: string;
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
+  signal?: AbortSignal;
 }
 
 export type RuntimeCommandRunner = (command: RuntimeCommand) => Promise<void>;
@@ -39,6 +40,7 @@ const runCommand: RuntimeCommandRunner = (command) =>
       cwd: command.cwd,
       env: command.env ? { ...process.env, ...command.env } : process.env,
       stdio: ["pipe", "pipe", "pipe"],
+      signal: command.signal,
     });
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -98,6 +100,7 @@ export class ConversionRuntime {
     capability: ConversionCapability,
     requestId: string,
     onEvent: (event: ConversionJobEvent) => void,
+    signal?: AbortSignal,
   ): Promise<void> {
     if (this.#ready.has(capability)) return;
     await this.#ensureExecutable();
@@ -123,6 +126,7 @@ export class ConversionRuntime {
         "-e",
         capability,
       ],
+      signal,
     });
     this.#ready.add(capability);
     onEvent({
@@ -140,10 +144,16 @@ export class ConversionRuntime {
   async execute(
     input: unknown,
     onEvent: (event: ConversionJobEvent) => void,
+    signal?: AbortSignal,
   ): Promise<void> {
     const request: ConversionJobRequest =
       conversionJobRequestSchema.parse(input);
-    await this.provision(request.capability, request.requestId, onEvent);
+    await this.provision(
+      request.capability,
+      request.requestId,
+      onEvent,
+      signal,
+    );
     let buffered = "";
     let parseFailure: unknown;
     await this.#run({
@@ -160,6 +170,7 @@ export class ConversionRuntime {
         join(this.#workerDirectory, "worker.py"),
       ],
       input: `${JSON.stringify(request)}\n`,
+      signal,
       onStdout: (chunk) => {
         if (parseFailure) return;
         buffered += chunk;

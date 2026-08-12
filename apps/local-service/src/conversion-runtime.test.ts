@@ -123,4 +123,23 @@ describe("ConversionRuntime", () => {
 
     await expect(runtime.execute(request, () => undefined)).rejects.toThrow();
   });
+
+  it("passes cooperative cancellation through provisioning and execution", async () => {
+    const signals: Array<AbortSignal | undefined> = [];
+    const controller = new AbortController();
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      manifestDirectory: "/repo",
+      workerDirectory: "/repo/conversion/worker",
+      pixiHome: null,
+      bootstrap: async () => undefined,
+      run: async (command) => {
+        signals.push(command.signal);
+      },
+    });
+
+    await runtime.execute(request, () => undefined, controller.signal);
+
+    expect(signals).toEqual([controller.signal, controller.signal]);
+  });
 });

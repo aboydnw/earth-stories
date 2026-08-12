@@ -30,7 +30,6 @@ import { loadExampleAssetFiles } from "./exampleAssets.js";
 import { isTrustedMutationOrigin } from "./security.js";
 import { checkShareLink, decodeShareCard } from "./share-health.js";
 import { storeShareCard } from "./share-card.js";
-import { ConversionRuntime } from "./conversion-runtime.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 import { PagesJobs } from "./pages-jobs.js";
 import type { ResolvedLocalServiceConfig } from "./config.js";
@@ -220,7 +219,7 @@ async function streamZip(
 }
 
 const publicationLocks = new Map<string, Promise<void>>();
-async function withProjectPublicationLock<T>(
+export async function withProjectPublicationLock<T>(
   projectId: string,
   operation: () => Promise<T>,
 ): Promise<T> {
@@ -256,30 +255,12 @@ export function createLocalServer(
   store: ProjectStore,
   config: ResolvedLocalServiceConfig,
   jobs: {
-    conversion?: ConversionJobs;
-    pages?: PagesJobs;
-  } = {},
+    conversion: ConversionJobs;
+    pages: PagesJobs;
+  },
 ): Server {
-  const conversionJobs =
-    jobs.conversion ??
-    new ConversionJobs(
-      store,
-      new ConversionRuntime({
-        pixi: config.conversion.pixiExecutable,
-        manifestDirectory: config.conversion.manifestDirectory,
-        workerDirectory: config.conversion.workerDirectory,
-        pixiHome: config.conversion.pixiHome,
-        bootstrap: async () => {
-          throw new Error("Pixi is not installed.");
-        },
-      }),
-    );
-  const pagesJobs =
-    jobs.pages ??
-    new PagesJobs(store, {
-      viewerDirectory: config.viewerDirectory,
-      withLock: withProjectPublicationLock,
-    });
+  const conversionJobs = jobs.conversion;
+  const pagesJobs = jobs.pages;
   let server: Server;
   server = createServer(async (request, response) => {
     response.setHeader("x-content-type-options", "nosniff");

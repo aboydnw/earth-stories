@@ -31,8 +31,11 @@ const outputExtension = (capability: string, target?: unknown): string => {
 
 export class ConversionJobs {
   readonly #jobs = new Map<string, ConversionJobSnapshot>();
+  readonly #controllers = new Map<string, AbortController>();
+  readonly #idleWaiters = new Set<() => void>();
   readonly #runtime: ConversionRuntime;
   readonly #store: ProjectStore;
+  #accepting = true;
 
   constructor(store: ProjectStore, runtime: ConversionRuntime) {
     this.#store = store;
@@ -41,6 +44,23 @@ export class ConversionJobs {
 
   get(id: string): ConversionJobSnapshot | null {
     return this.#jobs.get(id) ?? null;
+  }
+
+  activity(): number {
+    return this.#controllers.size;
+  }
+
+  refuseNewJobs(): void {
+    this.#accepting = false;
+  }
+
+  cancelRunning(): void {
+    for (const controller of this.#controllers.values()) controller.abort();
+  }
+
+  whenIdle(): Promise<void> {
+    if (this.#controllers.size === 0) return Promise.resolve();
+    return new Promise((resolveIdle) => this.#idleWaiters.add(resolveIdle));
   }
 
   async create(
@@ -52,7 +72,15 @@ export class ConversionJobs {
       options?: unknown;
     },
   ): Promise<ConversionJobSnapshot> {
+    if (!this.#accepting)
+      throw new Error(
+        "The local service is shutting down and cannot start new jobs.",
+      );
     await this.#store.read(projectId);
+    if (!this.#accepting)
+      throw new Error(
+        "The local service is shutting down and cannot start new jobs.",
+      );
     const operation = conversionOperationSchema.parse(input.operation);
     const capability = conversionCapabilitySchema.parse(input.capability);
     if (typeof input.assetPath !== "string" || !input.assetPath)
@@ -91,6 +119,8 @@ export class ConversionJobs {
       updatedAt: now,
     };
     this.#jobs.set(id, snapshot);
+    const controller = new AbortController();
+    this.#controllers.set(id, controller);
     const request = {
       protocol: CONVERSION_PROTOCOL_VERSION,
       requestId: id,
@@ -105,36 +135,41 @@ export class ConversionJobs {
       },
       options,
     };
-    void this.#run(snapshot, request);
+    void this.#run(snapshot, request, controller);
     return snapshot;
   }
 
   async #run(
     snapshot: ConversionJobSnapshot,
     request: Record<string, unknown>,
+    controller: AbortController,
   ): Promise<void> {
     snapshot.status = "running";
     snapshot.updatedAt = new Date().toISOString();
     try {
-      await this.#runtime.execute(request, (event) => {
-        const publicEvent =
-          event.type === "result" && typeof event.output.path === "string"
-            ? {
-                ...event,
-                output: {
-                  ...event.output,
-                  path: relative(
-                    this.#store.projectPath(snapshot.projectId),
-                    event.output.path,
-                  ).replaceAll("\\", "/"),
-                },
-              }
-            : event;
-        snapshot.events.push(publicEvent);
-        snapshot.updatedAt = new Date().toISOString();
-        if (event.type === "result") snapshot.status = "succeeded";
-        if (event.type === "failure") snapshot.status = "failed";
-      });
+      await this.#runtime.execute(
+        request,
+        (event) => {
+          const publicEvent =
+            event.type === "result" && typeof event.output.path === "string"
+              ? {
+                  ...event,
+                  output: {
+                    ...event.output,
+                    path: relative(
+                      this.#store.projectPath(snapshot.projectId),
+                      event.output.path,
+                    ).replaceAll("\\", "/"),
+                  },
+                }
+              : event;
+          snapshot.events.push(publicEvent);
+          snapshot.updatedAt = new Date().toISOString();
+          if (event.type === "result") snapshot.status = "succeeded";
+          if (event.type === "failure") snapshot.status = "failed";
+        },
+        controller.signal,
+      );
       if (snapshot.status === "running") snapshot.status = "succeeded";
     } catch (cause) {
       snapshot.status = "failed";
@@ -151,6 +186,11 @@ export class ConversionJobs {
       });
     } finally {
       snapshot.updatedAt = new Date().toISOString();
+      this.#controllers.delete(snapshot.id);
+      if (this.#controllers.size === 0) {
+        for (const resolveIdle of this.#idleWaiters) resolveIdle();
+        this.#idleWaiters.clear();
+      }
     }
   }
 }

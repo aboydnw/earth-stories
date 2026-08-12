@@ -270,4 +270,38 @@ describe("PagesJobs", () => {
     for (const event of finished.events)
       expect(event.message).not.toContain("ghp_secret");
   });
+
+  it("reports active work, refuses new jobs, and requests cancellation", async () => {
+    let finishSignIn!: () => void;
+    let cancellationRequested = false;
+    const deps = dependencies({
+      resolveToken: vi.fn(async (options) => {
+        await new Promise<void>((resolve) => {
+          finishSignIn = resolve;
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              cancellationRequested = true;
+            },
+            { once: true },
+          );
+        });
+        return { token: "t", login: "mapper", source: "device" as const };
+      }),
+    });
+    const jobs = new PagesJobs(store, deps);
+
+    await jobs.create("story-1");
+    await new Promise((resolveWait) => setTimeout(resolveWait, 0));
+    expect(jobs.activity()).toBe(1);
+
+    jobs.refuseNewJobs();
+    jobs.cancelRunning();
+    expect(cancellationRequested).toBe(true);
+    await expect(jobs.create("story-1")).rejects.toThrow(/shutting down/i);
+
+    finishSignIn();
+    await jobs.whenIdle();
+    expect(jobs.activity()).toBe(0);
+  });
 });
