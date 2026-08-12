@@ -77,6 +77,33 @@ describe("resolveToken", () => {
     });
   });
 
+  it("retains stored credentials after GitHub returns 403", async () => {
+    let clears = 0;
+    let cliCalls = 0;
+    const store: CredentialStore = {
+      read: async () => ({ token: "stored-token", login: "mapper" }),
+      write: async () => undefined,
+      clear: async () => {
+        clears += 1;
+      },
+    };
+
+    await expect(
+      resolveToken({
+        store,
+        fetchImpl: vi.fn(async () =>
+          jsonResponse({ message: "rate limited" }, 403),
+        ) as typeof fetch,
+        run: async () => {
+          cliCalls += 1;
+          return { stdout: "fallback-token", stderr: "" };
+        },
+      }),
+    ).rejects.toThrow(/verify the saved sign-in/i);
+    expect(clears).toBe(0);
+    expect(cliCalls).toBe(0);
+  });
+
   it("persists a device token through the injected store", async () => {
     let stored: StoredCredentials | null = null;
     const store: CredentialStore = {

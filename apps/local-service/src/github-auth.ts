@@ -61,8 +61,7 @@ async function resolveLogin(
       },
       signal: requestSignal(signal),
     });
-    if (response.status === 401 || response.status === 403)
-      return { status: "invalid" };
+    if (response.status === 401) return { status: "invalid" };
     if (!response.ok) return { status: "unavailable" };
     const body = (await response.json()) as { login?: unknown };
     return typeof body.login === "string" && body.login
