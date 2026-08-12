@@ -1,7 +1,7 @@
 # ADR 0002: Desktop shell and packaged conversion runtime
 
 - Status: Provisional — gates open
-- Date: 2026-08-11
+- Date: 2026-08-12
 
 ## Context
 
@@ -13,17 +13,22 @@ lock, environments, and caches live in a writable per-user location.
 The desktop packaging spike must answer this on Linux x64, Windows x64, and
 macOS, including a notarized hardened-runtime macOS build. It must also measure
 the service bundle, installer, runtime behavior, and redistribution licenses.
-Only the executable Linux x64 Pixi-layout probe has been completed so far. The
-durable evidence needed to interpret that probe is retained below; temporary
-spike files and raw logs are not dependencies of this ADR.
+Executable Linux x64 probes have now covered the Pixi layout and a bundled
+local service running in an actual Electron main process. The durable evidence
+needed to interpret those probes is retained below; temporary spike files and
+raw logs are not dependencies of this ADR.
 
 ## Provisional decision
 
 Keep the desktop-shell decision open. The Linux evidence supports continuing
 with the copied-manifest Pixi design: exact-version, checksum-verified Pixi can
 install locked environments and run the real conversion worker without observed
-modification of the modeled packaged resources. It does not decide Electron
-versus Tauri and does not satisfy the desktop spike's acceptance criteria.
+modification of the modeled packaged resources. A single-file ESM service
+bundle also starts and completes the core project API lifecycle in Electron,
+but current resource-root assumptions and the absence of editor serving prevent
+that bundle from being a package-ready desktop service. The evidence does not
+decide Electron versus Tauri and does not satisfy the desktop spike's acceptance
+criteria.
 
 Any implementation that advances from this spike must copy and digest-verify
 both `pixi.toml` and `pixi.lock`, restore mismatched copies before execution, use
@@ -184,6 +189,128 @@ The worker source was executed from the repository rather than from a bundled
 desktop resource. This proves the locked Linux raster toolchain and worker
 pipeline, not service bundling or worker-resource packaging.
 
+## Linux service-bundling and Electron-main evidence
+
+### Runtime selection and bundle configuration
+
+The probe ran on 2026-08-12 UTC on the same Linux x86_64 host described above.
+The official [Electron Releases dashboard](https://releases.electronjs.org/?channel=stable)
+listed Electron 43.4.0, released 2026-08-11, as the newest stable release with
+Chromium 150.0.7871.224 and embedded Node.js 24.18.1. The probe pinned that
+exact Electron version and targeted Node 24.18 in esbuild 0.28.1:
+
+```sh
+node_modules/.bin/esbuild apps/local-service/src/server.ts \
+  --bundle --platform=node --format=esm --target=node24.18 \
+  --banner:js='import { createRequire as __task2CreateRequire } from "node:module"; const require = __task2CreateRequire(import.meta.url);' \
+  --outfile=.superpowers/sdd/desktop-00-packaging-spike/task-2/bundle/local-service.mjs \
+  --metafile=.superpowers/sdd/desktop-00-packaging-spike/task-2/logs/esbuild-metafile.json \
+  --log-level=info
+```
+
+The resulting single ESM artifact contained 231 inputs and was 1,871,875 B
+(1,875,968 allocated bytes; 358,598 B after `gzip -9`). It bundled all
+repository workspace dependencies and the third-party packages `fflate`,
+`pmtiles`, `undici`, and `zod`. The only externals were Node runtime built-ins,
+which cannot be converted into application JavaScript and are resolved by
+Electron's embedded Node runtime:
+
+```text
+module
+node:assert, node:async_hooks, node:buffer, node:child_process, node:console
+node:crypto, node:diagnostics_channel, node:dns, node:dns/promises, node:events
+node:fs, node:fs/promises, node:http, node:http2, node:net, node:os, node:path
+node:perf_hooks, node:querystring, node:sqlite, node:stream
+node:stream/promises, node:timers, node:timers/promises, node:tls, node:url
+node:util, node:util/types, node:worker_threads, node:zlib
+```
+
+The `createRequire` banner is necessary because bundled CommonJS `undici`
+still dynamically requires Node built-ins. Without the banner, startup failed
+at `Dynamic require of "node:assert" is not supported`. The first banner used
+an unaliased `createRequire` and collided with a generated import; the unique
+alias above is the tested configuration.
+
+Running from the ignored spike directory, which contained the bundle but no
+TypeScript service sources and invoked neither `tsx` nor a TypeScript loader,
+returned HTTP 200 from `/health`. That standalone smoke used host Node 22.22.0
+only as an additional compatibility observation; the measurements below use
+Electron's actual embedded Node 24.18.1.
+
+### Electron execution and API results
+
+The package installed Electron 43.4.0 only under the ignored spike workspace.
+An actual Electron main entry ran under `xvfb-run`, waited for `app.whenReady()`
+through a callback, imported the ESM bundle, and configured a random loopback
+port plus a distinct temporary projects directory per repeat:
+
+```sh
+for repeat in 1 2 3; do
+  env TASK2_REPEAT="$repeat" \
+    TASK2_PROJECTS_DIR=".../task-2/projects/repeat-$repeat" \
+    timeout 30s xvfb-run -a ./node_modules/electron/dist/electron \
+      --no-sandbox electron-app/main.mjs
+done
+```
+
+Each repeat reported Electron 43.4.0, Node 24.18.1, and Chromium
+150.0.7871.224. Each selected a different kernel-assigned loopback port. All
+three repeats returned `/health` 200, created a project with
+`POST /api/projects` 201, changed its description and opening narrative with
+`PUT /api/projects/:id` 200, and read the persisted values back with
+`GET /api/projects/:id` 200. `GET /` returned 404 `Not found`; the service does
+not currently serve the editor, so this probe does not establish same-origin
+editor/API behavior.
+
+Cold start is elapsed time from the first Electron main-module instruction to
+the first responsive `/health` request. Idle RSS is `/proc/self/status` `VmRSS`
+for the Electron main process after the API cycle and one idle second; it
+excludes Xvfb and Electron child processes. Shutdown is elapsed time from
+self-delivered SIGTERM through the service's `server.close` callback to the
+process exit event.
+
+| Repeat | Cold start |      Main-process idle RSS | Shutdown cleanup |
+| -----: | ---------: | -------------------------: | ---------------: |
+|      1 | 225.680 ms | 211,447,808 B (201.65 MiB) |         0.668 ms |
+|      2 | 256.334 ms | 211,771,392 B (201.96 MiB) |         0.527 ms |
+|      3 | 210.205 ms | 211,943,424 B (202.13 MiB) |         1.055 ms |
+| Median | 225.680 ms | 211,771,392 B (201.96 MiB) |         0.668 ms |
+
+These are development-runtime measurements with a warm Electron download and
+host page cache, not packaged installer or end-user performance measurements.
+The `--no-sandbox` switch was required because the throwaway npm installation's
+`chrome-sandbox` helper was not root-owned mode 4755; this is not an acceptable
+production security configuration.
+
+### Resource-root findings and required refactors
+
+The bundled service still computes `REPOSITORY_DIRECTORY` as `../../..` from
+its own `import.meta.url`. From the spike bundle that resolved to
+`.superpowers/sdd`, demonstrating that bundle placement silently changes the
+meaning of the repository root. The Electron wrapper could override the viewer
+and Pixi paths to `process.resourcesPath/viewer` and
+`process.resourcesPath/pixi`, but a folder export then failed because
+`resources/viewer/index.html` had not been packaged. Creating the `boundaries`
+example failed because `exampleAssets.ts` looked for
+`bundle/example-assets/example-boundaries/everest-relief.png` beside the ESM
+artifact. Conversion was not invoked, so the configured Pixi path was observed
+but not re-proven here.
+
+Phase 1 must therefore:
+
+- separate server construction and lifecycle from module loading, returning an
+  address and an awaitable close operation instead of starting during import;
+- pass projects, viewer, Pixi, conversion-worker, and example-asset paths from
+  the desktop shell as explicit resource configuration rather than deriving a
+  repository root from `import.meta.url`;
+- package the viewer/editor and example/conversion resources deliberately, and
+  decide whether the service serves the editor at the loopback origin or the
+  window loads a separate packaged URL with an explicit API-origin policy;
+- bind port 0 directly and read `server.address()` rather than briefly releasing
+  a probed random port, avoiding a port-selection race; and
+- retain the tested ESM/CommonJS bridge or remove the bundled CommonJS dynamic
+  require before treating the service artifact as production-ready.
+
 ## Gates still open
 
 - A notarized, hardened-runtime macOS build has not been tested. Entitlements,
@@ -192,8 +319,8 @@ pipeline, not service bundling or worker-resource packaging.
 - macOS arm64, macOS x64, and Windows x64 packaged-layout provisioning and
   conversion have not been tested.
 - Windows signing and macOS notarization have not been tested or evidenced.
-- Service bundling inside the candidate desktop shell, installer size, cold
-  start, idle memory, shutdown cleanup, and viewer performance remain unmeasured.
+- Installer size, a production-sandboxed desktop launch, renderer-inclusive
+  memory, and viewer/editor performance remain unmeasured.
 - The redistribution-license inventory remains incomplete.
 - The current capability disclosure numbers need either a clearly named network
   download measurement or revised semantics; extracted environment size is
@@ -202,8 +329,8 @@ pipeline, not service bundling or worker-resource packaging.
 ## Consequences
 
 No shell technology is accepted by this ADR yet, and no later desktop plan may
-claim the packaging spike passed on the strength of the Linux probe alone. The
-probe provides a reproducible Linux baseline and exposes an additional cache
-redirection requirement in the tested sandbox. This ADR should be completed or
-superseded only after the remaining platform, signing, bundling, measurement,
-and license gates have evidence.
+claim the packaging spike passed on the strength of the Linux probes alone. The
+probes provide a reproducible Linux baseline and expose cache redirection,
+service lifecycle, ESM interop, and packaged-resource requirements. This ADR
+should be completed or superseded only after the remaining platform, signing,
+installer, renderer, and license gates have evidence.
