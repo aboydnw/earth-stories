@@ -550,11 +550,11 @@ describe("createLocalServer", () => {
         expect(descriptor).not.toBeNull();
         const expectedTarget = await realpath(target);
         request.destroy();
-        releaseIdentity();
         await waitUntil(
           async () =>
             (await readlink(descriptor!).catch(() => null)) !== expectedTarget,
         );
+        releaseIdentity();
       } finally {
         request.destroy();
         releaseIdentity();
