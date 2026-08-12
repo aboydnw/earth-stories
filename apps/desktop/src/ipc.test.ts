@@ -116,6 +116,27 @@ describe("desktop IPC", () => {
   );
 
   it.each(authorizedCalls)(
+    "rejects a different same-origin sender frame on %s",
+    async (channel, args) => {
+      const value = harness();
+      const unexpectedFrame = {
+        url: "http://127.0.0.1:45123/projects",
+      };
+
+      await expect(
+        value.invokeWithEvent(
+          { sender: value.webContents, senderFrame: unexpectedFrame },
+          channel,
+          ...args,
+        ),
+      ).rejects.toThrow("authorized desktop renderer");
+      expect(value.resolveProject).not.toHaveBeenCalled();
+      expect(value.showItemInFolder).not.toHaveBeenCalled();
+      expect(value.openExternal).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(authorizedCalls)(
     "rejects a mismatched sender origin on %s",
     async (channel, args) => {
       const value = harness(undefined, {
