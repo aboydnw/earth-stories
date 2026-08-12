@@ -40,6 +40,7 @@ function harness(
   let secondInstance: ((argv: string[]) => void) | undefined;
   let openFile: ((path: string) => void) | undefined;
   let beforeQuit: ((event: QuitEvent) => void) | undefined;
+  let startupErrorClosed: (() => void) | undefined;
   let dimensionsChanged:
     ((dimensions: { width: number; height: number }) => void) | undefined;
   const dependencies: DesktopMainDependencies = {
@@ -87,8 +88,14 @@ function harness(
         },
       };
     },
-    createStartupErrorWindow: ({ message, logsDirectory }) =>
-      events.push(`error:${message}:${logsDirectory}`),
+    createStartupErrorWindow: ({ message, logsDirectory }) => {
+      events.push(`error:${message}:${logsDirectory}`);
+      return {
+        onClosed: (listener: () => void) => {
+          startupErrorClosed = listener;
+        },
+      };
+    },
     queueFileArgument: (path) => events.push(`file:${path}`),
     readDimensions: async () => ({ width: 1111, height: 777 }),
     writeDimensions: async (_path, dimensions) =>
@@ -100,6 +107,7 @@ function harness(
     secondInstance: () => secondInstance,
     openFile: () => openFile,
     beforeQuit: () => beforeQuit,
+    startupErrorClosed: () => startupErrorClosed,
     dimensionsChanged: () => dimensionsChanged,
   };
 }
@@ -127,29 +135,51 @@ describe("launchDesktopMain", () => {
     ]);
   });
 
-  it("queues a project passed to the first launch", async () => {
+  it("queues every project passed to the first launch", async () => {
     const value = harness({
-      launchArguments: ["electron", "app", "/stories/map.earthstory"],
+      launchArguments: [
+        "electron",
+        "app",
+        "/stories/map.earthstory",
+        "--ignored",
+        "/stories/atlas.earthstory",
+      ],
     });
 
     await launchDesktopMain(value.dependencies);
 
-    expect(value.events).toContain("file:/stories/map.earthstory");
+    expect(value.events.filter((event) => event.startsWith("file:"))).toEqual([
+      "file:/stories/map.earthstory",
+      "file:/stories/atlas.earthstory",
+    ]);
   });
 
-  it("focuses the window and queues file arguments from later launches", async () => {
+  it("focuses the window and queues every file from a later launch", async () => {
     const value = harness();
     await launchDesktopMain(value.dependencies);
 
-    value.secondInstance()?.(["electron", "app", "/stories/map.earthstory"]);
-    value.openFile()?.("/stories/finder.earthstory");
+    value.secondInstance()?.([
+      "electron",
+      "app",
+      "/stories/map.earthstory",
+      "/stories/atlas.earthstory",
+    ]);
 
     expect(value.events.slice(-4)).toEqual([
       "file:/stories/map.earthstory",
+      "file:/stories/atlas.earthstory",
       "window:restore",
       "window:focus",
-      "file:/stories/finder.earthstory",
     ]);
+  });
+
+  it("queues projects received through the operating-system open-file event", async () => {
+    const value = harness();
+    await launchDesktopMain(value.dependencies);
+
+    value.openFile()?.("/stories/finder.earthstory");
+
+    expect(value.events.at(-1)).toBe("file:/stories/finder.earthstory");
   });
 
   it("shows the typed startup message and logs location", async () => {
@@ -166,6 +196,16 @@ describe("launchDesktopMain", () => {
       "service:start",
       "error:The viewer files are missing.:/profile/logs",
     ]);
+  });
+
+  it("retains the startup-error window until it closes", async () => {
+    const value = harness({ startError: new Error("Service unavailable") });
+
+    const lifecycle = await launchDesktopMain(value.dependencies);
+
+    expect(lifecycle.startupErrorWindow).not.toBeNull();
+    value.startupErrorClosed()?.();
+    expect(lifecycle.startupErrorWindow).toBeNull();
   });
 
   it("prevents quit until service work drains and then closes once", async () => {

@@ -5,6 +5,8 @@ import type { DesktopPaths } from "./paths.js";
 import { resolveDesktopPaths } from "./paths.js";
 import { DesktopService } from "./service.js";
 
+let activeDesktopLifecycle: DesktopMainLifecycle | null = null;
+
 export interface WindowDimensions {
   width: number;
   height: number;
@@ -19,6 +21,14 @@ export interface DesktopWindow {
   isMinimized(): boolean;
   restore(): void;
   onDimensionsChanged(listener: (dimensions: WindowDimensions) => void): void;
+}
+
+export interface StartupErrorWindow {
+  onClosed(listener: () => void): void;
+}
+
+export interface DesktopMainLifecycle {
+  startupErrorWindow: StartupErrorWindow | null;
 }
 
 export interface DesktopApplication {
@@ -54,7 +64,7 @@ export interface DesktopMainDependencies {
   createStartupErrorWindow(options: {
     message: string;
     logsDirectory: string;
-  }): void;
+  }): StartupErrorWindow;
   queueFileArgument(path: string): void;
   readDimensions(path: string): Promise<WindowDimensions>;
   writeDimensions(path: string, dimensions: WindowDimensions): Promise<void>;
@@ -119,8 +129,8 @@ export async function writeWindowDimensions(
   );
 }
 
-function fileArgument(argv: string[]): string | undefined {
-  return argv.find((argument) => /\.earthstory$/i.test(argument));
+function fileArguments(argv: string[]): string[] {
+  return argv.filter((argument) => /\.earthstory$/i.test(argument));
 }
 
 function startupMessage(cause: unknown): string {
@@ -131,10 +141,11 @@ function startupMessage(cause: unknown): string {
 
 export async function launchDesktopMain(
   dependencies: DesktopMainDependencies,
-): Promise<void> {
+): Promise<DesktopMainLifecycle> {
+  const lifecycle: DesktopMainLifecycle = { startupErrorWindow: null };
   if (!dependencies.app.requestSingleInstanceLock()) {
     dependencies.app.quit();
-    return;
+    return lifecycle;
   }
 
   let window: DesktopWindow | null = null;
@@ -142,15 +153,15 @@ export async function launchDesktopMain(
   let allowQuit = false;
 
   dependencies.app.onSecondInstance((argv) => {
-    const path = fileArgument(argv);
-    if (path) dependencies.queueFileArgument(path);
+    for (const path of fileArguments(argv))
+      dependencies.queueFileArgument(path);
     if (!window) return;
     if (window.isMinimized()) window.restore();
     window.focus();
   });
   dependencies.app.onOpenFile((path) => dependencies.queueFileArgument(path));
-  const initialFile = fileArgument(dependencies.launchArguments);
-  if (initialFile) dependencies.queueFileArgument(initialFile);
+  for (const path of fileArguments(dependencies.launchArguments))
+    dependencies.queueFileArgument(path);
   dependencies.app.onBeforeQuit((event) => {
     if (allowQuit) return;
     event.preventDefault();
@@ -174,11 +185,16 @@ export async function launchDesktopMain(
   try {
     origin = await dependencies.service.start();
   } catch (cause) {
-    dependencies.createStartupErrorWindow({
+    const errorWindow = dependencies.createStartupErrorWindow({
       message: startupMessage(cause),
       logsDirectory: dependencies.paths.logsDirectory,
     });
-    return;
+    lifecycle.startupErrorWindow = errorWindow;
+    errorWindow.onClosed(() => {
+      if (lifecycle.startupErrorWindow === errorWindow)
+        lifecycle.startupErrorWindow = null;
+    });
+    return lifecycle;
   }
 
   const desktopSession = dependencies.createSession();
@@ -200,6 +216,7 @@ export async function launchDesktopMain(
       next,
     );
   });
+  return lifecycle;
 }
 
 function escapeHtml(value: string): string {
@@ -239,7 +256,7 @@ export async function runElectronDesktop(): Promise<void> {
   const localService = new DesktopService(paths);
   const pendingFiles: string[] = [];
 
-  await launchDesktopMain({
+  activeDesktopLifecycle = await launchDesktopMain({
     paths,
     launchArguments: process.argv,
     service: localService,
@@ -321,6 +338,9 @@ export async function runElectronDesktop(): Promise<void> {
       void errorWindow.loadURL(
         `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
       );
+      return {
+        onClosed: (listener) => errorWindow.once("closed", listener),
+      };
     },
     queueFileArgument: (path) => pendingFiles.push(path),
     readDimensions: readWindowDimensions,
