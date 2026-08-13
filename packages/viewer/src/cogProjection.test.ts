@@ -65,4 +65,27 @@ describe("resolveCogProjection", () => {
     expect(projection.zone).toBe(18);
     expect(projection.units).toBe("m");
   });
+
+  it("uses a manifest projection before the remote resolver", async () => {
+    await expect(
+      resolveCogProjection(
+        32618,
+        null,
+        async () => {
+          throw new Error("remote resolver called");
+        },
+        [{ epsg: 32618, definition: "+proj=utm +zone=18" }],
+        true,
+      ),
+    ).resolves.toBe("+proj=utm +zone=18");
+  });
+
+  it("reports unsupported CRS without a remote request in offline mode", async () => {
+    const resolver = async () => {
+      throw new Error("remote resolver called");
+    };
+    await expect(
+      resolveCogProjection(32619, null, resolver, [], true),
+    ).rejects.toThrow("EPSG:32619 is not included in this offline publication");
+  });
 });

@@ -5,6 +5,7 @@ import {
   type PublicationManifest,
 } from "@earth-stories/story-schema";
 import { PublicationChapterRenderer } from "./PublicationChapterRenderer.js";
+import { publicationRuntimePolicy } from "./publicationRuntime.js";
 
 export interface FocusedChapterViewerProps {
   manifest: PublicationManifest;
@@ -34,6 +35,10 @@ export function FocusedChapterViewer({
     [manifest.assets],
   );
   const chapter = manifest.chapters.find(({ id }) => id === chapterId);
+  const runtimePolicy = useMemo(
+    () => publicationRuntimePolicy(manifest),
+    [manifest],
+  );
   if (!chapter)
     return (
       <div className="story-focused-state" role="status">
@@ -50,6 +55,7 @@ export function FocusedChapterViewer({
           chapter={chapter}
           assets={assets}
           basemapStyle={publicationBasemapHref(manifest.basemap)}
+          runtimePolicy={runtimePolicy}
           composition={interactiveMap ? "authoring-map" : "focused-preview"}
           interactiveMap={interactiveMap}
           fitRequestToken={fitRequestToken}

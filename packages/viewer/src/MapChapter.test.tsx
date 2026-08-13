@@ -42,7 +42,24 @@ vi.mock("react-map-gl/maplibre", async () => {
     ),
     Layer: () => null,
     NavigationControl: () => null,
-    Source: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+    Source: ({
+      children,
+      id,
+      tiles,
+      url,
+    }: {
+      children?: React.ReactNode;
+      id?: string;
+      tiles?: string[];
+      url?: string;
+    }) => (
+      <div
+        data-testid={id ? `source-${id}` : undefined}
+        data-locator={url ?? tiles?.[0]}
+      >
+        {children}
+      </div>
+    ),
   };
 });
 vi.mock("maplibre-gl", () => ({ default: { addProtocol: vi.fn() } }));
@@ -89,6 +106,79 @@ const chapter = {
 } as Extract<PublicationChapter, { type: "map" }>;
 
 describe("MapChapter", () => {
+  it("renders terrain and buildings only from declared chapter dependencies", () => {
+    const networkChapter = {
+      ...chapter,
+      camera: {
+        ...chapter.camera,
+        terrain: { enabled: true, exaggeration: 1 },
+        buildings: true,
+      },
+    };
+    const { rerender } = render(
+      <MapChapter
+        chapter={networkChapter}
+        asset={{ ...asset, kind: "xyz" }}
+        basemapStyle="local/style.json"
+        runtimePolicy={{
+          offline: false,
+          runtimeAssets: [],
+          projectionDefinitions: [],
+          dependencies: [],
+        }}
+      />,
+    );
+
+    expect(screen.queryByTestId("source-earth-stories-terrain")).toBeNull();
+    expect(
+      screen.queryByTestId("source-earth-stories-buildings-source"),
+    ).toBeNull();
+
+    rerender(
+      <MapChapter
+        chapter={networkChapter}
+        asset={{ ...asset, kind: "xyz" }}
+        basemapStyle="local/style.json"
+        runtimePolicy={{
+          offline: false,
+          runtimeAssets: [],
+          projectionDefinitions: [],
+          dependencies: [
+            {
+              id: "chapter:map:terrain",
+              owner: { type: "chapter", id: "map" },
+              locator: "https://terrain.test/{z}/{x}/{y}.webp",
+              estimatedBytes: null,
+              delivery: "connected",
+              materialization: "none",
+              requirements: ["network"],
+            },
+            {
+              id: "chapter:map:buildings",
+              owner: { type: "chapter", id: "map" },
+              locator: "https://buildings.test/planet",
+              estimatedBytes: null,
+              delivery: "connected",
+              materialization: "none",
+              requirements: ["network"],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(
+      screen
+        .getByTestId("source-earth-stories-terrain")
+        .getAttribute("data-locator"),
+    ).toBe("https://terrain.test/{z}/{x}/{y}.webp");
+    expect(
+      screen
+        .getByTestId("source-earth-stories-buildings-source")
+        .getAttribute("data-locator"),
+    ).toBe("https://buildings.test/planet");
+  });
+
   it("exposes the underlying map error to artifact verification", async () => {
     render(
       <MapChapter

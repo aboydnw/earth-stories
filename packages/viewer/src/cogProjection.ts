@@ -19,12 +19,16 @@ export function cogPreparationKey({
   rescaleMin,
   rescaleMax,
   projection,
+  projectionDefinitions = [],
+  offline = false,
 }: {
   url: string;
   rasterBand: number;
   rescaleMin: number | null;
   rescaleMax: number | null;
   projection: EmbeddedCogProjection | null;
+  projectionDefinitions?: EmbeddedCogProjection[];
+  offline?: boolean;
 }): string {
   return JSON.stringify([
     url,
@@ -33,6 +37,8 @@ export function cogPreparationKey({
     rescaleMax,
     projection?.epsg ?? null,
     projection?.definition ?? null,
+    projectionDefinitions,
+    offline,
   ]);
 }
 
@@ -40,6 +46,8 @@ export async function resolveCogProjection(
   crs: number | string | ProjJson,
   embedded: EmbeddedCogProjection | null,
   resolveEpsg: (epsg: number) => Promise<ProjectionDefinition> = epsgResolver,
+  projectionDefinitions: EmbeddedCogProjection[] = [],
+  offline = false,
 ): Promise<CogProjectionDefinition> {
   if (typeof crs !== "number") return parseWkt(crs);
   if (embedded) {
@@ -49,6 +57,12 @@ export async function resolveCogProjection(
       );
     return embedded.definition;
   }
+  const manifestDefinition = projectionDefinitions.find(
+    (definition) => definition.epsg === crs,
+  );
+  if (manifestDefinition) return manifestDefinition.definition;
+  if (offline)
+    throw new Error(`EPSG:${crs} is not included in this offline publication.`);
   return resolveEpsg(crs);
 }
 

@@ -8,6 +8,7 @@ import type {
 import { LEGACY_DEFAULT_CAMERA } from "@earth-stories/story-schema";
 import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
 import { VisualizationProvenance } from "./VisualizationProvenance.js";
+import type { PublicationRuntimePolicy } from "./publicationRuntime.js";
 
 const MapChapter = lazy(async () => ({
   default: (await import("./MapChapter.js")).MapChapter,
@@ -37,6 +38,7 @@ export function PublicationChapterRenderer({
   index = 0,
   assets,
   basemapStyle,
+  runtimePolicy,
   snapshotMode = false,
   composition = "full-story",
   interactiveMap = false,
@@ -51,6 +53,7 @@ export function PublicationChapterRenderer({
   index?: number;
   assets: Map<string, PublicationAsset>;
   basemapStyle: string;
+  runtimePolicy: PublicationRuntimePolicy;
   snapshotMode?: boolean;
   composition?: ChapterComposition;
   interactiveMap?: boolean;
@@ -106,6 +109,7 @@ export function PublicationChapterRenderer({
               asset={asset}
               overlayAssets={overlayAssets}
               basemapStyle={basemapStyle}
+              runtimePolicy={runtimePolicy}
               interactive={focused ? interactiveMap : true}
               followCamera={focused}
               autoFit={commitAutoFit || usesLegacyAutomaticFit(chapter.camera)}
@@ -119,7 +123,12 @@ export function PublicationChapterRenderer({
           </Suspense>
         </StoryMapHydrationBoundary>
       ) : null}
-      {chapter.type === "video" ? (
+      {chapter.type === "video" && runtimePolicy.offline ? (
+        <div className="story-video story-video--offline" role="status">
+          Video is unavailable offline.
+        </div>
+      ) : null}
+      {chapter.type === "video" && !runtimePolicy.offline ? (
         <figure className="story-video">
           <iframe
             src={
@@ -157,6 +166,7 @@ export function PublicationChapterRenderer({
               asset={asset}
               overlayAssets={overlayAssets}
               basemapStyle={basemapStyle}
+              runtimePolicy={runtimePolicy}
               snapshotMode={snapshotMode}
               interactive={composition === "authoring-map" && interactiveMap}
               cameraOverride={cameraOverride}

@@ -8,6 +8,7 @@ import { groupChaptersIntoBlocks } from "./chapterBlocks.js";
 import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
 import { VisualizationProvenance } from "./VisualizationProvenance.js";
 import { PublicationChapterRenderer } from "./PublicationChapterRenderer.js";
+import { publicationRuntimePolicy } from "./publicationRuntime.js";
 import "./viewer.css";
 
 const ScrollytellingBlock = lazy(async () => ({
@@ -37,6 +38,10 @@ export function StoryViewer({
   const chapterBlocks = useMemo(
     () => groupChaptersIntoBlocks(manifest.chapters),
     [manifest.chapters],
+  );
+  const runtimePolicy = useMemo(
+    () => publicationRuntimePolicy(manifest),
+    [manifest],
   );
   useEffect(() => {
     if (embed) return;
@@ -126,6 +131,7 @@ export function StoryViewer({
                       startIndex={block.startIndex}
                       assets={assets}
                       basemapStyle={publicationBasemapHref(manifest.basemap)}
+                      runtimePolicy={runtimePolicy}
                       snapshotMode={snapshotMode}
                     />
                   </Suspense>
@@ -142,6 +148,7 @@ export function StoryViewer({
               index={index}
               assets={assets}
               basemapStyle={publicationBasemapHref(manifest.basemap)}
+              runtimePolicy={runtimePolicy}
               snapshotMode={snapshotMode}
               onCameraChange={(camera) =>
                 onChapterCameraChange?.(chapter.id, camera)

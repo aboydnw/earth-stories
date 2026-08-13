@@ -7,12 +7,14 @@ import type {
 import { MapChapter } from "./MapChapter.js";
 import { interpolateFlyover } from "./flyover.js";
 import { useFlyoverScroll } from "./useFlyoverScroll.js";
+import type { PublicationRuntimePolicy } from "./publicationRuntime.js";
 
 interface Props {
   chapter: Extract<PublicationChapter, { type: "flyover" }>;
   asset: PublicationAsset | null;
   overlayAssets: PublicationAsset[];
   basemapStyle: string;
+  runtimePolicy?: PublicationRuntimePolicy;
   snapshotMode?: boolean;
   interactive?: boolean;
   cameraOverride?: Camera | null;
@@ -24,6 +26,7 @@ export function FlyoverChapter({
   asset,
   overlayAssets,
   basemapStyle,
+  runtimePolicy,
   snapshotMode = false,
   interactive = false,
   cameraOverride,
@@ -71,6 +74,7 @@ export function FlyoverChapter({
           asset={asset}
           overlayAssets={overlayAssets}
           basemapStyle={basemapStyle}
+          runtimePolicy={runtimePolicy}
           interactive={interactive}
           followCamera
           snapshotMode={snapshotMode}

@@ -31,6 +31,10 @@ import {
   timestepIndex,
 } from "./temporal.js";
 import { useTemporalPlayback } from "./useTemporalPlayback.js";
+import {
+  chapterDependencyLocators,
+  type PublicationRuntimePolicy,
+} from "./publicationRuntime.js";
 
 const CogOverlay = lazy(async () => ({
   default: (await import("./CogOverlay.js")).CogOverlay,
@@ -54,6 +58,7 @@ export interface MapChapterProps {
   asset: PublicationAsset | null;
   overlayAssets?: PublicationAsset[];
   basemapStyle: string;
+  runtimePolicy?: PublicationRuntimePolicy;
   controlled?: boolean;
   interactive?: boolean;
   followCamera?: boolean;
@@ -147,6 +152,7 @@ function AssetLayer({
   onAutoFitCameraChange,
   temporalPosition,
   onTimeBounds,
+  runtimePolicy,
 }: {
   asset: PublicationAsset;
   onError: (message: string) => void;
@@ -157,6 +163,7 @@ function AssetLayer({
   onAutoFitCameraChange?: () => void;
   temporalPosition: number;
   onTimeBounds: (bounds: [number, number] | null) => void;
+  runtimePolicy: PublicationRuntimePolicy;
 }) {
   const [pmtilesLayers, setPmtilesLayers] = useState<string[]>([]);
   const [geojson, setGeojson] = useState<GeoJSON.GeoJSON | null>(null);
@@ -253,6 +260,8 @@ function AssetLayer({
           onError={onError}
           onBounds={onBounds}
           onReady={reportReady}
+          projectionDefinitions={runtimePolicy.projectionDefinitions}
+          offline={runtimePolicy.offline}
         />
       </Suspense>
     );
@@ -264,6 +273,8 @@ function AssetLayer({
           onError={onError}
           onBounds={onBounds}
           onReady={reportReady}
+          runtimeAssets={runtimePolicy.runtimeAssets}
+          offline={runtimePolicy.offline}
         />
       </Suspense>
     );
@@ -414,6 +425,12 @@ export function MapChapter({
   asset,
   overlayAssets = [],
   basemapStyle,
+  runtimePolicy = {
+    offline: false,
+    runtimeAssets: [],
+    projectionDefinitions: [],
+    dependencies: [],
+  },
   controlled = false,
   interactive,
   followCamera,
@@ -611,6 +628,16 @@ export function MapChapter({
   }, []);
   const terrainEnabled =
     !!chapter.camera.terrain?.enabled && mapAssets.every(terrainCompatible);
+  const dependencyLocators = chapterDependencyLocators(
+    chapter.id,
+    runtimePolicy.dependencies,
+  );
+  const terrainLocator = terrainEnabled
+    ? dependencyLocators.terrain
+    : undefined;
+  const buildingsLocator = chapter.camera.buildings
+    ? dependencyLocators.buildings
+    : undefined;
   useEffect(() => () => onMapReadyRef.current?.(null), []);
   useEffect(
     () => () => {
@@ -679,20 +706,20 @@ export function MapChapter({
         {interaction.interactive ? (
           <NavigationControl position="top-right" showCompass visualizePitch />
         ) : null}
-        {terrainEnabled ? (
+        {terrainLocator ? (
           <Source
             id="earth-stories-terrain"
             type="raster-dem"
-            tiles={["https://tiles.mapterhorn.com/{z}/{x}/{y}.webp"]}
+            tiles={[terrainLocator]}
             tileSize={512}
             encoding="terrarium"
           />
         ) : null}
-        {chapter.camera.buildings ? (
+        {buildingsLocator ? (
           <Source
             id="earth-stories-buildings-source"
             type="vector"
-            url="https://tiles.openfreemap.org/planet"
+            url={buildingsLocator}
           >
             <Layer
               id="earth-stories-buildings"
@@ -735,6 +762,7 @@ export function MapChapter({
                 ? setTrajectoryTimeBounds
                 : ignoreTimeBounds
             }
+            runtimePolicy={runtimePolicy}
           />
         ))}
       </Map>
@@ -787,9 +815,7 @@ export function MapChapter({
           onSpeed={temporal.setSpeed}
         />
       )}
-      {interaction.interactive &&
-      chapter.camera.buildings &&
-      showBuildingHint ? (
+      {interaction.interactive && buildingsLocator && showBuildingHint ? (
         <div className="story-map__hint" role="status">
           Zoom in to street level to see 3D buildings.
         </div>

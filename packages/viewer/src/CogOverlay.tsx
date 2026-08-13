@@ -18,12 +18,16 @@ export function CogOverlay({
   onError,
   onBounds,
   onReady,
+  projectionDefinitions = [],
+  offline = false,
 }: {
   asset: PublicationAsset;
   url: string;
   onError: (message: string) => void;
   onBounds?: (bounds: [number, number, number, number]) => void;
   onReady?: () => void;
+  projectionDefinitions?: Array<{ epsg: number; definition: string }>;
+  offline?: boolean;
 }) {
   const maps = useMap();
   const raster = useRef<{
@@ -53,6 +57,8 @@ export function CogOverlay({
     rescaleMin,
     rescaleMax,
     projection: asset.cog,
+    projectionDefinitions,
+    offline,
   });
   useEffect(() => {
     let cancelled = false;
@@ -61,7 +67,13 @@ export function CogOverlay({
         const absoluteUrl = new URL(url, window.location.href).toString();
         const source = await GeoTIFF.fromUrl(absoluteUrl);
         const crs = source.crs;
-        const projection = await resolveCogProjection(crs, asset.cog);
+        const projection = await resolveCogProjection(
+          crs,
+          asset.cog,
+          undefined,
+          projectionDefinitions,
+          offline,
+        );
         let rescale: [number, number] | null =
           rescaleMin !== null && rescaleMax !== null
             ? [rescaleMin, rescaleMax]

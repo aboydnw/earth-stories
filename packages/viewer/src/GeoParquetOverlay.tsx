@@ -3,7 +3,10 @@ import type { Layer as DeckLayer } from "@deck.gl/core";
 import { GeoJsonLayer } from "@deck.gl/layers";
 import * as duckdb from "@duckdb/duckdb-wasm";
 import type { Table } from "apache-arrow";
-import type { PublicationAsset } from "@earth-stories/story-schema";
+import type {
+  PublicationAsset,
+  PublicationManifest,
+} from "@earth-stories/story-schema";
 import { DeckOverlay } from "./DeckOverlay.js";
 import { geoJsonBounds, type GeographicBounds } from "./geoBounds.js";
 import {
@@ -12,15 +15,27 @@ import {
 } from "./duckdbRuntime.js";
 
 const FEATURE_CAP = 100_000;
-let databasePromise: Promise<{
-  db: duckdb.AsyncDuckDB;
-  connection: duckdb.AsyncDuckDBConnection;
-}> | null = null;
+const databasePromises = new Map<
+  string,
+  Promise<{
+    db: duckdb.AsyncDuckDB;
+    connection: duckdb.AsyncDuckDBConnection;
+  }>
+>();
 
-async function database() {
-  if (databasePromise) return databasePromise;
-  databasePromise = (async () => {
-    const runtime = publicationDuckDbRuntime(new URL(window.location.href));
+async function database(
+  runtimeAssets: PublicationManifest["runtimeAssets"],
+  offline: boolean,
+) {
+  const key = JSON.stringify([offline, runtimeAssets]);
+  const existing = databasePromises.get(key);
+  if (existing) return existing;
+  const promise = (async () => {
+    const runtime = publicationDuckDbRuntime(
+      new URL(window.location.href),
+      runtimeAssets,
+      offline,
+    );
     const bundle = await duckdb.selectBundle(runtime.bundles);
     if (!bundle.mainModule || !bundle.mainWorker)
       throw new Error("No compatible in-browser GeoParquet runtime was found.");
@@ -41,10 +56,11 @@ async function database() {
     await connection.query(duckDbSpatialSetupSql(runtime.extensionRepository));
     return { db, connection };
   })().catch((cause) => {
-    databasePromise = null;
+    databasePromises.delete(key);
     throw cause;
   });
-  return databasePromise;
+  databasePromises.set(key, promise);
+  return promise;
 }
 
 function rowsToGeoJson(table: Table) {
@@ -82,11 +98,15 @@ export function GeoParquetOverlay({
   onError,
   onBounds,
   onReady,
+  runtimeAssets = [],
+  offline = false,
 }: {
   asset: PublicationAsset;
   onError: (message: string) => void;
   onBounds?: (bounds: GeographicBounds) => void;
   onReady?: () => void;
+  runtimeAssets?: PublicationManifest["runtimeAssets"];
+  offline?: boolean;
 }) {
   const [data, setData] = useState<ReturnType<typeof rowsToGeoJson> | null>(
     null,
@@ -94,7 +114,7 @@ export function GeoParquetOverlay({
   const renderedData = useRef<ReturnType<typeof rowsToGeoJson> | null>(null);
   useEffect(() => {
     let active = true;
-    void database()
+    void database(runtimeAssets, offline)
       .then(async ({ connection }) => {
         const countStatement = await connection.prepare(
           "SELECT COUNT(*) AS count FROM read_parquet(?)",
@@ -153,7 +173,7 @@ export function GeoParquetOverlay({
     return () => {
       active = false;
     };
-  }, [asset.href, onBounds, onError]);
+  }, [asset.href, offline, onBounds, onError, runtimeAssets]);
   const layers = useMemo<DeckLayer[]>(() => {
     if (!data) return [];
     const presentation = asset.presentation;
