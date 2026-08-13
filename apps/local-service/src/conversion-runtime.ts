@@ -333,8 +333,8 @@ export class ConversionRuntime {
     });
     try {
       await this.#ensureExecutable(signal);
-      const manifestDirectory = await this.#resolveManifestDirectory();
       await this.#verifyManifest();
+      const manifestDirectory = await this.#resolveManifestDirectory();
       await this.#run({
         executable: this.#pixi,
         cwd: manifestDirectory,
@@ -383,8 +383,8 @@ export class ConversionRuntime {
         onEvent,
         signal,
       );
-      const manifestDirectory = await this.#resolveManifestDirectory();
       await this.#verifyManifest();
+      const manifestDirectory = await this.#resolveManifestDirectory();
       let buffered = "";
       let parseFailure: unknown;
       await this.#run({

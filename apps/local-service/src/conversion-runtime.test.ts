@@ -156,6 +156,41 @@ describe("ConversionRuntime", () => {
     ]);
   });
 
+  it("uses the active generation selected by verification for install and run", async () => {
+    const commands: RuntimeCommand[] = [];
+    let activeManifest = "/tools/tree/manifests/generation-one";
+    let verification = 0;
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      manifestDirectory: activeManifest,
+      resolveManifestDirectory: () => activeManifest,
+      verifyManifest: async () => {
+        verification += 1;
+        activeManifest = `/tools/tree/manifests/generation-${verification + 1}`;
+      },
+      workerDirectory: "/worker",
+      pixiHome: null,
+      lockedVersions,
+      bootstrap: async () => undefined,
+      run: async (command) => {
+        commands.push(command);
+      },
+    });
+
+    const execution = runtime.execute(request, () => undefined);
+    expect(runtime.acknowledgeProvisioning("request-1")).toBe(true);
+    await execution;
+
+    expect(commands.map((command) => command.cwd)).toEqual([
+      "/tools/tree/manifests/generation-2",
+      "/tools/tree/manifests/generation-3",
+    ]);
+    expect(commands.map((command) => command.args[2])).toEqual([
+      "/tools/tree/manifests/generation-2/pixi.toml",
+      "/tools/tree/manifests/generation-3/pixi.toml",
+    ]);
+  });
+
   it("uses the injected bootstrap and omits PIXI_HOME when absent", async () => {
     const commands: RuntimeCommand[] = [];
     const bootstraps: string[] = [];

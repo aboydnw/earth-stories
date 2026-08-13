@@ -264,6 +264,29 @@ describe("DesktopTools", () => {
     await release();
   });
 
+  it("does not clean a failed job environment while another job holds a lease", async () => {
+    const value = await fixture();
+    const config = await value.manager.prepareRuntime();
+    const environment = join(
+      config.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+    await mkdir(environment, { recursive: true });
+    await writeFile(join(environment, "active-job.bin"), "still in use");
+    const releaseFailedJob = await config.acquireCapability("raster");
+    const releaseActiveJob = await config.acquireCapability("raster");
+
+    await config.cleanupCapability("raster");
+
+    await expect(
+      stat(join(environment, "active-job.bin")),
+    ).resolves.toBeTruthy();
+    await releaseFailedJob();
+    await releaseActiveJob();
+  });
+
   it("cleans only other application-version trees after a successful launch", async () => {
     const value = await fixture();
     const config = await value.manager.prepareRuntime();

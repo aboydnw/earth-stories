@@ -153,19 +153,22 @@ export class DesktopTools {
       verifyManifest: async () => {
         await this.#resolveManifest(treeDirectory);
       },
-      cleanupCapability: async (capability) =>
-        rm(
-          join(
-            await this.#resolveManifest(treeDirectory),
-            ".pixi",
-            "envs",
-            capability,
-          ),
-          {
-            recursive: true,
-            force: true,
-          },
-        ),
+      cleanupCapability: (capability) =>
+        this.#withCapabilityLock(capability, async () => {
+          if ((this.#activeCapabilities.get(capability) ?? 0) > 1) return;
+          await rm(
+            join(
+              await this.#resolveManifest(treeDirectory),
+              ".pixi",
+              "envs",
+              capability,
+            ),
+            {
+              recursive: true,
+              force: true,
+            },
+          );
+        }),
       capabilityReady: async (capability) => {
         try {
           return (
