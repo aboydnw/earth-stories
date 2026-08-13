@@ -46,7 +46,7 @@ describe("conversion protocol", () => {
         capabilityName: "Raster preparation",
         versions: ["GDAL >=3.10,<4", "Rasterio >=1.4,<2"],
         estimatedBytes: 668_962_511,
-        estimateKind: "measured-installed-footprint",
+        estimateKind: "measured-apparent-installed-footprint",
         destination: "/profile/tools/0.1.0-lock/.pixi/envs/raster",
         credits: [
           { name: "Pixi", license: "BSD-3-Clause" },
@@ -59,7 +59,7 @@ describe("conversion protocol", () => {
     ).toMatchObject({
       type: "provisioning-disclosure",
       estimatedBytes: 668_962_511,
-      estimateKind: "measured-installed-footprint",
+      estimateKind: "measured-apparent-installed-footprint",
     });
   });
 });

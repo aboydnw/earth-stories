@@ -15,7 +15,7 @@ describe("DesktopToolsPanel", () => {
       .mockResolvedValueOnce([
         {
           capability: "raster",
-          bytes: 668_962_511,
+          apparentBytes: 668_962_511,
           destination: "/tools/raster",
         },
       ])
@@ -23,7 +23,7 @@ describe("DesktopToolsPanel", () => {
     const desktop = { listTools, removeTool } as unknown as DesktopBridge;
     render(<DesktopToolsPanel desktop={desktop} />);
 
-    expect(await screen.findByText("669 MB on disk")).toBeTruthy();
+    expect(await screen.findByText("669 MB apparent file size")).toBeTruthy();
     await userEvent.click(
       screen.getByRole("button", { name: "Remove raster tools" }),
     );

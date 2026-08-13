@@ -34,6 +34,10 @@ export interface LocalServiceConfig {
     pixiCacheDirectory?: string | null;
     verifyManifest?: () => Promise<void>;
     cleanupCapability?: (capability: ConversionCapability) => Promise<void>;
+    capabilityReady?: (capability: ConversionCapability) => Promise<boolean>;
+    acquireCapability?: (
+      capability: ConversionCapability,
+    ) => Promise<() => void>;
   };
   credentials: CredentialStore;
   capabilityToken: string | null;

@@ -160,6 +160,17 @@ export function App() {
   const [conversionJobs, setConversionJobs] = useState<
     Record<string, ConversionJobSnapshot>
   >({});
+  const conversionIntents = useRef<
+    Record<
+      string,
+      {
+        operation: "inspect" | "prepare";
+        capability: ConversionCapability;
+        targetChapterId?: string;
+        pendingChapterType: PendingChapterType | null;
+      }
+    >
+  >({});
   const [multidimChoices, setMultidimChoices] = useState<
     Record<string, MultidimChoice>
   >({});
@@ -958,6 +969,86 @@ export function App() {
       showError(cause);
     }
   }
+  function applyPreparedConversion(
+    asset: ProjectDataAsset,
+    job: ConversionJobSnapshot,
+    intent: (typeof conversionIntents.current)[string],
+  ) {
+    if (intent.operation !== "prepare") return;
+    const result = [...job.events]
+      .reverse()
+      .find((event) => event.type === "result");
+    if (result?.type !== "result" || typeof result.output.path !== "string")
+      throw new Error("The prepared data path was not returned");
+    const sourceId = `prepared-${job.id}`;
+    const common = {
+      id: sourceId,
+      label: asset.label.replace(/\.[^.]+$/, ""),
+      locator: result.output.path,
+      attribution: null,
+      sizeBytes:
+        typeof result.output.sizeBytes === "number"
+          ? result.output.sizeBytes
+          : null,
+      delivery: "included" as const,
+      provenance: createDefaultSourceProvenance(),
+    };
+    const source: ProjectSource =
+      intent.capability === "raster" || intent.capability === "multidim"
+        ? { ...common, kind: "cog" }
+        : intent.capability === "pointcloud"
+          ? { ...common, kind: "copc", colorMode: "elevation", pointSize: 2 }
+          : asset.format === "gpx"
+            ? { ...common, kind: "trajectory", trailLength: 600 }
+            : { ...common, kind: "geoparquet" };
+    const intendedChapter: ProjectChapter | null =
+      !intent.targetChapterId &&
+      (intent.pendingChapterType === "map" ||
+        intent.pendingChapterType === "scrolly")
+        ? {
+            id: `${sourceId}-chapter`,
+            type: intent.pendingChapterType,
+            title: source.label,
+            narrative: "",
+            sourceId,
+            overlaySourceIds: [],
+            camera,
+            ...(intent.pendingChapterType === "scrolly"
+              ? {
+                  transition: "fly-to" as const,
+                  overlayPosition: "left" as const,
+                }
+              : {}),
+          }
+        : null;
+    changeProject((current) => ({
+      ...current,
+      dataAssets: current.dataAssets.map((item) =>
+        item.id === asset.id ? { ...item, preparedSourceId: sourceId } : item,
+      ),
+      sources: current.sources.some(({ id }) => id === sourceId)
+        ? current.sources
+        : [...current.sources, source],
+      chapters: intent.targetChapterId
+        ? current.chapters.map((chapter) =>
+            chapter.id === intent.targetChapterId &&
+            (chapter.type === "map" || chapter.type === "scrolly")
+              ? { ...chapter, sourceId }
+              : chapter,
+          )
+        : intendedChapter &&
+            !current.chapters.some(({ id }) => id === intendedChapter.id)
+          ? [...current.chapters, intendedChapter]
+          : current.chapters,
+    }));
+    if (intendedChapter) {
+      setActiveChapter(intendedChapter.id);
+      setInspectorMode("chapter");
+      setPendingChapterType(null);
+      requestInitialFit(intendedChapter.id, sourceId);
+    }
+  }
+
   async function runDataAssetJob(
     asset: ProjectDataAsset,
     operation: "inspect" | "prepare",
@@ -1023,6 +1114,12 @@ export function App() {
                 }
               : undefined,
       });
+      conversionIntents.current[asset.id] = {
+        operation,
+        capability,
+        targetChapterId,
+        pendingChapterType,
+      };
       setConversionJobs((current) => ({ ...current, [asset.id]: started }));
       let job: ConversionJobSnapshot;
       try {
@@ -1082,80 +1179,7 @@ export function App() {
         }
         return;
       }
-      const result = [...job.events]
-        .reverse()
-        .find((event) => event.type === "result");
-      if (result?.type !== "result" || typeof result.output.path !== "string")
-        throw new Error("The prepared data path was not returned");
-      const path = result.output.path;
-      const sourceId = crypto.randomUUID();
-      const common = {
-        id: sourceId,
-        label: asset.label.replace(/\.[^.]+$/, ""),
-        locator: path,
-        attribution: null,
-        sizeBytes:
-          typeof result.output.sizeBytes === "number"
-            ? result.output.sizeBytes
-            : null,
-        delivery: "included" as const,
-        provenance: createDefaultSourceProvenance(),
-      };
-      const source: ProjectSource =
-        capability === "raster" || capability === "multidim"
-          ? { ...common, kind: "cog" }
-          : capability === "pointcloud"
-            ? {
-                ...common,
-                kind: "copc",
-                colorMode: "elevation",
-                pointSize: 2,
-              }
-            : asset.format === "gpx"
-              ? { ...common, kind: "trajectory", trailLength: 600 }
-              : { ...common, kind: "geoparquet" };
-      const intendedChapter: ProjectChapter | null =
-        !targetChapterId &&
-        (pendingChapterType === "map" || pendingChapterType === "scrolly")
-          ? {
-              id: crypto.randomUUID(),
-              type: pendingChapterType,
-              title: source.label,
-              narrative: "",
-              sourceId,
-              overlaySourceIds: [],
-              camera,
-              ...(pendingChapterType === "scrolly"
-                ? {
-                    transition: "fly-to" as const,
-                    overlayPosition: "left" as const,
-                  }
-                : {}),
-            }
-          : null;
-      changeProject((current) => ({
-        ...current,
-        dataAssets: current.dataAssets.map((item) =>
-          item.id === asset.id ? { ...item, preparedSourceId: sourceId } : item,
-        ),
-        sources: [...current.sources, source],
-        chapters: targetChapterId
-          ? current.chapters.map((chapter) =>
-              chapter.id === targetChapterId &&
-              (chapter.type === "map" || chapter.type === "scrolly")
-                ? { ...chapter, sourceId }
-                : chapter,
-            )
-          : intendedChapter
-            ? [...current.chapters, intendedChapter]
-            : current.chapters,
-      }));
-      if (intendedChapter) {
-        setActiveChapter(intendedChapter.id);
-        setInspectorMode("chapter");
-        setPendingChapterType(null);
-        requestInitialFit(intendedChapter.id, sourceId);
-      }
+      applyPreparedConversion(asset, job, conversionIntents.current[asset.id]);
     } catch (cause) {
       showError(cause);
     }
@@ -1998,11 +2022,25 @@ export function App() {
                                               })),
                                           },
                                         );
-                                        if (result.kind === "completed")
+                                        if (result.kind === "completed") {
                                           setConversionJobs((current) => ({
                                             ...current,
                                             [asset.id]: result.job,
                                           }));
+                                          const failure =
+                                            result.job.events.find(
+                                              (event) =>
+                                                event.type === "failure",
+                                            );
+                                          if (!failure)
+                                            applyPreparedConversion(
+                                              asset,
+                                              result.job,
+                                              conversionIntents.current[
+                                                asset.id
+                                              ],
+                                            );
+                                        }
                                       })
                                       .catch(showError);
                                   }}

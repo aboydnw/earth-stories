@@ -19,7 +19,7 @@ describe("ProvisioningDialog", () => {
           capabilityName: "Raster preparation",
           versions: ["GDAL >=3.10,<4", "Rasterio >=1.4,<2"],
           estimatedBytes: 668_962_511,
-          estimateKind: "measured-installed-footprint",
+          estimateKind: "measured-apparent-installed-footprint",
           destination: "/profile/tools/raster",
           credits: [{ name: "Pixi", license: "BSD-3-Clause" }],
         }}
@@ -29,7 +29,7 @@ describe("ProvisioningDialog", () => {
     );
 
     const text = screen.getByRole("dialog").textContent ?? "";
-    expect(text).toContain("669 MB on disk");
+    expect(text).toContain("669 MB apparent file size");
     expect(text).toContain("not available offline");
     expect(text).toContain("/profile/tools/raster");
     expect(text).toContain("GDAL >=3.10,<4");

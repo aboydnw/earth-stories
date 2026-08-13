@@ -23,8 +23,11 @@ export function ProvisioningDialog(props: {
         available offline until this installation finishes.
       </p>
       <dl>
-        <dt>Estimated installed size</dt>
-        <dd>{Math.ceil(disclosure.estimatedBytes / 1_000_000)} MB on disk</dd>
+        <dt>Estimated apparent installed size</dt>
+        <dd>
+          {Math.ceil(disclosure.estimatedBytes / 1_000_000)} MB apparent file
+          size
+        </dd>
         <dt>Location</dt>
         <dd>{disclosure.destination}</dd>
         <dt>Versions</dt>

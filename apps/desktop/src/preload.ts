@@ -9,7 +9,11 @@ export interface DesktopBridge {
   showProjectFolder(projectId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   listTools(): Promise<
-    Array<{ capability: string; bytes: number; destination: string }>
+    Array<{
+      capability: string;
+      apparentBytes: number;
+      destination: string;
+    }>
   >;
   removeTool(capability: string): Promise<void>;
 }

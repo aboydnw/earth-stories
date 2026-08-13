@@ -29,7 +29,11 @@ export interface DesktopIpcDependencies {
   chooseWorkspace(): Promise<string | null>;
   tools?: {
     listInstalled(): Promise<
-      Array<{ capability: string; bytes: number; destination: string }>
+      Array<{
+        capability: string;
+        apparentBytes: number;
+        destination: string;
+      }>
     >;
     removeCapability(
       capability: "core" | "vector" | "raster" | "multidim" | "pointcloud",

@@ -191,7 +191,7 @@ describe("ConversionJobs", () => {
           capabilityName: "Vector preparation",
           versions: ["GDAL >=3.10,<4"],
           estimatedBytes: 430_000_000,
-          estimateKind: "estimated-installed-footprint",
+          estimateKind: "estimated-apparent-installed-footprint",
           destination: "/tools/vector",
           credits: [{ name: "Pixi", license: "BSD-3-Clause" }],
         });
@@ -252,7 +252,7 @@ describe("ConversionJobs", () => {
           capabilityName: "Vector preparation",
           versions: ["GDAL >=3.10,<4"],
           estimatedBytes: 430_000_000,
-          estimateKind: "estimated-installed-footprint",
+          estimateKind: "estimated-apparent-installed-footprint",
           destination: "/tools/vector",
           credits: [{ name: "Pixi", license: "BSD-3-Clause" }],
         });

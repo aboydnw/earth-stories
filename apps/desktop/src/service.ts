@@ -163,6 +163,8 @@ export class DesktopService {
         pixiCacheDirectory: this.#tools?.pixiCacheDirectory ?? null,
         verifyManifest: this.#tools?.verifyManifest,
         cleanupCapability: this.#tools?.cleanupCapability,
+        capabilityReady: this.#tools?.capabilityReady,
+        acquireCapability: this.#tools?.acquireCapability,
       },
       credentials: this.#createCredentialStore(this.#paths.credentialsFile),
       capabilityToken: this.capabilityToken,

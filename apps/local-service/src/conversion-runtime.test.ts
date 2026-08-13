@@ -1,8 +1,10 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import type { ConversionJobEvent } from "@earth-stories/story-schema";
 import {
   CAPABILITY_INSTALL_ESTIMATES,
   ConversionRuntime,
+  parseLockedCapabilityVersions,
   type RuntimeCommand,
 } from "./conversion-runtime.js";
 
@@ -22,6 +24,27 @@ const request = {
 } as const;
 
 describe("ConversionRuntime", () => {
+  const lockedVersions = {
+    core: ["Python 3.12.13", "Pydantic 2.13.4"],
+    vector: ["DuckDB 1.5.5", "GDAL 3.13.2", "PyArrow 22.0.0"],
+    raster: ["GDAL 3.12.3", "Rasterio 1.5.0", "rio-cogeo 5.4.2"],
+    multidim: ["GDAL 3.12.3", "Xarray 2026.7.0", "Zarr 3.3.0"],
+    pointcloud: ["PDAL 2.10.2", "python-pdal 3.5.5"],
+  } as const;
+
+  it("derives exact representative capability versions from the selected lock environment", async () => {
+    const versions = parseLockedCapabilityVersions(
+      await readFile("pixi.lock", "utf8"),
+      "linux-64",
+    );
+
+    expect(versions.raster).toEqual([
+      "GDAL 3.12.3",
+      "Rasterio 1.5.0",
+      "rio-cogeo 5.4.2",
+    ]);
+    expect(versions.pointcloud).toEqual(["PDAL 2.10.2", "python-pdal 3.5.5"]);
+  });
   it("discloses and provisions a capability only once", async () => {
     const commands: RuntimeCommand[] = [];
     const events: ConversionJobEvent[] = [];
@@ -32,6 +55,7 @@ describe("ConversionRuntime", () => {
       pixiHome: "/workspace/pixi-home",
       pixiCacheDirectory: "/workspace/pixi-cache",
       verifyManifest: async () => undefined,
+      lockedVersions,
       bootstrap: async () => undefined,
       run: async (command) => {
         commands.push(command);
@@ -57,6 +81,7 @@ describe("ConversionRuntime", () => {
       capabilityName: "Vector preparation",
       estimatedBytes: CAPABILITY_INSTALL_ESTIMATES.vector.estimatedBytes,
       destination: "/writable/manifest/.pixi/envs/vector",
+      versions: ["DuckDB 1.5.5", "GDAL 3.13.2", "PyArrow 22.0.0"],
     });
     expect(runtime.acknowledgeProvisioning("request-1")).toBe(true);
     await first;
@@ -106,6 +131,7 @@ describe("ConversionRuntime", () => {
       workerDirectory: "/workers",
       pixiHome: null,
       pixiCacheDirectory: null,
+      lockedVersions,
       bootstrap: async (pixi) => void bootstraps.push(pixi),
       executableExists: async () => false,
       run: async (command) => {
@@ -134,6 +160,7 @@ describe("ConversionRuntime", () => {
       workerDirectory: "/relocated/workers",
       pixiHome: null,
       pixiCacheDirectory: null,
+      lockedVersions,
       executableExists: async () => false,
     });
 
@@ -155,6 +182,7 @@ describe("ConversionRuntime", () => {
       workerDirectory: "/repo/conversion/worker",
       pixiHome: null,
       pixiCacheDirectory: null,
+      lockedVersions,
       bootstrap: async () => undefined,
       run: async (command) => {
         if (command.args[0] === "run") command.onStdout?.("not-json\n");
@@ -175,6 +203,7 @@ describe("ConversionRuntime", () => {
       workerDirectory: "/repo/conversion/worker",
       pixiHome: null,
       pixiCacheDirectory: null,
+      lockedVersions,
       bootstrap: async () => undefined,
       run: async (command) => {
         signals.push(command.signal);
@@ -201,6 +230,7 @@ describe("ConversionRuntime", () => {
       workerDirectory: "/repo/conversion/worker",
       pixiHome: null,
       pixiCacheDirectory: null,
+      lockedVersions,
       executableExists: async () => false,
       bootstrap: async (_pixi, signal) => {
         bootstrapSignal = signal;
@@ -228,6 +258,7 @@ describe("ConversionRuntime", () => {
       workerDirectory: "/workers",
       pixiHome: "/tools/home",
       pixiCacheDirectory: "/tools/cache",
+      lockedVersions,
       executableExists: async () => true,
       cleanupCapability: async (capability) => void cleaned.push(capability),
       run: async (command) => {
@@ -262,5 +293,44 @@ describe("ConversionRuntime", () => {
     runtime.acknowledgeProvisioning("request-1");
     await retry;
     expect(attempts).toBe(2);
+  });
+
+  it("rechecks disk readiness after removal before bypassing disclosure", async () => {
+    let installed = false;
+    const commands: RuntimeCommand[] = [];
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      manifestDirectory: "/manifest",
+      workerDirectory: "/workers",
+      pixiHome: "/tools/home",
+      pixiCacheDirectory: "/tools/cache",
+      lockedVersions,
+      capabilityReady: async () => installed,
+      executableExists: async () => true,
+      run: async (command) => {
+        commands.push(command);
+        if (command.args[0] === "install") installed = true;
+      },
+    });
+    const first = runtime.provision("raster", "request-1", () => undefined);
+    runtime.acknowledgeProvisioning("request-1");
+    await first;
+    installed = false;
+    const events: ConversionJobEvent[] = [];
+
+    const afterRemoval = runtime.provision("raster", "request-2", (event) =>
+      events.push(event),
+    );
+    await Promise.resolve();
+
+    expect(events[0]).toMatchObject({ type: "provisioning-disclosure" });
+    expect(
+      commands.filter((command) => command.args[0] === "install"),
+    ).toHaveLength(1);
+    runtime.acknowledgeProvisioning("request-2");
+    await afterRemoval;
+    expect(
+      commands.filter((command) => command.args[0] === "install"),
+    ).toHaveLength(2);
   });
 });

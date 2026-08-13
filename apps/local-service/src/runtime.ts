@@ -212,6 +212,8 @@ export function beginLocalService(
         pixiCacheDirectory: resolved.conversion.pixiCacheDirectory ?? null,
         verifyManifest: resolved.conversion.verifyManifest,
         cleanupCapability: resolved.conversion.cleanupCapability,
+        capabilityReady: resolved.conversion.capabilityReady,
+        acquireCapability: resolved.conversion.acquireCapability,
         bootstrap: dependencies.bootstrapPixi,
       }),
     );

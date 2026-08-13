@@ -25,7 +25,7 @@ export interface DesktopBridge {
 
 export interface InstalledDesktopTool {
   capability: string;
-  bytes: number;
+  apparentBytes: number;
   destination: string;
 }
 

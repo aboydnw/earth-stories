@@ -7,15 +7,25 @@ import { App } from "./App";
 import type { DesktopBridge } from "./desktop";
 
 const api = vi.hoisted(() => ({
+  actOnConversionJob: vi.fn(),
   getExamples: vi.fn(),
   listProjects: vi.fn(),
+  openProject: vi.fn(),
+  saveProject: vi.fn(),
+  startConversion: vi.fn(),
 }));
+const conversion = vi.hoisted(() => ({ poll: vi.fn() }));
 
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
+  actOnConversionJob: api.actOnConversionJob,
   getExamples: api.getExamples,
   listProjects: api.listProjects,
+  openProject: api.openProject,
+  saveProject: api.saveProject,
+  startConversion: api.startConversion,
 }));
+vi.mock("./conversionPolling", () => ({ pollConversionJob: conversion.poll }));
 
 const project = {
   id: "project-one",
@@ -38,6 +48,7 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/");
   api.getExamples.mockResolvedValue(null);
   api.listProjects.mockResolvedValue([project]);
+  api.saveProject.mockImplementation(async (value) => value);
 });
 
 afterEach(() => {
@@ -166,5 +177,144 @@ describe("desktop editor controls", () => {
     expect(
       screen.getByRole("dialog", { name: /workspace settings/i }),
     ).toBeTruthy();
+  });
+
+  it("completes prepared-source attachment after failed provisioning retries on the same job", async () => {
+    window.history.replaceState(null, "", "/stories/project-one");
+    const opened = {
+      schema: "earth-stories/project/v1",
+      id: "project-one",
+      metadata: {
+        title: "Retry story",
+        description: "",
+        author: null,
+        created: "2026-08-13T00:00:00.000Z",
+        updated: "2026-08-13T00:00:00.000Z",
+      },
+      basemap: {
+        id: "light",
+        label: "Light",
+        styleUrl: "https://example.com/style.json",
+        attribution: null,
+      },
+      publication: { profile: "connected", theme: "cng" },
+      sources: [],
+      dataAssets: [
+        {
+          id: "asset-one",
+          label: "relief.tif",
+          path: "assets/relief.tif",
+          format: "geotiff",
+          sizeBytes: 12,
+          createdAt: "2026-08-13T00:00:00.000Z",
+          preparedSourceId: null,
+        },
+      ],
+      chapters: [
+        { id: "chapter-one", type: "prose", title: "Start", narrative: "" },
+      ],
+    } as const;
+    const disclosure = {
+      protocol: "earth-stories/conversion/v1",
+      requestId: "job-one",
+      type: "provisioning-disclosure",
+      capability: "raster",
+      capabilityName: "Raster preparation",
+      versions: ["GDAL 3.12.3", "Rasterio 1.5.0"],
+      estimatedBytes: 668_962_511,
+      estimateKind: "measured-apparent-installed-footprint",
+      destination: "/tools/raster",
+      credits: [{ name: "Pixi", license: "BSD-3-Clause" }],
+    } as const;
+    const snapshot = (status: string, events: unknown[]) => ({
+      id: "job-one",
+      projectId: "project-one",
+      status,
+      events,
+      createdAt: "2026-08-13T00:00:00.000Z",
+      updatedAt: "2026-08-13T00:00:00.000Z",
+    });
+    let finishInitial!: (value: unknown) => void;
+    let finishRetry!: (value: unknown) => void;
+    api.openProject.mockResolvedValue(opened);
+    api.startConversion.mockResolvedValue(
+      snapshot("awaiting-approval", [disclosure]),
+    );
+    api.actOnConversionJob.mockImplementation(async (_id, action) =>
+      action === "retry"
+        ? snapshot("awaiting-approval", [disclosure])
+        : snapshot("running", [disclosure]),
+    );
+    conversion.poll
+      .mockImplementationOnce(
+        (_job, options) =>
+          new Promise((resolve) => {
+            finishInitial = (value: any) => {
+              options.onUpdate(value.job);
+              resolve(value);
+            };
+          }),
+      )
+      .mockImplementationOnce(
+        (_job, options) =>
+          new Promise((resolve) => {
+            finishRetry = (value: any) => {
+              options.onUpdate(value.job);
+              resolve(value);
+            };
+          }),
+      );
+    renderApp();
+    await screen.findByText("Retry story");
+    await userEvent.click(screen.getByRole("button", { name: /story data/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Prepare" }));
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: /install tools and continue/i,
+      }),
+    );
+    finishInitial({
+      kind: "completed",
+      job: snapshot("failed", [
+        disclosure,
+        {
+          protocol: "earth-stories/conversion/v1",
+          requestId: "job-one",
+          type: "failure",
+          status: "failed",
+          code: "runtime-error",
+          message: "install failed",
+          retryable: true,
+          details: {},
+        },
+      ]),
+    });
+    await userEvent.click(
+      await screen.findByRole("button", { name: /retry tool installation/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: /install tools and continue/i,
+      }),
+    );
+    finishRetry({
+      kind: "completed",
+      job: snapshot("succeeded", [
+        disclosure,
+        {
+          protocol: "earth-stories/conversion/v1",
+          requestId: "job-one",
+          type: "result",
+          status: "succeeded",
+          output: { path: "assets/prepared/relief.cog.tif", sizeBytes: 100 },
+          tools: [{ name: "gdal", version: "3.12.3" }],
+          warnings: [],
+        },
+      ]),
+    });
+
+    expect(await screen.findByText("Prepared and ready to use")).toBeTruthy();
+    expect(screen.getByText("relief")).toBeTruthy();
+    expect(api.startConversion).toHaveBeenCalledOnce();
   });
 });

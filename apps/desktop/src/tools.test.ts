@@ -11,7 +11,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DesktopTools } from "./tools.js";
 
-async function fixture() {
+async function fixture(
+  options: { beforeManifestActivation?: () => void } = {},
+) {
   const root = await mkdtemp(join(tmpdir(), "earth-stories-tools-"));
   const masters = join(root, "resources", "conversion");
   const tools = join(root, "userData", "tools");
@@ -30,6 +32,7 @@ async function fixture() {
       toolsDirectory: tools,
       pixiExecutable: join(tools, "bin", "pixi"),
       workerDirectory: join(root, "resources", "conversion", "worker"),
+      beforeManifestActivation: options.beforeManifestActivation,
     }),
   };
 }
@@ -116,11 +119,68 @@ describe("DesktopTools", () => {
     await writeFile(join(environment, "nested", "two.bin"), "1234567");
 
     expect(await value.manager.listInstalled()).toEqual([
-      expect.objectContaining({ capability: "raster", bytes: 12 }),
+      expect.objectContaining({ capability: "raster", apparentBytes: 12 }),
     ]);
     await value.manager.removeCapability("raster");
     await expect(stat(environment)).rejects.toThrow();
     await expect(stat(config.manifestDirectory)).resolves.toBeTruthy();
+  });
+
+  it("activates a fully verified manifest generation without exposing a mixed pair", async () => {
+    let activations = 0;
+    const value = await fixture({
+      beforeManifestActivation: () => {
+        activations += 1;
+        if (activations === 2) throw new Error("activation fault");
+      },
+    });
+    const config = await value.manager.prepareRuntime();
+    const originalManifest = await readFile(
+      join(config.manifestDirectory, "pixi.toml"),
+    );
+    const originalLock = await readFile(
+      join(config.manifestDirectory, "pixi.lock"),
+    );
+    await chmod(join(value.masters, "pixi.toml"), 0o644);
+    await chmod(join(value.masters, "pixi.lock"), 0o644);
+    await writeFile(
+      join(value.masters, "pixi.toml"),
+      "[workspace]\nname='next'\n",
+    );
+    await writeFile(
+      join(value.masters, "pixi.lock"),
+      "version: 7\nfixture: next\n",
+    );
+
+    await expect(config.verifyManifest()).rejects.toThrow("activation fault");
+
+    expect(await readFile(join(config.manifestDirectory, "pixi.toml"))).toEqual(
+      originalManifest,
+    );
+    expect(await readFile(join(config.manifestDirectory, "pixi.lock"))).toEqual(
+      originalLock,
+    );
+  });
+
+  it("refuses removal while the capability is in active use", async () => {
+    const value = await fixture();
+    const config = await value.manager.prepareRuntime();
+    const environment = join(
+      config.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+    await mkdir(environment, { recursive: true });
+    const release = await config.acquireCapability("raster");
+
+    await expect(value.manager.removeCapability("raster")).rejects.toThrow(
+      /in use/i,
+    );
+    release();
+    await expect(
+      value.manager.removeCapability("raster"),
+    ).resolves.toBeUndefined();
   });
 
   it("cleans only other application-version trees after a successful launch", async () => {

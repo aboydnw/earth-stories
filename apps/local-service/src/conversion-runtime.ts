@@ -1,5 +1,5 @@
-import { access } from "node:fs/promises";
-import { join } from "node:path";
+import { access, readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import {
   CONVERSION_PROTOCOL_VERSION,
   conversionJobEventSchema,
@@ -16,41 +16,138 @@ export const CAPABILITY_INSTALL_ESTIMATES: Record<
     name: string;
     estimatedBytes: number;
     estimateKind:
-      "measured-installed-footprint" | "estimated-installed-footprint";
-    versions: string[];
+      | "measured-apparent-installed-footprint"
+      | "estimated-apparent-installed-footprint";
   }
 > = {
   core: {
     name: "Core data inspection",
     estimatedBytes: 321_812_028,
-    estimateKind: "measured-installed-footprint",
-    versions: ["Python 3.12.*", "Pydantic >=2.11,<3"],
+    estimateKind: "measured-apparent-installed-footprint",
   },
   vector: {
     name: "Vector preparation",
     estimatedBytes: 430_000_000,
-    estimateKind: "estimated-installed-footprint",
-    versions: ["DuckDB >=1.3,<2", "GDAL >=3.10,<4", "PyArrow >=20,<23"],
+    estimateKind: "estimated-apparent-installed-footprint",
   },
   raster: {
     name: "Raster preparation",
     estimatedBytes: 668_962_511,
-    estimateKind: "measured-installed-footprint",
-    versions: ["GDAL >=3.10,<4", "Rasterio >=1.4,<2", "rio-cogeo >=5.4,<6"],
+    estimateKind: "measured-apparent-installed-footprint",
   },
   multidim: {
     name: "Multidimensional preparation",
     estimatedBytes: 410_000_000,
-    estimateKind: "estimated-installed-footprint",
-    versions: ["GDAL >=3.10,<4", "Xarray >=2025.6,<2027", "Zarr >=3,<4"],
+    estimateKind: "estimated-apparent-installed-footprint",
   },
   pointcloud: {
     name: "Point-cloud preparation",
     estimatedBytes: 310_000_000,
-    estimateKind: "estimated-installed-footprint",
-    versions: ["PDAL >=2.9,<3", "python-pdal >=3.5,<4"],
+    estimateKind: "estimated-apparent-installed-footprint",
   },
 };
+
+export type LockedCapabilityVersions = Record<
+  ConversionCapability,
+  readonly string[]
+>;
+
+const DISCLOSED_PACKAGES: Record<
+  ConversionCapability,
+  ReadonlyArray<readonly [packageName: string, displayName: string]>
+> = {
+  core: [
+    ["python", "Python"],
+    ["pydantic", "Pydantic"],
+  ],
+  vector: [
+    ["duckdb", "DuckDB"],
+    ["gdal", "GDAL"],
+    ["pyarrow", "PyArrow"],
+  ],
+  raster: [
+    ["gdal", "GDAL"],
+    ["rasterio", "Rasterio"],
+    ["rio-cogeo", "rio-cogeo"],
+  ],
+  multidim: [
+    ["gdal", "GDAL"],
+    ["xarray", "Xarray"],
+    ["zarr", "Zarr"],
+  ],
+  pointcloud: [
+    ["pdal", "PDAL"],
+    ["python-pdal", "python-pdal"],
+  ],
+};
+
+function lockPlatform(): string {
+  if (process.platform === "win32") return "win-64";
+  if (process.platform === "darwin")
+    return process.arch === "arm64" ? "osx-arm64" : "osx-64";
+  return "linux-64";
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function parseLockedCapabilityVersions(
+  contents: string,
+  platform = lockPlatform(),
+): LockedCapabilityVersions {
+  const found = Object.fromEntries(
+    Object.keys(DISCLOSED_PACKAGES).map((capability) => [
+      capability,
+      new Map<string, string>(),
+    ]),
+  ) as Record<ConversionCapability, Map<string, string>>;
+  let environment: ConversionCapability | null = null;
+  let inPlatform = false;
+  for (const line of contents.split(/\r?\n/)) {
+    const environmentMatch = line.match(/^  ([a-z]+):$/);
+    if (environmentMatch) {
+      environment = conversionCapability(environmentMatch[1]);
+      inPlatform = false;
+      continue;
+    }
+    const platformMatch = line.match(/^      ([a-z0-9-]+):$/);
+    if (platformMatch) {
+      inPlatform = environment !== null && platformMatch[1] === platform;
+      continue;
+    }
+    if (!environment || !inPlatform) continue;
+    const urlMatch = line.match(/^      - conda: (https:\/\/\S+)$/);
+    if (!urlMatch) continue;
+    const filename = basename(new URL(urlMatch[1]).pathname);
+    for (const [packageName] of DISCLOSED_PACKAGES[environment]) {
+      const match = filename.match(
+        new RegExp(
+          `^${escapeRegex(packageName)}-([^-]+)-.+\\.(?:conda|tar\\.bz2)$`,
+        ),
+      );
+      if (match) found[environment].set(packageName, match[1]);
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(DISCLOSED_PACKAGES).map(([capability, packages]) => [
+      capability,
+      packages.map(([packageName, displayName]) => {
+        const version =
+          found[capability as ConversionCapability].get(packageName);
+        if (!version)
+          throw new Error(
+            `pixi.lock does not pin ${packageName} for ${capability} on ${platform}.`,
+          );
+        return `${displayName} ${version}`;
+      }),
+    ]),
+  ) as unknown as LockedCapabilityVersions;
+}
+
+function conversionCapability(value: string): ConversionCapability | null {
+  return value in DISCLOSED_PACKAGES ? (value as ConversionCapability) : null;
+}
 
 export interface RuntimeCommand {
   executable: string;
@@ -77,6 +174,14 @@ export class ConversionRuntime {
   readonly #cleanupCapability: (
     capability: ConversionCapability,
   ) => Promise<void>;
+  readonly #capabilityReady: (
+    capability: ConversionCapability,
+  ) => Promise<boolean>;
+  readonly #acquireCapability: (
+    capability: ConversionCapability,
+  ) => (() => void) | Promise<() => void>;
+  readonly #lockedVersions:
+    LockedCapabilityVersions | Promise<LockedCapabilityVersions>;
   readonly #ready = new Set<ConversionCapability>();
   readonly #approvals = new Map<string, () => void>();
 
@@ -92,6 +197,11 @@ export class ConversionRuntime {
     executableExists?: (path: string) => Promise<boolean>;
     verifyManifest?: () => Promise<void>;
     cleanupCapability?: (capability: ConversionCapability) => Promise<void>;
+    capabilityReady?: (capability: ConversionCapability) => Promise<boolean>;
+    acquireCapability?: (
+      capability: ConversionCapability,
+    ) => Promise<() => void>;
+    lockedVersions?: LockedCapabilityVersions;
   }) {
     this.#pixi = options.pixi;
     this.#manifestDirectory = options.manifestDirectory;
@@ -107,6 +217,14 @@ export class ConversionRuntime {
     this.#verifyManifest = options.verifyManifest ?? (async () => undefined);
     this.#cleanupCapability =
       options.cleanupCapability ?? (async () => undefined);
+    this.#capabilityReady = options.capabilityReady ?? (async () => true);
+    this.#acquireCapability =
+      options.acquireCapability ?? (() => () => undefined);
+    this.#lockedVersions = options.lockedVersions
+      ? options.lockedVersions
+      : readFile(join(this.#manifestDirectory, "pixi.lock"), "utf8").then(
+          (contents) => parseLockedCapabilityVersions(contents),
+        );
     const processTrees = new ProcessTreeRunner();
     this.#run = options.run ?? ((command) => processTrees.run(command));
     this.#forceTerminate =
@@ -168,15 +286,23 @@ export class ConversionRuntime {
     onEvent: (event: ConversionJobEvent) => void,
     signal?: AbortSignal,
   ): Promise<void> {
-    if (this.#ready.has(capability)) return;
+    if (this.#ready.has(capability)) {
+      if (await this.#capabilityReady(capability)) return;
+      this.#ready.delete(capability);
+    }
     const disclosure = CAPABILITY_INSTALL_ESTIMATES[capability];
+    const lockedVersions =
+      this.#lockedVersions instanceof Promise
+        ? await this.#lockedVersions
+        : this.#lockedVersions;
+    const versions = lockedVersions[capability];
     onEvent({
       protocol: CONVERSION_PROTOCOL_VERSION,
       requestId,
       type: "provisioning-disclosure",
       capability,
       capabilityName: disclosure.name,
-      versions: disclosure.versions,
+      versions: [...versions],
       estimatedBytes: disclosure.estimatedBytes,
       estimateKind: disclosure.estimateKind,
       destination: join(this.#manifestDirectory, ".pixi", "envs", capability),
@@ -198,7 +324,7 @@ export class ConversionRuntime {
       completed: 0,
       total,
       unit: "bytes",
-      message: `Installing ${disclosure.name} (estimated ${Math.ceil(total / 1_000_000)} MB on disk)`,
+      message: `Installing ${disclosure.name} (estimated ${Math.ceil(total / 1_000_000)} MB apparent file size)`,
     });
     try {
       await this.#ensureExecutable(signal);
@@ -241,55 +367,62 @@ export class ConversionRuntime {
   ): Promise<void> {
     const request: ConversionJobRequest =
       conversionJobRequestSchema.parse(input);
-    await this.provision(
-      request.capability,
-      request.requestId,
-      onEvent,
-      signal,
-    );
-    await this.#verifyManifest();
-    let buffered = "";
-    let parseFailure: unknown;
-    await this.#run({
-      executable: this.#pixi,
-      cwd: this.#manifestDirectory,
-      env: this.#environment,
-      args: [
-        "run",
-        "--manifest-path",
-        join(this.#manifestDirectory, "pixi.toml"),
-        "--locked",
-        "-e",
+    const acquisition = this.#acquireCapability(request.capability);
+    const releaseCapability =
+      acquisition instanceof Promise ? await acquisition : acquisition;
+    try {
+      await this.provision(
         request.capability,
-        "python",
-        join(this.#workerDirectory, "worker.py"),
-      ],
-      input: `${JSON.stringify(request)}\n`,
-      signal,
-      onStdout: (chunk) => {
-        if (parseFailure) return;
-        buffered += chunk;
-        const lines = buffered.split("\n");
-        buffered = lines.pop() ?? "";
-        try {
-          for (const line of lines) {
-            if (line.trim())
-              onEvent(conversionJobEventSchema.parse(JSON.parse(line)));
+        request.requestId,
+        onEvent,
+        signal,
+      );
+      await this.#verifyManifest();
+      let buffered = "";
+      let parseFailure: unknown;
+      await this.#run({
+        executable: this.#pixi,
+        cwd: this.#manifestDirectory,
+        env: this.#environment,
+        args: [
+          "run",
+          "--manifest-path",
+          join(this.#manifestDirectory, "pixi.toml"),
+          "--locked",
+          "-e",
+          request.capability,
+          "python",
+          join(this.#workerDirectory, "worker.py"),
+        ],
+        input: `${JSON.stringify(request)}\n`,
+        signal,
+        onStdout: (chunk) => {
+          if (parseFailure) return;
+          buffered += chunk;
+          const lines = buffered.split("\n");
+          buffered = lines.pop() ?? "";
+          try {
+            for (const line of lines) {
+              if (line.trim())
+                onEvent(conversionJobEventSchema.parse(JSON.parse(line)));
+            }
+          } catch (cause) {
+            parseFailure = cause;
           }
+        },
+      });
+      if (parseFailure) throw parseFailure;
+      if (buffered.trim()) {
+        try {
+          onEvent(conversionJobEventSchema.parse(JSON.parse(buffered)));
         } catch (cause) {
-          parseFailure = cause;
+          throw new Error("The conversion worker returned an invalid event.", {
+            cause,
+          });
         }
-      },
-    });
-    if (parseFailure) throw parseFailure;
-    if (buffered.trim()) {
-      try {
-        onEvent(conversionJobEventSchema.parse(JSON.parse(buffered)));
-      } catch (cause) {
-        throw new Error("The conversion worker returned an invalid event.", {
-          cause,
-        });
       }
+    } finally {
+      releaseCapability();
     }
   }
 }

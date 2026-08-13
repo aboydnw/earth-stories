@@ -66,8 +66,8 @@ export const provisioningDisclosureSchema = z
     versions: z.array(z.string().min(1)).min(1),
     estimatedBytes: z.number().int().positive(),
     estimateKind: z.enum([
-      "measured-installed-footprint",
-      "estimated-installed-footprint",
+      "measured-apparent-installed-footprint",
+      "estimated-apparent-installed-footprint",
     ]),
     destination: z.string().min(1),
     credits: z

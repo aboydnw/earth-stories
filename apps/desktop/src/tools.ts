@@ -9,7 +9,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { dirname, join } from "node:path";
 
 const MANIFEST_FILES = ["pixi.toml", "pixi.lock"] as const;
 const CAPABILITIES = [
@@ -24,7 +24,7 @@ export type DesktopToolCapability = (typeof CAPABILITIES)[number];
 
 export interface InstalledToolCapability {
   capability: DesktopToolCapability;
-  bytes: number;
+  apparentBytes: number;
   destination: string;
 }
 
@@ -36,6 +36,8 @@ export interface DesktopToolRuntimeConfiguration {
   pixiCacheDirectory: string;
   verifyManifest(): Promise<void>;
   cleanupCapability(capability: DesktopToolCapability): Promise<void>;
+  capabilityReady(capability: DesktopToolCapability): Promise<boolean>;
+  acquireCapability(capability: DesktopToolCapability): Promise<() => void>;
 }
 
 function digest(value: Uint8Array): string {
@@ -67,7 +69,8 @@ export class DesktopTools {
     executable: string,
     signal?: AbortSignal,
   ) => Promise<void>;
-  #prepared: DesktopToolRuntimeConfiguration | null = null;
+  readonly #beforeManifestActivation: () => void;
+  readonly #activeCapabilities = new Map<DesktopToolCapability, number>();
   #verification = Promise.resolve();
 
   constructor(options: {
@@ -78,6 +81,7 @@ export class DesktopTools {
     workerDirectory: string;
     installerScript?: string;
     bootstrap?: (executable: string, signal?: AbortSignal) => Promise<void>;
+    beforeManifestActivation?: () => void;
   }) {
     this.#appVersion = options.appVersion;
     this.#masterDirectory = options.masterDirectory;
@@ -85,6 +89,8 @@ export class DesktopTools {
     this.#pixiExecutable = options.pixiExecutable;
     this.#workerDirectory = options.workerDirectory;
     this.#installerScript = options.installerScript ?? null;
+    this.#beforeManifestActivation =
+      options.beforeManifestActivation ?? (() => undefined);
     this.#bootstrap =
       options.bootstrap ??
       ((executable, signal) => {
@@ -133,9 +139,31 @@ export class DesktopTools {
           recursive: true,
           force: true,
         }),
+      capabilityReady: async (capability) => {
+        try {
+          return (
+            await stat(join(manifestDirectory, ".pixi", "envs", capability))
+          ).isDirectory();
+        } catch {
+          return false;
+        }
+      },
+      acquireCapability: async (capability) => {
+        this.#activeCapabilities.set(
+          capability,
+          (this.#activeCapabilities.get(capability) ?? 0) + 1,
+        );
+        let released = false;
+        return () => {
+          if (released) return;
+          released = true;
+          const remaining = (this.#activeCapabilities.get(capability) ?? 1) - 1;
+          if (remaining === 0) this.#activeCapabilities.delete(capability);
+          else this.#activeCapabilities.set(capability, remaining);
+        };
+      },
     };
     await config.verifyManifest();
-    this.#prepared = config;
     return config;
   }
 
@@ -161,7 +189,7 @@ export class DesktopTools {
         const destination = join(environments, entry.name);
         installed.push({
           capability: entry.name,
-          bytes: await directoryBytes(destination),
+          apparentBytes: await directoryBytes(destination),
           destination,
         });
       }
@@ -174,6 +202,8 @@ export class DesktopTools {
   async removeCapability(capability: DesktopToolCapability): Promise<void> {
     if (!isCapability(capability))
       throw new TypeError("Unknown tool capability.");
+    if ((this.#activeCapabilities.get(capability) ?? 0) > 0)
+      throw new Error(`${capability} tools are in use and cannot be removed.`);
     const installed = await this.listInstalled();
     await Promise.all(
       installed
@@ -231,26 +261,49 @@ export class DesktopTools {
         }),
       );
       if (matches.every(Boolean)) return;
-      await mkdir(manifestDirectory, { recursive: true, mode: 0o700 });
-      const staged = await Promise.all(
-        masters.map(async ({ name, bytes }) => {
-          const temporary = join(
-            manifestDirectory,
-            `.${basename(name)}.${process.pid}.${randomUUID()}.tmp`,
-          );
-          await writeFile(temporary, bytes, { mode: 0o600 });
-          if (digest(await readFile(temporary)) !== digest(bytes))
-            throw new Error(`Could not verify staged ${name}.`);
-          return { name, temporary };
-        }),
-      );
+      await mkdir(dirname(manifestDirectory), {
+        recursive: true,
+        mode: 0o700,
+      });
+      const generation = `${manifestDirectory}.generation-${randomUUID()}`;
+      const backup = `${manifestDirectory}.previous-${randomUUID()}`;
+      await mkdir(generation, { mode: 0o700 });
       try {
-        for (const { name, temporary } of staged)
-          await rename(temporary, join(manifestDirectory, name));
+        for (const { name, bytes } of masters) {
+          await writeFile(join(generation, name), bytes, { mode: 0o600 });
+          if (digest(await readFile(join(generation, name))) !== digest(bytes))
+            throw new Error(`Could not verify staged ${name}.`);
+        }
+        let retired = false;
+        try {
+          await rename(manifestDirectory, backup);
+          retired = true;
+        } catch (cause) {
+          if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+        }
+        if (retired)
+          await rename(join(backup, ".pixi"), join(generation, ".pixi")).catch(
+            (cause) => {
+              if ((cause as NodeJS.ErrnoException).code !== "ENOENT")
+                throw cause;
+            },
+          );
+        try {
+          this.#beforeManifestActivation();
+          await rename(generation, manifestDirectory);
+        } catch (cause) {
+          if (retired) {
+            await rename(
+              join(generation, ".pixi"),
+              join(backup, ".pixi"),
+            ).catch(() => undefined);
+            await rename(backup, manifestDirectory).catch(() => undefined);
+          }
+          throw cause;
+        }
+        await rm(backup, { recursive: true, force: true });
       } finally {
-        await Promise.all(
-          staged.map(({ temporary }) => rm(temporary, { force: true })),
-        );
+        await rm(generation, { recursive: true, force: true });
       }
       for (const { name, bytes } of masters)
         if (

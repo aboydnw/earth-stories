@@ -22,7 +22,9 @@ export function DesktopToolsPanel({ desktop }: { desktop: DesktopBridge }) {
       {tools?.map((tool) => (
         <div key={`${tool.destination}:${tool.capability}`}>
           <strong>{tool.capability}</strong>{" "}
-          <span>{Math.ceil(tool.bytes / 1_000_000)} MB on disk</span>{" "}
+          <span>
+            {Math.ceil(tool.apparentBytes / 1_000_000)} MB apparent file size
+          </span>{" "}
           <button type="button" onClick={() => void remove(tool.capability)}>
             Remove {tool.capability} tools
           </button>
