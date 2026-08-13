@@ -13,14 +13,6 @@ const defaultManifest = resolve(
   scriptDirectory,
   "../build/resources/resource-manifest.json",
 );
-const contractRoots = new Set([
-  "conversion",
-  "credits",
-  "editor",
-  "service",
-  "viewer",
-]);
-
 function parseArguments(argv) {
   const values = new Map();
   for (let index = 0; index < argv.length; index += 2) {
@@ -39,23 +31,16 @@ function parseArguments(argv) {
   };
 }
 
-async function listContractFiles(root, directory = root) {
+async function listResourceFiles(root, directory = root) {
   const files = [];
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     const path = join(directory, entry.name);
     const relativePath = relative(root, path).split(sep).join("/");
-    const rootName = relativePath.split("/", 1)[0];
-    if (entry.isDirectory()) {
-      if (directory !== root || contractRoots.has(entry.name)) {
-        files.push(...(await listContractFiles(root, path)));
-      }
-    } else if (
-      entry.isFile() &&
-      (contractRoots.has(rootName) || relativePath === "resource-manifest.json")
-    ) {
-      files.push(relativePath);
-    }
+    if (entry.isDirectory())
+      files.push(...(await listResourceFiles(root, path)));
+    else if (entry.isFile()) files.push(relativePath);
+    else throw new Error(`Unsupported packaged resource: ${relativePath}`);
   }
   return files.sort();
 }
@@ -83,9 +68,10 @@ async function verify({ resourcesDirectory, expectedManifestPath }) {
   }
   const expected = [
     ...manifest.files.map((entry) => entry.path),
+    "app.asar",
     "resource-manifest.json",
   ].sort();
-  const actual = await listContractFiles(resourcesDirectory);
+  const actual = await listResourceFiles(resourcesDirectory);
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error(
       `Packaged resource tree does not match manifest\nExpected: ${expected.join(", ")}\nActual: ${actual.join(", ")}`,

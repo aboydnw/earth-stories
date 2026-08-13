@@ -123,6 +123,7 @@ describe("packaged desktop resources", () => {
       staged,
     ]);
     await cp(staged, packaged, { recursive: true });
+    await writeFile(join(packaged, "app.asar"), "packaged application\n");
 
     await expect(
       execFileAsync(process.execPath, [
@@ -163,6 +164,19 @@ describe("packaged desktop resources", () => {
     ]).catch((cause: unknown) => cause as { message: string; stderr: string });
     expect(`${manifestError.message}\n${manifestError.stderr}`).toContain(
       "Packaged resource manifest does not match staged manifest",
+    );
+
+    await cp(staged, packaged, { recursive: true, force: true });
+    await writeFile(join(packaged, "unexpected.txt"), "undeclared\n");
+    const unexpectedError = await execFileAsync(process.execPath, [
+      verifyScript,
+      "--resources",
+      packaged,
+      "--manifest",
+      join(staged, "resource-manifest.json"),
+    ]).catch((cause: unknown) => cause as { message: string; stderr: string });
+    expect(`${unexpectedError.message}\n${unexpectedError.stderr}`).toContain(
+      "Packaged resource tree does not match manifest",
     );
   });
 });
