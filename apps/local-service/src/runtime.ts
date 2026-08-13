@@ -207,6 +207,7 @@ export function beginLocalService(
       new ConversionRuntime({
         pixi: resolved.conversion.pixiExecutable,
         manifestDirectory: resolved.conversion.manifestDirectory,
+        resolveManifestDirectory: resolved.conversion.resolveManifestDirectory,
         workerDirectory: resolved.conversion.workerDirectory,
         pixiHome: resolved.conversion.pixiHome,
         pixiCacheDirectory: resolved.conversion.pixiCacheDirectory ?? null,

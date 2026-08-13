@@ -165,6 +165,7 @@ export type RuntimeCommandRunner = (command: RuntimeCommand) => Promise<void>;
 export class ConversionRuntime {
   readonly #pixi: string;
   readonly #manifestDirectory: string;
+  readonly #resolveManifestDirectory: () => string | Promise<string>;
   readonly #workerDirectory: string;
   readonly #environment: Record<string, string> | undefined;
   readonly #run: RuntimeCommandRunner;
@@ -179,15 +180,15 @@ export class ConversionRuntime {
   ) => Promise<boolean>;
   readonly #acquireCapability: (
     capability: ConversionCapability,
-  ) => (() => void) | Promise<() => void>;
-  readonly #lockedVersions:
-    LockedCapabilityVersions | Promise<LockedCapabilityVersions>;
+  ) => (() => void | Promise<void>) | Promise<() => void | Promise<void>>;
+  readonly #lockedVersions: LockedCapabilityVersions | null;
   readonly #ready = new Set<ConversionCapability>();
   readonly #approvals = new Map<string, () => void>();
 
   constructor(options: {
     pixi: string;
     manifestDirectory: string;
+    resolveManifestDirectory?: () => string | Promise<string>;
     workerDirectory: string;
     pixiHome: string | null;
     pixiCacheDirectory?: string | null;
@@ -200,11 +201,13 @@ export class ConversionRuntime {
     capabilityReady?: (capability: ConversionCapability) => Promise<boolean>;
     acquireCapability?: (
       capability: ConversionCapability,
-    ) => Promise<() => void>;
+    ) => Promise<() => void | Promise<void>>;
     lockedVersions?: LockedCapabilityVersions;
   }) {
     this.#pixi = options.pixi;
     this.#manifestDirectory = options.manifestDirectory;
+    this.#resolveManifestDirectory =
+      options.resolveManifestDirectory ?? (() => this.#manifestDirectory);
     this.#workerDirectory = options.workerDirectory;
     this.#environment = options.pixiHome
       ? {
@@ -220,11 +223,7 @@ export class ConversionRuntime {
     this.#capabilityReady = options.capabilityReady ?? (async () => true);
     this.#acquireCapability =
       options.acquireCapability ?? (() => () => undefined);
-    this.#lockedVersions = options.lockedVersions
-      ? options.lockedVersions
-      : readFile(join(this.#manifestDirectory, "pixi.lock"), "utf8").then(
-          (contents) => parseLockedCapabilityVersions(contents),
-        );
+    this.#lockedVersions = options.lockedVersions ?? null;
     const processTrees = new ProcessTreeRunner();
     this.#run = options.run ?? ((command) => processTrees.run(command));
     this.#forceTerminate =
@@ -290,11 +289,17 @@ export class ConversionRuntime {
       if (await this.#capabilityReady(capability)) return;
       this.#ready.delete(capability);
     }
+    const initialManifestResolution = this.#resolveManifestDirectory();
+    const initialManifestDirectory =
+      typeof initialManifestResolution === "string"
+        ? initialManifestResolution
+        : await initialManifestResolution;
     const disclosure = CAPABILITY_INSTALL_ESTIMATES[capability];
     const lockedVersions =
-      this.#lockedVersions instanceof Promise
-        ? await this.#lockedVersions
-        : this.#lockedVersions;
+      this.#lockedVersions ??
+      parseLockedCapabilityVersions(
+        await readFile(join(initialManifestDirectory, "pixi.lock"), "utf8"),
+      );
     const versions = lockedVersions[capability];
     onEvent({
       protocol: CONVERSION_PROTOCOL_VERSION,
@@ -305,7 +310,7 @@ export class ConversionRuntime {
       versions: [...versions],
       estimatedBytes: disclosure.estimatedBytes,
       estimateKind: disclosure.estimateKind,
-      destination: join(this.#manifestDirectory, ".pixi", "envs", capability),
+      destination: join(initialManifestDirectory, ".pixi", "envs", capability),
       credits: [
         { name: "Pixi", license: "BSD-3-Clause" },
         {
@@ -328,15 +333,16 @@ export class ConversionRuntime {
     });
     try {
       await this.#ensureExecutable(signal);
+      const manifestDirectory = await this.#resolveManifestDirectory();
       await this.#verifyManifest();
       await this.#run({
         executable: this.#pixi,
-        cwd: this.#manifestDirectory,
+        cwd: manifestDirectory,
         env: this.#environment,
         args: [
           "install",
           "--manifest-path",
-          join(this.#manifestDirectory, "pixi.toml"),
+          join(manifestDirectory, "pixi.toml"),
           "--locked",
           "-e",
           capability,
@@ -377,17 +383,18 @@ export class ConversionRuntime {
         onEvent,
         signal,
       );
+      const manifestDirectory = await this.#resolveManifestDirectory();
       await this.#verifyManifest();
       let buffered = "";
       let parseFailure: unknown;
       await this.#run({
         executable: this.#pixi,
-        cwd: this.#manifestDirectory,
+        cwd: manifestDirectory,
         env: this.#environment,
         args: [
           "run",
           "--manifest-path",
-          join(this.#manifestDirectory, "pixi.toml"),
+          join(manifestDirectory, "pixi.toml"),
           "--locked",
           "-e",
           request.capability,
@@ -422,7 +429,7 @@ export class ConversionRuntime {
         }
       }
     } finally {
-      releaseCapability();
+      await releaseCapability();
     }
   }
 }

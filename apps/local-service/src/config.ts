@@ -29,6 +29,7 @@ export interface LocalServiceConfig {
   conversion: {
     pixiExecutable: string;
     manifestDirectory: string;
+    resolveManifestDirectory?: () => Promise<string>;
     workerDirectory: string;
     pixiHome: string | null;
     pixiCacheDirectory?: string | null;
@@ -37,7 +38,7 @@ export interface LocalServiceConfig {
     capabilityReady?: (capability: ConversionCapability) => Promise<boolean>;
     acquireCapability?: (
       capability: ConversionCapability,
-    ) => Promise<() => void>;
+    ) => Promise<() => Promise<void>>;
   };
   credentials: CredentialStore;
   capabilityToken: string | null;

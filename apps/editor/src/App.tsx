@@ -101,6 +101,12 @@ const presentation = {
   filterProperty: null,
   filterValue: null,
 };
+
+function latestConversionTerminal(job: ConversionJobSnapshot) {
+  return [...job.events]
+    .reverse()
+    .find((event) => event.type === "result" || event.type === "failure");
+}
 export function App() {
   const [desktop] = useState(detectDesktopBridge);
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(
@@ -975,9 +981,7 @@ export function App() {
     intent: (typeof conversionIntents.current)[string],
   ) {
     if (intent.operation !== "prepare") return;
-    const result = [...job.events]
-      .reverse()
-      .find((event) => event.type === "result");
+    const result = latestConversionTerminal(job);
     if (result?.type !== "result" || typeof result.output.path !== "string")
       throw new Error("The prepared data path was not returned");
     const sourceId = `prepared-${job.id}`;
@@ -1148,10 +1152,8 @@ export function App() {
         });
         throw cause;
       }
-      const failure = [...job.events]
-        .reverse()
-        .find((event) => event.type === "failure");
-      if (failure?.type === "failure") throw new Error(failure.message);
+      const terminal = latestConversionTerminal(job);
+      if (terminal?.type === "failure") throw new Error(terminal.message);
       if (operation !== "prepare") {
         if (capability === "multidim") {
           const result = [...job.events]
@@ -2027,12 +2029,10 @@ export function App() {
                                             ...current,
                                             [asset.id]: result.job,
                                           }));
-                                          const failure =
-                                            result.job.events.find(
-                                              (event) =>
-                                                event.type === "failure",
-                                            );
-                                          if (!failure)
+                                          if (
+                                            latestConversionTerminal(result.job)
+                                              ?.type === "result"
+                                          )
                                             applyPreparedConversion(
                                               asset,
                                               result.job,

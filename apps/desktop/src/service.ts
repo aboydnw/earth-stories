@@ -157,6 +157,7 @@ export class DesktopService {
         manifestDirectory:
           this.#tools?.manifestDirectory ??
           this.#paths.conversionManifestDirectory,
+        resolveManifestDirectory: this.#tools?.resolveManifestDirectory,
         workerDirectory:
           this.#tools?.workerDirectory ?? this.#paths.conversionWorkerDirectory,
         pixiHome: this.#tools?.pixiHome ?? this.#paths.pixiHome,

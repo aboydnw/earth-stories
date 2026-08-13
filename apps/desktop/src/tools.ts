@@ -9,7 +9,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 const MANIFEST_FILES = ["pixi.toml", "pixi.lock"] as const;
 const CAPABILITIES = [
@@ -31,13 +31,16 @@ export interface InstalledToolCapability {
 export interface DesktopToolRuntimeConfiguration {
   pixiExecutable: string;
   manifestDirectory: string;
+  resolveManifestDirectory(): Promise<string>;
   workerDirectory: string;
   pixiHome: string;
   pixiCacheDirectory: string;
   verifyManifest(): Promise<void>;
   cleanupCapability(capability: DesktopToolCapability): Promise<void>;
   capabilityReady(capability: DesktopToolCapability): Promise<boolean>;
-  acquireCapability(capability: DesktopToolCapability): Promise<() => void>;
+  acquireCapability(
+    capability: DesktopToolCapability,
+  ): Promise<() => Promise<void>>;
 }
 
 function digest(value: Uint8Array): string {
@@ -69,8 +72,14 @@ export class DesktopTools {
     executable: string,
     signal?: AbortSignal,
   ) => Promise<void>;
-  readonly #beforeManifestActivation: () => void;
+  readonly #afterManifestGenerationStaged: () => void;
+  readonly #afterManifestPointerActivated: () => void;
+  readonly #beforeCapabilityRemoval: () => Promise<void>;
   readonly #activeCapabilities = new Map<DesktopToolCapability, number>();
+  readonly #capabilityOperations = new Map<
+    DesktopToolCapability,
+    Promise<void>
+  >();
   #verification = Promise.resolve();
 
   constructor(options: {
@@ -81,7 +90,9 @@ export class DesktopTools {
     workerDirectory: string;
     installerScript?: string;
     bootstrap?: (executable: string, signal?: AbortSignal) => Promise<void>;
-    beforeManifestActivation?: () => void;
+    afterManifestGenerationStaged?: () => void;
+    afterManifestPointerActivated?: () => void;
+    beforeCapabilityRemoval?: () => Promise<void>;
   }) {
     this.#appVersion = options.appVersion;
     this.#masterDirectory = options.masterDirectory;
@@ -89,8 +100,12 @@ export class DesktopTools {
     this.#pixiExecutable = options.pixiExecutable;
     this.#workerDirectory = options.workerDirectory;
     this.#installerScript = options.installerScript ?? null;
-    this.#beforeManifestActivation =
-      options.beforeManifestActivation ?? (() => undefined);
+    this.#afterManifestGenerationStaged =
+      options.afterManifestGenerationStaged ?? (() => undefined);
+    this.#afterManifestPointerActivated =
+      options.afterManifestPointerActivated ?? (() => undefined);
+    this.#beforeCapabilityRemoval =
+      options.beforeCapabilityRemoval ?? (() => Promise.resolve());
     this.#bootstrap =
       options.bootstrap ??
       ((executable, signal) => {
@@ -123,47 +138,70 @@ export class DesktopTools {
 
   async prepareRuntime(): Promise<DesktopToolRuntimeConfiguration> {
     const lock = await readFile(join(this.#masterDirectory, "pixi.lock"));
-    const manifestDirectory = join(
+    const treeDirectory = join(
       this.#toolsDirectory,
       `${this.#appVersion}-${digest(lock)}`,
     );
+    const manifestDirectory = await this.#resolveManifest(treeDirectory);
     const config: DesktopToolRuntimeConfiguration = {
       pixiExecutable: this.#pixiExecutable,
       manifestDirectory,
       workerDirectory: this.#workerDirectory,
       pixiHome: join(this.#toolsDirectory, "pixi-home"),
       pixiCacheDirectory: join(this.#toolsDirectory, "pixi-cache"),
-      verifyManifest: () => this.#verifyManifest(manifestDirectory),
-      cleanupCapability: (capability) =>
-        rm(join(manifestDirectory, ".pixi", "envs", capability), {
-          recursive: true,
-          force: true,
-        }),
+      resolveManifestDirectory: () => this.#resolveManifest(treeDirectory),
+      verifyManifest: async () => {
+        await this.#resolveManifest(treeDirectory);
+      },
+      cleanupCapability: async (capability) =>
+        rm(
+          join(
+            await this.#resolveManifest(treeDirectory),
+            ".pixi",
+            "envs",
+            capability,
+          ),
+          {
+            recursive: true,
+            force: true,
+          },
+        ),
       capabilityReady: async (capability) => {
         try {
           return (
-            await stat(join(manifestDirectory, ".pixi", "envs", capability))
+            await stat(
+              join(
+                await this.#resolveManifest(treeDirectory),
+                ".pixi",
+                "envs",
+                capability,
+              ),
+            )
           ).isDirectory();
         } catch {
           return false;
         }
       },
       acquireCapability: async (capability) => {
-        this.#activeCapabilities.set(
-          capability,
-          (this.#activeCapabilities.get(capability) ?? 0) + 1,
-        );
+        await this.#withCapabilityLock(capability, () => {
+          this.#activeCapabilities.set(
+            capability,
+            (this.#activeCapabilities.get(capability) ?? 0) + 1,
+          );
+        });
         let released = false;
-        return () => {
+        return async () => {
           if (released) return;
           released = true;
-          const remaining = (this.#activeCapabilities.get(capability) ?? 1) - 1;
-          if (remaining === 0) this.#activeCapabilities.delete(capability);
-          else this.#activeCapabilities.set(capability, remaining);
+          await this.#withCapabilityLock(capability, () => {
+            const remaining =
+              (this.#activeCapabilities.get(capability) ?? 1) - 1;
+            if (remaining === 0) this.#activeCapabilities.delete(capability);
+            else this.#activeCapabilities.set(capability, remaining);
+          });
         };
       },
     };
-    await config.verifyManifest();
     return config;
   }
 
@@ -175,12 +213,10 @@ export class DesktopTools {
     }).catch(() => []);
     for (const tree of trees) {
       if (!tree.isDirectory() || !tree.name.startsWith(prefix)) continue;
-      const environments = join(
-        this.#toolsDirectory,
-        tree.name,
-        ".pixi",
-        "envs",
-      );
+      const treeDirectory = join(this.#toolsDirectory, tree.name);
+      const activeManifest = await this.#readActiveManifest(treeDirectory);
+      if (!activeManifest) continue;
+      const environments = join(activeManifest, ".pixi", "envs");
       const entries = await readdir(environments, {
         withFileTypes: true,
       }).catch(() => []);
@@ -202,16 +238,21 @@ export class DesktopTools {
   async removeCapability(capability: DesktopToolCapability): Promise<void> {
     if (!isCapability(capability))
       throw new TypeError("Unknown tool capability.");
-    if ((this.#activeCapabilities.get(capability) ?? 0) > 0)
-      throw new Error(`${capability} tools are in use and cannot be removed.`);
-    const installed = await this.listInstalled();
-    await Promise.all(
-      installed
-        .filter((entry) => entry.capability === capability)
-        .map((entry) =>
-          rm(entry.destination, { recursive: true, force: true }),
-        ),
-    );
+    await this.#withCapabilityLock(capability, async () => {
+      if ((this.#activeCapabilities.get(capability) ?? 0) > 0)
+        throw new Error(
+          `${capability} tools are in use and cannot be removed.`,
+        );
+      await this.#beforeCapabilityRemoval();
+      const installed = await this.listInstalled();
+      await Promise.all(
+        installed
+          .filter((entry) => entry.capability === capability)
+          .map((entry) =>
+            rm(entry.destination, { recursive: true, force: true }),
+          ),
+      );
+    });
   }
 
   async cleanupOtherApplicationVersions(): Promise<void> {
@@ -234,9 +275,91 @@ export class DesktopTools {
           }),
         ),
     );
+    await Promise.all(
+      entries
+        .filter(
+          (entry) =>
+            entry.isDirectory() && entry.name.startsWith(currentPrefix),
+        )
+        .map((entry) =>
+          this.#cleanupInactiveGenerations(
+            join(this.#toolsDirectory, entry.name),
+          ),
+        ),
+    );
   }
 
-  async #verifyManifest(manifestDirectory: string): Promise<void> {
+  async #cleanupInactiveGenerations(treeDirectory: string): Promise<void> {
+    const activeManifest = await this.#readActiveManifest(treeDirectory);
+    if (!activeManifest) return;
+    const manifestsDirectory = join(treeDirectory, "manifests");
+    const activeName = activeManifest.slice(manifestsDirectory.length + 1);
+    const entries = await readdir(manifestsDirectory, {
+      withFileTypes: true,
+    }).catch(() => []);
+    await Promise.all(
+      entries
+        .filter(
+          (entry) =>
+            entry.isDirectory() &&
+            entry.name !== activeName &&
+            (entry.name.startsWith("generation-") ||
+              entry.name.startsWith(".staging-")),
+        )
+        .map((entry) =>
+          rm(join(manifestsDirectory, entry.name), {
+            recursive: true,
+            force: true,
+          }),
+        ),
+    );
+  }
+
+  async #withCapabilityLock<T>(
+    capability: DesktopToolCapability,
+    action: () => T | Promise<T>,
+  ): Promise<T> {
+    const previous =
+      this.#capabilityOperations.get(capability) ?? Promise.resolve();
+    let unlock!: () => void;
+    const current = new Promise<void>((resolve) => (unlock = resolve));
+    const tail = previous.then(() => current);
+    this.#capabilityOperations.set(capability, tail);
+    await previous;
+    try {
+      return await action();
+    } finally {
+      unlock();
+      if (this.#capabilityOperations.get(capability) === tail)
+        this.#capabilityOperations.delete(capability);
+    }
+  }
+
+  async #readActiveManifest(treeDirectory: string): Promise<string | null> {
+    try {
+      const pointer = JSON.parse(
+        await readFile(join(treeDirectory, "active-manifest.json"), "utf8"),
+      ) as { generation?: unknown };
+      if (
+        typeof pointer.generation !== "string" ||
+        !/^generation-[a-f0-9-]+$/.test(pointer.generation)
+      )
+        return null;
+      const manifestDirectory = join(
+        treeDirectory,
+        "manifests",
+        pointer.generation,
+      );
+      await Promise.all(
+        MANIFEST_FILES.map((name) => stat(join(manifestDirectory, name))),
+      );
+      return manifestDirectory;
+    } catch {
+      return null;
+    }
+  }
+
+  async #resolveManifest(treeDirectory: string): Promise<string> {
     const previous = this.#verification;
     let release!: () => void;
     this.#verification = new Promise<void>((resolve) => (release = resolve));
@@ -248,69 +371,69 @@ export class DesktopTools {
           bytes: await readFile(join(this.#masterDirectory, name)),
         })),
       );
-      const matches = await Promise.all(
-        masters.map(async ({ name, bytes }) => {
-          try {
-            return (
-              digest(await readFile(join(manifestDirectory, name))) ===
-              digest(bytes)
-            );
-          } catch {
-            return false;
-          }
-        }),
-      );
-      if (matches.every(Boolean)) return;
-      await mkdir(dirname(manifestDirectory), {
-        recursive: true,
-        mode: 0o700,
+      const activeManifest = await this.#readActiveManifest(treeDirectory);
+      if (activeManifest) {
+        const matches = await Promise.all(
+          masters.map(
+            async ({ name, bytes }) =>
+              digest(await readFile(join(activeManifest, name))) ===
+              digest(bytes),
+          ),
+        );
+        if (matches.every(Boolean)) return activeManifest;
+      }
+      const manifestsDirectory = join(treeDirectory, "manifests");
+      await mkdir(manifestsDirectory, { recursive: true, mode: 0o700 });
+      const staleEntries = await readdir(manifestsDirectory, {
+        withFileTypes: true,
       });
-      const generation = `${manifestDirectory}.generation-${randomUUID()}`;
-      const backup = `${manifestDirectory}.previous-${randomUUID()}`;
-      await mkdir(generation, { mode: 0o700 });
+      await Promise.all(
+        staleEntries
+          .filter(
+            (entry) =>
+              entry.isDirectory() && entry.name.startsWith(".staging-"),
+          )
+          .map((entry) =>
+            rm(join(manifestsDirectory, entry.name), {
+              recursive: true,
+              force: true,
+            }),
+          ),
+      );
+      const identifier = randomUUID();
+      const staged = join(manifestsDirectory, `.staging-${identifier}`);
+      const generationName = `generation-${identifier}`;
+      const generation = join(manifestsDirectory, generationName);
+      const pointerTemporary = join(
+        treeDirectory,
+        `.active-manifest-${identifier}.json`,
+      );
+      await mkdir(staged, { mode: 0o700 });
       try {
         for (const { name, bytes } of masters) {
-          await writeFile(join(generation, name), bytes, { mode: 0o600 });
-          if (digest(await readFile(join(generation, name))) !== digest(bytes))
+          await writeFile(join(staged, name), bytes, { mode: 0o600 });
+          if (digest(await readFile(join(staged, name))) !== digest(bytes))
             throw new Error(`Could not verify staged ${name}.`);
         }
-        let retired = false;
-        try {
-          await rename(manifestDirectory, backup);
-          retired = true;
-        } catch (cause) {
-          if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
-        }
-        if (retired)
-          await rename(join(backup, ".pixi"), join(generation, ".pixi")).catch(
-            (cause) => {
-              if ((cause as NodeJS.ErrnoException).code !== "ENOENT")
-                throw cause;
-            },
-          );
-        try {
-          this.#beforeManifestActivation();
-          await rename(generation, manifestDirectory);
-        } catch (cause) {
-          if (retired) {
-            await rename(
-              join(generation, ".pixi"),
-              join(backup, ".pixi"),
-            ).catch(() => undefined);
-            await rename(backup, manifestDirectory).catch(() => undefined);
-          }
-          throw cause;
-        }
-        await rm(backup, { recursive: true, force: true });
+        await rename(staged, generation);
+        this.#afterManifestGenerationStaged();
+        const pointerBytes = `${JSON.stringify({ generation: generationName })}\n`;
+        await writeFile(pointerTemporary, pointerBytes, { mode: 0o600 });
+        if ((await readFile(pointerTemporary, "utf8")) !== pointerBytes)
+          throw new Error("Could not verify the staged manifest pointer.");
+        await rename(
+          pointerTemporary,
+          join(treeDirectory, "active-manifest.json"),
+        );
+        this.#afterManifestPointerActivated();
       } finally {
-        await rm(generation, { recursive: true, force: true });
+        await rm(staged, { recursive: true, force: true });
+        await rm(pointerTemporary, { force: true });
       }
       for (const { name, bytes } of masters)
-        if (
-          digest(await readFile(join(manifestDirectory, name))) !==
-          digest(bytes)
-        )
+        if (digest(await readFile(join(generation, name))) !== digest(bytes))
           throw new Error(`The writable ${name} does not match its master.`);
+      return generation;
     } finally {
       release();
     }

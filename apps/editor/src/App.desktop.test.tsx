@@ -304,6 +304,17 @@ describe("desktop editor controls", () => {
         {
           protocol: "earth-stories/conversion/v1",
           requestId: "job-one",
+          type: "failure",
+          status: "failed",
+          code: "runtime-error",
+          message: "install failed",
+          retryable: true,
+          details: {},
+        },
+        disclosure,
+        {
+          protocol: "earth-stories/conversion/v1",
+          requestId: "job-one",
           type: "result",
           status: "succeeded",
           output: { path: "assets/prepared/relief.cog.tif", sizeBytes: 100 },
