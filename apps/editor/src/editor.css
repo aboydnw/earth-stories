@@ -681,6 +681,27 @@ nav {
   font-size: 11px;
   line-height: 1.4;
 }
+.desktop-tools__list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.desktop-tools__list label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+}
+.desktop-tools__list span,
+.desktop-tools__list small {
+  display: block;
+}
+.desktop-tools__list small {
+  color: var(--es-fg-muted);
+}
 .publication-profiles {
   margin: 18px 0 0;
   padding: 12px;

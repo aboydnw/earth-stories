@@ -32,6 +32,7 @@ export interface ExampleStorySummary {
   description: string;
   chapterCount: number;
   formats: string[];
+  authoringConnectivity: "local" | "network-required";
 }
 
 export const exampleConnections: ExampleConnection[] = [
@@ -997,6 +998,15 @@ export function exampleCatalog(): {
       description: story.metadata.description,
       chapterCount: story.chapters.length,
       formats: [...new Set(story.sources.map((source) => source.kind))],
+      authoringConnectivity:
+        /^https?:\/\//i.test(story.basemap.styleUrl) ||
+        story.sources.some(
+          (source) =>
+            "locator" in source && /^https?:\/\//i.test(source.locator),
+        ) ||
+        story.chapters.some((chapter) => chapter.type === "video")
+          ? "network-required"
+          : "local",
     })),
     connections: exampleConnections,
   };

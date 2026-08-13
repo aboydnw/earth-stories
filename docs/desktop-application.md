@@ -67,10 +67,18 @@ by platform and package availability. Tool redistribution clearance is still a
 release gate, so the pilot currently provisions tools from their package
 sources rather than claiming they are bundled.
 
+Workspace settings list every pinned capability and distinguish **Installed**
+from **Needs download**. Select missing capabilities and choose **Prepare this
+computer for offline work** to provision them before disconnecting. This
+prepares conversion tools only; it does not mirror connected story data,
+basemaps, videos, or remote examples.
+
 Connected data sources, remote basemaps, GitHub publishing, and first-time tool
 provisioning require network access. Editing already-local content and building
-a publication can work without those services, but a complete offline workflow
-has not been validated or promised.
+an offline publication can work without those services. The editor smoke suite
+covers an already-local project with browser networking unavailable, but a
+brand-new computer and arbitrary connected authoring inputs are not an offline
+promise.
 
 Prefer a local filesystem for the workspace. Cloud-synchronized folders,
 network shares, removable drives, and filesystems with unusual locking or

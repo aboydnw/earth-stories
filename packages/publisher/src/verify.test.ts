@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildPublication } from "./build.js";
 import {
+  settleBrowserReadiness,
   verifyPublication,
   type PublicationBrowserVerifier,
 } from "./verify.js";
@@ -75,6 +76,26 @@ function readyBrowserVerifier(): PublicationBrowserVerifier {
 }
 
 describe("offline publication verification", () => {
+  it("rechecks browser readiness after two animation frames and a settling delay", async () => {
+    const order: string[] = [];
+
+    const state = await settleBrowserReadiness({
+      afterTwoAnimationFrames: async () => {
+        order.push("frames");
+      },
+      wait: async (milliseconds) => {
+        order.push(`wait:${milliseconds}`);
+      },
+      readState: async () => {
+        order.push("read");
+        return { ready: true };
+      },
+    });
+
+    expect(order).toEqual(["frames", "wait:250", "read"]);
+    expect(state).toEqual({ ready: true });
+  });
+
   it("rejects tampered included dependency bytes", async () => {
     const { output, manifest } = await setupOfflinePublication();
     await writeFile(join(output, "assets", "survey-sites.geojson"), "tampered");

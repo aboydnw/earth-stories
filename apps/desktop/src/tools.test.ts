@@ -17,6 +17,7 @@ async function fixture(
     afterManifestGenerationStaged?: () => void;
     afterManifestPointerActivated?: () => void;
     beforeCapabilityRemoval?: () => Promise<void>;
+    provision?: ConstructorParameters<typeof DesktopTools>[0]["provision"];
   } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "earth-stories-tools-"));
@@ -37,6 +38,8 @@ async function fixture(
       afterManifestGenerationStaged: options.afterManifestGenerationStaged,
       afterManifestPointerActivated: options.afterManifestPointerActivated,
       beforeCapabilityRemoval: options.beforeCapabilityRemoval,
+      bootstrap: options.provision ? async () => undefined : undefined,
+      provision: options.provision,
     });
   return {
     root,
@@ -48,6 +51,66 @@ async function fixture(
 }
 
 describe("DesktopTools", () => {
+  it("prepares selected locked capability environments and skips installed ones", async () => {
+    const provisioned: string[] = [];
+    const value = await fixture({
+      provision: async ({ capability, manifestDirectory }) => {
+        provisioned.push(capability);
+        await mkdir(join(manifestDirectory, ".pixi", "envs", capability), {
+          recursive: true,
+        });
+        await writeFile(
+          join(manifestDirectory, ".pixi", "envs", capability, "ready"),
+          capability,
+        );
+      },
+    });
+    const runtime = await value.manager.prepareRuntime();
+    await mkdir(join(runtime.manifestDirectory, ".pixi", "envs", "core"), {
+      recursive: true,
+    });
+
+    await value.manager.prepareCapabilities(["core", "raster", "vector"]);
+
+    expect(provisioned).toEqual(["raster", "vector"]);
+    expect(
+      (await value.manager.listInstalled()).map(({ capability }) => capability),
+    ).toEqual(["core", "raster", "vector"]);
+  });
+
+  it("removes a partial environment after preparation fails so retry is safe", async () => {
+    let attempts = 0;
+    const value = await fixture({
+      provision: async ({ capability, manifestDirectory }) => {
+        attempts += 1;
+        const environment = join(
+          manifestDirectory,
+          ".pixi",
+          "envs",
+          capability,
+        );
+        await mkdir(environment, { recursive: true });
+        await writeFile(join(environment, "partial"), "partial");
+        if (attempts === 1) throw new Error("download interrupted");
+      },
+    });
+    const runtime = await value.manager.prepareRuntime();
+    const environment = join(
+      runtime.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+
+    await expect(value.manager.prepareCapabilities(["raster"])).rejects.toThrow(
+      "download interrupted",
+    );
+    await expect(stat(environment)).rejects.toThrow();
+    await expect(
+      value.manager.prepareCapabilities(["raster"]),
+    ).resolves.toEqual([expect.objectContaining({ capability: "raster" })]);
+  });
+
   it("copies both immutable masters into the version and full-lock-digest tree", async () => {
     const value = await fixture();
 

@@ -1,3 +1,5 @@
+import type { ConversionCapability } from "@earth-stories/story-schema";
+
 export type DesktopPlatform =
   | "aix"
   | "android"
@@ -21,11 +23,14 @@ export interface DesktopBridge {
   showProjectFolder(projectId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   listTools(): Promise<InstalledDesktopTool[]>;
+  prepareTools(
+    capabilities: ConversionCapability[],
+  ): Promise<InstalledDesktopTool[]>;
   removeTool(capability: string): Promise<void>;
 }
 
 export interface InstalledDesktopTool {
-  capability: string;
+  capability: ConversionCapability;
   apparentBytes: number;
   destination: string;
 }

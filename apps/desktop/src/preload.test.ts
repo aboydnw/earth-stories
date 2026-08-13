@@ -28,6 +28,7 @@ describe("desktop preload bridge", () => {
       "listTools",
       "openExternal",
       "platform",
+      "prepareTools",
       "removeTool",
       "showProjectFolder",
       "showWorkspaceFolder",
@@ -47,6 +48,7 @@ describe("desktop preload bridge", () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce("exported")
       .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce(undefined);
     const bridge = electron.exposeInMainWorld.mock.calls[0]?.[1];
 
@@ -63,6 +65,7 @@ describe("desktop preload bridge", () => {
     ).resolves.toBeUndefined();
     await expect(bridge.exportDiagnostics()).resolves.toBe("exported");
     await expect(bridge.listTools()).resolves.toEqual([]);
+    await expect(bridge.prepareTools(["raster"])).resolves.toEqual([]);
     await expect(bridge.removeTool("raster")).resolves.toBeUndefined();
 
     expect(electron.invoke.mock.calls).toEqual([
@@ -73,6 +76,7 @@ describe("desktop preload bridge", () => {
       ["desktop:open-external", "https://example.com/help"],
       ["desktop:export-diagnostics"],
       ["desktop:list-tools"],
+      ["desktop:prepare-tools", ["raster"]],
       ["desktop:remove-tool", "raster"],
     ]);
   });

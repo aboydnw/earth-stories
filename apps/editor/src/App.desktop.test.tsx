@@ -9,6 +9,7 @@ import type { DesktopBridge } from "./desktop";
 const api = vi.hoisted(() => ({
   actOnConversionJob: vi.fn(),
   getExamples: vi.fn(),
+  getPublicationPreflight: vi.fn(),
   listProjects: vi.fn(),
   openProject: vi.fn(),
   saveProject: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
   actOnConversionJob: api.actOnConversionJob,
   getExamples: api.getExamples,
+  getPublicationPreflight: api.getPublicationPreflight,
   listProjects: api.listProjects,
   openProject: api.openProject,
   saveProject: api.saveProject,
@@ -49,6 +51,21 @@ beforeEach(() => {
   api.getExamples.mockResolvedValue(null);
   api.listProjects.mockResolvedValue([project]);
   api.saveProject.mockImplementation(async (value) => value);
+  api.getPublicationPreflight.mockResolvedValue({
+    ready: true,
+    projectId: "project-one",
+    buildId: "offline-authoring-smoke",
+    estimatedIncludedBytes: 12,
+    requiredDownloadBytes: 0,
+    unknownDownloadSizes: 0,
+    availableDiskBytes: null,
+    needsBuildInternet: false,
+    needsRuntimeInternet: false,
+    includedAssets: 1,
+    connectedAssets: 0,
+    profile: "offline",
+    issues: [],
+  });
 });
 
 afterEach(() => {
@@ -56,9 +73,104 @@ afterEach(() => {
   delete window.earthStoriesDesktop;
   sessionStorage.clear();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("desktop editor controls", () => {
+  it("opens an all-local project while browser networking is unavailable", async () => {
+    window.history.replaceState(null, "", "/stories/project-one");
+    const fetch = vi.fn(() => Promise.reject(new Error("network disabled")));
+    vi.stubGlobal("fetch", fetch);
+    vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    api.openProject.mockResolvedValue({
+      schema: "earth-stories/project/v2",
+      id: "project-one",
+      metadata: {
+        title: "Offline field notebook",
+        description: "All authoring inputs are already local.",
+        author: null,
+        created: "2026-08-13T00:00:00.000Z",
+        updated: "2026-08-13T00:00:00.000Z",
+      },
+      basemap: {
+        id: "local-neutral",
+        label: "Local neutral",
+        styleUrl: "http://127.0.0.1:4317/local-neutral-style.json",
+        attribution: null,
+      },
+      publication: {
+        profile: "offline",
+        theme: "cng",
+        offlineBasemap: { mode: "neutral" },
+      },
+      dataAssets: [],
+      sources: [
+        {
+          id: "local-cover",
+          kind: "image",
+          label: "Local cover",
+          path: "assets/local-cover.png",
+          attribution: null,
+          sizeBytes: 12,
+          delivery: "included",
+          provenance: {
+            publisher: "Local author",
+            sourceUrl: null,
+            licenseName: null,
+            licenseUrl: null,
+            dataUpdatedAt: null,
+            accessedAt: null,
+            staleAfterDays: null,
+            temporalCoverage: null,
+            spatialCoverage: null,
+            transformations: [],
+          },
+        },
+      ],
+      chapters: [
+        {
+          id: "opening",
+          type: "image",
+          title: "Local opening",
+          narrative: "This chapter and its image are already on this computer.",
+          sourceId: "local-cover",
+          alt: "Local cover",
+          caption: "Stored with the project",
+        },
+      ],
+    });
+
+    renderApp();
+
+    expect(
+      await screen.findAllByText("Offline field notebook"),
+    ).not.toHaveLength(0);
+    expect(await screen.findAllByText("Local opening")).not.toHaveLength(0);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("labels bundled examples that still need the network while authoring", async () => {
+    api.listProjects.mockResolvedValue([]);
+    api.getExamples.mockResolvedValue({
+      stories: [
+        {
+          id: "connected-example",
+          title: "Connected example",
+          description: "Uses a remote source",
+          chapterCount: 2,
+          formats: ["cog"],
+          authoringConnectivity: "network-required",
+        },
+      ],
+      connections: [],
+    });
+
+    renderApp();
+
+    expect(await screen.findByText("Connected example")).toBeTruthy();
+    expect(screen.getByText("cog · Network required")).toBeTruthy();
+  });
+
   it("detects the launch-static desktop bridge only on initial render", async () => {
     let reads = 0;
     Object.defineProperty(window, "earthStoriesDesktop", {
@@ -107,6 +219,7 @@ describe("desktop editor controls", () => {
       },
       openExternal: async () => undefined,
       listTools: async () => [],
+      prepareTools: async () => [],
       removeTool: async () => undefined,
     } satisfies DesktopBridge;
 
@@ -143,6 +256,7 @@ describe("desktop editor controls", () => {
       showProjectFolder: async () => undefined,
       openExternal: async () => undefined,
       listTools: async () => [],
+      prepareTools: async () => [],
       removeTool: async () => undefined,
     } satisfies DesktopBridge;
 
@@ -180,6 +294,7 @@ describe("desktop editor controls", () => {
       showProjectFolder: async () => undefined,
       openExternal: async () => undefined,
       listTools: async () => [],
+      prepareTools: async () => [],
       removeTool: async () => undefined,
     } satisfies DesktopBridge;
 

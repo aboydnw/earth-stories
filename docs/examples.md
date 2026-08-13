@@ -13,6 +13,14 @@ first time; later selections reopen that same editable local copy instead of
 creating duplicates. Edits, publication settings, and exports never modify the
 bundled template.
 
+Each catalog row also says **Network required** or **Available offline** for
+authoring. Included images, CSV files, and trajectories are copied from the
+application into the editable project, but an example remains network-required
+when its normal authoring basemap, a connected data source, or a video chapter
+is remote. The label describes opening and editing the example; publication
+preflight independently decides whether a requested release can be verified
+offline.
+
 The initial catalog contains:
 
 - **Antakya from above**, a connected public COG story using OpenAerialMap

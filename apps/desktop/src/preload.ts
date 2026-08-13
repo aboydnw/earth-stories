@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { ConversionCapability } from "@earth-stories/story-schema";
 
 export interface DesktopBridge {
   version: string;
@@ -10,6 +11,13 @@ export interface DesktopBridge {
   showProjectFolder(projectId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   listTools(): Promise<
+    Array<{
+      capability: string;
+      apparentBytes: number;
+      destination: string;
+    }>
+  >;
+  prepareTools(capabilities: ConversionCapability[]): Promise<
     Array<{
       capability: string;
       apparentBytes: number;
@@ -32,6 +40,8 @@ const bridge: DesktopBridge = Object.freeze({
   openExternal: (url: string) =>
     ipcRenderer.invoke("desktop:open-external", url),
   listTools: () => ipcRenderer.invoke("desktop:list-tools"),
+  prepareTools: (capabilities: ConversionCapability[]) =>
+    ipcRenderer.invoke("desktop:prepare-tools", capabilities),
   removeTool: (capability: string) =>
     ipcRenderer.invoke("desktop:remove-tool", capability),
 });

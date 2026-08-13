@@ -34,6 +34,16 @@ remains outside the target matrix. See the
 [desktop application guide](desktop-application.md) for the precise support
 boundary.
 
+The desktop workspace settings show a separate **Offline authoring readiness**
+list for all five pinned capability environments. Installed environments show
+their measured apparent size. An author can select any missing environments,
+review the combined estimated footprint, and choose **Prepare this computer for
+offline work** while connected. Preparation uses the same locked manifests and
+application-owned Pixi cache as conversion jobs, skips environments that are
+already installed, and removes an incomplete environment after failure so a
+retry starts from a safe state. This is optional and does not change whether an
+offline publication is verified.
+
 ## Pilot workflow
 
 1. Create a story and open **Story data**.

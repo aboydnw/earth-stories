@@ -1,4 +1,8 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import {
+  CONVERSION_CAPABILITIES,
+  type ConversionCapability,
+} from "@earth-stories/story-schema";
 
 const PROJECT_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -36,9 +40,14 @@ export interface DesktopIpcDependencies {
         destination: string;
       }>
     >;
-    removeCapability(
-      capability: "core" | "vector" | "raster" | "multidim" | "pointcloud",
-    ): Promise<void>;
+    removeCapability(capability: ConversionCapability): Promise<void>;
+    prepareCapabilities(capabilities: ConversionCapability[]): Promise<
+      Array<{
+        capability: string;
+        apparentBytes: number;
+        destination: string;
+      }>
+    >;
   };
 }
 
@@ -81,14 +90,32 @@ function requireExternalUrl(args: unknown[]): string {
 }
 
 function requireCapability(args: unknown[]) {
-  const values = ["core", "vector", "raster", "multidim", "pointcloud"];
   if (
     args.length !== 1 ||
     typeof args[0] !== "string" ||
-    !values.includes(args[0])
+    !(CONVERSION_CAPABILITIES as readonly string[]).includes(args[0])
   )
     throw new TypeError("A valid tool capability is required.");
-  return args[0] as "core" | "vector" | "raster" | "multidim" | "pointcloud";
+  return args[0] as ConversionCapability;
+}
+
+function requireCapabilities(args: unknown[]) {
+  if (
+    args.length !== 1 ||
+    !Array.isArray(args[0]) ||
+    args[0].length === 0 ||
+    args[0].length > 5
+  )
+    throw new TypeError("One or more valid tool capabilities are required.");
+  let capabilities: ConversionCapability[];
+  try {
+    capabilities = args[0].map((value) => requireCapability([value]));
+  } catch {
+    throw new TypeError("One or more valid tool capabilities are required.");
+  }
+  if (new Set(capabilities).size !== capabilities.length)
+    throw new TypeError("Tool capabilities must be unique.");
+  return capabilities;
 }
 
 function isContainedProjectPath(root: string, candidate: string): boolean {
@@ -196,6 +223,15 @@ export function registerDesktopIpcHandlers(
       requireNoArguments("listTools", args);
       return dependencies.tools!.listInstalled();
     });
+    dependencies.ipcMain.handle(
+      "desktop:prepare-tools",
+      async (event, ...args) => {
+        requireAuthorizedSender(event, dependencies);
+        return dependencies.tools!.prepareCapabilities(
+          requireCapabilities(args),
+        );
+      },
+    );
     dependencies.ipcMain.handle(
       "desktop:remove-tool",
       async (event, ...args) => {

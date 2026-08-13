@@ -9,6 +9,9 @@
   "private": true,
   "type": "module",
   "main": "dist/main.js",
+  "dependencies": {
+    "@earth-stories/story-schema": "workspace:*"
+  },
   "scripts": {
     "build": "tsc --build && node scripts/build-preload.mjs",
     "dev": "yarn workspace @earth-stories/local-service build && yarn workspace @earth-stories/viewer-app build && yarn workspace @earth-stories/editor build && yarn build && electron dist/main.js --development",

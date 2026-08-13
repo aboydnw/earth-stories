@@ -19,6 +19,16 @@ describe("example catalog", () => {
       expect(compileProject(validated).chapters).toHaveLength(
         summary.chapterCount,
       );
+      const requiresNetwork =
+        /^https?:\/\//i.test(validated.basemap.styleUrl) ||
+        validated.sources.some(
+          (source) =>
+            "locator" in source && /^https?:\/\//i.test(source.locator),
+        ) ||
+        validated.chapters.some((chapter) => chapter.type === "video");
+      expect(summary.authoringConnectivity).toBe(
+        requiresNetwork ? "network-required" : "local",
+      );
     }
   });
 

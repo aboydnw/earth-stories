@@ -1,6 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
+  CAPABILITY_INSTALL_ESTIMATES,
   CONVERSION_PROTOCOL_VERSION,
   conversionJobEventSchema,
   conversionJobRequestSchema,
@@ -10,42 +11,7 @@ import {
 } from "@earth-stories/story-schema";
 import { ProcessTreeRunner } from "./process-tree.js";
 
-export const CAPABILITY_INSTALL_ESTIMATES: Record<
-  ConversionCapability,
-  {
-    name: string;
-    estimatedBytes: number;
-    estimateKind:
-      | "measured-apparent-installed-footprint"
-      | "estimated-apparent-installed-footprint";
-  }
-> = {
-  core: {
-    name: "Core data inspection",
-    estimatedBytes: 321_812_028,
-    estimateKind: "measured-apparent-installed-footprint",
-  },
-  vector: {
-    name: "Vector preparation",
-    estimatedBytes: 430_000_000,
-    estimateKind: "estimated-apparent-installed-footprint",
-  },
-  raster: {
-    name: "Raster preparation",
-    estimatedBytes: 668_962_511,
-    estimateKind: "measured-apparent-installed-footprint",
-  },
-  multidim: {
-    name: "Multidimensional preparation",
-    estimatedBytes: 410_000_000,
-    estimateKind: "estimated-apparent-installed-footprint",
-  },
-  pointcloud: {
-    name: "Point-cloud preparation",
-    estimatedBytes: 310_000_000,
-    estimateKind: "estimated-apparent-installed-footprint",
-  },
-};
+export { CAPABILITY_INSTALL_ESTIMATES } from "@earth-stories/story-schema";
 
 export type LockedCapabilityVersions = Record<
   ConversionCapability,

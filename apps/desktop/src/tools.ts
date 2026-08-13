@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
+  access,
   mkdir,
   readFile,
   readdir,
@@ -10,17 +11,23 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  CONVERSION_CAPABILITIES,
+  type ConversionCapability,
+} from "@earth-stories/story-schema";
 
 const MANIFEST_FILES = ["pixi.toml", "pixi.lock"] as const;
-const CAPABILITIES = [
-  "core",
-  "vector",
-  "raster",
-  "multidim",
-  "pointcloud",
-] as const;
+const CAPABILITIES = CONVERSION_CAPABILITIES;
 
-export type DesktopToolCapability = (typeof CAPABILITIES)[number];
+export type DesktopToolCapability = ConversionCapability;
+
+export interface ProvisionDesktopCapabilityOptions {
+  capability: DesktopToolCapability;
+  manifestDirectory: string;
+  pixiExecutable: string;
+  pixiHome: string;
+  pixiCacheDirectory: string;
+}
 
 export interface InstalledToolCapability {
   capability: DesktopToolCapability;
@@ -72,6 +79,9 @@ export class DesktopTools {
     executable: string,
     signal?: AbortSignal,
   ) => Promise<void>;
+  readonly #provision: (
+    options: ProvisionDesktopCapabilityOptions,
+  ) => Promise<void>;
   readonly #afterManifestGenerationStaged: () => void;
   readonly #afterManifestPointerActivated: () => void;
   readonly #beforeCapabilityRemoval: () => Promise<void>;
@@ -90,6 +100,7 @@ export class DesktopTools {
     workerDirectory: string;
     installerScript?: string;
     bootstrap?: (executable: string, signal?: AbortSignal) => Promise<void>;
+    provision?: (options: ProvisionDesktopCapabilityOptions) => Promise<void>;
     afterManifestGenerationStaged?: () => void;
     afterManifestPointerActivated?: () => void;
     beforeCapabilityRemoval?: () => Promise<void>;
@@ -131,6 +142,41 @@ export class DesktopTools {
           });
         });
       });
+    this.#provision =
+      options.provision ??
+      ((request) =>
+        new Promise<void>((resolveProvision, rejectProvision) => {
+          const child = spawn(
+            request.pixiExecutable,
+            [
+              "install",
+              "--manifest-path",
+              join(request.manifestDirectory, "pixi.toml"),
+              "--locked",
+              "-e",
+              request.capability,
+            ],
+            {
+              cwd: request.manifestDirectory,
+              env: {
+                ...process.env,
+                PIXI_HOME: request.pixiHome,
+                PIXI_CACHE_DIR: request.pixiCacheDirectory,
+              },
+              stdio: "ignore",
+            },
+          );
+          child.once("error", rejectProvision);
+          child.once("exit", (code) => {
+            if (code === 0) resolveProvision();
+            else
+              rejectProvision(
+                new Error(
+                  `Pixi could not prepare ${request.capability} tools (exit ${code}).`,
+                ),
+              );
+          });
+        }));
   }
 
   bootstrapPixi = (executable: string, signal?: AbortSignal) =>
@@ -236,6 +282,49 @@ export class DesktopTools {
     return installed.sort((left, right) =>
       left.capability.localeCompare(right.capability),
     );
+  }
+
+  async prepareCapabilities(
+    capabilities: DesktopToolCapability[],
+  ): Promise<InstalledToolCapability[]> {
+    const requested = [...new Set(capabilities)];
+    for (const capability of requested) {
+      if (!isCapability(capability))
+        throw new TypeError("Unknown tool capability.");
+      await this.#withCapabilityLock(capability, async () => {
+        const runtime = await this.prepareRuntime();
+        if (await runtime.capabilityReady(capability)) return;
+        if ((this.#activeCapabilities.get(capability) ?? 0) > 0)
+          throw new Error(
+            `${capability} tools are in use and cannot be prepared.`,
+          );
+        try {
+          await access(this.#pixiExecutable);
+        } catch {
+          await this.#bootstrap(this.#pixiExecutable);
+        }
+        try {
+          await this.#provision({
+            capability,
+            manifestDirectory: runtime.manifestDirectory,
+            pixiExecutable: runtime.pixiExecutable,
+            pixiHome: runtime.pixiHome,
+            pixiCacheDirectory: runtime.pixiCacheDirectory,
+          });
+          if (!(await runtime.capabilityReady(capability)))
+            throw new Error(
+              `Pixi finished without creating the ${capability} environment.`,
+            );
+        } catch (cause) {
+          await rm(
+            join(runtime.manifestDirectory, ".pixi", "envs", capability),
+            { recursive: true, force: true },
+          );
+          throw cause;
+        }
+      });
+    }
+    return this.listInstalled();
   }
 
   async removeCapability(capability: DesktopToolCapability): Promise<void> {

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { registerDesktopIpcHandlers } from "./ipc.js";
+import {
+  registerDesktopIpcHandlers,
+  type DesktopIpcDependencies,
+} from "./ipc.js";
 
 function harness(
   resolveProjectDirectory: (projectId: string) => Promise<string> = async (
@@ -11,6 +14,7 @@ function harness(
     expectedSession?: object;
     webContentsSession?: object;
   } = {},
+  tools?: DesktopIpcDependencies["tools"],
 ) {
   const origin = identity.origin ?? "http://127.0.0.1:45123";
   const expectedSession = identity.expectedSession ?? {
@@ -38,6 +42,7 @@ function harness(
     expectedWebContents: () => webContents,
     chooseWorkspace,
     exportDiagnostics,
+    tools,
   });
   const invokeWithEvent = async (
     event: unknown,
@@ -306,5 +311,36 @@ describe("desktop IPC", () => {
     expect(value.openExternal).toHaveBeenCalledWith(
       "https://example.com/help?q=1",
     );
+  });
+
+  it("prepares only validated pinned tool capabilities", async () => {
+    const listInstalled = vi.fn(async () => []);
+    const prepareCapabilities = vi.fn(async () => []);
+    const removeCapability = vi.fn(async () => undefined);
+    const value = harness(
+      undefined,
+      {},
+      {
+        listInstalled,
+        prepareCapabilities,
+        removeCapability,
+      },
+    );
+
+    await expect(
+      value.invoke("desktop:prepare-tools", ["raster", "vector"]),
+    ).resolves.toEqual([]);
+    expect(prepareCapabilities).toHaveBeenCalledWith(["raster", "vector"]);
+    await expect(
+      value.invoke("desktop:prepare-tools", ["raster", "../outside"]),
+    ).rejects.toThrow(/tool capabilities/i);
+    await expect(
+      value.invoke("desktop:prepare-tools", ["raster", "raster"]),
+    ).rejects.toThrow(/tool capabilities/i);
+    prepareCapabilities.mockClear();
+    await expect(
+      value.invokeWithEvent(undefined, "desktop:prepare-tools", ["raster"]),
+    ).rejects.toThrow("authorized desktop renderer");
+    expect(prepareCapabilities).not.toHaveBeenCalled();
   });
 });

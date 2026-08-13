@@ -103,6 +103,20 @@ export class PublicationVerificationError extends Error {
   }
 }
 
+export async function settleBrowserReadiness<T>(options: {
+  afterTwoAnimationFrames(): Promise<void>;
+  readState(): Promise<T>;
+  wait?: (milliseconds: number) => Promise<void>;
+}): Promise<T> {
+  await options.afterTwoAnimationFrames();
+  await (
+    options.wait ??
+    ((milliseconds) =>
+      new Promise<void>((resolveWait) => setTimeout(resolveWait, milliseconds)))
+  )(250);
+  return options.readState();
+}
+
 function isContained(root: string, target: string): boolean {
   const child = relative(root, target);
   return (
@@ -519,7 +533,8 @@ export const verifyPublicationInChrome: PublicationBrowserVerifier = async (
     let chapterReadiness: ChapterVerification[] = [];
     let chapterIndex = 0;
     let webgl = false;
-    while (Date.now() < deadline) {
+    let readinessReached = false;
+    const readBrowserState = async () => {
       const state = await cdp.send("Runtime.evaluate", {
         expression: `(() => {
           const expected = ${JSON.stringify(request.expectedChapterIds)};
@@ -536,13 +551,20 @@ export const verifyPublicationInChrome: PublicationBrowserVerifier = async (
         })()`,
         returnByValue: true,
       });
-      chapterReadiness = state.result.value?.chapters ?? [];
-      webgl = state.result.value?.webgl === true;
+      return {
+        chapterReadiness: state.result.value?.chapters ?? [],
+        webgl: state.result.value?.webgl === true,
+      };
+    };
+    while (Date.now() < deadline) {
+      ({ chapterReadiness, webgl } = await readBrowserState());
       if (
         chapterReadiness.length === request.expectedChapterIds.length &&
         chapterReadiness.every(({ ready }) => ready)
-      )
+      ) {
+        readinessReached = true;
         break;
+      }
       await cdp.send("Runtime.evaluate", {
         expression: `document.querySelectorAll('[data-chapter-id]')[${chapterIndex}]?.scrollIntoView({block:'center'})`,
       });
@@ -550,6 +572,17 @@ export const verifyPublicationInChrome: PublicationBrowserVerifier = async (
         (chapterIndex + 1) % Math.max(1, request.expectedChapterIds.length);
       await new Promise((resolveWait) => setTimeout(resolveWait, 100));
     }
+    if (readinessReached)
+      ({ chapterReadiness, webgl } = await settleBrowserReadiness({
+        afterTwoAnimationFrames: async () => {
+          await cdp.send("Runtime.evaluate", {
+            expression:
+              "new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))",
+            awaitPromise: true,
+          });
+        },
+        readState: readBrowserState,
+      }));
     cdp.socket.close();
     return { attemptedOutsideOrigin, runtimeErrors, chapterReadiness, webgl };
   } finally {

@@ -229,7 +229,11 @@ export function WorkspaceScreen({
                       number={String(story.chapterCount).padStart(2, "0")}
                       title={story.title}
                       description={story.description}
-                      meta={story.formats.join(" + ")}
+                      meta={`${story.formats.join(" + ")} · ${
+                        story.authoringConnectivity === "local"
+                          ? "Available offline"
+                          : "Network required"
+                      }`}
                       badge={<mark className="project-list__tag">Example</mark>}
                       onOpen={() => onOpenExample(story.id)}
                     />

@@ -72,6 +72,7 @@ export interface ExampleCatalog {
     description: string;
     chapterCount: number;
     formats: string[];
+    authoringConnectivity: "local" | "network-required";
   }>;
   connections: ExampleConnection[];
 }
