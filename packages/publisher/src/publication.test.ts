@@ -23,7 +23,10 @@ import { compileProject } from "./compile.js";
 import { createEmbedSnippet } from "./embed.js";
 import { preflightPublication } from "./preflight.js";
 import { deriveAuthoringReadiness } from "./readiness.js";
-import { verifyPublication } from "./verify.js";
+import {
+  verifyPublication,
+  type PublicationBrowserVerifier,
+} from "./verify.js";
 
 const VALID_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQcLAAAAEcAJlbA0QyAAAAAElFTkSuQmCC",
@@ -499,6 +502,101 @@ describe("publication hardening", () => {
     );
     expect(report).toContain("Internet needed to assemble: no");
     expect(report).toContain("Internet needed at runtime: no");
+  });
+
+  it("promotes an offline latest build only after atomically marking it verified", async () => {
+    const { project, viewer } = await setup();
+    const story = await readProject(project);
+    story.schema = "earth-stories/project/v2";
+    story.publication = {
+      profile: "offline",
+      theme: "cng",
+      offlineBasemap: { mode: "neutral" },
+    };
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+    const browserVerifier: PublicationBrowserVerifier = vi.fn(
+      async ({ expectedChapterIds }) => ({
+        attemptedOutsideOrigin: [],
+        runtimeErrors: [],
+        webgl: true,
+        chapterReadiness: expectedChapterIds.map((chapterId: string) => ({
+          chapterId,
+          ready: true,
+        })),
+      }),
+    );
+
+    const latest = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+      browserVerifier,
+    });
+    const diskManifest = JSON.parse(
+      await readFile(join(latest.directory, "publication.json"), "utf8"),
+    );
+
+    expect(latest.manifest.connectivity).toEqual({
+      requested: "offline",
+      state: "verified",
+      verified: "offline",
+    });
+    expect(diskManifest.connectivity).toEqual(latest.manifest.connectivity);
+  });
+
+  it("keeps the previous latest publication when offline runtime verification fails", async () => {
+    const { project, viewer } = await setup();
+    const previous = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+    });
+    const previousBuildId = previous.manifest.build.id;
+    const story = await readProject(project);
+    story.schema = "earth-stories/project/v2";
+    story.metadata.title = "Unverified replacement";
+    story.publication = {
+      profile: "offline",
+      theme: "cng",
+      offlineBasemap: { mode: "neutral" },
+    };
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+
+    await expect(
+      buildLatestPublication({
+        projectDirectory: project,
+        viewerDirectory: viewer,
+        browserVerifier: async () => ({
+          attemptedOutsideOrigin: [
+            "https://secret@example.net/path?token=do-not-record",
+          ],
+          runtimeErrors: [],
+          webgl: true,
+          chapterReadiness: [],
+        }),
+      }),
+    ).rejects.toThrow("outside-origin");
+
+    expect(
+      JSON.parse(
+        await readFile(
+          join(project, "publication", "publication.json"),
+          "utf8",
+        ),
+      ).build.id,
+    ).toBe(previousBuildId);
+    const failed = JSON.parse(
+      await readFile(
+        join(project, ".earth-stories-publication-verification-failed.json"),
+        "utf8",
+      ),
+    );
+    expect(failed).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        attemptedOutsideOrigin: ["https://example.net/path"],
+      }),
+    );
+    expect(JSON.stringify(failed)).not.toContain("secret");
+    expect(JSON.stringify(failed)).not.toContain("token");
   });
 
   it("shares local findings and preserves warning-only provenance in folder and archive outputs", async () => {

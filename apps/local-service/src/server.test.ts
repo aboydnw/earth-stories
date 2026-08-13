@@ -483,6 +483,7 @@ describe("createLocalServer", () => {
         );
         expect(response.status).toBe(200);
         expect(response.headers.get("cache-control")).toBe("no-cache");
+        await response.arrayBuffer();
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }

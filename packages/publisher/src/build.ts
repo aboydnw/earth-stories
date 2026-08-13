@@ -14,7 +14,10 @@ import type {
   PublicationManifest,
   StoryProject,
 } from "@earth-stories/story-schema";
-import { storyProjectSchema } from "@earth-stories/story-schema";
+import {
+  parsePublicationManifest,
+  storyProjectSchema,
+} from "@earth-stories/story-schema";
 import { compileProject } from "./compile.js";
 import { buildArchivalHtml } from "./archive.js";
 import { embedInstructions } from "./embed.js";
@@ -33,7 +36,10 @@ import {
   SHARE_CARD_SOURCE_FILENAME,
   SHARE_POST_TEXT_PATH,
 } from "./share.js";
-import { verifyPublication } from "./verify.js";
+import {
+  verifyPublication,
+  type PublicationBrowserVerifier,
+} from "./verify.js";
 
 async function retryFileOperation(operation: () => Promise<void>) {
   for (let attempt = 0; ; attempt += 1) {
@@ -57,6 +63,8 @@ export interface BuildPublicationOptions {
   viewerDirectory?: string;
   mapSnapshots?: Record<string, string>;
   publicationUrl?: string;
+  browserVerifier?: PublicationBrowserVerifier;
+  verificationTimeoutMs?: number;
 }
 
 export interface LatestPublication {
@@ -252,6 +260,45 @@ async function directorySize(directory: string): Promise<number> {
   return total;
 }
 
+async function writeJsonAtomically(
+  path: string,
+  value: unknown,
+): Promise<void> {
+  const temporaryPath = `${path}.partial-${randomUUID()}`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
+      flag: "wx",
+    });
+    await retryFileOperation(() => rename(temporaryPath, path));
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
+}
+
+async function preserveFailedVerification(
+  projectDirectory: string,
+  candidateDirectory: string,
+): Promise<void> {
+  try {
+    const report = JSON.parse(
+      await readFile(
+        join(candidateDirectory, "publication-verification.json"),
+        "utf8",
+      ),
+    );
+    await writeJsonAtomically(
+      join(
+        projectDirectory,
+        ".earth-stories-publication-verification-failed.json",
+      ),
+      report,
+    );
+  } catch {
+    // The original verification error remains authoritative when a report
+    // cannot be preserved (for example, a read-only project directory).
+  }
+}
+
 export async function buildLatestPublication(
   options: Omit<BuildPublicationOptions, "outputDirectory">,
 ): Promise<LatestPublication> {
@@ -284,19 +331,33 @@ async function buildLatestPublicationUnlocked(
     );
   const builtAt = new Date().toISOString();
   try {
-    const manifest = await buildPublication({
+    let manifest = await buildPublication({
       ...options,
       projectDirectory,
       outputDirectory: temporary,
     });
-    const verification = await verifyPublication(temporary, manifest, {
-      requireEmbed: Boolean(options.viewerDirectory),
-      requireShareKit: true,
-    });
-    await writeFile(
-      join(temporary, "publication-verification.json"),
-      `${JSON.stringify(verification, null, 2)}\n`,
-    );
+    try {
+      await verifyPublication(temporary, manifest, {
+        requireEmbed: Boolean(options.viewerDirectory),
+        requireShareKit: true,
+        browserVerifier: options.browserVerifier,
+        timeoutMs: options.verificationTimeoutMs,
+      });
+    } catch (cause) {
+      await preserveFailedVerification(projectDirectory, temporary);
+      throw cause;
+    }
+    if (manifest.connectivity.requested === "offline") {
+      manifest = parsePublicationManifest({
+        ...manifest,
+        connectivity: {
+          requested: "offline",
+          state: "verified",
+          verified: "offline",
+        },
+      });
+      await writeJsonAtomically(join(temporary, "publication.json"), manifest);
+    }
     let totalBytes = await directorySize(temporary);
     const summaryPath = join(temporary, "publication-summary.json");
     for (;;) {
