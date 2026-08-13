@@ -133,7 +133,7 @@ Observed: exit 0; Prettier reported all matched files use its code style; diff c
 
 ## Concerns
 
-- One unrelated pre-existing relocated service-bundle test remains red because its generated fixture does not contain `pixi.lock`; 398/399 affected desktop/local-service tests otherwise pass.
+- The initially unrelated relocated service-bundle fixture failure is resolved in the final integration fixture repair recorded below.
 - Directory `fsync` portability is handled by ignoring only Windows `EINVAL`/`EPERM`; other flush failures remain visible rather than claiming durability.
 
 ## Fix Round 1
@@ -181,3 +181,33 @@ Tests 11 passed (11)
 ```
 
 Both injected post-rename failures now reject with the fixed sanitized protection error, leave the original plaintext bytes at the active path, and remain readable through a new fallback store. The future-version write rejects and leaves the original bytes unchanged without logging the replacement token. Clear removes both the active and recovery artifacts.
+
+## Final integration fixture repair
+
+The relocated production-bundle test fixture now copies the repository's real immutable `pixi.lock` alongside `service.js`, its source map, and the harness. Its exact relocated-file assertion includes that lock while continuing to prove the repository `scripts` directory is absent. Production lock parsing and pinned-version disclosure remain unchanged; both injected-bootstrap success and missing-bootstrap failure expectations remain intact.
+
+### RED
+
+The controller's elevated reproduction established the fixture regression before this change:
+
+```text
+apps/local-service/src/service-bundle.test.ts
+ENOENT: no such file or directory, open '<relocated temporary directory>/pixi.lock'
+bootstrapCalls: 0
+injectedStatus: failed
+```
+
+### GREEN
+
+Command:
+
+```text
+yarn vitest run apps/local-service/src/service-bundle.test.ts
+```
+
+Observed with loopback/subprocess permissions:
+
+```text
+Test Files 1 passed (1)
+Tests 1 passed (1)
+```

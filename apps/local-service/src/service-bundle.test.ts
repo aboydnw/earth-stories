@@ -27,6 +27,7 @@ describe("production service bundle", () => {
     const relocated = join(root, "service.js");
     await cp(join(packageDirectory, "dist/service.js"), relocated);
     await cp(join(packageDirectory, "dist/service.js.map"), `${relocated}.map`);
+    await cp(resolve("pixi.lock"), join(root, "pixi.lock"));
     const harness = join(root, "harness.mjs");
     await writeFile(
       harness,
@@ -117,6 +118,7 @@ process.stdout.write(JSON.stringify(result) + "\\n");
     );
     expect((await readdir(root)).sort()).toEqual([
       "harness.mjs",
+      "pixi.lock",
       "service.js",
       "service.js.map",
     ]);
