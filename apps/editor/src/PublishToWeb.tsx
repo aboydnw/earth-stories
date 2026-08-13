@@ -20,6 +20,7 @@ import {
   type PublishRecord,
 } from "./api";
 import { captureMapSnapshots } from "./captureSnapshots";
+import { isMissingJobError } from "./httpErrors";
 
 interface Props {
   project: StoryProject;
@@ -44,10 +45,6 @@ export function repoNameFromTitle(title: string): string {
 
 const isSettled = (job: PublishJob | null) =>
   job?.status === "succeeded" || job?.status === "failed";
-
-export function isMissingJobError(cause: unknown): boolean {
-  return cause instanceof Error && "status" in cause && cause.status === 404;
-}
 
 export function PublishToWeb({
   project,

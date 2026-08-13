@@ -35,7 +35,6 @@ import {
   createExampleStory,
   discoverSource,
   getExamples,
-  getConversionJob,
   importAsset,
   listProjects,
   openProject,
@@ -68,6 +67,7 @@ import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 import { detectDesktopBridge } from "./desktop";
 import { resolvePreviewManifest } from "./resolvePreviewManifest";
 import { captureKeyframe } from "./flyoverPath";
+import { pollConversionJob } from "./conversionPolling";
 
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
@@ -1016,18 +1016,25 @@ export function App() {
               : undefined,
       });
       setConversionJobs((current) => ({ ...current, [asset.id]: started }));
-      let job = started;
-      const deadline = Date.now() + 30 * 60 * 1_000;
+      let job: ConversionJobSnapshot;
       try {
-        while (job.status === "queued" || job.status === "running") {
-          if (Date.now() >= deadline)
-            throw new Error(
-              "The conversion is still running. Try preparing this source again later.",
-            );
-          await new Promise((resolveWait) => setTimeout(resolveWait, 750));
-          job = await getConversionJob(job.id);
-          setConversionJobs((current) => ({ ...current, [asset.id]: job }));
+        const result = await pollConversionJob(started, {
+          onUpdate: (job) =>
+            setConversionJobs((current) => ({
+              ...current,
+              [asset.id]: job,
+            })),
+        });
+        if (result.kind === "workspace-changed") {
+          setConversionJobs((current) => {
+            const next = { ...current };
+            delete next[asset.id];
+            return next;
+          });
+          setError(result.message);
+          return;
         }
+        job = result.job;
       } catch (cause) {
         setConversionJobs((current) => {
           const next = { ...current };

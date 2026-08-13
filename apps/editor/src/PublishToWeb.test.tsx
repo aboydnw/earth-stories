@@ -21,11 +21,8 @@ vi.mock("./captureSnapshots", () => ({
 
 import { getPublishJob, getPublishRecord, startPublish } from "./api";
 import type { PublishJob, PublishRecord } from "./api";
-import {
-  PublishToWeb,
-  isMissingJobError,
-  repoNameFromTitle,
-} from "./PublishToWeb";
+import { PublishToWeb, repoNameFromTitle } from "./PublishToWeb";
+import { isMissingJobError } from "./httpErrors";
 
 afterEach(() => {
   cleanup();

@@ -1,10 +1,11 @@
 import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DesktopPaths } from "./paths.js";
 import {
   capabilityRequestHeaders,
+  changeDesktopWorkspace,
   createDimensionPersistence,
   createEphemeralSessionPartition,
   launchDesktopMain,
@@ -465,6 +466,55 @@ describe("launchDesktopMain", () => {
     expect(value.events.at(-1)).toBe(
       "error:The local service reported an invalid origin.:/profile/logs",
     );
+  });
+});
+
+describe("workspace change transaction", () => {
+  it("restores the old workspace before changing pointer, origin authorization, or window", async () => {
+    const events: string[] = [];
+    let activeWorkspace = "/documents/Earth Stories";
+    let serviceWorkspace = activeWorkspace;
+    let authorizedOrigin = "http://127.0.0.1:45123";
+    let windowOrigin = authorizedOrigin;
+    const writePointer = vi.fn(async () => events.push("pointer:new"));
+    const restartWithWorkspace = vi
+      .fn()
+      .mockImplementationOnce(async (workspace) => {
+        serviceWorkspace = workspace;
+        events.push("restart:new:failed");
+        throw new Error("new workspace readiness failed");
+      })
+      .mockImplementationOnce(async (workspace) => {
+        serviceWorkspace = workspace;
+        events.push("restart:old");
+        return "http://127.0.0.1:45124";
+      });
+
+    await expect(
+      changeDesktopWorkspace({
+        currentWorkspace: activeWorkspace,
+        nextWorkspace: "/documents/Another Workspace",
+        restartWithWorkspace,
+        writePointer,
+        activate: async ({ workspace, origin }) => {
+          activeWorkspace = workspace;
+          authorizedOrigin = origin;
+          windowOrigin = origin;
+          events.push(`activate:${workspace}:${origin}`);
+        },
+      }),
+    ).rejects.toThrow("new workspace readiness failed");
+
+    expect(writePointer).not.toHaveBeenCalled();
+    expect(activeWorkspace).toBe("/documents/Earth Stories");
+    expect(serviceWorkspace).toBe("/documents/Earth Stories");
+    expect(authorizedOrigin).toBe("http://127.0.0.1:45124");
+    expect(windowOrigin).toBe("http://127.0.0.1:45124");
+    expect(events).toEqual([
+      "restart:new:failed",
+      "restart:old",
+      "activate:/documents/Earth Stories:http://127.0.0.1:45124",
+    ]);
   });
 });
 

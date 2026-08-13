@@ -228,6 +228,39 @@ export function requireServiceOrigin(value: string): string {
   return url.origin;
 }
 
+export async function changeDesktopWorkspace(options: {
+  currentWorkspace: string;
+  nextWorkspace: string;
+  restartWithWorkspace(path: string): Promise<string>;
+  writePointer(path: string): Promise<unknown>;
+  activate(state: { workspace: string; origin: string }): Promise<void>;
+}): Promise<string> {
+  let pointerUpdated = false;
+  try {
+    const origin = requireServiceOrigin(
+      await options.restartWithWorkspace(options.nextWorkspace),
+    );
+    await options.writePointer(options.nextWorkspace);
+    pointerUpdated = true;
+    await options.activate({ workspace: options.nextWorkspace, origin });
+    return options.nextWorkspace;
+  } catch (cause) {
+    try {
+      const origin = requireServiceOrigin(
+        await options.restartWithWorkspace(options.currentWorkspace),
+      );
+      if (pointerUpdated) await options.writePointer(options.currentWorkspace);
+      await options.activate({ workspace: options.currentWorkspace, origin });
+    } catch (recoveryCause) {
+      throw new AggregateError(
+        [cause, recoveryCause],
+        "Earth Stories could not change workspaces or restore the previous workspace.",
+      );
+    }
+    throw cause;
+  }
+}
+
 export function createEphemeralSessionPartition(): string {
   return `earth-stories-${randomUUID()}`;
 }
@@ -550,34 +583,41 @@ export async function runElectronDesktop(): Promise<void> {
             cancelId: 1,
           });
           if (confirmation.response !== 0) return null;
-          await writeWorkspacePointer(paths.workspacePointerFile, path);
-          const nextOrigin = await localService.restartWithWorkspace(path, {
-            unsavedStateResolved: true,
-          });
-          paths = { ...paths, projectsDirectory: path };
-          currentOrigin = requireServiceOrigin(nextOrigin);
-          const value = desktopSession as Electron.Session;
-          value.webRequest.onBeforeSendHeaders(
-            { urls: [`${currentOrigin}/*`] },
-            (details, callback) => {
-              callback({
-                requestHeaders: capabilityRequestHeaders(
-                  details.url,
-                  details.requestHeaders as Record<string, string>,
-                  currentOrigin,
-                  localService.capabilityToken,
-                ),
-              });
+          return changeDesktopWorkspace({
+            currentWorkspace: paths.projectsDirectory,
+            nextWorkspace: path,
+            restartWithWorkspace: (workspace) =>
+              localService.restartWithWorkspace(workspace, {
+                unsavedStateResolved: true,
+              }),
+            writePointer: (workspace) =>
+              writeWorkspacePointer(paths.workspacePointerFile, workspace),
+            activate: async ({ workspace, origin }) => {
+              paths = { ...paths, projectsDirectory: workspace };
+              currentOrigin = origin;
+              const value = desktopSession as Electron.Session;
+              value.webRequest.onBeforeSendHeaders(
+                { urls: [`${currentOrigin}/*`] },
+                (details, callback) => {
+                  callback({
+                    requestHeaders: capabilityRequestHeaders(
+                      details.url,
+                      details.requestHeaders as Record<string, string>,
+                      currentOrigin,
+                      localService.capabilityToken,
+                    ),
+                  });
+                },
+              );
+              installDesktopSessionPolicies(
+                desktopSession as DesktopSessionPolicyTarget,
+                currentOrigin,
+              );
+              await primaryBrowserWindow?.loadURL(
+                `${currentOrigin}/?workspace=settings`,
+              );
             },
-          );
-          installDesktopSessionPolicies(
-            desktopSession as DesktopSessionPolicyTarget,
-            currentOrigin,
-          );
-          await primaryBrowserWindow?.loadURL(
-            `${currentOrigin}/?workspace=settings`,
-          );
-          return path;
+          });
         },
       });
     },
