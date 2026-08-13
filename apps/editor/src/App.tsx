@@ -67,6 +67,7 @@ import { usePublicationReadiness } from "./usePublicationReadiness";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 import { detectDesktopBridge } from "./desktop";
 import { DesktopToolsPanel } from "./DesktopToolsPanel";
+import { DesktopDiagnosticsPanel } from "./DesktopDiagnosticsPanel";
 import { ProvisioningDialog } from "./ProvisioningDialog";
 import { resolvePreviewManifest } from "./resolvePreviewManifest";
 import { captureKeyframe } from "./flyoverPath";
@@ -1543,7 +1544,12 @@ export function App() {
             : undefined
         }
         toolsPanel={
-          desktop ? <DesktopToolsPanel desktop={desktop} /> : undefined
+          desktop ? (
+            <>
+              <DesktopToolsPanel desktop={desktop} />
+              <DesktopDiagnosticsPanel desktop={desktop} />
+            </>
+          ) : undefined
         }
       />
     );

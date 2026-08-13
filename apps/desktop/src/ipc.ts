@@ -27,6 +27,7 @@ export interface DesktopIpcDependencies {
   session: unknown;
   expectedWebContents(): DesktopIpcWebContents | null;
   chooseWorkspace(): Promise<string | null>;
+  exportDiagnostics(): Promise<"exported" | "cancelled">;
   tools?: {
     listInstalled(): Promise<
       Array<{
@@ -136,6 +137,14 @@ export function registerDesktopIpcHandlers(
     requireNoArguments("chooseWorkspace", args);
     return dependencies.chooseWorkspace();
   });
+  dependencies.ipcMain.handle(
+    "desktop:export-diagnostics",
+    (event, ...args) => {
+      requireAuthorizedSender(event, dependencies);
+      requireNoArguments("exportDiagnostics", args);
+      return dependencies.exportDiagnostics();
+    },
+  );
   dependencies.ipcMain.handle("desktop:workspace-path", (event, ...args) => {
     requireAuthorizedSender(event, dependencies);
     requireNoArguments("workspacePath", args);

@@ -4,6 +4,7 @@ export interface DesktopBridge {
   version: string;
   platform: NodeJS.Platform;
   chooseWorkspace(): Promise<string | null>;
+  exportDiagnostics(): Promise<"exported" | "cancelled">;
   workspacePath(): Promise<string>;
   showWorkspaceFolder(): Promise<void>;
   showProjectFolder(projectId: string): Promise<void>;
@@ -22,6 +23,7 @@ const bridge: DesktopBridge = Object.freeze({
   version: process.env.npm_package_version ?? "0.1.0",
   platform: process.platform,
   chooseWorkspace: () => ipcRenderer.invoke("desktop:choose-workspace"),
+  exportDiagnostics: () => ipcRenderer.invoke("desktop:export-diagnostics"),
   workspacePath: () => ipcRenderer.invoke("desktop:workspace-path"),
   showWorkspaceFolder: () =>
     ipcRenderer.invoke("desktop:show-workspace-folder"),

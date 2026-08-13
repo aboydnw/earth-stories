@@ -24,6 +24,7 @@ function harness(
   const openExternal = vi.fn(async () => undefined);
   const showItemInFolder = vi.fn();
   const chooseWorkspace = vi.fn(async () => "/documents/Another Workspace");
+  const exportDiagnostics = vi.fn(async () => "exported" as const);
   const resolveProject = vi.fn(resolveProjectDirectory);
   registerDesktopIpcHandlers({
     ipcMain: {
@@ -36,6 +37,7 @@ function harness(
     session: expectedSession,
     expectedWebContents: () => webContents,
     chooseWorkspace,
+    exportDiagnostics,
   });
   const invokeWithEvent = async (
     event: unknown,
@@ -56,6 +58,7 @@ function harness(
     mainFrame,
     openExternal,
     chooseWorkspace,
+    exportDiagnostics,
     resolveProject,
     showItemInFolder,
     validEvent,
@@ -70,16 +73,30 @@ describe("desktop IPC", () => {
     ["desktop:show-workspace-folder", []],
     ["desktop:show-project-folder", ["project-one"]],
     ["desktop:open-external", ["https://example.com/help"]],
+    ["desktop:export-diagnostics", []],
   ] as const;
 
   it("registers one fixed handler per bridge method", () => {
     expect([...harness().handlers.keys()].sort()).toEqual([
       "desktop:choose-workspace",
+      "desktop:export-diagnostics",
       "desktop:open-external",
       "desktop:show-project-folder",
       "desktop:show-workspace-folder",
       "desktop:workspace-path",
     ]);
+  });
+
+  it("exports diagnostics through one argument-free authorized action", async () => {
+    const value = harness();
+
+    await expect(value.invoke("desktop:export-diagnostics")).resolves.toBe(
+      "exported",
+    );
+    expect(value.exportDiagnostics).toHaveBeenCalledOnce();
+    await expect(
+      value.invoke("desktop:export-diagnostics", "/renderer/chosen/path"),
+    ).rejects.toThrow("exportDiagnostics");
   });
 
   it("changes workspace through the authorized lifecycle and rejects unexpected input", async () => {

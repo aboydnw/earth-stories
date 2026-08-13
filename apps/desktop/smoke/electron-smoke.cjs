@@ -96,6 +96,7 @@ app
       };
       const expectedKeys = [
         "chooseWorkspace",
+        "exportDiagnostics",
         "listTools",
         "openExternal",
         "platform",

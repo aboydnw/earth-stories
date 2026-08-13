@@ -99,6 +99,7 @@ describe("desktop editor controls", () => {
       version: "9.8.7",
       platform: "linux",
       chooseWorkspace: async () => null,
+      exportDiagnostics: async () => "cancelled",
       workspacePath: async () => "/documents/Earth Stories",
       showWorkspaceFolder: async () => undefined,
       showProjectFolder: async (projectId) => {
@@ -122,7 +123,7 @@ describe("desktop editor controls", () => {
     ).toBeNull();
   });
 
-  it("shows workspace settings, reveals the workspace, and invokes workspace choice", async () => {
+  it("shows workspace settings and invokes workspace and diagnostics actions", async () => {
     const actions: string[] = [];
     window.earthStoriesDesktop = {
       version: "9.8.7",
@@ -134,6 +135,10 @@ describe("desktop editor controls", () => {
       chooseWorkspace: async () => {
         actions.push("choose");
         return null;
+      },
+      exportDiagnostics: async () => {
+        actions.push("export");
+        return "exported";
       },
       showProjectFolder: async () => undefined,
       openExternal: async () => undefined,
@@ -152,7 +157,15 @@ describe("desktop editor controls", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /choose workspace/i }),
     );
-    expect(actions).toEqual(["show", "choose"]);
+    await userEvent.click(
+      screen.getByRole("button", { name: /export diagnostics/i }),
+    );
+    expect(
+      await screen.findByText(
+        "Diagnostics exported and revealed in your file browser.",
+      ),
+    ).toBeTruthy();
+    expect(actions).toEqual(["show", "choose", "export"]);
   });
 
   it("restores workspace settings from the workspace-change reload marker", async () => {
@@ -163,6 +176,7 @@ describe("desktop editor controls", () => {
       workspacePath: async () => "/documents/Changed Workspace",
       showWorkspaceFolder: async () => undefined,
       chooseWorkspace: async () => null,
+      exportDiagnostics: async () => "cancelled",
       showProjectFolder: async () => undefined,
       openExternal: async () => undefined,
       listTools: async () => [],

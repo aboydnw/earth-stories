@@ -8,6 +8,7 @@ import {
   changeDesktopWorkspace,
   createDimensionPersistence,
   createEphemeralSessionPartition,
+  exportDesktopDiagnostics,
   launchDesktopMain,
   readWindowDimensions,
   requestBrowserWindowClose,
@@ -33,6 +34,39 @@ const paths: DesktopPaths = {
   pixiExecutable: "/profile/tools/bin/pixi",
   pixiHome: "/profile/tools/pixi-home",
 };
+
+describe("exportDesktopDiagnostics", () => {
+  it("reveals an exported file without returning its path", async () => {
+    const exportTo = vi.fn(async () => undefined);
+    const reveal = vi.fn();
+
+    await expect(
+      exportDesktopDiagnostics({
+        chooseDestination: async () => "/exports/earth-stories.json",
+        exportTo,
+        reveal,
+      }),
+    ).resolves.toBe("exported");
+
+    expect(exportTo).toHaveBeenCalledWith("/exports/earth-stories.json");
+    expect(reveal).toHaveBeenCalledWith("/exports/earth-stories.json");
+  });
+
+  it("does nothing when the author cancels the destination dialog", async () => {
+    const exportTo = vi.fn(async () => undefined);
+    const reveal = vi.fn();
+
+    await expect(
+      exportDesktopDiagnostics({
+        chooseDestination: async () => null,
+        exportTo,
+        reveal,
+      }),
+    ).resolves.toBe("cancelled");
+    expect(exportTo).not.toHaveBeenCalled();
+    expect(reveal).not.toHaveBeenCalled();
+  });
+});
 
 function harness(
   options: {

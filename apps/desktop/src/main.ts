@@ -11,6 +11,7 @@ import { resolveDesktopPaths } from "./paths.js";
 import { DesktopService } from "./service.js";
 import { createSafeStorageCredentialStoreFactory } from "./credentials.js";
 import { DesktopTools } from "./tools.js";
+import { DesktopDiagnostics } from "./diagnostics.js";
 import { resolveLaunchWorkspace, type FirstRunChoice } from "./firstRun.js";
 import {
   looksLikeWorkspace,
@@ -440,6 +441,18 @@ function escapeHtml(value: string): string {
   );
 }
 
+export async function exportDesktopDiagnostics(options: {
+  chooseDestination(): Promise<string | null>;
+  exportTo(path: string): Promise<void>;
+  reveal(path: string): void;
+}): Promise<"exported" | "cancelled"> {
+  const destination = await options.chooseDestination();
+  if (!destination) return "cancelled";
+  await options.exportTo(destination);
+  options.reveal(destination);
+  return "exported";
+}
+
 export async function runElectronDesktop(): Promise<void> {
   const electron = await import("electron");
   const { app, BrowserWindow, dialog, ipcMain, safeStorage, session, shell } =
@@ -462,6 +475,11 @@ export async function runElectronDesktop(): Promise<void> {
   });
   await mkdir(paths.logsDirectory, { recursive: true });
   await app.whenReady();
+  const diagnostics = new DesktopDiagnostics({
+    directory: paths.logsDirectory,
+    appVersion: app.getVersion(),
+    platform: process.platform,
+  });
   const pickFolder = async (): Promise<string | null> => {
     const result = await dialog.showOpenDialog({
       title: "Choose an Earth Stories workspace",
@@ -582,6 +600,22 @@ export async function runElectronDesktop(): Promise<void> {
         session: desktopSession,
         expectedWebContents: () => primaryWebContents,
         tools: desktopTools,
+        exportDiagnostics: () =>
+          exportDesktopDiagnostics({
+            chooseDestination: async () => {
+              const result = await dialog.showSaveDialog({
+                title: "Export Earth Stories diagnostics",
+                defaultPath: resolve(
+                  app.getPath("downloads"),
+                  `earth-stories-diagnostics-${app.getVersion()}.json`,
+                ),
+                filters: [{ name: "JSON", extensions: ["json"] }],
+              });
+              return result.canceled ? null : (result.filePath ?? null);
+            },
+            exportTo: (path) => diagnostics.exportTo(path),
+            reveal: (path) => shell.showItemInFolder(path),
+          }),
         chooseWorkspace: async () => {
           const path = await pickFolder();
           if (!path || path === paths.projectsDirectory) return null;
@@ -744,8 +778,23 @@ export async function runElectronDesktop(): Promise<void> {
     readDimensions: readWindowDimensions,
     writeDimensions: writeWindowDimensions,
   });
-  if (activeDesktopLifecycle.launched)
+  if (activeDesktopLifecycle.launched) {
     await desktopTools.cleanupOtherApplicationVersions();
+    await diagnostics
+      .record({
+        componentCode: "main",
+        errorCode: "none",
+        lifecycleStage: "startup",
+        serviceState: {
+          statusCode: "ready",
+          ready: true,
+          acceptingMutations: true,
+          runningConversions: 0,
+          runningPublishes: 0,
+        },
+      })
+      .catch(() => undefined);
+  }
 }
 
 const entrypoint = process.argv[1]

@@ -16,6 +16,7 @@ describe("detectDesktopBridge", () => {
       version: "9.8.7",
       platform: "linux",
       chooseWorkspace: async () => null,
+      exportDiagnostics: async () => "cancelled",
       workspacePath: async () => "/documents/Earth Stories",
       showWorkspaceFolder: async () => undefined,
       showProjectFolder: async () => undefined,
