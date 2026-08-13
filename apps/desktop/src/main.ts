@@ -9,6 +9,7 @@ import {
 } from "./ipc.js";
 import { resolveDesktopPaths } from "./paths.js";
 import { DesktopService } from "./service.js";
+import { createSafeStorageCredentialStoreFactory } from "./credentials.js";
 import { DesktopTools } from "./tools.js";
 import { resolveLaunchWorkspace, type FirstRunChoice } from "./firstRun.js";
 import {
@@ -441,7 +442,8 @@ function escapeHtml(value: string): string {
 
 export async function runElectronDesktop(): Promise<void> {
   const electron = await import("electron");
-  const { app, BrowserWindow, dialog, ipcMain, session, shell } = electron;
+  const { app, BrowserWindow, dialog, ipcMain, safeStorage, session, shell } =
+    electron;
   const ownsSingleInstanceLock = app.requestSingleInstanceLock();
   if (!ownsSingleInstanceLock) {
     app.quit();
@@ -541,6 +543,7 @@ export async function runElectronDesktop(): Promise<void> {
   const localService = new DesktopService(paths, {
     tools: toolRuntime,
     bootstrapPixi: desktopTools.bootstrapPixi,
+    createCredentialStore: createSafeStorageCredentialStoreFactory(safeStorage),
   });
   // Routing infrastructure only: the later handoff importer will consume these.
   const pendingFiles: string[] = [];

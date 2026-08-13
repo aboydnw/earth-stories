@@ -1,4 +1,5 @@
 import type {
+  CredentialStore,
   LocalService,
   LocalServiceConfig,
   StartingLocalService,
@@ -52,6 +53,30 @@ function localService(origin: string, events: string[] = []): LocalService {
 }
 
 describe("DesktopService", () => {
+  it("passes the desktop credential store into the local service", async () => {
+    let received: LocalServiceConfig | undefined;
+    const credentials: CredentialStore = {
+      read: async () => null,
+      write: async () => undefined,
+      clear: async () => undefined,
+    };
+    const service = new DesktopService(paths, {
+      begin: (config) => {
+        received = config;
+        const running = localService("http://127.0.0.1:45123");
+        return { ready: Promise.resolve(running), close: running.close };
+      },
+      createCredentialStore: (path) => {
+        expect(path).toBe(paths.credentialsFile);
+        return credentials;
+      },
+    });
+
+    await service.start();
+
+    expect(received?.credentials).toBe(credentials);
+  });
+
   it("starts on an ephemeral port with one generated launch capability", async () => {
     let received: LocalServiceConfig | undefined;
     const expected = localService("http://127.0.0.1:45123");
