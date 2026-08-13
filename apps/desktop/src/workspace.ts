@@ -14,13 +14,17 @@ import { dirname, join, posix, win32 } from "node:path";
 export type WorkspaceFindingCode =
   | "not-found"
   | "not-directory"
+  | "inspect-failed"
   | "create-file-failed"
   | "write-file-failed"
   | "sync-file-failed"
+  | "close-file-failed"
   | "rename-failed"
   | "create-subdirectory-failed"
   | "remove-subdirectory-failed"
-  | "exclusive-create-failed";
+  | "exclusive-create-failed"
+  | "close-lock-failed"
+  | "cleanup-failed";
 
 export interface WorkspaceFinding {
   code: WorkspaceFindingCode;
@@ -114,7 +118,10 @@ export async function validateWorkspace(
         "This folder does not exist. Choose an existing folder or create it first.",
       );
     }
-    throw cause;
+    return validationError(
+      "inspect-failed",
+      "Earth Stories could not inspect this folder. Check that it is available and that you have permission to use it.",
+    );
   }
   if (!info.isDirectory()) {
     return validationError(
@@ -131,6 +138,7 @@ export async function validateWorkspace(
 
   let handle;
   let lockHandle;
+  let competingLockHandle;
   try {
     try {
       handle = await operations.open(source, "wx", 0o600);
@@ -156,7 +164,14 @@ export async function validateWorkspace(
         "This folder could not finish a safe test write. Choose another folder for reliable saves.",
       );
     }
-    await handle.close();
+    try {
+      await handle.close();
+    } catch {
+      return validationError(
+        "close-file-failed",
+        "Earth Stories could not finish closing a test file in this folder. Choose another folder for reliable saves.",
+      );
+    }
     handle = undefined;
     try {
       await operations.rename(source, promoted);
@@ -166,7 +181,14 @@ export async function validateWorkspace(
         "This folder cannot safely replace saved files. Choose another folder for reliable saves.",
       );
     }
-    await operations.rm(promoted);
+    try {
+      await operations.rm(promoted);
+    } catch {
+      return validationError(
+        "cleanup-failed",
+        "Earth Stories could not remove a test file from this folder. Choose another folder.",
+      );
+    }
 
     try {
       await operations.mkdir(subdirectory);
@@ -193,14 +215,43 @@ export async function validateWorkspace(
         "This folder cannot create the lock files that protect stories from conflicting saves. Choose another folder.",
       );
     }
-    await lockHandle.close();
+    try {
+      competingLockHandle = await operations.open(lock, "wx", 0o600);
+      return validationError(
+        "exclusive-create-failed",
+        "This folder cannot create the lock files that protect stories from conflicting saves. Choose another folder.",
+      );
+    } catch (cause) {
+      if (!hasErrorCode(cause, "EEXIST")) {
+        return validationError(
+          "exclusive-create-failed",
+          "This folder cannot create the lock files that protect stories from conflicting saves. Choose another folder.",
+        );
+      }
+    }
+    try {
+      await lockHandle.close();
+    } catch {
+      return validationError(
+        "close-lock-failed",
+        "Earth Stories could not finish closing a lock file in this folder. Choose another folder.",
+      );
+    }
     lockHandle = undefined;
-    await operations.rm(lock);
+    try {
+      await operations.rm(lock);
+    } catch {
+      return validationError(
+        "cleanup-failed",
+        "Earth Stories could not remove a test file from this folder. Choose another folder.",
+      );
+    }
 
     return { ok: true, findings: [] };
   } finally {
     await handle?.close().catch(() => undefined);
     await lockHandle?.close().catch(() => undefined);
+    await competingLockHandle?.close().catch(() => undefined);
     await Promise.all(
       [source, promoted, subdirectory, lock].map((path) =>
         rm(path, { recursive: true, force: true }).catch(() => undefined),

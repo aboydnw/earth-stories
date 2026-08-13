@@ -1,12 +1,4 @@
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  open,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, open, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,6 +22,27 @@ function failWritableProbeAt(operation: "writeFile" | "sync"): typeof open {
           return async () => {
             throw Object.assign(new Error(`${operation} unavailable`), {
               code: "ENOTSUP",
+            });
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }) as typeof open;
+}
+
+function failProbeCloseAt(probe: "write" | "lock"): typeof open {
+  return (async (path, flags, mode) => {
+    const handle = await open(path, flags, mode);
+    if (!String(path).includes(`.earth-stories-${probe}-`)) return handle;
+    return new Proxy(handle, {
+      get(target, property) {
+        if (property === "close") {
+          return async () => {
+            await target.close();
+            throw Object.assign(new Error("close unavailable"), {
+              code: "EIO",
             });
           };
         }
@@ -68,6 +81,34 @@ describe("defaultWorkspace", () => {
 });
 
 describe("validateWorkspace", () => {
+  it.each([
+    {
+      probe: "write" as const,
+      code: "close-file-failed",
+      message:
+        "Earth Stories could not finish closing a test file in this folder. Choose another folder for reliable saves.",
+    },
+    {
+      probe: "lock" as const,
+      code: "close-lock-failed",
+      message:
+        "Earth Stories could not finish closing a lock file in this folder. Choose another folder.",
+    },
+  ])(
+    "returns an author-facing finding when the $probe probe cannot close",
+    async ({ probe, code, message }) => {
+      const candidate = await temporaryDirectory(`${probe}-close-failure`);
+
+      await expect(
+        validateWorkspace(candidate, { open: failProbeCloseAt(probe) }),
+      ).resolves.toEqual({
+        ok: false,
+        findings: [{ code, severity: "error", message }],
+      });
+      expect(await readdir(candidate)).toEqual([]);
+    },
+  );
+
   it("accepts a writable path containing spaces and Unicode", async () => {
     const root = await temporaryDirectory("validation");
     const candidate = join(root, "Field notes – 河");
@@ -97,6 +138,28 @@ describe("validateWorkspace", () => {
     });
   });
 
+  it("returns an author-facing finding when the folder cannot be inspected", async () => {
+    const candidate = await temporaryDirectory("inspect-failure");
+
+    await expect(
+      validateWorkspace(candidate, {
+        stat: async () => {
+          throw Object.assign(new Error("access denied"), { code: "EACCES" });
+        },
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      findings: [
+        {
+          code: "inspect-failed",
+          severity: "error",
+          message:
+            "Earth Stories could not inspect this folder. Check that it is available and that you have permission to use it.",
+        },
+      ],
+    });
+  });
+
   it("returns an author-facing finding when the path is a file", async () => {
     const root = await temporaryDirectory("not-directory");
     const candidate = join(root, "stories.txt");
@@ -116,25 +179,26 @@ describe("validateWorkspace", () => {
   });
 
   it("rejects a read-only directory with an author-facing finding", async () => {
-    const root = await temporaryDirectory("read-only");
-    const candidate = join(root, "stories");
-    await mkdir(candidate, { mode: 0o500 });
-
-    try {
-      await expect(validateWorkspace(candidate)).resolves.toEqual({
-        ok: false,
-        findings: [
-          {
-            code: "create-file-failed",
-            severity: "error",
-            message:
-              "Earth Stories could not create a test file in this folder. Choose a folder where you can add files.",
-          },
-        ],
+    const candidate = await temporaryDirectory("read-only");
+    const denyFileCreation: typeof open = async () => {
+      throw Object.assign(new Error("read-only filesystem"), {
+        code: "EROFS",
       });
-    } finally {
-      await chmod(candidate, 0o700);
-    }
+    };
+
+    await expect(
+      validateWorkspace(candidate, { open: denyFileCreation }),
+    ).resolves.toEqual({
+      ok: false,
+      findings: [
+        {
+          code: "create-file-failed",
+          severity: "error",
+          message:
+            "Earth Stories could not create a test file in this folder. Choose a folder where you can add files.",
+        },
+      ],
+    });
   });
 
   it("rejects a directory where atomic rename fails", async () => {
@@ -245,6 +309,37 @@ describe("validateWorkspace", () => {
     });
   });
 
+  it.each(["rename", "lock"] as const)(
+    "returns an author-facing finding when the %s probe file cannot be removed",
+    async (probe) => {
+      const candidate = await temporaryDirectory(`${probe}-remove-failure`);
+      const removeExceptProbeFile: typeof rm = async (path, options) => {
+        if (
+          String(path).includes(`.earth-stories-${probe}-`) &&
+          !options?.force
+        ) {
+          throw Object.assign(new Error("remove unavailable"), { code: "EIO" });
+        }
+        return rm(path, options);
+      };
+
+      await expect(
+        validateWorkspace(candidate, { rm: removeExceptProbeFile }),
+      ).resolves.toEqual({
+        ok: false,
+        findings: [
+          {
+            code: "cleanup-failed",
+            severity: "error",
+            message:
+              "Earth Stories could not remove a test file from this folder. Choose another folder.",
+          },
+        ],
+      });
+      expect(await readdir(candidate)).toEqual([]);
+    },
+  );
+
   it("rejects a directory where exclusive lock creation fails", async () => {
     const candidate = await temporaryDirectory("exclusive-failure");
     const openExceptForLocks: typeof open = async (path, flags, mode) => {
@@ -256,6 +351,30 @@ describe("validateWorkspace", () => {
 
     await expect(
       validateWorkspace(candidate, { open: openExceptForLocks }),
+    ).resolves.toEqual({
+      ok: false,
+      findings: [
+        {
+          code: "exclusive-create-failed",
+          severity: "error",
+          message:
+            "This folder cannot create the lock files that protect stories from conflicting saves. Choose another folder.",
+        },
+      ],
+    });
+    expect(await readdir(candidate)).toEqual([]);
+  });
+
+  it("rejects a filesystem that silently makes wx non-exclusive", async () => {
+    const candidate = await temporaryDirectory("degraded-exclusive-create");
+    const openWithDegradedExclusiveCreate: typeof open = async (
+      path,
+      flags,
+      mode,
+    ) => open(path, flags === "wx" ? "w" : flags, mode);
+
+    await expect(
+      validateWorkspace(candidate, { open: openWithDegradedExclusiveCreate }),
     ).resolves.toEqual({
       ok: false,
       findings: [
