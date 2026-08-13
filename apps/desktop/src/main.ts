@@ -9,6 +9,12 @@ import {
 } from "./ipc.js";
 import { resolveDesktopPaths } from "./paths.js";
 import { DesktopService } from "./service.js";
+import { resolveLaunchWorkspace, type FirstRunChoice } from "./firstRun.js";
+import {
+  looksLikeWorkspace,
+  validateWorkspace,
+  writeWorkspacePointer,
+} from "./workspace.js";
 import {
   createDesktopWindowOptions,
   installDesktopSessionPolicies,
@@ -396,14 +402,14 @@ function escapeHtml(value: string): string {
 
 export async function runElectronDesktop(): Promise<void> {
   const electron = await import("electron");
-  const { app, BrowserWindow, ipcMain, session, shell } = electron;
+  const { app, BrowserWindow, dialog, ipcMain, session, shell } = electron;
   const ownsSingleInstanceLock = app.requestSingleInstanceLock();
   if (!ownsSingleInstanceLock) {
     app.quit();
     return;
   }
   const sourceDirectory = dirname(fileURLToPath(import.meta.url));
-  const paths = resolveDesktopPaths({
+  let paths = resolveDesktopPaths({
     isPackaged: app.isPackaged,
     applicationDirectory: app.isPackaged
       ? app.getAppPath()
@@ -414,10 +420,77 @@ export async function runElectronDesktop(): Promise<void> {
     platform: process.platform,
   });
   await mkdir(paths.logsDirectory, { recursive: true });
+  await app.whenReady();
+  const pickFolder = async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog({
+      title: "Choose an Earth Stories workspace",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    return result.canceled ? null : (result.filePaths[0] ?? null);
+  };
+  const selectedWorkspace = await resolveLaunchWorkspace({
+    pointerFile: paths.workspacePointerFile,
+    defaultPath: paths.projectsDirectory,
+    choose: async (defaultPath) => {
+      const result = await dialog.showMessageBox({
+        type: "question",
+        title: "Choose where Earth Stories keeps your work",
+        message: "Choose your Earth Stories workspace",
+        detail: `The default folder is:\n${defaultPath}\n\nEarth Stories will not scan for or move existing projects.`,
+        buttons: [
+          "Use default",
+          "Choose existing workspace",
+          "Use another folder",
+          "Cancel",
+        ],
+        cancelId: 3,
+        defaultId: 0,
+      });
+      if (result.response === 0) return { kind: "default" };
+      if (result.response === 3) return null;
+      const path = await pickFolder();
+      return path
+        ? ({
+            kind: result.response === 1 ? "existing" : "other",
+            path,
+          } satisfies Exclude<FirstRunChoice, null>)
+        : null;
+    },
+    confirm: async ({ path, willCreate, containsProjects }) => {
+      const result = await dialog.showMessageBox({
+        type: "question",
+        title: "Confirm workspace",
+        message: willCreate
+          ? "Create this workspace?"
+          : containsProjects
+            ? "Use this existing workspace?"
+            : "Use this empty folder as a new workspace?",
+        detail: path,
+        buttons: [willCreate ? "Create workspace" : "Use folder", "Cancel"],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      return result.response === 0;
+    },
+    reportInvalid: async ({ findings }) => {
+      await dialog.showMessageBox({
+        type: "error",
+        title: "This folder cannot be used",
+        message: findings[0]?.message ?? "Choose another workspace folder.",
+      });
+    },
+  });
+  if (!selectedWorkspace) {
+    app.quit();
+    return;
+  }
+  paths = { ...paths, projectsDirectory: selectedWorkspace };
   const localService = new DesktopService(paths);
   // Routing infrastructure only: the later handoff importer will consume these.
   const pendingFiles: string[] = [];
   let primaryWebContents: DesktopIpcWebContents | null = null;
+  let primaryBrowserWindow: Electron.BrowserWindow | null = null;
+  let currentOrigin = "";
 
   activeDesktopLifecycle = await launchDesktopMain({
     paths,
@@ -443,14 +516,69 @@ export async function runElectronDesktop(): Promise<void> {
     createSession: () =>
       session.fromPartition(createEphemeralSessionPartition()),
     installIpcHandlers: ({ origin, session: desktopSession }) => {
+      currentOrigin = origin;
       registerDesktopIpcHandlers({
         ipcMain,
         service: localService,
         shell,
-        projectsDirectory: paths.projectsDirectory,
-        origin,
+        projectsDirectory: () => paths.projectsDirectory,
+        origin: () => currentOrigin,
         session: desktopSession,
         expectedWebContents: () => primaryWebContents,
+        chooseWorkspace: async () => {
+          const path = await pickFolder();
+          if (!path || path === paths.projectsDirectory) return null;
+          const validation = await validateWorkspace(path);
+          if (!validation.ok) {
+            await dialog.showMessageBox({
+              type: "error",
+              title: "This folder cannot be used",
+              message: validation.findings[0]?.message,
+            });
+            return null;
+          }
+          const containsProjects = await looksLikeWorkspace(path);
+          const confirmation = await dialog.showMessageBox({
+            type: "question",
+            title: "Change workspace?",
+            message: containsProjects
+              ? "Open this workspace?"
+              : "Use this empty folder as a new workspace?",
+            detail: `${path}\n\nEarth Stories will not move or copy projects.`,
+            buttons: ["Change workspace", "Cancel"],
+            defaultId: 0,
+            cancelId: 1,
+          });
+          if (confirmation.response !== 0) return null;
+          await writeWorkspacePointer(paths.workspacePointerFile, path);
+          const nextOrigin = await localService.restartWithWorkspace(path, {
+            unsavedStateResolved: true,
+          });
+          paths = { ...paths, projectsDirectory: path };
+          currentOrigin = requireServiceOrigin(nextOrigin);
+          const value = desktopSession as Electron.Session;
+          value.webRequest.onBeforeSendHeaders(
+            { urls: [`${currentOrigin}/*`] },
+            (details, callback) => {
+              callback({
+                requestHeaders: capabilityRequestHeaders(
+                  details.url,
+                  details.requestHeaders as Record<string, string>,
+                  currentOrigin,
+                  localService.capabilityToken,
+                ),
+              });
+            },
+          );
+          installDesktopSessionPolicies(
+            desktopSession as DesktopSessionPolicyTarget,
+            currentOrigin,
+          );
+          await primaryBrowserWindow?.loadURL(
+            `${currentOrigin}/?workspace=settings`,
+          );
+          return path;
+        },
       });
     },
     installHeaderHook: (desktopSession, options) => {
@@ -492,10 +620,14 @@ export async function runElectronDesktop(): Promise<void> {
           session: desktopSession,
         }) as Electron.BrowserWindowConstructorOptions,
       );
+      primaryBrowserWindow = browserWindow;
       primaryWebContents = browserWindow.webContents;
       installNavigationPolicy(
         browserWindow.webContents as unknown as DesktopNavigationTarget,
-        { origin, openExternal: (url) => shell.openExternal(url) },
+        {
+          origin: () => currentOrigin,
+          openExternal: (url) => shell.openExternal(url),
+        },
       );
       browserWindow.once("ready-to-show", () => browserWindow.show());
       return {

@@ -45,6 +45,10 @@ export function repoNameFromTitle(title: string): string {
 const isSettled = (job: PublishJob | null) =>
   job?.status === "succeeded" || job?.status === "failed";
 
+export function isMissingJobError(cause: unknown): boolean {
+  return cause instanceof Error && "status" in cause && cause.status === 404;
+}
+
 export function PublishToWeb({
   project,
   disabled,
@@ -87,6 +91,11 @@ export function PublishToWeb({
         })
         .catch((cause: unknown) => {
           if (cancelled) return;
+          if (isMissingJobError(cause)) {
+            setJob(null);
+            setError("This publish job ended when the workspace changed.");
+            return;
+          }
           setError(
             cause instanceof Error
               ? cause.message

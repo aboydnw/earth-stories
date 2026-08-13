@@ -5,7 +5,11 @@ import type {
 } from "@earth-stories/local-service";
 import { describe, expect, it, vi } from "vitest";
 import type { DesktopPaths } from "./paths.js";
-import { DesktopService, DesktopServiceReadinessError } from "./service.js";
+import {
+  DesktopService,
+  DesktopServiceReadinessError,
+  DesktopServiceUnsavedStateError,
+} from "./service.js";
 
 const paths: DesktopPaths = {
   serviceBundle: "/resources/apps/local-service/dist/service.js",
@@ -18,6 +22,7 @@ const paths: DesktopPaths = {
   toolsDirectory: "/profile/tools",
   logsDirectory: "/profile/logs",
   credentialsFile: "/profile/credentials.json",
+  workspacePointerFile: "/profile/workspace.json",
   windowPreferencesFile: "/profile/window.json",
   pixiExecutable: "/profile/tools/bin/pixi",
   pixiHome: "/profile/tools/pixi-home",
@@ -112,7 +117,25 @@ describe("DesktopService", () => {
     await expect(service.start()).rejects.toBe(readiness);
   });
 
-  it("drains and closes the old instance before exposing a restarted origin", async () => {
+  it("refuses a workspace restart until renderer unsaved state is resolved", async () => {
+    const events: string[] = [];
+    const running = localService("http://127.0.0.1:45123", events);
+    const service = new DesktopService(paths, {
+      begin: () => ({ ready: Promise.resolve(running), close: running.close }),
+      createCapabilityToken: () => "launch-secret",
+    });
+    await service.start();
+
+    await expect(
+      service.restartWithWorkspace("/documents/Another Workspace", {
+        unsavedStateResolved: false,
+      }),
+    ).rejects.toBeInstanceOf(DesktopServiceUnsavedStateError);
+    expect(events).toEqual([]);
+    expect(service.origin).toBe("http://127.0.0.1:45123");
+  });
+
+  it("drains and closes the old instance before exposing a restarted workspace", async () => {
     const events: string[] = [];
     const configuredProjects: string[] = [];
     const instances = [
@@ -132,9 +155,8 @@ describe("DesktopService", () => {
 
     await service.start();
     await expect(
-      service.restart({
-        ...paths,
-        projectsDirectory: "/documents/Another Workspace",
+      service.restartWithWorkspace("/documents/Another Workspace", {
+        unsavedStateResolved: true,
       }),
     ).resolves.toBe("http://127.0.0.1:45124");
     expect(events).toEqual([

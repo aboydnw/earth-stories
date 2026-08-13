@@ -42,6 +42,7 @@ describe("resolveDesktopPaths", () => {
         toolsDirectory: join("/profile", "tools"),
         logsDirectory: join("/profile", "logs"),
         credentialsFile: join("/profile", "credentials.json"),
+        workspacePointerFile: join("/profile", "workspace.json"),
         windowPreferencesFile: join("/profile", "window.json"),
         pixiExecutable: join("/profile", "tools", "bin", "pixi"),
         pixiHome: join("/profile", "tools", "pixi-home"),

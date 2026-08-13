@@ -20,6 +20,7 @@ export interface DesktopPaths {
   toolsDirectory: string;
   logsDirectory: string;
   credentialsFile: string;
+  workspacePointerFile: string;
   windowPreferencesFile: string;
   pixiExecutable: string;
   pixiHome: string;
@@ -53,6 +54,10 @@ export function resolveDesktopPaths(
     credentialsFile: path.resolve(
       environment.userDataDirectory,
       "credentials.json",
+    ),
+    workspacePointerFile: path.resolve(
+      environment.userDataDirectory,
+      "workspace.json",
     ),
     windowPreferencesFile: path.resolve(
       environment.userDataDirectory,

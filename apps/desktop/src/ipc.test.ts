@@ -23,6 +23,7 @@ function harness(
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
   const openExternal = vi.fn(async () => undefined);
   const showItemInFolder = vi.fn();
+  const chooseWorkspace = vi.fn(async () => "/documents/Another Workspace");
   const resolveProject = vi.fn(resolveProjectDirectory);
   registerDesktopIpcHandlers({
     ipcMain: {
@@ -34,6 +35,7 @@ function harness(
     origin,
     session: expectedSession,
     expectedWebContents: () => webContents,
+    chooseWorkspace,
   });
   const invokeWithEvent = async (
     event: unknown,
@@ -53,6 +55,7 @@ function harness(
     invokeWithEvent,
     mainFrame,
     openExternal,
+    chooseWorkspace,
     resolveProject,
     showItemInFolder,
     validEvent,
@@ -63,6 +66,8 @@ function harness(
 describe("desktop IPC", () => {
   const authorizedCalls = [
     ["desktop:choose-workspace", []],
+    ["desktop:workspace-path", []],
+    ["desktop:show-workspace-folder", []],
     ["desktop:show-project-folder", ["project-one"]],
     ["desktop:open-external", ["https://example.com/help"]],
   ] as const;
@@ -72,16 +77,35 @@ describe("desktop IPC", () => {
       "desktop:choose-workspace",
       "desktop:open-external",
       "desktop:show-project-folder",
+      "desktop:show-workspace-folder",
+      "desktop:workspace-path",
     ]);
   });
 
-  it("keeps workspace selection stubbed and rejects unexpected input", async () => {
+  it("changes workspace through the authorized lifecycle and rejects unexpected input", async () => {
     const value = harness();
 
-    await expect(value.invoke("desktop:choose-workspace")).resolves.toBeNull();
+    await expect(value.invoke("desktop:choose-workspace")).resolves.toBe(
+      "/documents/Another Workspace",
+    );
+    expect(value.chooseWorkspace).toHaveBeenCalledOnce();
     await expect(
       value.invoke("desktop:choose-workspace", "/host/chosen/path"),
     ).rejects.toThrow("chooseWorkspace");
+  });
+
+  it("returns and reveals only the configured workspace path", async () => {
+    const value = harness();
+
+    await expect(value.invoke("desktop:workspace-path")).resolves.toBe(
+      "/documents/Earth Stories",
+    );
+    await expect(
+      value.invoke("desktop:show-workspace-folder"),
+    ).resolves.toBeUndefined();
+    expect(value.showItemInFolder).toHaveBeenCalledWith(
+      "/documents/Earth Stories",
+    );
   });
 
   it.each(authorizedCalls)(

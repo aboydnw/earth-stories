@@ -22,10 +22,11 @@ export interface DesktopIpcDependencies {
   ipcMain: DesktopIpcMain;
   service: DesktopIpcService;
   shell: DesktopShell;
-  projectsDirectory: string;
-  origin: string;
+  projectsDirectory: string | (() => string);
+  origin: string | (() => string);
   session: unknown;
   expectedWebContents(): DesktopIpcWebContents | null;
+  chooseWorkspace(): Promise<string | null>;
 }
 
 export interface DesktopIpcFrame {
@@ -93,7 +94,11 @@ function requireAuthorizedSender(
   )
     throw new Error("IPC is restricted to the authorized desktop renderer.");
   try {
-    if (new URL(senderFrame.url).origin !== dependencies.origin)
+    const origin =
+      typeof dependencies.origin === "function"
+        ? dependencies.origin()
+        : dependencies.origin;
+    if (new URL(senderFrame.url).origin !== origin)
       throw new Error("origin mismatch");
   } catch {
     throw new Error("IPC is restricted to the authorized desktop renderer.");
@@ -106,8 +111,27 @@ export function registerDesktopIpcHandlers(
   dependencies.ipcMain.handle("desktop:choose-workspace", (event, ...args) => {
     requireAuthorizedSender(event, dependencies);
     requireNoArguments("chooseWorkspace", args);
-    return null;
+    return dependencies.chooseWorkspace();
   });
+  dependencies.ipcMain.handle("desktop:workspace-path", (event, ...args) => {
+    requireAuthorizedSender(event, dependencies);
+    requireNoArguments("workspacePath", args);
+    return typeof dependencies.projectsDirectory === "function"
+      ? dependencies.projectsDirectory()
+      : dependencies.projectsDirectory;
+  });
+  dependencies.ipcMain.handle(
+    "desktop:show-workspace-folder",
+    (event, ...args) => {
+      requireAuthorizedSender(event, dependencies);
+      requireNoArguments("showWorkspaceFolder", args);
+      dependencies.shell.showItemInFolder(
+        typeof dependencies.projectsDirectory === "function"
+          ? dependencies.projectsDirectory()
+          : dependencies.projectsDirectory,
+      );
+    },
+  );
   dependencies.ipcMain.handle(
     "desktop:show-project-folder",
     async (event, ...args) => {
@@ -117,7 +141,9 @@ export function registerDesktopIpcHandlers(
         await dependencies.service.resolveProjectDirectory(projectId);
       if (
         !isContainedProjectPath(
-          dependencies.projectsDirectory,
+          typeof dependencies.projectsDirectory === "function"
+            ? dependencies.projectsDirectory()
+            : dependencies.projectsDirectory,
           projectDirectory,
         )
       )

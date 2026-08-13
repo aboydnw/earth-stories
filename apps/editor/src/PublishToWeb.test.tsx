@@ -21,7 +21,11 @@ vi.mock("./captureSnapshots", () => ({
 
 import { getPublishJob, getPublishRecord, startPublish } from "./api";
 import type { PublishJob, PublishRecord } from "./api";
-import { PublishToWeb, repoNameFromTitle } from "./PublishToWeb";
+import {
+  PublishToWeb,
+  isMissingJobError,
+  repoNameFromTitle,
+} from "./PublishToWeb";
 
 afterEach(() => {
   cleanup();
@@ -89,6 +93,13 @@ describe("repoNameFromTitle", () => {
     );
     expect(repoNameFromTitle("!!!")).toBe("earth-story");
   });
+});
+
+it("recognizes a 404 as a job ended by workspace change", () => {
+  expect(
+    isMissingJobError(Object.assign(new Error("missing"), { status: 404 })),
+  ).toBe(true);
+  expect(isMissingJobError(new Error("temporary failure"))).toBe(false);
 });
 
 describe("PublishToWeb", () => {

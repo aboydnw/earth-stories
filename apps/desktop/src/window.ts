@@ -96,7 +96,7 @@ export interface DesktopNavigationTarget {
 }
 
 export interface DesktopNavigationOptions {
-  origin: string;
+  origin: string | (() => string);
   openExternal(url: string): Promise<void>;
 }
 
@@ -135,12 +135,16 @@ export function installNavigationPolicy(
   options: DesktopNavigationOptions,
 ): void {
   target.on("will-navigate", (event, url) => {
-    if (isServiceUrl(url, options.origin)) return;
+    const origin =
+      typeof options.origin === "function" ? options.origin() : options.origin;
+    if (isServiceUrl(url, origin)) return;
     event.preventDefault();
     openApprovedExternal(url, options.openExternal);
   });
   target.setWindowOpenHandler(({ url }) => {
-    if (!isServiceUrl(url, options.origin))
+    const origin =
+      typeof options.origin === "function" ? options.origin() : options.origin;
+    if (!isServiceUrl(url, origin))
       openApprovedExternal(url, options.openExternal);
     return { action: "deny" };
   });

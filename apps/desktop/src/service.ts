@@ -30,6 +30,15 @@ export class DesktopServiceReadinessError extends Error {
   }
 }
 
+export class DesktopServiceUnsavedStateError extends Error {
+  readonly code = "unsaved-state-unresolved";
+
+  constructor() {
+    super("Save or discard editor changes before changing workspace.");
+    this.name = "DesktopServiceUnsavedStateError";
+  }
+}
+
 export function createCapabilityToken(): string {
   return randomBytes(32).toString("base64url");
 }
@@ -98,6 +107,15 @@ export class DesktopService {
     await this.#stopRunning();
     this.#paths = paths;
     return this.start();
+  }
+
+  async restartWithWorkspace(
+    path: string,
+    options: { unsavedStateResolved: boolean },
+  ): Promise<string> {
+    if (!options.unsavedStateResolved)
+      throw new DesktopServiceUnsavedStateError();
+    return this.restart({ ...this.#paths, projectsDirectory: path });
   }
 
   async resolveProjectDirectory(projectId: string): Promise<string> {

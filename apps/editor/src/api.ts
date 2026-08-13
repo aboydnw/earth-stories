@@ -120,11 +120,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const body = (await response.json()) as T | { error?: string };
   if (!response.ok) {
-    throw new Error(
-      "error" in (body as object) &&
-        typeof (body as { error?: unknown }).error === "string"
-        ? (body as { error: string }).error
-        : "Earth Stories could not complete that request",
+    throw Object.assign(
+      new Error(
+        "error" in (body as object) &&
+          typeof (body as { error?: unknown }).error === "string"
+          ? (body as { error: string }).error
+          : "Earth Stories could not complete that request",
+      ),
+      { status: response.status },
     );
   }
   return body as T;

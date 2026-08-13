@@ -17,7 +17,7 @@ describe("desktop preload bridge", () => {
     electron.invoke.mockReset();
   });
 
-  it("exposes exactly the five approved desktop capabilities", () => {
+  it("exposes exactly the seven approved desktop capabilities", () => {
     expect(electron.exposeInMainWorld).toHaveBeenCalledOnce();
     const [name, bridge] = electron.exposeInMainWorld.mock.calls[0] ?? [];
 
@@ -27,7 +27,9 @@ describe("desktop preload bridge", () => {
       "openExternal",
       "platform",
       "showProjectFolder",
+      "showWorkspaceFolder",
       "version",
+      "workspacePath",
     ]);
     expect(typeof bridge.version).toBe("string");
     expect(bridge.platform).toBe(process.platform);
@@ -36,11 +38,17 @@ describe("desktop preload bridge", () => {
   it("maps each method to one fixed IPC channel", async () => {
     electron.invoke
       .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("/documents/Earth Stories")
+      .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined);
     const bridge = electron.exposeInMainWorld.mock.calls[0]?.[1];
 
     await expect(bridge.chooseWorkspace()).resolves.toBeNull();
+    await expect(bridge.workspacePath()).resolves.toBe(
+      "/documents/Earth Stories",
+    );
+    await expect(bridge.showWorkspaceFolder()).resolves.toBeUndefined();
     await expect(
       bridge.showProjectFolder("project-one"),
     ).resolves.toBeUndefined();
@@ -50,6 +58,8 @@ describe("desktop preload bridge", () => {
 
     expect(electron.invoke.mock.calls).toEqual([
       ["desktop:choose-workspace"],
+      ["desktop:workspace-path"],
+      ["desktop:show-workspace-folder"],
       ["desktop:show-project-folder", "project-one"],
       ["desktop:open-external", "https://example.com/help"],
     ]);

@@ -15,6 +15,8 @@ export interface DesktopBridge {
   version: string;
   platform: DesktopPlatform;
   chooseWorkspace(): Promise<string | null>;
+  workspacePath(): Promise<string>;
+  showWorkspaceFolder(): Promise<void>;
   showProjectFolder(projectId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
 }

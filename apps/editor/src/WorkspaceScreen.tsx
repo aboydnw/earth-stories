@@ -40,6 +40,13 @@ export function WorkspaceScreen({
   selectedDatasetId,
   onDatasetChange,
   applicationVersion,
+  workspacePath,
+  workspaceSettingsOpen,
+  workspaceBusy,
+  onOpenWorkspaceSettings,
+  onCloseWorkspaceSettings,
+  onChooseWorkspace,
+  onShowWorkspaceFolder,
 }: {
   projects: ProjectSummary[];
   examples: ExampleCatalog | null;
@@ -62,6 +69,13 @@ export function WorkspaceScreen({
   selectedDatasetId: string | null;
   onDatasetChange: (id: string | null) => void;
   applicationVersion: string | null;
+  workspacePath?: string | null;
+  workspaceSettingsOpen?: boolean;
+  workspaceBusy?: boolean;
+  onOpenWorkspaceSettings?: () => void;
+  onCloseWorkspaceSettings?: () => void;
+  onChooseWorkspace?: () => void;
+  onShowWorkspaceFolder?: () => void;
 }) {
   return (
     <div className="workspace-screen">
@@ -232,8 +246,48 @@ export function WorkspaceScreen({
       <footer className="workspace-footer">
         <span>Built for portable geospatial storytelling</span>
         {applicationVersion ? <span>Version {applicationVersion}</span> : null}
+        {onOpenWorkspaceSettings ? (
+          <button type="button" onClick={onOpenWorkspaceSettings}>
+            Workspace settings
+          </button>
+        ) : null}
         <span>No account required</span>
       </footer>
+      {workspaceSettingsOpen ? (
+        <div
+          className="workspace-settings"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Workspace settings"
+        >
+          <h2>Workspace settings</h2>
+          <p>Earth Stories stores projects in this folder.</p>
+          <code>{workspacePath ?? "Loading workspace…"}</code>
+          <div>
+            <button
+              type="button"
+              disabled={workspaceBusy}
+              onClick={onShowWorkspaceFolder}
+            >
+              Show folder
+            </button>
+            <button
+              type="button"
+              disabled={workspaceBusy}
+              onClick={onChooseWorkspace}
+            >
+              Choose workspace
+            </button>
+            <button
+              type="button"
+              disabled={workspaceBusy}
+              onClick={onCloseWorkspaceSettings}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title={`Remove ${deleteTarget?.title ?? "this story"}?`}

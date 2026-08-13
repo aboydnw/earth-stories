@@ -27,6 +27,7 @@ const paths: DesktopPaths = {
   toolsDirectory: "/profile/tools",
   logsDirectory: "/profile/logs",
   credentialsFile: "/profile/credentials.json",
+  workspacePointerFile: "/profile/workspace.json",
   windowPreferencesFile: "/profile/window.json",
   pixiExecutable: "/profile/tools/bin/pixi",
   pixiHome: "/profile/tools/pixi-home",

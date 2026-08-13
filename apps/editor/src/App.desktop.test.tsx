@@ -43,6 +43,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   delete window.earthStoriesDesktop;
+  sessionStorage.clear();
   vi.clearAllMocks();
 });
 
@@ -87,6 +88,8 @@ describe("desktop editor controls", () => {
       version: "9.8.7",
       platform: "linux",
       chooseWorkspace: async () => null,
+      workspacePath: async () => "/documents/Earth Stories",
+      showWorkspaceFolder: async () => undefined,
       showProjectFolder: async (projectId) => {
         revealedProjectIds.push(projectId);
       },
@@ -104,5 +107,58 @@ describe("desktop editor controls", () => {
     expect(
       screen.queryByRole("button", { name: /choose workspace/i }),
     ).toBeNull();
+  });
+
+  it("shows workspace settings, reveals the workspace, and invokes workspace choice", async () => {
+    const actions: string[] = [];
+    window.earthStoriesDesktop = {
+      version: "9.8.7",
+      platform: "linux",
+      workspacePath: async () => "/documents/Earth Stories",
+      showWorkspaceFolder: async () => {
+        actions.push("show");
+      },
+      chooseWorkspace: async () => {
+        actions.push("choose");
+        return null;
+      },
+      showProjectFolder: async () => undefined,
+      openExternal: async () => undefined,
+    } satisfies DesktopBridge;
+
+    renderApp();
+    await screen.findByText("Desktop story");
+    await userEvent.click(
+      screen.getByRole("button", { name: /workspace settings/i }),
+    );
+
+    expect(await screen.findByText("/documents/Earth Stories")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: /show folder/i }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /choose workspace/i }),
+    );
+    expect(actions).toEqual(["show", "choose"]);
+  });
+
+  it("restores workspace settings from the workspace-change reload marker", async () => {
+    window.history.replaceState(null, "", "/?workspace=settings");
+    window.earthStoriesDesktop = {
+      version: "9.8.7",
+      platform: "linux",
+      workspacePath: async () => "/documents/Changed Workspace",
+      showWorkspaceFolder: async () => undefined,
+      chooseWorkspace: async () => null,
+      showProjectFolder: async () => undefined,
+      openExternal: async () => undefined,
+    } satisfies DesktopBridge;
+
+    renderApp();
+
+    expect(
+      await screen.findByText("/documents/Changed Workspace"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("dialog", { name: /workspace settings/i }),
+    ).toBeTruthy();
   });
 });

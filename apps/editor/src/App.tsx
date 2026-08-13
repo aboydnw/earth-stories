@@ -100,6 +100,15 @@ const presentation = {
 };
 export function App() {
   const [desktop] = useState(detectDesktopBridge);
+  const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(
+    () =>
+      desktop !== null &&
+      (sessionStorage.getItem("earth-stories:workspace-settings") === "open" ||
+        new URLSearchParams(window.location.search).get("workspace") ===
+          "settings"),
+  );
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [workspaceBusy, setWorkspaceBusy] = useState(false);
   const persistedProjectRef = useRef<StoryProject | null>(null);
   const prePublishViewRef = useRef<{
     canvasMode: CanvasMode;
@@ -154,6 +163,17 @@ export function App() {
   const [previewReceiptVersion, setPreviewReceiptVersion] = useState(0);
   const chapterAddRef = useRef<HTMLDivElement>(null);
   const publicationReadiness = usePublicationReadiness(project);
+
+  useEffect(() => {
+    if (!desktop || !workspaceSettingsOpen || workspacePath !== null) return;
+    let current = true;
+    void desktop.workspacePath().then((path) => {
+      if (current) setWorkspacePath(path);
+    });
+    return () => {
+      current = false;
+    };
+  }, [desktop, workspacePath, workspaceSettingsOpen]);
 
   function navigate(next: AppRoute, replace = false) {
     window.history[replace ? "replaceState" : "pushState"](
@@ -367,6 +387,41 @@ export function App() {
     try {
       await desktop.showProjectFolder(id);
     } catch (cause) {
+      showError(cause);
+    }
+  }
+  async function openWorkspaceSettings() {
+    if (!desktop) return;
+    sessionStorage.setItem("earth-stories:workspace-settings", "open");
+    setWorkspaceSettingsOpen(true);
+    try {
+      setWorkspacePath(await desktop.workspacePath());
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  function closeWorkspaceSettings() {
+    sessionStorage.removeItem("earth-stories:workspace-settings");
+    if (new URLSearchParams(window.location.search).has("workspace"))
+      window.history.replaceState(null, "", window.location.pathname);
+    setWorkspaceSettingsOpen(false);
+  }
+  async function chooseWorkspace() {
+    if (!desktop) return;
+    setWorkspaceBusy(true);
+    try {
+      if (
+        project &&
+        (saveState === "changed" || saveState === "save-error") &&
+        !(await persist())
+      ) {
+        setWorkspaceBusy(false);
+        return;
+      }
+      const selected = await desktop.chooseWorkspace();
+      if (!selected) setWorkspaceBusy(false);
+    } catch (cause) {
+      setWorkspaceBusy(false);
       showError(cause);
     }
   }
@@ -1433,6 +1488,19 @@ export function App() {
           );
         }}
         applicationVersion={desktop?.version ?? null}
+        workspacePath={workspacePath}
+        workspaceSettingsOpen={workspaceSettingsOpen}
+        workspaceBusy={workspaceBusy}
+        onOpenWorkspaceSettings={
+          desktop ? () => void openWorkspaceSettings() : undefined
+        }
+        onCloseWorkspaceSettings={closeWorkspaceSettings}
+        onChooseWorkspace={() => void chooseWorkspace()}
+        onShowWorkspaceFolder={
+          desktop
+            ? () => void desktop.showWorkspaceFolder().catch(showError)
+            : undefined
+        }
       />
     );
 
