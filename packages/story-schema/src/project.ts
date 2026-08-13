@@ -284,23 +284,30 @@ export const projectChapterSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const storyProjectSchema = z
+const storyProjectFields = {
+  id: z.string().min(1),
+  metadata: z.object({
+    title: z.string().min(1),
+    description: z.string(),
+    author: z.string().nullable().default(null),
+    created: z.string().datetime(),
+    updated: z.string().datetime(),
+  }),
+  basemap: z.object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    styleUrl: z.string().url(),
+    attribution: z.string().nullable().default(null),
+  }),
+  sources: z.array(projectSourceSchema),
+  dataAssets: z.array(projectDataAssetSchema).default([]),
+  chapters: z.array(projectChapterSchema).min(1),
+};
+
+export const storyProjectV1Schema = z
   .object({
     schema: z.literal("earth-stories/project/v1"),
-    id: z.string().min(1),
-    metadata: z.object({
-      title: z.string().min(1),
-      description: z.string(),
-      author: z.string().nullable().default(null),
-      created: z.string().datetime(),
-      updated: z.string().datetime(),
-    }),
-    basemap: z.object({
-      id: z.string().min(1),
-      label: z.string().min(1),
-      styleUrl: z.string().url(),
-      attribution: z.string().nullable().default(null),
-    }),
+    ...storyProjectFields,
     publication: z
       .object({
         profile: z
@@ -309,11 +316,53 @@ export const storyProjectSchema = z
         theme: z.enum(["cng", "editorial"]).default("cng"),
       })
       .default({ profile: "connected", theme: "cng" }),
-    sources: z.array(projectSourceSchema),
-    dataAssets: z.array(projectDataAssetSchema).default([]),
-    chapters: z.array(projectChapterSchema).min(1),
   })
   .strict();
+
+export const storyProjectV2Schema = z
+  .object({
+    schema: z.literal("earth-stories/project/v2"),
+    ...storyProjectFields,
+    publication: z
+      .object({
+        profile: z
+          .enum(["connected", "portable", "custom", "offline"])
+          .default("connected"),
+        theme: z.enum(["cng", "editorial"]).default("cng"),
+        offlineBasemap: z
+          .object({ mode: z.literal("neutral") })
+          .default({ mode: "neutral" }),
+      })
+      .default({
+        profile: "connected",
+        theme: "cng",
+        offlineBasemap: { mode: "neutral" },
+      }),
+  })
+  .strict();
+
+function migrateStoryProjectV1(value: unknown): unknown {
+  const legacy = storyProjectV1Schema.parse(value);
+  return {
+    ...legacy,
+    schema: "earth-stories/project/v2" as const,
+    publication: {
+      ...legacy.publication,
+      offlineBasemap: { mode: "neutral" as const },
+    },
+  };
+}
+
+/** Canonical persisted-project schema. V1 input is normalized to v2. */
+export const storyProjectSchema = z.preprocess((value) => {
+  if (
+    value &&
+    typeof value === "object" &&
+    (value as { schema?: unknown }).schema === "earth-stories/project/v1"
+  )
+    return migrateStoryProjectV1(value);
+  return value;
+}, storyProjectV2Schema);
 
 export class UnsupportedProjectSchemaError extends Error {
   constructor(schema: unknown) {
@@ -336,7 +385,9 @@ export function parseStoryProject(value: unknown): StoryProject {
   const schema = (value as { schema?: unknown }).schema;
   switch (schema) {
     case "earth-stories/project/v1":
-      return storyProjectSchema.parse(value);
+      return storyProjectV2Schema.parse(migrateStoryProjectV1(value));
+    case "earth-stories/project/v2":
+      return storyProjectV2Schema.parse(value);
     default:
       throw new UnsupportedProjectSchemaError(schema);
   }
@@ -347,4 +398,5 @@ export type FlyoverKeyframe = z.infer<typeof flyoverKeyframeSchema>;
 export type ProjectSource = z.infer<typeof projectSourceSchema>;
 export type ProjectDataAsset = z.infer<typeof projectDataAssetSchema>;
 export type ProjectChapter = z.infer<typeof projectChapterSchema>;
-export type StoryProject = z.infer<typeof storyProjectSchema>;
+export type StoryProjectV1 = z.infer<typeof storyProjectV1Schema>;
+export type StoryProject = z.infer<typeof storyProjectV2Schema>;

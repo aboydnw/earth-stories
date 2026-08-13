@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { publicationManifestSchema } from "@earth-stories/story-schema";
+import { parsePublicationManifest } from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
 import "./viewer-app.css";
 
@@ -8,7 +8,7 @@ async function start() {
   const response = await fetch("./publication.json");
   if (!response.ok)
     throw new Error(`Could not load publication (${response.status})`);
-  const manifest = publicationManifestSchema.parse(await response.json());
+  const manifest = parsePublicationManifest(await response.json());
   document.title = manifest.metadata.title;
   const root = document.getElementById("root");
   if (!root) throw new Error("Missing application root");

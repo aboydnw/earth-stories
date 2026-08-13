@@ -6,6 +6,52 @@ import { compileProject } from "./compile.js";
 const fixturePath = join(process.cwd(), "fixtures/field-notes/story.json");
 
 describe("compileProject", () => {
+  it("emits publication v2 and changes build identity with ordered dependency digests", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.schema = "earth-stories/project/v2";
+    fixture.publication.profile = "offline";
+    fixture.publication.offlineBasemap = { mode: "neutral" };
+    const first = compileProject(fixture, {
+      dependencyDigests: { "source:survey-sites:data": "1".repeat(64) },
+    });
+    const changed = compileProject(fixture, {
+      dependencyDigests: { "source:survey-sites:data": "2".repeat(64) },
+    });
+
+    expect(first.schema).toBe("earth-stories/publication/v2");
+    expect(first.basemap).toEqual(
+      expect.objectContaining({
+        delivery: "included",
+        styleHref: "basemap/neutral-style.json",
+      }),
+    );
+    expect(first.dependencies).toContainEqual(
+      expect.objectContaining({
+        id: "basemap:neutral:style",
+        delivery: "included",
+        locator: "basemap/neutral-style.json",
+      }),
+    );
+    expect(first.connectivity).toEqual({
+      requested: "offline",
+      state: "pending",
+    });
+    expect(first.externalDependencies).toEqual([]);
+    expect(first.build.id).not.toBe(changed.build.id);
+  });
+
+  it("fails offline compilation when included source bytes have no resolved digest", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.schema = "earth-stories/project/v2";
+    fixture.publication = {
+      ...fixture.publication,
+      profile: "offline",
+      offlineBasemap: { mode: "neutral" },
+    };
+
+    expect(() => compileProject(fixture)).toThrow(/source:survey-sites:data/);
+  });
+
   it("is deterministic and includes local assets", async () => {
     const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as unknown;
     const first = compileProject(fixture);

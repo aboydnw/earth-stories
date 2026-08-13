@@ -1,5 +1,9 @@
 import { useMemo } from "react";
-import type { Camera, PublicationManifest } from "@earth-stories/story-schema";
+import {
+  publicationBasemapHref,
+  type Camera,
+  type PublicationManifest,
+} from "@earth-stories/story-schema";
 import { PublicationChapterRenderer } from "./PublicationChapterRenderer.js";
 
 export interface FocusedChapterViewerProps {
@@ -45,7 +49,7 @@ export function FocusedChapterViewer({
         <PublicationChapterRenderer
           chapter={chapter}
           assets={assets}
-          basemapStyle={manifest.basemap.styleUrl}
+          basemapStyle={publicationBasemapHref(manifest.basemap)}
           composition={interactiveMap ? "authoring-map" : "focused-preview"}
           interactiveMap={interactiveMap}
           fitRequestToken={fitRequestToken}

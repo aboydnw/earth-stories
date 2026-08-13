@@ -1,5 +1,9 @@
 import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from "react";
-import type { Camera, PublicationManifest } from "@earth-stories/story-schema";
+import {
+  publicationBasemapHref,
+  type Camera,
+  type PublicationManifest,
+} from "@earth-stories/story-schema";
 import { groupChaptersIntoBlocks } from "./chapterBlocks.js";
 import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
 import { VisualizationProvenance } from "./VisualizationProvenance.js";
@@ -121,7 +125,7 @@ export function StoryViewer({
                       chapters={block.chapters}
                       startIndex={block.startIndex}
                       assets={assets}
-                      basemapStyle={manifest.basemap.styleUrl}
+                      basemapStyle={publicationBasemapHref(manifest.basemap)}
                       snapshotMode={snapshotMode}
                     />
                   </Suspense>
@@ -137,7 +141,7 @@ export function StoryViewer({
               chapter={chapter}
               index={index}
               assets={assets}
-              basemapStyle={manifest.basemap.styleUrl}
+              basemapStyle={publicationBasemapHref(manifest.basemap)}
               snapshotMode={snapshotMode}
               onCameraChange={(camera) =>
                 onChapterCameraChange?.(chapter.id, camera)

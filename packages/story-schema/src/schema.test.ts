@@ -12,6 +12,51 @@ import {
 import { publicationAssetSchema } from "./publication.js";
 
 describe("storyProjectSchema", () => {
+  it("migrates v1 projects losslessly to v2 with the neutral offline basemap default", async () => {
+    const legacy = JSON.parse(
+      await readFile(
+        join(process.cwd(), "fixtures/field-notes/story.json"),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+
+    const migrated = parseStoryProject(legacy);
+
+    expect(migrated.schema).toBe("earth-stories/project/v2");
+    expect(migrated.publication).toEqual({
+      ...(legacy.publication as object),
+      offlineBasemap: { mode: "neutral" },
+    });
+    expect(migrated).toMatchObject({
+      id: legacy.id,
+      metadata: legacy.metadata,
+      basemap: legacy.basemap,
+      sources: legacy.sources,
+      dataAssets: legacy.dataAssets ?? [],
+      chapters: legacy.chapters,
+    });
+  });
+
+  it("accepts the offline profile in project v2", async () => {
+    const legacy = JSON.parse(
+      await readFile(
+        join(process.cwd(), "fixtures/field-notes/story.json"),
+        "utf8",
+      ),
+    ) as Record<string, any>;
+    const project = parseStoryProject({
+      ...legacy,
+      schema: "earth-stories/project/v2",
+      publication: {
+        ...legacy.publication,
+        profile: "offline",
+        offlineBasemap: { mode: "neutral" },
+      },
+    });
+
+    expect(project.publication.profile).toBe("offline");
+  });
+
   it("defaults the optional COG projection on legacy publication assets", () => {
     const asset = publicationAssetSchema.parse({
       id: "legacy-cog",

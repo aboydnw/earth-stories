@@ -178,7 +178,7 @@ function exampleConnection(id: string): ExampleConnection {
 }
 
 const antakya: StoryProject = {
-  schema: "earth-stories/project/v1",
+  schema: "earth-stories/project/v2",
   id: "example-antakya",
   metadata: {
     title: "Antakya from above",
@@ -188,7 +188,11 @@ const antakya: StoryProject = {
     updated: created,
   },
   basemap,
-  publication: { profile: "connected", theme: "cng" },
+  publication: {
+    profile: "connected",
+    theme: "cng",
+    offlineBasemap: { mode: "neutral" },
+  },
   dataAssets: [],
   sources: [
     {
@@ -262,7 +266,7 @@ const antakya: StoryProject = {
 };
 
 const boundaries: StoryProject = {
-  schema: "earth-stories/project/v1",
+  schema: "earth-stories/project/v2",
   id: "example-boundaries",
   metadata: {
     title: "Lines on a shared planet",
@@ -272,7 +276,11 @@ const boundaries: StoryProject = {
     updated: created,
   },
   basemap,
-  publication: { profile: "connected", theme: "editorial" },
+  publication: {
+    profile: "connected",
+    theme: "editorial",
+    offlineBasemap: { mode: "neutral" },
+  },
   dataAssets: [],
   sources: [
     {
@@ -416,7 +424,7 @@ const boundaries: StoryProject = {
 };
 
 const pointCloud: StoryProject = {
-  schema: "earth-stories/project/v1",
+  schema: "earth-stories/project/v2",
   id: "example-point-cloud",
   metadata: {
     title: "Anatomy of a point cloud",
@@ -426,7 +434,11 @@ const pointCloud: StoryProject = {
     updated: created,
   },
   basemap,
-  publication: { profile: "connected", theme: "cng" },
+  publication: {
+    profile: "connected",
+    theme: "cng",
+    offlineBasemap: { mode: "neutral" },
+  },
   dataAssets: [],
   sources: [
     {
@@ -574,7 +586,7 @@ const pointCloud: StoryProject = {
 };
 
 const temporalFields: StoryProject = {
-  schema: "earth-stories/project/v1",
+  schema: "earth-stories/project/v2",
   id: "example-temporal-fields",
   metadata: {
     title: "Fields through time",
@@ -584,7 +596,11 @@ const temporalFields: StoryProject = {
     updated: created,
   },
   basemap,
-  publication: { profile: "connected", theme: "cng" },
+  publication: {
+    profile: "connected",
+    theme: "cng",
+    offlineBasemap: { mode: "neutral" },
+  },
   dataAssets: [],
   sources: [
     {
@@ -716,7 +732,7 @@ const temporalFields: StoryProject = {
 };
 
 const richMedia: StoryProject = {
-  schema: "earth-stories/project/v1",
+  schema: "earth-stories/project/v2",
   id: "example-rich-media",
   metadata: {
     title: "A story beyond the map",
@@ -726,7 +742,11 @@ const richMedia: StoryProject = {
     updated: created,
   },
   basemap,
-  publication: { profile: "connected", theme: "editorial" },
+  publication: {
+    profile: "connected",
+    theme: "editorial",
+    offlineBasemap: { mode: "neutral" },
+  },
   dataAssets: [],
   sources: [
     ...boundaries.sources.filter((source) => source.kind === "pmtiles"),
@@ -799,7 +819,7 @@ const richMedia: StoryProject = {
 };
 
 const stormTrack: StoryProject = {
-  schema: "earth-stories/project/v1",
+  schema: "earth-stories/project/v2",
   id: "example-storm-track",
   metadata: {
     title: "Tracking a hurricane",
@@ -810,7 +830,11 @@ const stormTrack: StoryProject = {
     updated: created,
   },
   basemap,
-  publication: { profile: "connected", theme: "editorial" },
+  publication: {
+    profile: "connected",
+    theme: "editorial",
+    offlineBasemap: { mode: "neutral" },
+  },
   dataAssets: [],
   sources: [
     {

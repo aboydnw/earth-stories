@@ -1,7 +1,7 @@
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import {
-  publicationManifestSchema,
+  parsePublicationManifest,
   type PublicationManifest,
 } from "@earth-stories/story-schema";
 import { SHARE_POST_TEXT_PATH } from "./share.js";
@@ -40,7 +40,7 @@ export async function verifyPublication(
   }
 
   try {
-    const manifest = publicationManifestSchema.parse(
+    const manifest = parsePublicationManifest(
       JSON.parse(await readFile(join(directory, "publication.json"), "utf8")),
     );
     if (manifest.build.id !== expected.build.id)
