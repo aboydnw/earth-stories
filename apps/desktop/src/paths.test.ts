@@ -32,9 +32,20 @@ describe("resolveDesktopPaths", () => {
     "resolves $name resources through the same interface",
     ({ name, input, resourceRoot }) => {
       expect(resolveDesktopPaths(input)).toEqual({
-        serviceBundle: join(resourceRoot, "apps/local-service/dist/service.js"),
-        viewerDirectory: join(resourceRoot, "dist/viewer"),
-        editorDirectory: join(resourceRoot, "dist/editor"),
+        serviceBundle: join(
+          resourceRoot,
+          name === "packaged"
+            ? "service/service.js"
+            : "apps/local-service/dist/service.js",
+        ),
+        viewerDirectory: join(
+          resourceRoot,
+          name === "packaged" ? "viewer" : "dist/viewer",
+        ),
+        editorDirectory: join(
+          resourceRoot,
+          name === "packaged" ? "editor" : "dist/editor",
+        ),
         conversionManifestDirectory:
           name === "packaged" ? join(resourceRoot, "conversion") : resourceRoot,
         conversionWorkerDirectory: join(resourceRoot, "conversion/worker"),

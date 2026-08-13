@@ -7,6 +7,8 @@ earth-stories-projects/
 /.earth-stories/
 __pycache__/
 coverage/
+apps/desktop/build/artifacts/
+apps/desktop/build/resources/
 .feedback/
 storybook-static/
 .DS_Store

@@ -1,19 +1,28 @@
 import { randomBytes } from "node:crypto";
-import {
-  beginLocalService,
-  FileCredentialStore,
-  type CredentialStore,
-  type LocalService,
-  type LocalServiceConfig,
-  type StartingLocalService,
+import { pathToFileURL } from "node:url";
+import type {
+  CredentialStore,
+  LocalService,
+  LocalServiceConfig,
+  RuntimeDependencies,
+  StartingLocalService,
 } from "@earth-stories/local-service";
+import { PlaintextCredentialStore } from "./credentials.js";
 import type { DesktopPaths } from "./paths.js";
 import type { DesktopToolRuntimeConfiguration } from "./tools.js";
 
-type BeginLocalService = (config: LocalServiceConfig) => StartingLocalService;
+type BeginLocalService = (
+  config: LocalServiceConfig,
+  dependencies?: RuntimeDependencies,
+) => StartingLocalService;
+
+interface LocalServiceModule {
+  beginLocalService: BeginLocalService;
+}
 
 export interface DesktopServiceDependencies {
   begin?: BeginLocalService;
+  loadServiceModule?: (path: string) => Promise<LocalServiceModule>;
   createCapabilityToken?: () => string;
   createCredentialStore?: (path: string) => CredentialStore;
   readinessTimeoutMs?: number;
@@ -49,11 +58,13 @@ export function createCapabilityToken(): string {
 export class DesktopService {
   readonly capabilityToken: string;
   #paths: DesktopPaths;
-  readonly #begin: BeginLocalService;
+  readonly #begin: BeginLocalService | null;
+  readonly #loadServiceModule: (path: string) => Promise<LocalServiceModule>;
   readonly #createCredentialStore: (path: string) => CredentialStore;
   readonly #readinessTimeoutMs: number;
   readonly #drainTimeoutMs: number;
   readonly #tools: DesktopToolRuntimeConfiguration | null;
+  readonly #bootstrapPixi?: RuntimeDependencies["bootstrapPixi"];
   #running: LocalService | null = null;
   #starting: StartingLocalService | null = null;
   #shutdown: Promise<void> | null = null;
@@ -63,21 +74,20 @@ export class DesktopService {
     dependencies: DesktopServiceDependencies = {},
   ) {
     this.#paths = paths;
-    this.#begin =
-      dependencies.begin ??
-      ((config) =>
-        beginLocalService(config, {
-          bootstrapPixi: dependencies.bootstrapPixi,
-        }));
+    this.#begin = dependencies.begin ?? null;
+    this.#loadServiceModule =
+      dependencies.loadServiceModule ??
+      (async (path) => import(pathToFileURL(path).href));
     this.capabilityToken = (
       dependencies.createCapabilityToken ?? createCapabilityToken
     )();
     this.#createCredentialStore =
       dependencies.createCredentialStore ??
-      ((path) => new FileCredentialStore(path));
+      ((path) => new PlaintextCredentialStore(path));
     this.#readinessTimeoutMs = dependencies.readinessTimeoutMs ?? 15_000;
     this.#drainTimeoutMs = dependencies.drainTimeoutMs ?? 30_000;
     this.#tools = dependencies.tools ?? null;
+    this.#bootstrapPixi = dependencies.bootstrapPixi;
   }
 
   get origin(): string | null {
@@ -89,7 +99,13 @@ export class DesktopService {
     if (this.#starting)
       throw new Error("Earth Stories local service is already starting.");
 
-    const starting = this.#begin(this.#config());
+    const begin =
+      this.#begin ??
+      (await this.#loadServiceModule(this.#paths.serviceBundle))
+        .beginLocalService;
+    const starting = begin(this.#config(), {
+      bootstrapPixi: this.#bootstrapPixi,
+    });
     this.#starting = starting;
     let timer: NodeJS.Timeout | undefined;
     try {

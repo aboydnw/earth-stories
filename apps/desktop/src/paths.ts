@@ -38,10 +38,18 @@ export function resolveDesktopPaths(
   return {
     serviceBundle: path.resolve(
       resourceRoot,
-      "apps/local-service/dist/service.js",
+      environment.isPackaged
+        ? "service/service.js"
+        : "apps/local-service/dist/service.js",
     ),
-    viewerDirectory: path.resolve(resourceRoot, "dist/viewer"),
-    editorDirectory: path.resolve(resourceRoot, "dist/editor"),
+    viewerDirectory: path.resolve(
+      resourceRoot,
+      environment.isPackaged ? "viewer" : "dist/viewer",
+    ),
+    editorDirectory: path.resolve(
+      resourceRoot,
+      environment.isPackaged ? "editor" : "dist/editor",
+    ),
     conversionManifestDirectory: environment.isPackaged
       ? path.resolve(resourceRoot, "conversion")
       : resourceRoot,

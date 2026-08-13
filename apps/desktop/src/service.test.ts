@@ -4,6 +4,9 @@ import type {
   LocalServiceConfig,
   StartingLocalService,
 } from "@earth-stories/local-service";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { DesktopPaths } from "./paths.js";
 import {
@@ -53,6 +56,43 @@ function localService(origin: string, events: string[] = []): LocalService {
 }
 
 describe("DesktopService", () => {
+  it("starts from the relocated production service bundle by default", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "earth-stories-service-"));
+    const serviceBundle = join(directory, "service.mjs");
+    await writeFile(
+      serviceBundle,
+      `export function beginLocalService(config) {
+  const running = {
+    origin: "http://127.0.0.1:45991",
+    port: 45991,
+    projectsDirectory: config.projectsDirectory,
+    resolveProjectDirectory: async (id) => config.projectsDirectory + "/" + id,
+    forceTerminateConversions: async () => undefined,
+    activity: () => ({ runningConversions: 0, runningPublishes: 0 }),
+    drain: async () => ({ runningConversions: 0, runningPublishes: 0 }),
+    close: async () => undefined,
+  };
+  return { ready: Promise.resolve(running), close: running.close };
+}\n`,
+    );
+    const service = new DesktopService(
+      { ...paths, serviceBundle },
+      {
+        createCredentialStore: () => ({
+          read: async () => null,
+          write: async () => undefined,
+          clear: async () => undefined,
+        }),
+        createCapabilityToken: () => "launch-secret",
+      },
+    );
+
+    await expect(service.start()).resolves.toBe("http://127.0.0.1:45991");
+    await expect(service.resolveProjectDirectory("story")).resolves.toBe(
+      "/documents/Earth Stories/story",
+    );
+  });
+
   it("passes the desktop credential store into the local service", async () => {
     let received: LocalServiceConfig | undefined;
     const credentials: CredentialStore = {

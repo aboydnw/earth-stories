@@ -532,12 +532,9 @@ export async function runElectronDesktop(): Promise<void> {
     toolsDirectory: paths.toolsDirectory,
     pixiExecutable: paths.pixiExecutable,
     workerDirectory: paths.conversionWorkerDirectory,
-    installerScript: resolve(
-      app.isPackaged
-        ? process.resourcesPath
-        : resolve(sourceDirectory, "../../.."),
-      "scripts/install-pixi.mjs",
-    ),
+    installerScript: app.isPackaged
+      ? resolve(process.resourcesPath, "conversion/install-pixi.mjs")
+      : resolve(sourceDirectory, "../../../scripts/install-pixi.mjs"),
   });
   const toolRuntime = await desktopTools.prepareRuntime();
   const localService = new DesktopService(paths, {

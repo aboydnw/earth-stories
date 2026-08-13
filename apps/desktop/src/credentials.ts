@@ -1,10 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import {
-  FileCredentialStore,
-  type CredentialStore,
-  type StoredCredentials,
+  chmod,
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
+import type {
+  CredentialStore,
+  StoredCredentials,
 } from "@earth-stories/local-service";
 
 export interface SafeStorageBoundary {
@@ -100,10 +107,53 @@ async function syncDirectory(path: string): Promise<void> {
   }
 }
 
+export class PlaintextCredentialStore implements CredentialStore {
+  readonly path: string;
+
+  constructor(path: string) {
+    this.path = path;
+  }
+
+  async read(): Promise<StoredCredentials | null> {
+    try {
+      const parsed = JSON.parse(await readFile(this.path, "utf8")) as {
+        token?: unknown;
+        login?: unknown;
+      };
+      if (typeof parsed.token !== "string" || !parsed.token) return null;
+      if (typeof parsed.login !== "string" || !parsed.login) return null;
+      return { token: parsed.token, login: parsed.login };
+    } catch {
+      return null;
+    }
+  }
+
+  async write(value: StoredCredentials): Promise<void> {
+    const directory = dirname(this.path);
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    await chmod(directory, 0o700);
+    const temporary = join(directory, `.credentials-${randomUUID()}.tmp`);
+    try {
+      await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
+        mode: 0o600,
+        flag: "wx",
+      });
+      await rename(temporary, this.path);
+      await chmod(this.path, 0o600);
+    } finally {
+      await rm(temporary, { force: true });
+    }
+  }
+
+  async clear(): Promise<void> {
+    await rm(this.path, { force: true });
+  }
+}
+
 export class SafeStorageCredentialStore implements CredentialStore {
   readonly path: string;
   readonly #safeStorage: SafeStorageBoundary;
-  readonly #fallback: FileCredentialStore;
+  readonly #fallback: PlaintextCredentialStore;
   readonly #promotion: CredentialPromotionOperations;
   readonly #reported = new Set<string>();
 
@@ -114,7 +164,7 @@ export class SafeStorageCredentialStore implements CredentialStore {
   ) {
     this.path = path;
     this.#safeStorage = safeStorage;
-    this.#fallback = new FileCredentialStore(path);
+    this.#fallback = new PlaintextCredentialStore(path);
     this.#promotion = { ...defaultPromotionOperations, ...promotion };
   }
 
