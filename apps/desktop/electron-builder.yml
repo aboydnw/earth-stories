@@ -15,6 +15,7 @@ extraResources:
     filter:
       - "**/*"
 mac:
+  executableName: earth-stories
   category: public.app-category.graphics-design
   target:
     - target: dmg
@@ -31,11 +32,15 @@ mac:
   identity: null
   notarize: false
 win:
+  executableName: earth-stories
   target:
     - target: nsis
       arch:
         - x64
 linux:
+  executableName: earth-stories
+  maintainer: Earth Stories contributors
+  syncDesktopName: true
   category: Graphics
   target:
     - target: AppImage
