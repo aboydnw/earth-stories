@@ -404,6 +404,8 @@ describe("publication hardening", () => {
     expect(preflight.ready).toBe(true);
     expect(preflight.profile).toBe("portable");
     expect(preflight.estimatedIncludedBytes).toBeGreaterThanOrEqual(8);
+    expect(preflight.needsBuildInternet).toBe(true);
+    expect(preflight.needsRuntimeInternet).toBe(true);
     const output = join(root, "portable-output");
     await buildPublication({
       projectDirectory: project,
@@ -412,6 +414,91 @@ describe("publication hardening", () => {
     expect(await readFile(join(output, "assets", "rain.tif"), "utf8")).toBe(
       "cog-data",
     );
+    const publication = JSON.parse(
+      await readFile(join(output, "publication.json"), "utf8"),
+    );
+    expect(publication.dependencies).toContainEqual(
+      expect.objectContaining({
+        id: "source:rain:data",
+        delivery: "included",
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
+  });
+
+  it("blocks unsupported offline dependencies with a concrete replacement", async () => {
+    const { project } = await setup();
+    const story = await readProject(project);
+    story.schema = "earth-stories/project/v2";
+    story.publication = {
+      profile: "offline",
+      theme: "cng",
+      offlineBasemap: { mode: "neutral" },
+    };
+    story.sources.push({
+      id: "world-tiles",
+      kind: "xyz",
+      label: "World tiles",
+      locator: "https://tiles.example/{z}/{x}/{y}.png",
+      attribution: null,
+      sizeBytes: null,
+      delivery: "auto",
+    });
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+
+    const result = await preflightPublication(project);
+    expect(result.ready).toBe(false);
+    expect(result.needsRuntimeInternet).toBe(false);
+    expect(result.issues).toContainEqual(
+      expect.objectContaining({
+        id: "unsupported-source:world-tiles:data",
+        severity: "error",
+        resourceId: "world-tiles",
+        resolution: expect.stringMatching(/PMTiles|neutral basemap/),
+      }),
+    );
+  });
+
+  it("builds an offline candidate from materialized hashes with a neutral basemap", async () => {
+    const { root, project } = await setup();
+    const story = await readProject(project);
+    story.schema = "earth-stories/project/v2";
+    story.publication = {
+      profile: "offline",
+      theme: "cng",
+      offlineBasemap: { mode: "neutral" },
+    };
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+    const output = join(root, "offline-output");
+
+    const manifest = await buildPublication({
+      projectDirectory: project,
+      outputDirectory: output,
+    });
+
+    expect(manifest.connectivity).toEqual({
+      requested: "offline",
+      state: "pending",
+    });
+    expect(manifest.basemap).toEqual(
+      expect.objectContaining({ delivery: "included", id: "neutral" }),
+    );
+    expect(manifest.dependencies).toContainEqual(
+      expect.objectContaining({
+        id: "source:survey-sites:data",
+        delivery: "included",
+        sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    );
+    expect(
+      await readFile(join(output, "basemap", "neutral-style.json"), "utf8"),
+    ).toContain('"sources":{}');
+    const report = await readFile(
+      join(output, "publication-report.html"),
+      "utf8",
+    );
+    expect(report).toContain("Internet needed to assemble: no");
+    expect(report).toContain("Internet needed at runtime: no");
   });
 
   it("shares local findings and preserves warning-only provenance in folder and archive outputs", async () => {

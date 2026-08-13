@@ -1,4 +1,4 @@
-import { access, readFile, stat } from "node:fs/promises";
+import { access, readFile, stat, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   PublicationManifest,
@@ -7,6 +7,8 @@ import type {
 import { storyProjectSchema } from "@earth-stories/story-schema";
 import { containedRealPath } from "./paths.js";
 import { authorizedFetch } from "./remote-fetch.js";
+import { inventoryPublicationDependencies } from "./dependencies.js";
+import { findVerifiedRemoteMaterialization } from "./materialize.js";
 import { isValidPng, SHARE_CARD_SOURCE_FILENAME } from "./share.js";
 import {
   deriveAuthoringReadiness,
@@ -29,6 +31,11 @@ export interface PublicationPreflight {
   projectId: string;
   buildId: string | null;
   estimatedIncludedBytes: number;
+  requiredDownloadBytes: number;
+  unknownDownloadSizes: number;
+  availableDiskBytes: number | null;
+  needsBuildInternet: boolean;
+  needsRuntimeInternet: boolean;
   includedAssets: number;
   connectedAssets: number;
   profile: StoryProject["publication"]["profile"];
@@ -57,8 +64,38 @@ export async function preflightPublication(
   ) as unknown;
   const project = storyProjectSchema.parse(raw);
   const localReadiness = deriveAuthoringReadiness(project);
-  const issues: PreflightIssue[] = [...localReadiness.findings];
+  const inventory = inventoryPublicationDependencies(project);
+  const authorizedRemoteHosts = new Set(
+    project.sources.flatMap((source) => {
+      if (!("locator" in source) || !/^https?:\/\//i.test(source.locator))
+        return [];
+      return [new URL(source.locator).hostname.toLowerCase()];
+    }),
+  );
+  const issues: PreflightIssue[] = localReadiness.findings.filter(
+    (finding) =>
+      !(
+        project.publication.profile === "offline" &&
+        finding.id === "compile" &&
+        finding.message.includes("requires resolved SHA-256 digests")
+      ),
+  );
   const manifest: PublicationManifest | null = localReadiness.manifest;
+  for (const dependency of inventory) {
+    if (dependency.delivery !== "unsupported") continue;
+    issues.push({
+      id: `unsupported-${dependency.id}`,
+      area: dependency.owner.type === "chapter" ? "chapters" : "data",
+      severity: "error",
+      ...(dependency.owner.type === "chapter"
+        ? { chapterId: dependency.owner.id }
+        : dependency.owner.type === "source"
+          ? { resourceId: dependency.owner.id }
+          : {}),
+      message: dependency.reason,
+      resolution: dependency.reason,
+    });
+  }
   for (const chapter of project.chapters) {
     if (
       chapter.type === "map" ||
@@ -73,15 +110,30 @@ export async function preflightPublication(
         message: `The archival export will preserve “${chapter.title}” as a map snapshot.`,
       });
   }
-  let estimatedIncludedBytes = 0;
+  let estimatedIncludedBytes = inventory
+    .filter(
+      (dependency) =>
+        dependency.delivery === "included" &&
+        dependency.materialization === "bundle-runtime",
+    )
+    .reduce((total, dependency) => total + (dependency.estimatedBytes ?? 0), 0);
+  let requiredDownloadBytes = 0;
+  let unknownDownloadSizes = 0;
+  let needsBuildInternet = false;
+  const cacheDirectory = join(
+    projectDirectory,
+    ".earth-stories-cache",
+    "materializations",
+  );
   for (const source of project.sources) {
-    const asset = manifest?.assets.find(
-      (candidate) => candidate.id === source.id,
+    const dependency = inventory.find(
+      (candidate) => candidate.id === `source:${source.id}:data`,
     );
-    if (asset?.delivery === "connected") {
+    if (dependency?.delivery === "unsupported") continue;
+    if (dependency?.delivery === "connected") {
       let safe = false;
       try {
-        const parsed = new URL(asset.href);
+        const parsed = new URL(dependency.locator);
         safe = parsed.protocol === "https:" || parsed.protocol === "http:";
       } catch {
         /* Report below. */
@@ -93,7 +145,7 @@ export async function preflightPublication(
               area: "publish",
               severity: "warning",
               resourceId: source.id,
-              message: `“${source.label}” remains connected to ${asset.href}.`,
+              message: `“${source.label}” remains connected to ${dependency.locator}.`,
               resolution:
                 "Confirm the URL permits CORS and stays publicly available.",
             }
@@ -116,17 +168,49 @@ export async function preflightPublication(
         ? source.locator
         : null;
     if (remoteLocator && /^https?:\/\//i.test(remoteLocator)) {
+      try {
+        const cached = await findVerifiedRemoteMaterialization(
+          cacheDirectory,
+          remoteLocator,
+        );
+        if (cached) {
+          estimatedIncludedBytes += cached.sizeBytes;
+          continue;
+        }
+      } catch (cause) {
+        issues.push({
+          id: `cache-${source.id}`,
+          area: "data",
+          severity: "error",
+          resourceId: source.id,
+          message: `The cached copy of “${source.label}” failed integrity checks.`,
+          resolution:
+            cause instanceof Error
+              ? cause.message
+              : "Remove the corrupt cache entry.",
+        });
+        continue;
+      }
+      needsBuildInternet = true;
       let reportedSize = source.sizeBytes;
       try {
-        let response = await authorizedFetch(remoteLocator, {
-          method: "HEAD",
-          signal: AbortSignal.timeout(15_000),
-        });
-        if (response.status === 403 || response.status === 405)
-          response = await authorizedFetch(remoteLocator, {
-            headers: { range: "bytes=0-0" },
+        let response = await authorizedFetch(
+          remoteLocator,
+          {
+            method: "HEAD",
             signal: AbortSignal.timeout(15_000),
-          });
+          },
+          { allowedHosts: authorizedRemoteHosts },
+        );
+        if (response.status === 403 || response.status === 405)
+          response = await authorizedFetch(
+            remoteLocator,
+            {
+              headers: { range: "bytes=0-0" },
+              signal: AbortSignal.timeout(15_000),
+            },
+            { allowedHosts: authorizedRemoteHosts },
+          );
         if (!response.ok)
           throw new Error(`remote server returned ${response.status}`);
         const contentRange = response.headers.get("content-range");
@@ -139,8 +223,11 @@ export async function preflightPublication(
           length >= 0
         )
           reportedSize = length;
-        if (reportedSize !== null) estimatedIncludedBytes += reportedSize;
-        else
+        if (reportedSize !== null) {
+          estimatedIncludedBytes += reportedSize;
+          requiredDownloadBytes += reportedSize;
+        } else {
+          unknownDownloadSizes += 1;
           issues.push({
             id: `unknown-size-${source.id}`,
             area: "publish",
@@ -150,6 +237,7 @@ export async function preflightPublication(
             resolution:
               "Confirm there is enough disk space before building this release.",
           });
+        }
       } catch (cause) {
         issues.push({
           id: `unreachable-${source.id}`,
@@ -194,14 +282,23 @@ export async function preflightPublication(
       });
     }
   }
-  if (manifest?.externalDependencies.length)
+  const connectedDependencies = inventory.filter(
+    ({ delivery }) => delivery === "connected",
+  );
+  if (connectedDependencies.length)
     issues.push({
       id: "network",
       area: "publish",
       severity: "info",
-      message: `${manifest.externalDependencies.length} external resource${manifest.externalDependencies.length === 1 ? " is" : "s are"} required by the interactive publication.`,
+      message: `${connectedDependencies.length} external resource${connectedDependencies.length === 1 ? " is" : "s are"} required by the interactive publication.`,
     });
-  if (manifest?.hostingRequirements.includes("byte-ranges"))
+  if (
+    inventory.some(
+      (dependency) =>
+        dependency.delivery === "included" &&
+        dependency.requirements.includes("byte-ranges"),
+    )
+  )
     issues.push({
       id: "hosting-byte-ranges",
       area: "publish",
@@ -211,7 +308,7 @@ export async function preflightPublication(
     });
   if (
     project.publication.profile === "portable" &&
-    Boolean(manifest?.externalDependencies.length)
+    connectedDependencies.length > 0
   )
     issues.push({
       id: "portable-connected-exceptions",
@@ -243,18 +340,36 @@ export async function preflightPublication(
   const deduplicated = [
     ...new Map(issues.map((issue) => [issue.id, issue])).values(),
   ];
+  let availableDiskBytes: number | null = null;
+  try {
+    const disk = await statfs(projectDirectory);
+    availableDiskBytes = disk.bavail * disk.bsize;
+  } catch {
+    availableDiskBytes = null;
+  }
   return {
     ready: !deduplicated.some((issue) => issue.severity === "error"),
     projectId: project.id,
     profile: project.publication.profile,
     buildId: manifest?.build.id ?? null,
     estimatedIncludedBytes,
-    includedAssets:
-      manifest?.assets.filter((asset) => asset.delivery === "included")
-        .length ?? 0,
-    connectedAssets:
-      manifest?.assets.filter((asset) => asset.delivery === "connected")
-        .length ?? 0,
+    requiredDownloadBytes,
+    unknownDownloadSizes,
+    availableDiskBytes,
+    needsBuildInternet,
+    needsRuntimeInternet: connectedDependencies.length > 0,
+    includedAssets: inventory.filter(
+      (dependency) =>
+        dependency.owner.type === "source" &&
+        dependency.id.endsWith(":data") &&
+        dependency.delivery === "included",
+    ).length,
+    connectedAssets: inventory.filter(
+      (dependency) =>
+        dependency.owner.type === "source" &&
+        dependency.id.endsWith(":data") &&
+        dependency.delivery === "connected",
+    ).length,
     issues: deduplicated,
     manifest,
   };

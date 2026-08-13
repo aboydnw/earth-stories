@@ -9,6 +9,20 @@ interface AuthorizedAddress {
   address: string;
   family: 4 | 6;
 }
+
+export interface AuthorizedFetchPolicy {
+  allowedHosts?: ReadonlySet<string>;
+}
+
+function authorizeConfiguredHost(url: URL, policy: AuthorizedFetchPolicy) {
+  if (
+    policy.allowedHosts &&
+    !policy.allowedHosts.has(url.hostname.toLowerCase())
+  )
+    throw new Error(
+      `Remote host ${url.hostname} is not authorized for this build.`,
+    );
+}
 async function authorize(url: URL): Promise<AuthorizedAddress> {
   validateRemoteUrl(url.toString());
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
@@ -55,9 +69,11 @@ function pinnedAgent(url: URL, authorized: AuthorizedAddress): Agent {
 export async function authorizedFetch(
   input: string,
   init: RequestInit = {},
+  policy: AuthorizedFetchPolicy = {},
 ): Promise<Response> {
   let url = validateRemoteUrl(input);
   for (let redirects = 0; redirects <= 5; redirects += 1) {
+    authorizeConfiguredHost(url, policy);
     const authorized = await authorize(url);
     const response = await fetch(url, {
       ...init,
