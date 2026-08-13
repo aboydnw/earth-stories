@@ -26,14 +26,22 @@ const expected = {
     bytes: 23_469_719,
     sha256: "04b776946da64a15a7b14501790c75093e38f876acc46b2922f0daeb6aaa1d60",
   },
+  "extensions/v1.4.3/wasm_eh/parquet.duckdb_extension.wasm": {
+    bytes: 3_045_039,
+    sha256: "22765c8f7dc741cda2b571a66ac7bb355295d7d69a6c37e5315b265672984f55",
+  },
   "extensions/v1.4.3/wasm_mvp/spatial.duckdb_extension.wasm": {
     bytes: 23_338_062,
     sha256: "7a745cfc5259f69b46f077bc6afeb7a6aefb8ef8d8b336bb0b770e5449708bb4",
   },
+  "extensions/v1.4.3/wasm_mvp/parquet.duckdb_extension.wasm": {
+    bytes: 2_867_304,
+    sha256: "0785c6c95d003eff4faa7b3b4b660f02c9c92f6d68d135ddf330d42e3a650600",
+  },
 } as const;
 
 describe("vendored offline DuckDB runtime", () => {
-  it("contains the exact compatible browser and signed spatial artifacts", async () => {
+  it("contains the exact compatible browser and signed extension artifacts", async () => {
     for (const [relativePath, evidence] of Object.entries(expected)) {
       const path = resolve(runtimeRoot, relativePath);
       expect((await stat(path)).size, relativePath).toBe(evidence.bytes);

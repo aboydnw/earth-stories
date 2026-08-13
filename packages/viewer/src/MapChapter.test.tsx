@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PublicationChapter } from "@earth-stories/story-schema";
 import { publicationAsset } from "./testFixtures.js";
@@ -20,14 +20,23 @@ vi.mock("react-map-gl/maplibre", async () => {
   return {
     default: React.forwardRef(
       (
-        props: { children?: React.ReactNode; onLoad?: () => void },
+        props: {
+          children?: React.ReactNode;
+          mapStyle?: string;
+          onError?: (event: { error: Error }) => void;
+          onLoad?: () => void;
+        },
         ref: React.ForwardedRef<unknown>,
       ) => {
         React.useImperativeHandle(ref, () => ({
           getMap: () => map,
           fitBounds: vi.fn(),
         }));
-        React.useEffect(() => props.onLoad?.(), [props.onLoad]);
+        React.useEffect(() => {
+          props.onLoad?.();
+          if (props.mapStyle === "error://style")
+            props.onError?.({ error: new Error("Map fixture failed") });
+        }, [props.mapStyle, props.onError, props.onLoad]);
         return <div>{props.children}</div>;
       },
     ),
@@ -80,6 +89,19 @@ const chapter = {
 } as Extract<PublicationChapter, { type: "map" }>;
 
 describe("MapChapter", () => {
+  it("exposes the underlying map error to artifact verification", async () => {
+    render(
+      <MapChapter
+        chapter={chapter}
+        asset={{ ...asset, kind: "image" }}
+        basemapStyle="error://style"
+      />,
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.getAttribute("data-error-detail")).toBe("Map fixture failed");
+  });
+
   it("keeps camera rerenders stable and accepts bounds from a replacement source", async () => {
     const onFitAvailabilityChange = vi.fn();
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({

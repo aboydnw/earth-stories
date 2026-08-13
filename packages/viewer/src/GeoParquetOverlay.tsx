@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Layer as DeckLayer } from "@deck.gl/core";
 import { GeoJsonLayer } from "@deck.gl/layers";
 import * as duckdb from "@duckdb/duckdb-wasm";
@@ -91,6 +91,7 @@ export function GeoParquetOverlay({
   const [data, setData] = useState<ReturnType<typeof rowsToGeoJson> | null>(
     null,
   );
+  const renderedData = useRef<ReturnType<typeof rowsToGeoJson> | null>(null);
   useEffect(() => {
     let active = true;
     void database()
@@ -137,7 +138,6 @@ export function GeoParquetOverlay({
         if (active) {
           const next = rowsToGeoJson(table);
           setData(next);
-          onReady?.();
           const bounds = geoJsonBounds(next);
           if (bounds) onBounds?.(bounds);
         }
@@ -153,7 +153,7 @@ export function GeoParquetOverlay({
     return () => {
       active = false;
     };
-  }, [asset.href, onBounds, onError, onReady]);
+  }, [asset.href, onBounds, onError]);
   const layers = useMemo<DeckLayer[]>(() => {
     if (!data) return [];
     const presentation = asset.presentation;
@@ -192,5 +192,10 @@ export function GeoParquetOverlay({
       }),
     ];
   }, [asset, data]);
-  return <DeckOverlay layers={layers} />;
+  const reportRendered = useCallback(() => {
+    if (!data || renderedData.current === data) return;
+    renderedData.current = data;
+    onReady?.();
+  }, [data, onReady]);
+  return <DeckOverlay layers={layers} onAfterRender={reportRendered} />;
 }

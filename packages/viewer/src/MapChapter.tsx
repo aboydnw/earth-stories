@@ -800,7 +800,11 @@ export function MapChapter({
         </div>
       ) : null}
       {error ? (
-        <div className="story-map__error" role="alert">
+        <div
+          className="story-map__error"
+          role="alert"
+          data-error-detail={error}
+        >
           <strong>Map source unavailable</strong>
           <span>
             {snapshotMode

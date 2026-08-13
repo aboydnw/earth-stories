@@ -18,6 +18,7 @@
     "conversion:smoke": "node scripts/smoke-conversion-tools.mjs",
     "clean:types": "tsc --build --clean",
     "test": "vitest run",
+    "test:offline-runtime": "yarn workspace @earth-stories/viewer-app build && node --import tsx scripts/verify-offline-runtime.ts",
     "typecheck": "tsc --build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
