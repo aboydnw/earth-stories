@@ -25,11 +25,14 @@ feature target; PMTiles is selected for tiled delivery. GDAL's native PMTiles
 driver is the v1 implementation, avoiding a mandatory tippecanoe installation.
 See [ADR 0001](adr/0001-conversion-runtime.md) for the tradeoffs.
 
-Supported authoring platforms are macOS, Linux, and Windows x64. Lock data is
-committed for each platform, and CI loads every native conversion capability on
-Windows. Pixi's checksum-verified Windows bootstrap uses the same lazy
-environments, so authors do not install GDAL, PDAL, or another system package.
-Windows ARM remains outside the supported platform matrix.
+Source-development lock data is committed for macOS, Linux, and Windows x64.
+Pixi's checksum-verified Windows bootstrap uses the same lazy environments, so
+authors do not install GDAL, PDAL, or another system package. CI is intentionally
+absent in the current phase, and the installed desktop application has not
+completed the target-machine conversion matrix on any platform. Windows ARM
+remains outside the target matrix. See the
+[desktop application guide](desktop-application.md) for the precise support
+boundary.
 
 ## Pilot workflow
 
