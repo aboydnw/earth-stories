@@ -8,7 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DesktopTools } from "./tools.js";
 
@@ -27,12 +27,9 @@ async function fixture(
   await writeFile(masters + "/pixi.lock", "version: 6\nfixture: locked\n");
   await chmod(masters + "/pixi.toml", 0o444);
   await chmod(masters + "/pixi.lock", 0o444);
-  return {
-    root,
-    masters,
-    tools,
-    manager: new DesktopTools({
-      appVersion: "0.1.0",
+  const createManager = (appVersion: string) =>
+    new DesktopTools({
+      appVersion,
       masterDirectory: masters,
       toolsDirectory: tools,
       pixiExecutable: join(tools, "bin", "pixi"),
@@ -40,7 +37,13 @@ async function fixture(
       afterManifestGenerationStaged: options.afterManifestGenerationStaged,
       afterManifestPointerActivated: options.afterManifestPointerActivated,
       beforeCapabilityRemoval: options.beforeCapabilityRemoval,
-    }),
+    });
+  return {
+    root,
+    masters,
+    tools,
+    manager: createManager("0.1.0"),
+    createManager,
   };
 }
 
@@ -299,5 +302,134 @@ describe("DesktopTools", () => {
     await expect(stat(old)).rejects.toThrow();
     await expect(stat(sameVersionOldLock)).resolves.toBeTruthy();
     await expect(stat(config.manifestDirectory)).resolves.toBeTruthy();
+  });
+
+  it("reuses same-lock capability environments across application upgrades", async () => {
+    const value = await fixture();
+    const firstManager = value.createManager("1.0.0");
+    const first = await firstManager.prepareRuntime();
+    const firstTree = dirname(dirname(first.manifestDirectory));
+    const firstEnvironment = join(
+      first.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+    await mkdir(firstEnvironment, { recursive: true });
+    await writeFile(join(firstEnvironment, "installed.bin"), "version-one");
+    const secondManager = value.createManager("2.0.0");
+    const second = await secondManager.prepareRuntime();
+
+    await secondManager.cleanupOtherApplicationVersions();
+
+    await expect(
+      readFile(
+        join(
+          second.manifestDirectory,
+          ".pixi",
+          "envs",
+          "raster",
+          "installed.bin",
+        ),
+        "utf8",
+      ),
+    ).resolves.toBe("version-one");
+    await expect(stat(firstTree)).rejects.toThrow();
+  });
+
+  it("does not reuse capability environments when the lock changes", async () => {
+    const value = await fixture();
+    const firstManager = value.createManager("1.0.0");
+    const first = await firstManager.prepareRuntime();
+    const firstTree = dirname(dirname(first.manifestDirectory));
+    const firstEnvironment = join(
+      first.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+    await mkdir(firstEnvironment, { recursive: true });
+    await writeFile(join(firstEnvironment, "installed.bin"), "old-lock");
+    await chmod(join(value.masters, "pixi.lock"), 0o644);
+    await writeFile(join(value.masters, "pixi.lock"), "version: 6\nnew lock\n");
+    const secondManager = value.createManager("2.0.0");
+    const second = await secondManager.prepareRuntime();
+
+    await secondManager.cleanupOtherApplicationVersions();
+
+    await expect(
+      stat(join(second.manifestDirectory, ".pixi", "envs", "raster")),
+    ).rejects.toThrow();
+    await expect(stat(firstTree)).rejects.toThrow();
+  });
+
+  it("keeps current capability environments when adopting a same-lock tree", async () => {
+    const value = await fixture();
+    const firstManager = value.createManager("1.0.0");
+    const first = await firstManager.prepareRuntime();
+    const firstEnvironment = join(
+      first.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+    await mkdir(firstEnvironment, { recursive: true });
+    await writeFile(join(firstEnvironment, "installed.bin"), "version-one");
+    const secondManager = value.createManager("2.0.0");
+    const second = await secondManager.prepareRuntime();
+    const secondEnvironment = join(
+      second.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+    await mkdir(secondEnvironment, { recursive: true });
+    await writeFile(join(secondEnvironment, "installed.bin"), "version-two");
+
+    await secondManager.cleanupOtherApplicationVersions();
+
+    await expect(
+      readFile(join(secondEnvironment, "installed.bin"), "utf8"),
+    ).resolves.toBe("version-two");
+  });
+
+  it("defers upgrade adoption and deletion while a capability lease is active", async () => {
+    const value = await fixture();
+    const firstManager = value.createManager("1.0.0");
+    const first = await firstManager.prepareRuntime();
+    const firstTree = dirname(dirname(first.manifestDirectory));
+    const firstEnvironment = join(
+      first.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+    await mkdir(firstEnvironment, { recursive: true });
+    await writeFile(join(firstEnvironment, "installed.bin"), "version-one");
+    const secondManager = value.createManager("2.0.0");
+    const second = await secondManager.prepareRuntime();
+    const release = await second.acquireCapability("raster");
+
+    await secondManager.cleanupOtherApplicationVersions();
+
+    await expect(stat(firstTree)).resolves.toBeTruthy();
+    await expect(
+      stat(join(second.manifestDirectory, ".pixi", "envs", "raster")),
+    ).rejects.toThrow();
+    await release();
+    await secondManager.cleanupOtherApplicationVersions();
+    await expect(
+      readFile(
+        join(
+          second.manifestDirectory,
+          ".pixi",
+          "envs",
+          "raster",
+          "installed.bin",
+        ),
+        "utf8",
+      ),
+    ).resolves.toBe("version-one");
+    await expect(stat(firstTree)).rejects.toThrow();
   });
 });

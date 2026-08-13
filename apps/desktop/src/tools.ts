@@ -259,37 +259,87 @@ export class DesktopTools {
   }
 
   async cleanupOtherApplicationVersions(): Promise<void> {
-    const entries = await readdir(this.#toolsDirectory, {
-      withFileTypes: true,
-    }).catch(() => []);
-    const currentPrefix = `${this.#appVersion}-`;
-    await Promise.all(
-      entries
-        .filter(
-          (entry) =>
-            entry.isDirectory() &&
-            /^[^-].*-[a-f0-9]{64}$/.test(entry.name) &&
-            !entry.name.startsWith(currentPrefix),
+    await this.#withAllCapabilityLocks(async () => {
+      if (
+        CAPABILITIES.some(
+          (capability) => (this.#activeCapabilities.get(capability) ?? 0) > 0,
         )
-        .map((entry) =>
+      )
+        return;
+      const entries = await readdir(this.#toolsDirectory, {
+        withFileTypes: true,
+      }).catch(() => []);
+      const currentPrefix = `${this.#appVersion}-`;
+      const lock = await readFile(join(this.#masterDirectory, "pixi.lock"));
+      const lockDigest = digest(lock);
+      const currentTree = join(
+        this.#toolsDirectory,
+        `${currentPrefix}${lockDigest}`,
+      );
+      const currentManifest = await this.#resolveManifest(currentTree);
+      const previousTrees = entries.filter(
+        (entry) =>
+          entry.isDirectory() &&
+          /^[^-].*-[a-f0-9]{64}$/.test(entry.name) &&
+          !entry.name.startsWith(currentPrefix),
+      );
+      for (const entry of previousTrees) {
+        if (!entry.name.endsWith(`-${lockDigest}`)) continue;
+        const previousManifest = await this.#readActiveManifest(
+          join(this.#toolsDirectory, entry.name),
+        );
+        if (!previousManifest) continue;
+        await mkdir(join(currentManifest, ".pixi", "envs"), {
+          recursive: true,
+        });
+        for (const capability of CAPABILITIES) {
+          const source = join(previousManifest, ".pixi", "envs", capability);
+          const destination = join(
+            currentManifest,
+            ".pixi",
+            "envs",
+            capability,
+          );
+          try {
+            await stat(destination);
+            continue;
+          } catch (cause) {
+            if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+          }
+          await rename(source, destination).catch((cause) => {
+            if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+          });
+        }
+      }
+      await Promise.all(
+        previousTrees.map((entry) =>
           rm(join(this.#toolsDirectory, entry.name), {
             recursive: true,
             force: true,
           }),
         ),
-    );
-    await Promise.all(
-      entries
-        .filter(
-          (entry) =>
-            entry.isDirectory() && entry.name.startsWith(currentPrefix),
-        )
-        .map((entry) =>
-          this.#cleanupInactiveGenerations(
-            join(this.#toolsDirectory, entry.name),
+      );
+      await Promise.all(
+        entries
+          .filter(
+            (entry) =>
+              entry.isDirectory() && entry.name.startsWith(currentPrefix),
+          )
+          .map((entry) =>
+            this.#cleanupInactiveGenerations(
+              join(this.#toolsDirectory, entry.name),
+            ),
           ),
-        ),
-    );
+      );
+    });
+  }
+
+  #withAllCapabilityLocks<T>(action: () => Promise<T>): Promise<T> {
+    const run = (index: number): Promise<T> =>
+      index === CAPABILITIES.length
+        ? action()
+        : this.#withCapabilityLock(CAPABILITIES[index], () => run(index + 1));
+    return run(0);
   }
 
   async #cleanupInactiveGenerations(treeDirectory: string): Promise<void> {
