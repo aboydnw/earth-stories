@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createSafeStorageCredentialStoreFactory,
   SafeStorageCredentialStore,
+  type CredentialPromotionOperations,
   type SafeStorageBoundary,
 } from "./credentials.js";
 
@@ -99,6 +100,47 @@ describe("SafeStorageCredentialStore", () => {
     await expect(readFile(path, "utf8")).resolves.toBe(plaintext);
   });
 
+  it.each([
+    [
+      "credential chmod",
+      {
+        securePromotedFile: async () => {
+          throw new Error("chmod failed with legacy-secret");
+        },
+      },
+    ],
+    [
+      "directory fsync",
+      {
+        syncPromotedDirectory: async () => {
+          throw new Error("fsync failed with legacy-secret");
+        },
+      },
+    ],
+  ] satisfies [string, Partial<CredentialPromotionOperations>][])(
+    "restores readable plaintext when post-rename %s fails",
+    async (_name, operations) => {
+      const root = await mkdtemp(join(tmpdir(), "earth-stories-rollback-"));
+      const path = join(root, "credentials.json");
+      const plaintext = '{"token":"legacy-secret","login":"mapper"}';
+      await writeFile(path, plaintext, { mode: 0o600 });
+      const store = new SafeStorageCredentialStore(
+        path,
+        safeStorage(),
+        operations,
+      );
+
+      const migration = store.read();
+
+      await expect(migration).rejects.toThrow("credential protection failed");
+      await expect(migration).rejects.not.toThrow("legacy-secret");
+      await expect(readFile(path, "utf8")).resolves.toBe(plaintext);
+      await expect(
+        new SafeStorageCredentialStore(path, safeStorage(false)).read(),
+      ).resolves.toEqual({ token: "legacy-secret", login: "mapper" });
+    },
+  );
+
   it("falls back to the private plaintext file once per instance without a keyring", async () => {
     const warning = vi
       .spyOn(console, "warn")
@@ -163,13 +205,41 @@ describe("SafeStorageCredentialStore", () => {
     await expect(readFile(path, "utf8")).resolves.toBe(encrypted);
   });
 
+  it("never overwrites a future-version record with plaintext without a keyring", async () => {
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    const { path, store } = await fixture(safeStorage(false));
+    const futureRecord = `${JSON.stringify({
+      version: 2,
+      login: "future-mapper",
+      encryptedToken: "future-opaque-bytes",
+    })}\n`;
+    await writeFile(path, futureRecord, { mode: 0o600 });
+
+    await expect(
+      store.write({ token: "replacement-secret", login: "mapper" }),
+    ).rejects.toThrow(/encrypted credentials/i);
+
+    await expect(readFile(path, "utf8")).resolves.toBe(futureRecord);
+    expect(warning.mock.calls.flat().join(" ")).not.toContain(
+      "replacement-secret",
+    );
+    warning.mockRestore();
+  });
+
   it("clears the active credentials artifact", async () => {
     const { path, store } = await fixture();
     await store.write({ token: "secret", login: "mapper" });
+    const recoveryPath = `${path}.plaintext-recovery`;
+    await writeFile(recoveryPath, '{"token":"recovery","login":"mapper"}');
 
     await store.clear();
 
     await expect(store.read()).resolves.toBeNull();
     await expect(readFile(path)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(recoveryPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });

@@ -13,6 +13,16 @@ export interface SafeStorageBoundary {
   decryptString(encrypted: Buffer): string;
 }
 
+export interface CredentialPromotionOperations {
+  securePromotedFile(path: string): Promise<void>;
+  syncPromotedDirectory(path: string): Promise<void>;
+}
+
+const defaultPromotionOperations: CredentialPromotionOperations = {
+  securePromotedFile: async (path) => chmod(path, 0o600),
+  syncPromotedDirectory: syncDirectory,
+};
+
 interface EncryptedCredentialRecord {
   version: 1;
   login: string;
@@ -94,12 +104,18 @@ export class SafeStorageCredentialStore implements CredentialStore {
   readonly path: string;
   readonly #safeStorage: SafeStorageBoundary;
   readonly #fallback: FileCredentialStore;
+  readonly #promotion: CredentialPromotionOperations;
   readonly #reported = new Set<string>();
 
-  constructor(path: string, safeStorage: SafeStorageBoundary) {
+  constructor(
+    path: string,
+    safeStorage: SafeStorageBoundary,
+    promotion: Partial<CredentialPromotionOperations> = {},
+  ) {
     this.path = path;
     this.#safeStorage = safeStorage;
     this.#fallback = new FileCredentialStore(path);
+    this.#promotion = { ...defaultPromotionOperations, ...promotion };
   }
 
   async read(): Promise<StoredCredentials | null> {
@@ -127,10 +143,10 @@ export class SafeStorageCredentialStore implements CredentialStore {
     }
 
     try {
-      await this.#writeEncrypted(record.value);
+      await this.#writeEncrypted(record.value, serialized);
     } catch {
       throw new Error(
-        "Earth Stories credential protection failed; readable plaintext credentials were left unchanged.",
+        "Earth Stories credential protection failed; readable plaintext credentials remain recoverable.",
       );
     }
     return record.value;
@@ -146,7 +162,7 @@ export class SafeStorageCredentialStore implements CredentialStore {
       return;
     }
 
-    if (await this.#containsEncryptedRecord()) {
+    if (await this.#containsProtectedRecord()) {
       this.#diagnose(
         "encrypted-unavailable",
         "OS credential encryption is unavailable; stored encrypted credentials cannot be replaced.",
@@ -160,7 +176,10 @@ export class SafeStorageCredentialStore implements CredentialStore {
   }
 
   async clear(): Promise<void> {
-    await this.#fallback.clear();
+    await Promise.all([
+      this.#fallback.clear(),
+      rm(this.#recoveryPath(), { force: true }),
+    ]);
   }
 
   #decrypt(record: EncryptedCredentialRecord): StoredCredentials | null {
@@ -191,7 +210,10 @@ export class SafeStorageCredentialStore implements CredentialStore {
     }
   }
 
-  async #writeEncrypted(value: StoredCredentials): Promise<void> {
+  async #writeEncrypted(
+    value: StoredCredentials,
+    recoveryPlaintext?: string,
+  ): Promise<void> {
     const encryptedToken = this.#safeStorage
       .encryptString(value.token)
       .toString("base64");
@@ -204,15 +226,59 @@ export class SafeStorageCredentialStore implements CredentialStore {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await chmod(directory, 0o700);
     const temporary = join(directory, `.credentials-${randomUUID()}.tmp`);
+    const recovery = this.#recoveryPath();
     let file;
+    let recoveryPrepared = false;
+    let promoted = false;
+    let restored = false;
     try {
       file = await open(temporary, "wx", 0o600);
       await file.writeFile(`${JSON.stringify(record, null, 2)}\n`, "utf8");
       await file.sync();
       await file.close();
       file = undefined;
+      if (recoveryPlaintext !== undefined) {
+        await this.#writeRecovery(recoveryPlaintext, directory);
+        recoveryPrepared = true;
+      }
       await rename(temporary, this.path);
-      await chmod(this.path, 0o600);
+      promoted = true;
+      await this.#promotion.securePromotedFile(this.path);
+      await this.#promotion.syncPromotedDirectory(directory);
+    } catch (cause) {
+      if (promoted && recoveryPrepared) {
+        try {
+          await rename(recovery, this.path);
+          restored = true;
+          await syncDirectory(directory);
+        } catch {
+          // If restoration cannot finish, retain whichever recovery artifact
+          // still exists rather than deleting the only readable plaintext.
+        }
+      }
+      throw cause;
+    } finally {
+      await file?.close().catch(() => undefined);
+      await rm(temporary, { force: true });
+      if (recoveryPrepared && (!promoted || restored))
+        await rm(recovery, { force: true });
+    }
+    if (recoveryPrepared) await rm(recovery, { force: true });
+  }
+
+  async #writeRecovery(serialized: string, directory: string): Promise<void> {
+    const temporary = join(
+      directory,
+      `.credentials-recovery-${randomUUID()}.tmp`,
+    );
+    let file;
+    try {
+      file = await open(temporary, "wx", 0o600);
+      await file.writeFile(serialized, "utf8");
+      await file.sync();
+      await file.close();
+      file = undefined;
+      await rename(temporary, this.#recoveryPath());
       await syncDirectory(directory);
     } finally {
       await file?.close().catch(() => undefined);
@@ -220,14 +286,17 @@ export class SafeStorageCredentialStore implements CredentialStore {
     }
   }
 
-  async #containsEncryptedRecord(): Promise<boolean> {
+  #recoveryPath(): string {
+    return `${this.path}.plaintext-recovery`;
+  }
+
+  async #containsProtectedRecord(): Promise<boolean> {
     try {
       const value = JSON.parse(await readFile(this.path, "utf8")) as unknown;
       return Boolean(
         value &&
         typeof value === "object" &&
-        "version" in value &&
-        (value as { version?: unknown }).version === 1,
+        Object.prototype.hasOwnProperty.call(value, "version"),
       );
     } catch {
       return false;

@@ -135,3 +135,49 @@ Observed: exit 0; Prettier reported all matched files use its code style; diff c
 
 - One unrelated pre-existing relocated service-bundle test remains red because its generated fixture does not contain `pixi.lock`; 398/399 affected desktop/local-service tests otherwise pass.
 - Directory `fsync` portability is handled by ignoring only Windows `EINVAL`/`EPERM`; other flush failures remain visible rather than claiming durability.
+
+## Fix Round 1
+
+### Findings addressed
+
+1. Made plaintext migration rollback-safe across failures after same-path encrypted promotion. Before replacement, the store writes the exact legacy bytes to a mode-0600 recovery artifact, flushes the file and directory, then promotes the encrypted record. A failure securing the promoted file or flushing its directory restores the recovery artifact to the active credentials path and flushes that restoration. If restoration itself cannot finish, the recovery artifact is deliberately retained instead of deleting the only readable plaintext copy. `clear()` now removes both the active path and recovery path.
+2. Strengthened no-keyring downgrade protection. Any parsed object with its own `version` marker is protected from plaintext overwrite, including records from unknown future versions; the store does not need to understand their opaque payload.
+
+### RED
+
+Command:
+
+```text
+yarn vitest run apps/desktop/src/credentials.test.ts
+```
+
+Observed expected failures before implementation:
+
+```text
+Test Files 1 failed (1)
+Tests 3 failed | 8 passed (11)
+```
+
+- Injected post-rename credential chmod failure resolved instead of rejecting and restoring.
+- Injected post-rename directory fsync failure resolved instead of rejecting and restoring.
+- A future-version record was overwritten by the no-keyring plaintext fallback instead of being rejected.
+
+After introducing the recovery artifact, its clear behavior was independently driven through RED with the same command:
+
+```text
+Test Files 1 failed (1)
+Tests 1 failed | 10 passed (11)
+```
+
+The active credentials file was removed, but the recovery artifact remained readable.
+
+### GREEN
+
+Same command after the minimal implementation:
+
+```text
+Test Files 1 passed (1)
+Tests 11 passed (11)
+```
+
+Both injected post-rename failures now reject with the fixed sanitized protection error, leave the original plaintext bytes at the active path, and remain readable through a new fallback store. The future-version write rejects and leaves the original bytes unchanged without logging the replacement token. Clear removes both the active and recovery artifacts.
