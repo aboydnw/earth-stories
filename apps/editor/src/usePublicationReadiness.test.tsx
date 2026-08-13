@@ -24,13 +24,18 @@ function project(
 }
 function preflight(
   id: string,
-  profile: "connected" | "portable" | "custom" = "connected",
+  profile: StoryProject["publication"]["profile"] = "connected",
 ) {
   return {
     ready: true,
     projectId: id,
     buildId: "build",
     estimatedIncludedBytes: 0,
+    requiredDownloadBytes: 0,
+    unknownDownloadSizes: 0,
+    availableDiskBytes: null,
+    needsBuildInternet: false,
+    needsRuntimeInternet: profile === "connected",
     includedAssets: 0,
     connectedAssets: 0,
     profile,

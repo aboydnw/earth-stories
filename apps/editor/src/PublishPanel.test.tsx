@@ -76,6 +76,9 @@ const localReadiness: AuthoringReadiness = {
 
 function readyState(
   issues: NonNullable<PublicationReadinessState["result"]>["issues"] = [],
+  resultOverrides: Partial<
+    NonNullable<PublicationReadinessState["result"]>
+  > = {},
 ): PublicationReadinessState {
   return {
     status: "ready",
@@ -85,9 +88,15 @@ function readyState(
       projectId: project.id,
       buildId: "build-1",
       estimatedIncludedBytes: 1024,
+      requiredDownloadBytes: 0,
+      unknownDownloadSizes: 0,
+      availableDiskBytes: 5 * 1024 ** 2,
+      needsBuildInternet: false,
+      needsRuntimeInternet: true,
       includedAssets: 1,
       connectedAssets: 2,
       profile: "connected",
+      ...resultOverrides,
     },
     error: null,
     key: "field-notes:key",
@@ -116,6 +125,90 @@ function panel(overrides: Partial<Parameters<typeof PublishPanel>[0]> = {}) {
 }
 
 describe("PublishPanel", () => {
+  it("offers an offline delivery profile with a precise runtime promise", async () => {
+    panel();
+
+    await userEvent.click(screen.getByText("Release settings"));
+
+    expect(screen.getByRole("radio", { name: /offline/i })).toBeTruthy();
+    expect(
+      screen.getByText("No internet required after this build."),
+    ).toBeTruthy();
+  });
+
+  it("separates assembly downloads from publication runtime connectivity", async () => {
+    panel({
+      preflightState: readyState([], {
+        requiredDownloadBytes: 1536,
+        unknownDownloadSizes: 2,
+        availableDiskBytes: 5 * 1024 ** 2,
+        needsBuildInternet: true,
+        needsRuntimeInternet: false,
+        profile: "offline",
+      }),
+    });
+
+    await userEvent.click(screen.getByText("Release settings"));
+
+    expect(screen.getByText("Assembly inputs")).toBeTruthy();
+    expect(screen.getByText("Internet needed during assembly")).toBeTruthy();
+    expect(screen.getByText(/1\.5 KB to download/)).toBeTruthy();
+    expect(screen.getByText(/2 inputs have unknown sizes/)).toBeTruthy();
+    expect(screen.getByText(/5\.0 MB available/)).toBeTruthy();
+    expect(screen.getByText("Publication runtime")).toBeTruthy();
+    expect(
+      screen.getAllByText("No internet required after this build."),
+    ).toHaveLength(2);
+  });
+
+  it("does not claim an offline selection or preflight is verified", async () => {
+    const offlineProject = {
+      ...project,
+      publication: { ...project.publication, profile: "offline" as const },
+    };
+    panel({
+      project: offlineProject,
+      onBeforeExport: vi.fn().mockResolvedValue(offlineProject),
+      preflightState: readyState([], {
+        profile: "offline",
+        needsBuildInternet: true,
+        needsRuntimeInternet: false,
+      }),
+    });
+
+    await userEvent.click(screen.getByText("Release settings"));
+
+    expect(screen.queryByText("Verified offline")).toBeNull();
+  });
+
+  it("reports verified offline only after a successful offline export", async () => {
+    const offlineProject = {
+      ...project,
+      publication: { ...project.publication, profile: "offline" as const },
+    };
+    vi.mocked(captureMapSnapshots).mockResolvedValue({});
+    vi.mocked(exportProject).mockResolvedValue({
+      directory: "/tmp/publication",
+      buildId: "build-offline",
+    });
+    panel({
+      project: offlineProject,
+      onBeforeExport: vi.fn().mockResolvedValue(offlineProject),
+      preflightState: readyState([], {
+        profile: "offline",
+        needsBuildInternet: true,
+        needsRuntimeInternet: false,
+      }),
+    });
+
+    expect(screen.queryByText("Verified offline")).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+
+    expect(await screen.findByText("Verified offline")).toBeTruthy();
+  });
+
   it("leads with one recommended build and keeps specialized outputs collapsed", async () => {
     panel();
     expect(

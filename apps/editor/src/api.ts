@@ -37,9 +37,14 @@ export interface PublicationPreflight {
   projectId: string;
   buildId: string | null;
   estimatedIncludedBytes: number;
+  requiredDownloadBytes: number;
+  unknownDownloadSizes: number;
+  availableDiskBytes: number | null;
+  needsBuildInternet: boolean;
+  needsRuntimeInternet: boolean;
   includedAssets: number;
   connectedAssets: number;
-  profile: "connected" | "portable" | "custom";
+  profile: "connected" | "portable" | "custom" | "offline";
   issues: PreflightIssue[];
 }
 export type ExportFormat = "zip" | "folder" | "archive" | "embed";

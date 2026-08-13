@@ -86,6 +86,7 @@ const publicationProfiles = [
     "Portable",
     "Copy compatible COG, PMTiles, and GeoParquet data into the release.",
   ],
+  ["offline", "Offline", "No internet required after this build."],
   ["custom", "Custom", "Use each asset’s publication data policy."],
 ] as const;
 
@@ -114,6 +115,7 @@ export function PublishPanel({
   const [lastFormat, setLastFormat] = useState<ExportFormat | null>(null);
   const [snippet, setSnippet] = useState("");
   const [resultBuildId, setResultBuildId] = useState<string | null>(null);
+  const [verifiedOffline, setVerifiedOffline] = useState(false);
   const [publicationUrl, setPublicationUrl] = useState("");
   const [shareBusy, setShareBusy] = useState(false);
   const [publishBusy, setPublishBusy] = useState(false);
@@ -134,6 +136,7 @@ export function PublishPanel({
     setResult(null);
     setLastFormat(null);
     setResultBuildId(null);
+    setVerifiedOffline(false);
   }, [open, project.id, project.metadata.updated]);
 
   useEffect(() => {
@@ -251,6 +254,7 @@ export function PublishPanel({
     setResult(null);
     setLastFormat(null);
     setResultBuildId(null);
+    setVerifiedOffline(false);
     setSnippet("");
     try {
       const saved = await onBeforeExport();
@@ -264,6 +268,7 @@ export function PublishPanel({
       });
       setLastFormat(format);
       setResultBuildId(response.buildId ?? null);
+      setVerifiedOffline(saved.publication.profile === "offline");
       if (response.blob && response.filename) {
         const href = URL.createObjectURL(response.blob);
         const anchor = document.createElement("a");
@@ -491,7 +496,14 @@ export function PublishPanel({
             {lastFormat ? (
               <p>
                 {resultBuildId ? `Build ${resultBuildId}. ` : ""}
-                Deploy the output, then verify it at its public URL.
+                {verifiedOffline ? (
+                  <>
+                    <strong>Verified offline</strong>. This export passed its
+                    offline runtime check.
+                  </>
+                ) : (
+                  "Deploy the output, then verify it at its public URL."
+                )}
               </p>
             ) : null}
             {lastFormat === "folder" ? (
@@ -532,6 +544,52 @@ export function PublishPanel({
                 <strong>{preflight?.connectedAssets ?? "—"}</strong>
                 <span>connected assets</span>
               </div>
+            </div>
+            <div className="publication-connectivity">
+              <section aria-labelledby="assembly-inputs-status">
+                <h3 id="assembly-inputs-status">Assembly inputs</h3>
+                <strong>
+                  {!currentServerResult
+                    ? "Check pending"
+                    : currentServerResult.needsBuildInternet
+                      ? "Internet needed during assembly"
+                      : "No internet needed during assembly"}
+                </strong>
+                <span>
+                  {currentServerResult ? (
+                    <>
+                      {currentServerResult.needsBuildInternet
+                        ? `${bytes(currentServerResult.requiredDownloadBytes)} to download`
+                        : "No downloads needed"}
+                      {currentServerResult.unknownDownloadSizes
+                        ? ` · ${currentServerResult.unknownDownloadSizes} input${currentServerResult.unknownDownloadSizes === 1 ? " has" : "s have"} unknown sizes`
+                        : ""}
+                      {currentServerResult.availableDiskBytes === null
+                        ? " · available disk space unknown"
+                        : ` · ${bytes(currentServerResult.availableDiskBytes)} available`}
+                    </>
+                  ) : (
+                    "Save and refresh checks to calculate downloads."
+                  )}
+                </span>
+              </section>
+              <section aria-labelledby="publication-runtime-status">
+                <h3 id="publication-runtime-status">Publication runtime</h3>
+                <strong>
+                  {!currentServerResult
+                    ? "Check pending"
+                    : currentServerResult.needsRuntimeInternet
+                      ? "Internet required after publishing"
+                      : "No internet required after this build."}
+                </strong>
+                <span>
+                  {!currentServerResult
+                    ? "Save and refresh checks to inspect runtime dependencies."
+                    : currentServerResult.needsRuntimeInternet
+                      ? `${currentServerResult.connectedAssets} connected asset${currentServerResult.connectedAssets === 1 ? "" : "s"}`
+                      : "All publication dependencies will be included."}
+                </span>
+              </section>
             </div>
             <fieldset className="publication-profiles">
               <legend>Data delivery</legend>
