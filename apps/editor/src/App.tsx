@@ -32,6 +32,7 @@ import {
 import { reorderChapters } from "./chapterOrder";
 import {
   createProject,
+  actOnConversionJob,
   createExampleStory,
   discoverSource,
   getExamples,
@@ -65,6 +66,8 @@ import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
 import { usePublicationReadiness } from "./usePublicationReadiness";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 import { detectDesktopBridge } from "./desktop";
+import { DesktopToolsPanel } from "./DesktopToolsPanel";
+import { ProvisioningDialog } from "./ProvisioningDialog";
 import { resolvePreviewManifest } from "./resolvePreviewManifest";
 import { captureKeyframe } from "./flyoverPath";
 import { pollConversionJob } from "./conversionPolling";
@@ -163,6 +166,11 @@ export function App() {
   const [previewReceiptVersion, setPreviewReceiptVersion] = useState(0);
   const chapterAddRef = useRef<HTMLDivElement>(null);
   const publicationReadiness = usePublicationReadiness(project);
+  const pendingProvisioning = Object.entries(conversionJobs).find(
+    ([, job]) =>
+      job.status === "awaiting-approval" &&
+      job.events.some((event) => event.type === "provisioning-disclosure"),
+  );
 
   useEffect(() => {
     if (!desktop || !workspaceSettingsOpen || workspacePath !== null) return;
@@ -1508,6 +1516,9 @@ export function App() {
             ? () => void desktop.showWorkspaceFolder().catch(showError)
             : undefined
         }
+        toolsPanel={
+          desktop ? <DesktopToolsPanel desktop={desktop} /> : undefined
+        }
       />
     );
 
@@ -1942,7 +1953,8 @@ export function App() {
                                 type="button"
                                 disabled={
                                   job?.status === "queued" ||
-                                  job?.status === "running"
+                                  job?.status === "running" ||
+                                  job?.status === "awaiting-approval"
                                 }
                                 onClick={() =>
                                   void runDataAssetJob(asset, "inspect")
@@ -1955,13 +1967,47 @@ export function App() {
                                   type="button"
                                   disabled={
                                     job?.status === "queued" ||
-                                    job?.status === "running"
+                                    job?.status === "running" ||
+                                    job?.status === "awaiting-approval"
                                   }
                                   onClick={() =>
                                     void runDataAssetJob(asset, "prepare")
                                   }
                                 >
                                   Prepare
+                                </button>
+                              ) : null}
+                              {job?.status === "failed" ||
+                              job?.status === "cancelled" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void actOnConversionJob(job.id, "retry")
+                                      .then(async (retried) => {
+                                        setConversionJobs((current) => ({
+                                          ...current,
+                                          [asset.id]: retried,
+                                        }));
+                                        const result = await pollConversionJob(
+                                          retried,
+                                          {
+                                            onUpdate: (next) =>
+                                              setConversionJobs((current) => ({
+                                                ...current,
+                                                [asset.id]: next,
+                                              })),
+                                          },
+                                        );
+                                        if (result.kind === "completed")
+                                          setConversionJobs((current) => ({
+                                            ...current,
+                                            [asset.id]: result.job,
+                                          }));
+                                      })
+                                      .catch(showError);
+                                  }}
+                                >
+                                  Retry tool installation
                                 </button>
                               ) : null}
                             </div>
@@ -2479,6 +2525,39 @@ export function App() {
           }
         }}
       />
+      {pendingProvisioning
+        ? (() => {
+            const [assetId, job] = pendingProvisioning;
+            const disclosure = job.events.find(
+              (event) => event.type === "provisioning-disclosure",
+            );
+            return disclosure?.type === "provisioning-disclosure" ? (
+              <ProvisioningDialog
+                disclosure={disclosure}
+                onAcknowledge={() => {
+                  void actOnConversionJob(job.id, "acknowledge")
+                    .then((next) =>
+                      setConversionJobs((current) => ({
+                        ...current,
+                        [assetId]: next,
+                      })),
+                    )
+                    .catch(showError);
+                }}
+                onCancel={() => {
+                  void actOnConversionJob(job.id, "cancel")
+                    .then((next) =>
+                      setConversionJobs((current) => ({
+                        ...current,
+                        [assetId]: next,
+                      })),
+                    )
+                    .catch(showError);
+                }}
+              />
+            ) : null;
+          })()
+        : null}
     </div>
   );
 }

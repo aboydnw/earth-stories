@@ -209,6 +209,9 @@ export function beginLocalService(
         manifestDirectory: resolved.conversion.manifestDirectory,
         workerDirectory: resolved.conversion.workerDirectory,
         pixiHome: resolved.conversion.pixiHome,
+        pixiCacheDirectory: resolved.conversion.pixiCacheDirectory ?? null,
+        verifyManifest: resolved.conversion.verifyManifest,
+        cleanupCapability: resolved.conversion.cleanupCapability,
         bootstrap: dependencies.bootstrapPixi,
       }),
     );

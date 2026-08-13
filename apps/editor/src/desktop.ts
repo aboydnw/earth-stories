@@ -19,6 +19,14 @@ export interface DesktopBridge {
   showWorkspaceFolder(): Promise<void>;
   showProjectFolder(projectId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
+  listTools(): Promise<InstalledDesktopTool[]>;
+  removeTool(capability: string): Promise<void>;
+}
+
+export interface InstalledDesktopTool {
+  capability: string;
+  bytes: number;
+  destination: string;
 }
 
 declare global {

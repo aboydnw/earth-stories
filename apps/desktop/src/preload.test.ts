@@ -17,15 +17,17 @@ describe("desktop preload bridge", () => {
     electron.invoke.mockReset();
   });
 
-  it("exposes exactly the seven approved desktop capabilities", () => {
+  it("exposes exactly the approved desktop capabilities", () => {
     expect(electron.exposeInMainWorld).toHaveBeenCalledOnce();
     const [name, bridge] = electron.exposeInMainWorld.mock.calls[0] ?? [];
 
     expect(name).toBe("earthStoriesDesktop");
     expect(Object.keys(bridge).sort()).toEqual([
       "chooseWorkspace",
+      "listTools",
       "openExternal",
       "platform",
+      "removeTool",
       "showProjectFolder",
       "showWorkspaceFolder",
       "version",
@@ -41,6 +43,8 @@ describe("desktop preload bridge", () => {
       .mockResolvedValueOnce("/documents/Earth Stories")
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce(undefined);
     const bridge = electron.exposeInMainWorld.mock.calls[0]?.[1];
 
@@ -55,6 +59,8 @@ describe("desktop preload bridge", () => {
     await expect(
       bridge.openExternal("https://example.com/help"),
     ).resolves.toBeUndefined();
+    await expect(bridge.listTools()).resolves.toEqual([]);
+    await expect(bridge.removeTool("raster")).resolves.toBeUndefined();
 
     expect(electron.invoke.mock.calls).toEqual([
       ["desktop:choose-workspace"],
@@ -62,6 +68,8 @@ describe("desktop preload bridge", () => {
       ["desktop:show-workspace-folder"],
       ["desktop:show-project-folder", "project-one"],
       ["desktop:open-external", "https://example.com/help"],
+      ["desktop:list-tools"],
+      ["desktop:remove-tool", "raster"],
     ]);
   });
 });

@@ -36,8 +36,14 @@ import { join } from "node:path";
 const listeningServers = () => process._getActiveHandles().filter((handle) => handle?.constructor?.name === "Server" && handle.listening).length;
 const post = (origin, path, body, headers = {}) => fetch(origin + path, { method: "POST", headers: { origin, "content-type": "application/json", ...headers }, body: typeof body === "string" ? body : JSON.stringify(body) });
 const waitForJob = async (origin, id) => {
+  let acknowledged = false;
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const job = await (await fetch(origin + "/api/conversion-jobs/" + id)).json();
+    if (job.status === "awaiting-approval" && !acknowledged) {
+      acknowledged = true;
+      const response = await post(origin, "/api/conversion-jobs/" + id + "/acknowledge", "");
+      if (!response.ok) throw new Error("conversion disclosure acknowledgement failed");
+    }
     if (job.status === "succeeded" || job.status === "failed") return job;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }

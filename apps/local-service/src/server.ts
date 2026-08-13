@@ -440,6 +440,31 @@ export function createLocalServer(
         json(response, 200, job);
         return;
       }
+      const conversionActionMatch = url.pathname.match(
+        /^\/api\/conversion-jobs\/([^/]+)\/(acknowledge|cancel|retry)$/,
+      );
+      if (conversionActionMatch && request.method === "POST") {
+        const id = decodeURIComponent(conversionActionMatch[1]);
+        if (!conversionJobs.get(id)) {
+          json(response, 404, { error: "Conversion job not found" });
+          return;
+        }
+        const action = conversionActionMatch[2];
+        const accepted =
+          action === "acknowledge"
+            ? conversionJobs.acknowledge(id)
+            : action === "cancel"
+              ? conversionJobs.cancel(id)
+              : conversionJobs.retry(id);
+        if (!accepted) {
+          json(response, 409, {
+            error: `The conversion cannot ${action} from its current state.`,
+          });
+          return;
+        }
+        json(response, 200, conversionJobs.get(id));
+        return;
+      }
       const preflightMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/export\/preflight$/,
       );

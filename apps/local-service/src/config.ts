@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { access, mkdir, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import type { CredentialStore } from "./credentials.js";
+import type { ConversionCapability } from "@earth-stories/story-schema";
 
 export type { CredentialStore, StoredCredentials } from "./credentials.js";
 
@@ -30,6 +31,9 @@ export interface LocalServiceConfig {
     manifestDirectory: string;
     workerDirectory: string;
     pixiHome: string | null;
+    pixiCacheDirectory?: string | null;
+    verifyManifest?: () => Promise<void>;
+    cleanupCapability?: (capability: ConversionCapability) => Promise<void>;
   };
   credentials: CredentialStore;
   capabilityToken: string | null;
@@ -86,6 +90,10 @@ export async function resolveLocalServiceConfig(
     config.conversion.workerDirectory,
   );
   requireAbsolute("conversion.pixiHome", config.conversion.pixiHome);
+  requireAbsolute(
+    "conversion.pixiCacheDirectory",
+    config.conversion.pixiCacheDirectory ?? null,
+  );
 
   let viewerInfo;
   try {

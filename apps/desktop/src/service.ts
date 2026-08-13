@@ -8,6 +8,7 @@ import {
   type StartingLocalService,
 } from "@earth-stories/local-service";
 import type { DesktopPaths } from "./paths.js";
+import type { DesktopToolRuntimeConfiguration } from "./tools.js";
 
 type BeginLocalService = (config: LocalServiceConfig) => StartingLocalService;
 
@@ -17,6 +18,8 @@ export interface DesktopServiceDependencies {
   createCredentialStore?: (path: string) => CredentialStore;
   readinessTimeoutMs?: number;
   drainTimeoutMs?: number;
+  tools?: DesktopToolRuntimeConfiguration;
+  bootstrapPixi?: (executable: string, signal?: AbortSignal) => Promise<void>;
 }
 
 export class DesktopServiceReadinessError extends Error {
@@ -50,6 +53,7 @@ export class DesktopService {
   readonly #createCredentialStore: (path: string) => CredentialStore;
   readonly #readinessTimeoutMs: number;
   readonly #drainTimeoutMs: number;
+  readonly #tools: DesktopToolRuntimeConfiguration | null;
   #running: LocalService | null = null;
   #starting: StartingLocalService | null = null;
   #shutdown: Promise<void> | null = null;
@@ -59,7 +63,12 @@ export class DesktopService {
     dependencies: DesktopServiceDependencies = {},
   ) {
     this.#paths = paths;
-    this.#begin = dependencies.begin ?? beginLocalService;
+    this.#begin =
+      dependencies.begin ??
+      ((config) =>
+        beginLocalService(config, {
+          bootstrapPixi: dependencies.bootstrapPixi,
+        }));
     this.capabilityToken = (
       dependencies.createCapabilityToken ?? createCapabilityToken
     )();
@@ -68,6 +77,7 @@ export class DesktopService {
       ((path) => new FileCredentialStore(path));
     this.#readinessTimeoutMs = dependencies.readinessTimeoutMs ?? 15_000;
     this.#drainTimeoutMs = dependencies.drainTimeoutMs ?? 30_000;
+    this.#tools = dependencies.tools ?? null;
   }
 
   get origin(): string | null {
@@ -142,10 +152,17 @@ export class DesktopService {
       viewerDirectory: this.#paths.viewerDirectory,
       editorDirectory: this.#paths.editorDirectory,
       conversion: {
-        pixiExecutable: this.#paths.pixiExecutable,
-        manifestDirectory: this.#paths.conversionManifestDirectory,
-        workerDirectory: this.#paths.conversionWorkerDirectory,
-        pixiHome: this.#paths.pixiHome,
+        pixiExecutable:
+          this.#tools?.pixiExecutable ?? this.#paths.pixiExecutable,
+        manifestDirectory:
+          this.#tools?.manifestDirectory ??
+          this.#paths.conversionManifestDirectory,
+        workerDirectory:
+          this.#tools?.workerDirectory ?? this.#paths.conversionWorkerDirectory,
+        pixiHome: this.#tools?.pixiHome ?? this.#paths.pixiHome,
+        pixiCacheDirectory: this.#tools?.pixiCacheDirectory ?? null,
+        verifyManifest: this.#tools?.verifyManifest,
+        cleanupCapability: this.#tools?.cleanupCapability,
       },
       credentials: this.#createCredentialStore(this.#paths.credentialsFile),
       capabilityToken: this.capabilityToken,

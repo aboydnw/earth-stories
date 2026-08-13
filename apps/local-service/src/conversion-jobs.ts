@@ -10,7 +10,13 @@ import {
 import type { ProjectStore } from "@earth-stories/project-store";
 import { ConversionRuntime } from "./conversion-runtime.js";
 
-export type ConversionJobStatus = "queued" | "running" | "succeeded" | "failed";
+export type ConversionJobStatus =
+  | "queued"
+  | "awaiting-approval"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
 
 export interface ConversionJobSnapshot {
   id: string;
@@ -37,6 +43,7 @@ const outputExtension = (capability: string, target?: unknown): string => {
 export class ConversionJobs {
   readonly #jobs = new Map<string, ConversionJobSnapshot>();
   readonly #controllers = new Map<string, AbortController>();
+  readonly #requests = new Map<string, Record<string, unknown>>();
   readonly #idleWaiters = new Set<() => void>();
   readonly #runtime: ConversionRuntime;
   readonly #store: ProjectStore;
@@ -55,6 +62,43 @@ export class ConversionJobs {
 
   get(id: string): ConversionJobSnapshot | null {
     return this.#jobs.get(id) ?? null;
+  }
+
+  acknowledge(id: string): boolean {
+    const snapshot = this.#jobs.get(id);
+    if (!snapshot || snapshot.status !== "awaiting-approval") return false;
+    const accepted = this.#runtime.acknowledgeProvisioning(id);
+    if (accepted) {
+      snapshot.status = "running";
+      snapshot.updatedAt = new Date().toISOString();
+    }
+    return accepted;
+  }
+
+  cancel(id: string): boolean {
+    const controller = this.#controllers.get(id);
+    if (!controller) return false;
+    controller.abort();
+    return true;
+  }
+
+  retry(id: string): ConversionJobSnapshot | null {
+    const snapshot = this.#jobs.get(id);
+    const request = this.#requests.get(id);
+    if (
+      !this.#accepting ||
+      !snapshot ||
+      !request ||
+      (snapshot.status !== "failed" && snapshot.status !== "cancelled") ||
+      this.#controllers.has(id)
+    )
+      return null;
+    snapshot.status = "queued";
+    snapshot.updatedAt = new Date().toISOString();
+    const controller = new AbortController();
+    this.#controllers.set(id, controller);
+    void this.#run(snapshot, request, controller);
+    return snapshot;
   }
 
   activity(): number {
@@ -155,6 +199,7 @@ export class ConversionJobs {
       },
       options,
     };
+    this.#requests.set(id, request);
     void this.#run(snapshot, request, controller);
     return snapshot;
   }
@@ -185,22 +230,31 @@ export class ConversionJobs {
               : event;
           snapshot.events.push(publicEvent);
           snapshot.updatedAt = new Date().toISOString();
+          if (event.type === "provisioning-disclosure")
+            snapshot.status = "awaiting-approval";
+          if (event.type === "progress") snapshot.status = "running";
           if (event.type === "result") snapshot.status = "succeeded";
-          if (event.type === "failure") snapshot.status = "failed";
+          if (event.type === "failure")
+            snapshot.status =
+              event.status === "cancelled" ? "cancelled" : "failed";
         },
         controller.signal,
       );
       if (snapshot.status === "running") snapshot.status = "succeeded";
     } catch (cause) {
-      snapshot.status = "failed";
+      const cancelled = controller.signal.aborted;
+      snapshot.status = cancelled ? "cancelled" : "failed";
       snapshot.events.push({
         protocol: CONVERSION_PROTOCOL_VERSION,
         requestId: snapshot.id,
         type: "failure",
-        status: "failed",
-        code: "runtime-error",
-        message:
-          cause instanceof Error ? cause.message : "Conversion runtime failed",
+        status: cancelled ? "cancelled" : "failed",
+        code: cancelled ? "provisioning-cancelled" : "runtime-error",
+        message: cancelled
+          ? "Tool installation was cancelled. You can retry this conversion."
+          : cause instanceof Error
+            ? cause.message
+            : "Conversion runtime failed",
         retryable: true,
         details: {},
       });

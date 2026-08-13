@@ -20,6 +20,8 @@ describe("detectDesktopBridge", () => {
       showWorkspaceFolder: async () => undefined,
       showProjectFolder: async () => undefined,
       openExternal: async () => undefined,
+      listTools: async () => [],
+      removeTool: async () => undefined,
     } satisfies DesktopBridge;
     window.earthStoriesDesktop = bridge;
 

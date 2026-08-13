@@ -10,15 +10,46 @@ import {
 } from "@earth-stories/story-schema";
 import { ProcessTreeRunner } from "./process-tree.js";
 
-export const CAPABILITY_DOWNLOAD_ESTIMATES: Record<
+export const CAPABILITY_INSTALL_ESTIMATES: Record<
   ConversionCapability,
-  number
+  {
+    name: string;
+    estimatedBytes: number;
+    estimateKind:
+      "measured-installed-footprint" | "estimated-installed-footprint";
+    versions: string[];
+  }
 > = {
-  core: 45_000_000,
-  vector: 430_000_000,
-  raster: 360_000_000,
-  multidim: 410_000_000,
-  pointcloud: 310_000_000,
+  core: {
+    name: "Core data inspection",
+    estimatedBytes: 321_812_028,
+    estimateKind: "measured-installed-footprint",
+    versions: ["Python 3.12.*", "Pydantic >=2.11,<3"],
+  },
+  vector: {
+    name: "Vector preparation",
+    estimatedBytes: 430_000_000,
+    estimateKind: "estimated-installed-footprint",
+    versions: ["DuckDB >=1.3,<2", "GDAL >=3.10,<4", "PyArrow >=20,<23"],
+  },
+  raster: {
+    name: "Raster preparation",
+    estimatedBytes: 668_962_511,
+    estimateKind: "measured-installed-footprint",
+    versions: ["GDAL >=3.10,<4", "Rasterio >=1.4,<2", "rio-cogeo >=5.4,<6"],
+  },
+  multidim: {
+    name: "Multidimensional preparation",
+    estimatedBytes: 410_000_000,
+    estimateKind: "estimated-installed-footprint",
+    versions: ["GDAL >=3.10,<4", "Xarray >=2025.6,<2027", "Zarr >=3,<4"],
+  },
+  pointcloud: {
+    name: "Point-cloud preparation",
+    estimatedBytes: 310_000_000,
+    estimateKind: "estimated-installed-footprint",
+    versions: ["PDAL >=2.9,<3", "python-pdal >=3.5,<4"],
+  },
 };
 
 export interface RuntimeCommand {
@@ -42,24 +73,40 @@ export class ConversionRuntime {
   readonly #run: RuntimeCommandRunner;
   readonly #forceTerminate: () => Promise<void>;
   readonly #ensureExecutable: (signal?: AbortSignal) => Promise<void>;
+  readonly #verifyManifest: () => Promise<void>;
+  readonly #cleanupCapability: (
+    capability: ConversionCapability,
+  ) => Promise<void>;
   readonly #ready = new Set<ConversionCapability>();
+  readonly #approvals = new Map<string, () => void>();
 
   constructor(options: {
     pixi: string;
     manifestDirectory: string;
     workerDirectory: string;
     pixiHome: string | null;
+    pixiCacheDirectory?: string | null;
     run?: RuntimeCommandRunner;
     forceTerminate?: () => Promise<void>;
     bootstrap?: (pixiExecutable: string, signal?: AbortSignal) => Promise<void>;
     executableExists?: (path: string) => Promise<boolean>;
+    verifyManifest?: () => Promise<void>;
+    cleanupCapability?: (capability: ConversionCapability) => Promise<void>;
   }) {
     this.#pixi = options.pixi;
     this.#manifestDirectory = options.manifestDirectory;
     this.#workerDirectory = options.workerDirectory;
     this.#environment = options.pixiHome
-      ? { PIXI_HOME: options.pixiHome }
+      ? {
+          PIXI_HOME: options.pixiHome,
+          ...(options.pixiCacheDirectory
+            ? { PIXI_CACHE_DIR: options.pixiCacheDirectory }
+            : {}),
+        }
       : undefined;
+    this.#verifyManifest = options.verifyManifest ?? (async () => undefined);
+    this.#cleanupCapability =
+      options.cleanupCapability ?? (async () => undefined);
     const processTrees = new ProcessTreeRunner();
     this.#run = options.run ?? ((command) => processTrees.run(command));
     this.#forceTerminate =
@@ -88,6 +135,33 @@ export class ConversionRuntime {
     return this.#forceTerminate();
   }
 
+  acknowledgeProvisioning(requestId: string): boolean {
+    const approve = this.#approvals.get(requestId);
+    if (!approve) return false;
+    approve();
+    return true;
+  }
+
+  async #waitForApproval(
+    requestId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (signal?.aborted) throw abortError();
+    await new Promise<void>((resolveApproval, rejectApproval) => {
+      const onAbort = () => {
+        this.#approvals.delete(requestId);
+        rejectApproval(abortError());
+      };
+      const approve = () => {
+        this.#approvals.delete(requestId);
+        signal?.removeEventListener("abort", onAbort);
+        resolveApproval();
+      };
+      this.#approvals.set(requestId, approve);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+
   async provision(
     capability: ConversionCapability,
     requestId: string,
@@ -95,8 +169,27 @@ export class ConversionRuntime {
     signal?: AbortSignal,
   ): Promise<void> {
     if (this.#ready.has(capability)) return;
-    await this.#ensureExecutable(signal);
-    const total = CAPABILITY_DOWNLOAD_ESTIMATES[capability];
+    const disclosure = CAPABILITY_INSTALL_ESTIMATES[capability];
+    onEvent({
+      protocol: CONVERSION_PROTOCOL_VERSION,
+      requestId,
+      type: "provisioning-disclosure",
+      capability,
+      capabilityName: disclosure.name,
+      versions: disclosure.versions,
+      estimatedBytes: disclosure.estimatedBytes,
+      estimateKind: disclosure.estimateKind,
+      destination: join(this.#manifestDirectory, ".pixi", "envs", capability),
+      credits: [
+        { name: "Pixi", license: "BSD-3-Clause" },
+        {
+          name: "conda-forge packages",
+          license: "See the pinned pixi.lock and third-party notices",
+        },
+      ],
+    });
+    await this.#waitForApproval(requestId, signal);
+    const total = disclosure.estimatedBytes;
     onEvent({
       protocol: CONVERSION_PROTOCOL_VERSION,
       requestId,
@@ -105,21 +198,29 @@ export class ConversionRuntime {
       completed: 0,
       total,
       unit: "bytes",
-      message: `Downloading the ${capability} data tools (up to ${Math.ceil(total / 1_000_000)} MB)`,
+      message: `Installing ${disclosure.name} (estimated ${Math.ceil(total / 1_000_000)} MB on disk)`,
     });
-    await this.#run({
-      executable: this.#pixi,
-      cwd: this.#manifestDirectory,
-      env: this.#environment,
-      args: [
-        "install",
-        "--manifest-path",
-        join(this.#manifestDirectory, "pixi.toml"),
-        "-e",
-        capability,
-      ],
-      signal,
-    });
+    try {
+      await this.#ensureExecutable(signal);
+      await this.#verifyManifest();
+      await this.#run({
+        executable: this.#pixi,
+        cwd: this.#manifestDirectory,
+        env: this.#environment,
+        args: [
+          "install",
+          "--manifest-path",
+          join(this.#manifestDirectory, "pixi.toml"),
+          "--locked",
+          "-e",
+          capability,
+        ],
+        signal,
+      });
+    } catch (cause) {
+      await this.#cleanupCapability(capability);
+      throw cause;
+    }
     this.#ready.add(capability);
     onEvent({
       protocol: CONVERSION_PROTOCOL_VERSION,
@@ -129,7 +230,7 @@ export class ConversionRuntime {
       completed: total,
       total,
       unit: "bytes",
-      message: `${capability} data tools are ready`,
+      message: `${disclosure.name} tools are ready`,
     });
   }
 
@@ -146,6 +247,7 @@ export class ConversionRuntime {
       onEvent,
       signal,
     );
+    await this.#verifyManifest();
     let buffered = "";
     let parseFailure: unknown;
     await this.#run({
@@ -156,6 +258,7 @@ export class ConversionRuntime {
         "run",
         "--manifest-path",
         join(this.#manifestDirectory, "pixi.toml"),
+        "--locked",
         "-e",
         request.capability,
         "python",
@@ -189,4 +292,10 @@ export class ConversionRuntime {
       }
     }
   }
+}
+
+function abortError(): Error {
+  const error = new Error("Provisioning was cancelled.");
+  error.name = "AbortError";
+  return error;
 }

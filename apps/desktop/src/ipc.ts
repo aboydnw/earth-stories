@@ -27,6 +27,14 @@ export interface DesktopIpcDependencies {
   session: unknown;
   expectedWebContents(): DesktopIpcWebContents | null;
   chooseWorkspace(): Promise<string | null>;
+  tools?: {
+    listInstalled(): Promise<
+      Array<{ capability: string; bytes: number; destination: string }>
+    >;
+    removeCapability(
+      capability: "core" | "vector" | "raster" | "multidim" | "pointcloud",
+    ): Promise<void>;
+  };
 }
 
 export interface DesktopIpcFrame {
@@ -65,6 +73,17 @@ function requireExternalUrl(args: unknown[]): string {
   if (url.protocol !== "http:" && url.protocol !== "https:")
     throw new TypeError("External links must use HTTP or HTTPS.");
   return url.href;
+}
+
+function requireCapability(args: unknown[]) {
+  const values = ["core", "vector", "raster", "multidim", "pointcloud"];
+  if (
+    args.length !== 1 ||
+    typeof args[0] !== "string" ||
+    !values.includes(args[0])
+  )
+    throw new TypeError("A valid tool capability is required.");
+  return args[0] as "core" | "vector" | "raster" | "multidim" | "pointcloud";
 }
 
 function isContainedProjectPath(root: string, candidate: string): boolean {
@@ -158,4 +177,18 @@ export function registerDesktopIpcHandlers(
       await dependencies.shell.openExternal(requireExternalUrl(args));
     },
   );
+  if (dependencies.tools) {
+    dependencies.ipcMain.handle("desktop:list-tools", (event, ...args) => {
+      requireAuthorizedSender(event, dependencies);
+      requireNoArguments("listTools", args);
+      return dependencies.tools!.listInstalled();
+    });
+    dependencies.ipcMain.handle(
+      "desktop:remove-tool",
+      async (event, ...args) => {
+        requireAuthorizedSender(event, dependencies);
+        await dependencies.tools!.removeCapability(requireCapability(args));
+      },
+    );
+  }
 }

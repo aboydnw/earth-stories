@@ -157,4 +157,124 @@ describe("ConversionJobs", () => {
     await expect(creating).rejects.toThrow(/shutting down/i);
     expect(jobs.activity()).toBe(0);
   });
+
+  it("acknowledges, cancels, and retries provisioning on the existing job id", async () => {
+    const root = await mkdtemp(join(tmpdir(), "earth-stories-jobs-"));
+    const store = new ProjectStore(root);
+    await store.initialize();
+    const project = await store.create({ title: "Conversions" });
+    const asset = join(store.projectPath(project.id), "assets/places.geojson");
+    await mkdir(join(store.projectPath(project.id), "assets"), {
+      recursive: true,
+    });
+    await writeFile(asset, "{}");
+    let attempt = 0;
+    let approve: (() => void) | undefined;
+    const acknowledged: string[] = [];
+    const runtime = {
+      acknowledgeProvisioning: (requestId: string) => {
+        acknowledged.push(requestId);
+        approve?.();
+        return Boolean(approve);
+      },
+      execute: async (
+        request: { requestId: string; capability: "vector" },
+        onEvent: (event: unknown) => void,
+        signal?: AbortSignal,
+      ) => {
+        attempt += 1;
+        onEvent({
+          protocol: "earth-stories/conversion/v1",
+          requestId: request.requestId,
+          type: "provisioning-disclosure",
+          capability: "vector",
+          capabilityName: "Vector preparation",
+          versions: ["GDAL >=3.10,<4"],
+          estimatedBytes: 430_000_000,
+          estimateKind: "estimated-installed-footprint",
+          destination: "/tools/vector",
+          credits: [{ name: "Pixi", license: "BSD-3-Clause" }],
+        });
+        await new Promise<void>((resolve, reject) => {
+          approve = resolve;
+          signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        });
+        approve = undefined;
+        if (attempt === 1) throw new Error("install failed");
+      },
+    } as unknown as ConversionRuntime;
+    const jobs = new ConversionJobs(store, runtime);
+    const created = await jobs.create(project.id, {
+      operation: "prepare",
+      capability: "vector",
+      assetPath: "assets/places.geojson",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(jobs.get(created.id)?.status).toBe("awaiting-approval");
+    expect(jobs.acknowledge(created.id)).toBe(true);
+    await jobs.whenIdle();
+    expect(jobs.get(created.id)?.status).toBe("failed");
+
+    const retried = jobs.retry(created.id);
+    expect(retried?.id).toBe(created.id);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(jobs.acknowledge(created.id)).toBe(true);
+    await jobs.whenIdle();
+    expect(jobs.get(created.id)?.status).toBe("succeeded");
+    expect(acknowledged).toEqual([created.id, created.id]);
+  });
+
+  it("cancels an author-waiting provisioning job", async () => {
+    const root = await mkdtemp(join(tmpdir(), "earth-stories-jobs-"));
+    const store = new ProjectStore(root);
+    await store.initialize();
+    const project = await store.create({ title: "Conversions" });
+    const asset = join(store.projectPath(project.id), "assets/places.geojson");
+    await mkdir(join(store.projectPath(project.id), "assets"), {
+      recursive: true,
+    });
+    await writeFile(asset, "{}");
+    const runtime = {
+      execute: async (
+        request: { requestId: string },
+        onEvent: (event: unknown) => void,
+        signal?: AbortSignal,
+      ) => {
+        onEvent({
+          protocol: "earth-stories/conversion/v1",
+          requestId: request.requestId,
+          type: "provisioning-disclosure",
+          capability: "vector",
+          capabilityName: "Vector preparation",
+          versions: ["GDAL >=3.10,<4"],
+          estimatedBytes: 430_000_000,
+          estimateKind: "estimated-installed-footprint",
+          destination: "/tools/vector",
+          credits: [{ name: "Pixi", license: "BSD-3-Clause" }],
+        });
+        await new Promise<void>((_resolve, reject) =>
+          signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          ),
+        );
+      },
+    } as unknown as ConversionRuntime;
+    const jobs = new ConversionJobs(store, runtime);
+    const created = await jobs.create(project.id, {
+      operation: "prepare",
+      capability: "vector",
+      assetPath: "assets/places.geojson",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(jobs.cancel(created.id)).toBe(true);
+    await jobs.whenIdle();
+    expect(jobs.get(created.id)?.status).toBe("cancelled");
+  });
 });

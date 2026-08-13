@@ -56,6 +56,33 @@ export const conversionProgressSchema = z
   })
   .strict();
 
+export const provisioningDisclosureSchema = z
+  .object({
+    protocol: z.literal(CONVERSION_PROTOCOL_VERSION),
+    requestId: z.string().min(1),
+    type: z.literal("provisioning-disclosure"),
+    capability: conversionCapabilitySchema,
+    capabilityName: z.string().min(1),
+    versions: z.array(z.string().min(1)).min(1),
+    estimatedBytes: z.number().int().positive(),
+    estimateKind: z.enum([
+      "measured-installed-footprint",
+      "estimated-installed-footprint",
+    ]),
+    destination: z.string().min(1),
+    credits: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            license: z.string().min(1),
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+
 export const conversionResultSchema = z
   .object({
     protocol: z.literal(CONVERSION_PROTOCOL_VERSION),
@@ -84,6 +111,7 @@ export const conversionFailureSchema = z
   .strict();
 
 export const conversionJobEventSchema = z.discriminatedUnion("type", [
+  provisioningDisclosureSchema,
   conversionProgressSchema,
   conversionResultSchema,
   conversionFailureSchema,

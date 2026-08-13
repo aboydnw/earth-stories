@@ -9,6 +9,7 @@ import {
 } from "./ipc.js";
 import { resolveDesktopPaths } from "./paths.js";
 import { DesktopService } from "./service.js";
+import { DesktopTools } from "./tools.js";
 import { resolveLaunchWorkspace, type FirstRunChoice } from "./firstRun.js";
 import {
   looksLikeWorkspace,
@@ -62,6 +63,7 @@ export interface StartupErrorWindow {
 
 export interface DesktopMainLifecycle {
   startupErrorWindow: StartupErrorWindow | null;
+  launched: boolean;
 }
 
 export interface DesktopApplication {
@@ -300,7 +302,10 @@ function startupMessage(cause: unknown): string {
 export async function launchDesktopMain(
   dependencies: DesktopMainDependencies,
 ): Promise<DesktopMainLifecycle> {
-  const lifecycle: DesktopMainLifecycle = { startupErrorWindow: null };
+  const lifecycle: DesktopMainLifecycle = {
+    startupErrorWindow: null,
+    launched: false,
+  };
   if (!dependencies.app.requestSingleInstanceLock()) {
     dependencies.app.quit();
     return lifecycle;
@@ -400,6 +405,7 @@ export async function launchDesktopMain(
     });
     await openedWindow.load();
     windowLoaded = true;
+    lifecycle.launched = true;
     if (window !== openedWindow) return lifecycle;
     const persistence = createDimensionPersistence({
       path: dependencies.paths.windowPreferencesFile,
@@ -518,7 +524,24 @@ export async function runElectronDesktop(): Promise<void> {
     return;
   }
   paths = { ...paths, projectsDirectory: selectedWorkspace };
-  const localService = new DesktopService(paths);
+  const desktopTools = new DesktopTools({
+    appVersion: app.getVersion(),
+    masterDirectory: paths.conversionManifestDirectory,
+    toolsDirectory: paths.toolsDirectory,
+    pixiExecutable: paths.pixiExecutable,
+    workerDirectory: paths.conversionWorkerDirectory,
+    installerScript: resolve(
+      app.isPackaged
+        ? process.resourcesPath
+        : resolve(sourceDirectory, "../../.."),
+      "scripts/install-pixi.mjs",
+    ),
+  });
+  const toolRuntime = await desktopTools.prepareRuntime();
+  const localService = new DesktopService(paths, {
+    tools: toolRuntime,
+    bootstrapPixi: desktopTools.bootstrapPixi,
+  });
   // Routing infrastructure only: the later handoff importer will consume these.
   const pendingFiles: string[] = [];
   let primaryWebContents: DesktopIpcWebContents | null = null;
@@ -558,6 +581,7 @@ export async function runElectronDesktop(): Promise<void> {
         origin: () => currentOrigin,
         session: desktopSession,
         expectedWebContents: () => primaryWebContents,
+        tools: desktopTools,
         chooseWorkspace: async () => {
           const path = await pickFolder();
           if (!path || path === paths.projectsDirectory) return null;
@@ -720,6 +744,8 @@ export async function runElectronDesktop(): Promise<void> {
     readDimensions: readWindowDimensions,
     writeDimensions: writeWindowDimensions,
   });
+  if (activeDesktopLifecycle.launched)
+    await desktopTools.cleanupOtherApplicationVersions();
 }
 
 const entrypoint = process.argv[1]

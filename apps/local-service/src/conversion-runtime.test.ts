@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ConversionJobEvent } from "@earth-stories/story-schema";
 import {
-  CAPABILITY_DOWNLOAD_ESTIMATES,
+  CAPABILITY_INSTALL_ESTIMATES,
   ConversionRuntime,
   type RuntimeCommand,
 } from "./conversion-runtime.js";
@@ -30,6 +30,8 @@ describe("ConversionRuntime", () => {
       manifestDirectory: "/writable/manifest",
       workerDirectory: "/read-only/worker",
       pixiHome: "/workspace/pixi-home",
+      pixiCacheDirectory: "/workspace/pixi-cache",
+      verifyManifest: async () => undefined,
       bootstrap: async () => undefined,
       run: async (command) => {
         commands.push(command);
@@ -48,25 +50,33 @@ describe("ConversionRuntime", () => {
       },
     });
 
-    await runtime.execute(request, (event) => events.push(event));
+    const first = runtime.execute(request, (event) => events.push(event));
+    expect(commands).toHaveLength(0);
+    expect(events[0]).toMatchObject({
+      type: "provisioning-disclosure",
+      capabilityName: "Vector preparation",
+      estimatedBytes: CAPABILITY_INSTALL_ESTIMATES.vector.estimatedBytes,
+      destination: "/writable/manifest/.pixi/envs/vector",
+    });
+    expect(runtime.acknowledgeProvisioning("request-1")).toBe(true);
+    await first;
     await runtime.execute(request, (event) => events.push(event));
 
     expect(
       commands.filter((command) => command.args[0] === "install"),
     ).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      type: "progress",
-      stage: "provisioning",
-      total: CAPABILITY_DOWNLOAD_ESTIMATES.vector,
-    });
     expect(events.filter((event) => event.type === "result")).toHaveLength(2);
     expect(commands[0]).toMatchObject({
       cwd: "/writable/manifest",
-      env: { PIXI_HOME: "/workspace/pixi-home" },
+      env: {
+        PIXI_HOME: "/workspace/pixi-home",
+        PIXI_CACHE_DIR: "/workspace/pixi-cache",
+      },
       args: [
         "install",
         "--manifest-path",
         "/writable/manifest/pixi.toml",
+        "--locked",
         "-e",
         "vector",
       ],
@@ -78,6 +88,7 @@ describe("ConversionRuntime", () => {
         "run",
         "--manifest-path",
         "/writable/manifest/pixi.toml",
+        "--locked",
         "-e",
         "vector",
         "python",
@@ -94,6 +105,7 @@ describe("ConversionRuntime", () => {
       manifestDirectory: "/manifest",
       workerDirectory: "/workers",
       pixiHome: null,
+      pixiCacheDirectory: null,
       bootstrap: async (pixi) => void bootstraps.push(pixi),
       executableExists: async () => false,
       run: async (command) => {
@@ -101,7 +113,13 @@ describe("ConversionRuntime", () => {
       },
     });
 
-    await runtime.provision("core", "request-1", () => undefined);
+    const provisioning = runtime.provision(
+      "core",
+      "request-1",
+      () => undefined,
+    );
+    runtime.acknowledgeProvisioning("request-1");
+    await provisioning;
 
     expect(bootstraps).toEqual(["/missing/pixi"]);
     expect(commands).toHaveLength(1);
@@ -115,12 +133,17 @@ describe("ConversionRuntime", () => {
       manifestDirectory: "/relocated/manifest",
       workerDirectory: "/relocated/workers",
       pixiHome: null,
+      pixiCacheDirectory: null,
       executableExists: async () => false,
     });
 
-    await expect(
-      runtime.provision("core", "request-1", () => undefined),
-    ).rejects.toThrow(
+    const provisioning = runtime.provision(
+      "core",
+      "request-1",
+      () => undefined,
+    );
+    runtime.acknowledgeProvisioning("request-1");
+    await expect(provisioning).rejects.toThrow(
       "Pixi is missing and this service host did not provide a bootstrap.",
     );
   });
@@ -131,13 +154,16 @@ describe("ConversionRuntime", () => {
       manifestDirectory: "/repo",
       workerDirectory: "/repo/conversion/worker",
       pixiHome: null,
+      pixiCacheDirectory: null,
       bootstrap: async () => undefined,
       run: async (command) => {
         if (command.args[0] === "run") command.onStdout?.("not-json\n");
       },
     });
 
-    await expect(runtime.execute(request, () => undefined)).rejects.toThrow();
+    const execution = runtime.execute(request, () => undefined);
+    runtime.acknowledgeProvisioning("request-1");
+    await expect(execution).rejects.toThrow();
   });
 
   it("passes cooperative cancellation through provisioning and execution", async () => {
@@ -148,13 +174,20 @@ describe("ConversionRuntime", () => {
       manifestDirectory: "/repo",
       workerDirectory: "/repo/conversion/worker",
       pixiHome: null,
+      pixiCacheDirectory: null,
       bootstrap: async () => undefined,
       run: async (command) => {
         signals.push(command.signal);
       },
     });
 
-    await runtime.execute(request, () => undefined, controller.signal);
+    const execution = runtime.execute(
+      request,
+      () => undefined,
+      controller.signal,
+    );
+    runtime.acknowledgeProvisioning("request-1");
+    await execution;
 
     expect(signals).toEqual([controller.signal, controller.signal]);
   });
@@ -167,6 +200,7 @@ describe("ConversionRuntime", () => {
       manifestDirectory: "/repo",
       workerDirectory: "/repo/conversion/worker",
       pixiHome: null,
+      pixiCacheDirectory: null,
       executableExists: async () => false,
       bootstrap: async (_pixi, signal) => {
         bootstrapSignal = signal;
@@ -174,8 +208,59 @@ describe("ConversionRuntime", () => {
       run: async () => undefined,
     });
 
-    await runtime.execute(request, () => undefined, controller.signal);
+    const execution = runtime.execute(
+      request,
+      () => undefined,
+      controller.signal,
+    );
+    runtime.acknowledgeProvisioning("request-1");
+    await execution;
 
     expect(bootstrapSignal).toBe(controller.signal);
+  });
+
+  it("cleans a partial environment when provisioning is cancelled and permits retry", async () => {
+    const cleaned: string[] = [];
+    let attempts = 0;
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      manifestDirectory: "/manifest",
+      workerDirectory: "/workers",
+      pixiHome: "/tools/home",
+      pixiCacheDirectory: "/tools/cache",
+      executableExists: async () => true,
+      cleanupCapability: async (capability) => void cleaned.push(capability),
+      run: async (command) => {
+        if (command.args[0] !== "install") return;
+        attempts += 1;
+        if (attempts === 1) {
+          if (command.signal?.aborted)
+            throw new DOMException("Aborted", "AbortError");
+          await new Promise<void>((_resolve, reject) =>
+            command.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("Aborted", "AbortError")),
+              { once: true },
+            ),
+          );
+        }
+      },
+    });
+    const controller = new AbortController();
+    const first = runtime.provision(
+      "raster",
+      "request-1",
+      () => undefined,
+      controller.signal,
+    );
+    runtime.acknowledgeProvisioning("request-1");
+    controller.abort();
+    await expect(first).rejects.toThrow(/abort/i);
+    expect(cleaned).toEqual(["raster"]);
+
+    const retry = runtime.provision("raster", "request-1", () => undefined);
+    runtime.acknowledgeProvisioning("request-1");
+    await retry;
+    expect(attempts).toBe(2);
   });
 });

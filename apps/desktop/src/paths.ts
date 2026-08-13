@@ -42,7 +42,9 @@ export function resolveDesktopPaths(
     ),
     viewerDirectory: path.resolve(resourceRoot, "dist/viewer"),
     editorDirectory: path.resolve(resourceRoot, "dist/editor"),
-    conversionManifestDirectory: resourceRoot,
+    conversionManifestDirectory: environment.isPackaged
+      ? path.resolve(resourceRoot, "conversion")
+      : resourceRoot,
     conversionWorkerDirectory: path.resolve(resourceRoot, "conversion/worker"),
     projectsDirectory: path.resolve(
       environment.documentsDirectory,

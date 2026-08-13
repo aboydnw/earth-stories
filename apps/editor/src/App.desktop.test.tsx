@@ -94,6 +94,8 @@ describe("desktop editor controls", () => {
         revealedProjectIds.push(projectId);
       },
       openExternal: async () => undefined,
+      listTools: async () => [],
+      removeTool: async () => undefined,
     } satisfies DesktopBridge;
 
     renderApp();
@@ -124,6 +126,8 @@ describe("desktop editor controls", () => {
       },
       showProjectFolder: async () => undefined,
       openExternal: async () => undefined,
+      listTools: async () => [],
+      removeTool: async () => undefined,
     } satisfies DesktopBridge;
 
     renderApp();
@@ -150,6 +154,8 @@ describe("desktop editor controls", () => {
       chooseWorkspace: async () => null,
       showProjectFolder: async () => undefined,
       openExternal: async () => undefined,
+      listTools: async () => [],
+      removeTool: async () => undefined,
     } satisfies DesktopBridge;
 
     renderApp();

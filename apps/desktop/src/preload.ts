@@ -8,6 +8,10 @@ export interface DesktopBridge {
   showWorkspaceFolder(): Promise<void>;
   showProjectFolder(projectId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
+  listTools(): Promise<
+    Array<{ capability: string; bytes: number; destination: string }>
+  >;
+  removeTool(capability: string): Promise<void>;
 }
 
 const bridge: DesktopBridge = Object.freeze({
@@ -21,6 +25,9 @@ const bridge: DesktopBridge = Object.freeze({
     ipcRenderer.invoke("desktop:show-project-folder", projectId),
   openExternal: (url: string) =>
     ipcRenderer.invoke("desktop:open-external", url),
+  listTools: () => ipcRenderer.invoke("desktop:list-tools"),
+  removeTool: (capability: string) =>
+    ipcRenderer.invoke("desktop:remove-tool", capability),
 });
 
 contextBridge.exposeInMainWorld("earthStoriesDesktop", bridge);

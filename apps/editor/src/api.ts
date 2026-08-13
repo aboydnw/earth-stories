@@ -74,7 +74,13 @@ export interface ExampleCatalog {
 export interface ConversionJobSnapshot {
   id: string;
   projectId: string;
-  status: "queued" | "running" | "succeeded" | "failed";
+  status:
+    | "queued"
+    | "awaiting-approval"
+    | "running"
+    | "succeeded"
+    | "failed"
+    | "cancelled";
   events: ConversionJobEvent[];
   createdAt: string;
   updatedAt: string;
@@ -256,6 +262,18 @@ export async function getConversionJob(
 ): Promise<ConversionJobSnapshot> {
   return parseConversionJob(
     await request<unknown>(`/api/conversion-jobs/${encodeURIComponent(id)}`),
+  );
+}
+
+export async function actOnConversionJob(
+  id: string,
+  action: "acknowledge" | "cancel" | "retry",
+): Promise<ConversionJobSnapshot> {
+  return parseConversionJob(
+    await request<unknown>(
+      `/api/conversion-jobs/${encodeURIComponent(id)}/${action}`,
+      { method: "POST" },
+    ),
   );
 }
 

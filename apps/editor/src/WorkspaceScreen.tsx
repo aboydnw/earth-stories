@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import {
   FolderOpen,
   MapTrifold,
@@ -47,6 +47,7 @@ export function WorkspaceScreen({
   onCloseWorkspaceSettings,
   onChooseWorkspace,
   onShowWorkspaceFolder,
+  toolsPanel,
 }: {
   projects: ProjectSummary[];
   examples: ExampleCatalog | null;
@@ -76,6 +77,7 @@ export function WorkspaceScreen({
   onCloseWorkspaceSettings?: () => void;
   onChooseWorkspace?: () => void;
   onShowWorkspaceFolder?: () => void;
+  toolsPanel?: ReactNode;
 }) {
   return (
     <div className="workspace-screen">
@@ -263,6 +265,7 @@ export function WorkspaceScreen({
           <h2>Workspace settings</h2>
           <p>Earth Stories stores projects in this folder.</p>
           <code>{workspacePath ?? "Loading workspace…"}</code>
+          {toolsPanel}
           <div>
             <button
               type="button"
