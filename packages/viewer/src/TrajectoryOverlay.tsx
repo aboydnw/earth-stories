@@ -150,5 +150,5 @@ export function TrajectoryOverlay({
         : []),
     ];
   }, [asset, position, timeBounds, tracks]);
-  return <DeckOverlay layers={layers} />;
+  return <DeckOverlay layers={layers} onError={onError} />;
 }

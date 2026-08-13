@@ -74,9 +74,9 @@ export const exampleConnections: ExampleConnection[] = [
     description: "Global country boundaries packaged as vector PMTiles.",
     kind: "pmtiles",
     locator:
-      "https://pub-a8e1027739334149a1dadd24c89b6969.r2.dev/context/admin0.pmtiles",
+      "https://undpngddlsgeohubdev01.blob.core.windows.net/admin/cgaz/ADM0.pmtiles",
     tileType: "vector",
-    attribution: "geoBoundaries CGAZ, CC BY 4.0",
+    attribution: "geoBoundaries CGAZ, CC BY 4.0; hosted by UNDP GeoHub",
     camera: { center: [0, 18], zoom: 1.4, bearing: 0, pitch: 0 },
   },
   {
@@ -85,10 +85,10 @@ export const exampleConnections: ExampleConnection[] = [
     description: "Global first-order administrative boundaries in PMTiles.",
     kind: "pmtiles",
     locator:
-      "https://pub-a8e1027739334149a1dadd24c89b6969.r2.dev/context/admin1.pmtiles",
+      "https://undpngddlsgeohubdev01.blob.core.windows.net/admin/cgaz/ADM1.pmtiles",
     tileType: "vector",
-    attribution: "geoBoundaries CGAZ, CC BY 4.0",
-    camera: { center: [-98, 39], zoom: 2.8, bearing: 0, pitch: 0 },
+    attribution: "geoBoundaries CGAZ, CC BY 4.0; hosted by UNDP GeoHub",
+    camera: { center: [-98, 39], zoom: 4, bearing: 0, pitch: 0 },
   },
   {
     id: "fields-zarr",
@@ -299,7 +299,7 @@ const boundaries: StoryProject = {
         color: "#cf3f02",
         strokeColor: "#443f3f",
         radius: 4,
-        sourceLayer: null,
+        sourceLayer: "admin",
         rasterBand: 1,
         rescale: null,
         colormap: "terrain",
@@ -366,7 +366,7 @@ const boundaries: StoryProject = {
       narrative:
         "Zoom into any region and the same archive holds up: more than forty distinct jurisdictions sit inside an area smaller than the Sahara, each boundary line drawn by a different history.",
       sourceId: "countries",
-      camera: { center: [10, 50], zoom: 4.3, bearing: 0, pitch: 0 },
+      camera: { center: [10, 50], zoom: 3, bearing: 0, pitch: 0 },
     },
     {
       id: "boundaries-close",
@@ -375,14 +375,14 @@ const boundaries: StoryProject = {
       narrative:
         "Zooming changes the reading of the same source. Adjust the camera, colors, opacity, and legend in the editor, then publish the result as a connected or portable story.",
       sourceId: "countries",
-      camera: { center: [21, 5], zoom: 3.2, bearing: -4, pitch: 18 },
+      camera: { center: [21, 5], zoom: 3, bearing: -4, pitch: 18 },
     },
     {
       id: "boundaries-pyramid-chart",
       type: "chart",
       title: "What one file actually stores",
       narrative:
-        "This admin-0 archive addresses 573,399 tiles across eleven zoom levels — but most of those tiles are identical: empty ocean at zoom 8 looks the same as empty ocean at zoom 9. PMTiles stores each distinct tile once and lets many addresses point at the same bytes.",
+        "This compact admin-0 archive addresses 82 tiles across four zoom levels. PMTiles stores its indexed vector tiles in one range-readable file, so the browser can request only the geographic context needed for the current view.",
       sourceId: "tile-pyramid",
       chartType: "bar",
       xColumn: "metric",
@@ -766,7 +766,7 @@ const richMedia: StoryProject = {
         color: "#f0a93b",
         strokeColor: "#443f3f",
         radius: 4,
-        sourceLayer: null,
+        sourceLayer: "admin",
         rasterBand: 1,
         rescale: null,
         colormap: "terrain",
@@ -802,7 +802,7 @@ const richMedia: StoryProject = {
       overlayPosition: "left",
       camera: {
         center: [-98, 39],
-        zoom: 3,
+        zoom: 4,
         bearing: 0,
         pitch: 18,
         buildings: false,
@@ -853,7 +853,7 @@ const stormTrack: StoryProject = {
         color: "#7a8a99",
         strokeColor: "#443f3f",
         radius: 4,
-        sourceLayer: null,
+        sourceLayer: "admin",
         rasterBand: 1,
         rescale: null,
         colormap: "terrain",
@@ -919,7 +919,7 @@ const stormTrack: StoryProject = {
         "The storm's first fixes place it as a weak tropical depression drifting northwest — unremarkable, one of dozens that form and dissipate each Atlantic season without ever making landfall.",
       sourceId: "katrina-track",
       overlaySourceIds: ["regions"],
-      camera: { center: [-75.6, 24.2], zoom: 5.6, bearing: 0, pitch: 0 },
+      camera: { center: [-75.6, 24.2], zoom: 5, bearing: 0, pitch: 0 },
       temporalPosition: 0.06,
     },
     {
@@ -930,7 +930,7 @@ const stormTrack: StoryProject = {
         "At 22:30 UTC on 25 August, the storm — now Hurricane Katrina — came ashore near the Miami-Dade/Broward county line as a Category 1 hurricane, sustained winds near 70 knots. It crossed the narrow peninsula within hours and re-emerged over the Gulf of Mexico by the next morning, barely weakened.",
       sourceId: "katrina-track",
       overlaySourceIds: ["regions"],
-      camera: { center: [-80.15, 26.05], zoom: 7.6, bearing: 0, pitch: 0 },
+      camera: { center: [-80.15, 26.05], zoom: 5, bearing: 0, pitch: 0 },
       temporalPosition: 0.292,
     },
     {
@@ -941,7 +941,7 @@ const stormTrack: StoryProject = {
         "Over the Gulf's warm loop current, the storm intensified faster than almost any Atlantic hurricane on record. By 18:00 UTC on 28 August it reached Category 5 strength: sustained winds near 150 knots and a central pressure of 902 millibars, at the time the fourth-lowest ever measured in the Atlantic basin.",
       sourceId: "katrina-track",
       overlaySourceIds: ["regions"],
-      camera: { center: [-87.5, 26.5], zoom: 5.4, bearing: 0, pitch: 0 },
+      camera: { center: [-87.5, 26.5], zoom: 5, bearing: 0, pitch: 0 },
       temporalPosition: 0.667,
     },
     {
@@ -952,7 +952,7 @@ const stormTrack: StoryProject = {
         "Weakening slightly before landfall, the storm came ashore near Buras-Triumph, Louisiana at 11:10 UTC on 29 August as a Category 3 hurricane, then made a third landfall near the Louisiana–Mississippi border three and a half hours later. Storm surge overwhelmed levees protecting New Orleans, flooding most of the city and beginning the deadliest and most costly phase of the disaster.",
       sourceId: "katrina-track",
       overlaySourceIds: ["regions"],
-      camera: { center: [-89.6, 29.6], zoom: 7.4, bearing: 0, pitch: 0 },
+      camera: { center: [-89.6, 29.6], zoom: 5, bearing: 0, pitch: 0 },
       temporalPosition: 0.762,
     },
     {

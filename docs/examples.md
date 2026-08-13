@@ -46,6 +46,12 @@ and Autzen Stadium COPC. These URLs and their
 attribution are explicit, reviewed source data—not silent dependencies on CNG
 Sandbox.
 
+The geoBoundaries CGAZ connections use the separate ADM0 and ADM1 PMTiles
+archives published by UNDP GeoHub. UNDP is an external host that Earth Stories
+does not control, so these URLs remain subject to the same availability review
+as every other connected example source. The underlying boundary attribution
+and CC BY 4.0 license remain unchanged.
+
 Examples default to connected delivery. Authors can switch the publication
 profile or override the individual asset when they want Earth Stories to copy a
 compatible remote file into a portable release.

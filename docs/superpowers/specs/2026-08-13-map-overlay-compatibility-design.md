@@ -53,8 +53,10 @@ archives published by UNDP's open `cgaz-admin-boundaries` project:
 
 Both endpoints currently provide CORS-enabled byte ranges and PMTiles v3
 metadata with the `admin` vector source layer. The example sources will pin
-that source-layer name rather than rely on discovery. Cameras will stay within
-the archives' useful zoom ranges: ADM0 at zooms 0–3 and ADM1 at zooms 4–5.
+that source-layer name rather than rely on discovery. ADM0-only cameras will
+stay at zooms 0–3. Chapters that use ADM1 will stay at zooms 4–5; MapLibre can
+overscale the ADM0 archive in the mixed-layer chapter so both levels remain
+visible.
 
 The boundaries example's included archive-statistics CSV and corresponding
 narrative will be updated from the replacement ADM0 header. Attribution will

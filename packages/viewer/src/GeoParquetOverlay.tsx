@@ -217,5 +217,11 @@ export function GeoParquetOverlay({
     renderedData.current = data;
     onReady?.();
   }, [data, onReady]);
-  return <DeckOverlay layers={layers} onAfterRender={reportRendered} />;
+  return (
+    <DeckOverlay
+      layers={layers}
+      onAfterRender={reportRendered}
+      onError={onError}
+    />
+  );
 }

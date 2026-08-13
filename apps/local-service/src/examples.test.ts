@@ -9,6 +9,51 @@ import {
 import { loadExampleAssetFiles } from "./exampleAssets.js";
 
 describe("example catalog", () => {
+  it("uses the reviewed UNDP CGAZ archives with compatible layers and cameras", () => {
+    const adm0Url =
+      "https://undpngddlsgeohubdev01.blob.core.windows.net/admin/cgaz/ADM0.pmtiles";
+    const adm1Url =
+      "https://undpngddlsgeohubdev01.blob.core.windows.net/admin/cgaz/ADM1.pmtiles";
+    expect(
+      exampleConnections.find(({ id }) => id === "countries-pmtiles"),
+    ).toMatchObject({ locator: adm0Url });
+    expect(
+      exampleConnections.find(({ id }) => id === "regions-pmtiles"),
+    ).toMatchObject({ locator: adm1Url });
+
+    for (const id of ["boundaries", "rich-media", "storm-track"]) {
+      const story = storyProjectSchema.parse(findExampleStory(id));
+      for (const source of story.sources) {
+        if (source.kind !== "pmtiles") continue;
+        expect(source.locator).toBe(
+          source.id === "countries" ? adm0Url : adm1Url,
+        );
+        expect(source.presentation?.sourceLayer).toBe("admin");
+      }
+    }
+
+    const boundaries = storyProjectSchema.parse(findExampleStory("boundaries"));
+    for (const chapter of boundaries.chapters) {
+      if (
+        (chapter.type === "map" || chapter.type === "scrolly") &&
+        chapter.sourceId === "countries"
+      )
+        expect(chapter.camera.zoom).toBeLessThanOrEqual(3);
+    }
+    for (const id of ["rich-media", "storm-track"]) {
+      const story = storyProjectSchema.parse(findExampleStory(id));
+      for (const chapter of story.chapters) {
+        if (
+          (chapter.type === "map" || chapter.type === "scrolly") &&
+          chapter.overlaySourceIds?.includes("regions")
+        ) {
+          expect(chapter.camera.zoom).toBeGreaterThanOrEqual(4);
+          expect(chapter.camera.zoom).toBeLessThanOrEqual(5);
+        }
+      }
+    }
+  });
+
   it("ships editable stories that satisfy the current project contract", () => {
     const catalog = exampleCatalog();
     expect(catalog.stories.length).toBeGreaterThanOrEqual(2);

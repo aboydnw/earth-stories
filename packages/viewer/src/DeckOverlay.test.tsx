@@ -78,4 +78,24 @@ describe("DeckOverlay", () => {
     props.onAfterRender?.();
     expect(latestCallback).toHaveBeenCalledOnce();
   });
+
+  it("reports deck failures through the latest error callback", () => {
+    const firstCallback = vi.fn();
+    const latestCallback = vi.fn();
+    const layers = [{ id: "layer" }] as unknown as Layer[];
+    const view = render(
+      <DeckOverlay layers={layers} onError={firstCallback} />,
+    );
+    const props = mocks.constructor.mock.calls[0]?.[0] as {
+      onError?: (cause: Error) => void;
+    };
+
+    props.onError?.(new Error("Deck layer failed"));
+    expect(firstCallback).toHaveBeenCalledWith("Deck layer failed");
+
+    view.rerender(<DeckOverlay layers={layers} onError={latestCallback} />);
+    props.onError?.(new Error("Updated deck failure"));
+    expect(firstCallback).toHaveBeenCalledOnce();
+    expect(latestCallback).toHaveBeenCalledWith("Updated deck failure");
+  });
 });

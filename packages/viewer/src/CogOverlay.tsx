@@ -207,7 +207,11 @@ export function CogOverlay({
   }, [asset.presentation.rasterBand, maps, onError]);
   return (
     <>
-      <DeckOverlay layers={layers} onAfterRender={reportRendered} />
+      <DeckOverlay
+        layers={layers}
+        onAfterRender={reportRendered}
+        onError={onError}
+      />
       {inspection ? (
         <output className="story-map__pixel">{inspection}</output>
       ) : null}

@@ -140,6 +140,9 @@ const terrainCompatible = (asset: PublicationAsset) =>
   asset.kind === "trajectory" ||
   asset.kind === "xyz";
 
+export const supportsGlobeProjection = (asset: PublicationAsset) =>
+  asset.kind === "pmtiles" || asset.kind === "geojson" || asset.kind === "xyz";
+
 const ignoreTimeBounds = () => undefined;
 
 function AssetLayer({
@@ -586,6 +589,9 @@ export function MapChapter({
     [chapter.camera],
   );
   const mapAssets = asset ? [asset, ...overlayAssets] : overlayAssets;
+  const globeSuppressed =
+    Boolean(chapter.camera.globe) && !mapAssets.every(supportsGlobeProjection);
+  const globeEnabled = Boolean(chapter.camera.globe) && !globeSuppressed;
   const mapAssetEntries = mapAssets.map((item) => ({
     item,
     key: `${item.id}:${item.href}`,
@@ -661,7 +667,7 @@ export function MapChapter({
         initialViewState={initialViewState}
         mapStyle={basemapStyle}
         interactive={interaction.interactive}
-        projection={chapter.camera.globe ? { type: "globe" } : undefined}
+        projection={globeEnabled ? { type: "globe" } : undefined}
         terrain={
           terrainEnabled
             ? {
@@ -823,6 +829,12 @@ export function MapChapter({
       {chapter.camera.terrain?.enabled && !terrainEnabled ? (
         <div className="story-map__hint" role="status">
           Terrain is unavailable for this dataset renderer.
+        </div>
+      ) : null}
+      {globeSuppressed ? (
+        <div className="story-map__hint" role="status">
+          Mercator is used because this dataset renderer does not support globe
+          view.
         </div>
       ) : null}
       {error ? (

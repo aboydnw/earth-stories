@@ -23,6 +23,7 @@ vi.mock("react-map-gl/maplibre", async () => {
         props: {
           children?: React.ReactNode;
           mapStyle?: string;
+          projection?: { type: string };
           onError?: (event: { error: Error }) => void;
           onLoad?: () => void;
         },
@@ -37,7 +38,14 @@ vi.mock("react-map-gl/maplibre", async () => {
           if (props.mapStyle === "error://style")
             props.onError?.({ error: new Error("Map fixture failed") });
         }, [props.mapStyle, props.onError, props.onLoad]);
-        return <div>{props.children}</div>;
+        return (
+          <div
+            data-testid="map-root"
+            data-projection={props.projection?.type ?? "mercator"}
+          >
+            {props.children}
+          </div>
+        );
       },
     ),
     Layer: () => null,
@@ -63,8 +71,25 @@ vi.mock("react-map-gl/maplibre", async () => {
   };
 });
 vi.mock("maplibre-gl", () => ({ default: { addProtocol: vi.fn() } }));
+vi.mock("pmtiles", () => ({
+  PMTiles: class {
+    getMetadata = async () => ({ vector_layers: [{ id: "admin" }] });
+    getHeader = async () => ({
+      minLon: -180,
+      minLat: -85,
+      maxLon: 180,
+      maxLat: 85,
+    });
+  },
+  Protocol: class {
+    tile = vi.fn();
+    add = vi.fn();
+  },
+}));
+vi.mock("./CogOverlay.js", () => ({ CogOverlay: () => null }));
+vi.mock("./TrajectoryOverlay.js", () => ({ TrajectoryOverlay: () => null }));
 
-import { MapChapter } from "./MapChapter.js";
+import { MapChapter, supportsGlobeProjection } from "./MapChapter.js";
 
 afterEach(() => {
   cleanup();
@@ -106,6 +131,90 @@ const chapter = {
 } as Extract<PublicationChapter, { type: "map" }>;
 
 describe("MapChapter", () => {
+  it("classifies every supported map renderer by globe compatibility", () => {
+    for (const kind of ["pmtiles", "geojson", "xyz"] as const)
+      expect(supportsGlobeProjection(publicationAsset({ kind }))).toBe(true);
+    for (const kind of [
+      "cog",
+      "geoparquet",
+      "zarr",
+      "trajectory",
+      "copc",
+    ] as const)
+      expect(supportsGlobeProjection(publicationAsset({ kind }))).toBe(false);
+  });
+
+  it("uses Mercator for an authored globe with a deck-backed primary source", () => {
+    render(
+      <MapChapter
+        chapter={{
+          ...chapter,
+          camera: { ...chapter.camera, globe: true },
+        }}
+        asset={publicationAsset({ id: "raster", kind: "cog" })}
+        basemapStyle="local/style.json"
+      />,
+    );
+
+    expect(screen.getByTestId("map-root").getAttribute("data-projection")).toBe(
+      "mercator",
+    );
+    expect(
+      screen.getByText(
+        "Mercator is used because this dataset renderer does not support globe view.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("uses Mercator when an authored globe has a deck-backed overlay", () => {
+    render(
+      <MapChapter
+        chapter={{
+          ...chapter,
+          camera: { ...chapter.camera, globe: true },
+        }}
+        asset={publicationAsset({ id: "base", kind: "xyz" })}
+        overlayAssets={[publicationAsset({ id: "track", kind: "trajectory" })]}
+        basemapStyle="local/style.json"
+      />,
+    );
+
+    expect(screen.getByTestId("map-root").getAttribute("data-projection")).toBe(
+      "mercator",
+    );
+    expect(
+      screen.getByText(
+        "Mercator is used because this dataset renderer does not support globe view.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("preserves an authored globe for a PMTiles-only map", () => {
+    render(
+      <MapChapter
+        chapter={{
+          ...chapter,
+          camera: { ...chapter.camera, globe: true },
+        }}
+        asset={publicationAsset({
+          id: "boundaries",
+          kind: "pmtiles",
+          tileType: "vector",
+        })}
+        basemapStyle="local/style.json"
+      />,
+    );
+
+    expect(screen.getByTestId("map-root").getAttribute("data-projection")).toBe(
+      "globe",
+    );
+    expect(
+      screen.queryByText(
+        "Mercator is used because this dataset renderer does not support globe view.",
+      ),
+    ).toBeNull();
+  });
+
   it("renders terrain and buildings only from declared chapter dependencies", () => {
     const networkChapter = {
       ...chapter,

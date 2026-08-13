@@ -187,5 +187,5 @@ export function ZarrOverlay({
       }),
     ];
   }, [asset, colormapTextures, opened, onError, timeIndex]);
-  return <DeckOverlay layers={layers} />;
+  return <DeckOverlay layers={layers} onError={onError} />;
 }
