@@ -211,3 +211,33 @@ Observed with loopback/subprocess permissions:
 Test Files 1 passed (1)
 Tests 1 passed (1)
 ```
+
+## Final Electron smoke fixture repair
+
+The smoke fixture's exact approved preload-bridge key list now matches the nine-key production bridge and preload unit contract. No smoke assertion or production bridge behavior changed.
+
+### RED
+
+The controller's Electron smoke run reached the application with every security assertion true, but rejected the received nine bridge keys because the fixture still expected the pre-desktop-03 five-key list.
+
+### GREEN
+
+Command:
+
+```text
+yarn workspace @earth-stories/desktop smoke:electron
+```
+
+Observed with GUI/loopback permissions:
+
+```text
+bridgeKeys: chooseWorkspace, listTools, openExternal, platform, removeTool, showProjectFolder, showWorkspaceFolder, version, workspacePath
+contextIsolation: true
+sandbox: true
+nodeIntegration: false
+storagePath: null
+serviceAuthenticated: true
+maliciousTokenAbsent: true
+tokenContained: true
+exit 0
+```

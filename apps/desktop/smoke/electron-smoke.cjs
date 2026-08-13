@@ -96,10 +96,14 @@ app
       };
       const expectedKeys = [
         "chooseWorkspace",
+        "listTools",
         "openExternal",
         "platform",
+        "removeTool",
         "showProjectFolder",
+        "showWorkspaceFolder",
         "version",
+        "workspacePath",
       ];
       if (
         JSON.stringify(result.bridgeKeys) !== JSON.stringify(expectedKeys) ||
