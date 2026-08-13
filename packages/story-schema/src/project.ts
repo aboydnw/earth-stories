@@ -146,6 +146,13 @@ export const projectSourceSchema = z.discriminatedUnion("kind", [
   sourceBaseSchema.extend({
     kind: z.literal("cog"),
     locator: z.string().min(1),
+    cog: z
+      .object({
+        epsg: z.number().int().positive(),
+        definition: z.string().min(1),
+      })
+      .nullable()
+      .optional(),
   }),
   sourceBaseSchema.extend({
     kind: z.literal("xyz"),

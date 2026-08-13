@@ -224,6 +224,64 @@ describe("compileProject", () => {
     ).toBe("connected");
   });
 
+  it("does not report vendored GeoParquet runtime files as network dependencies", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.sources.push({
+      id: "boundaries",
+      kind: "geoparquet",
+      label: "Boundaries",
+      locator: "boundaries.parquet",
+      attribution: null,
+      sizeBytes: 1024,
+      delivery: "included",
+    });
+
+    const dependencies = compileProject(fixture).externalDependencies;
+    expect(dependencies).not.toContainEqual(
+      expect.objectContaining({
+        resourceId: "earth-stories-geoparquet-runtime",
+      }),
+    );
+    expect(dependencies).not.toContainEqual(
+      expect.objectContaining({ resourceId: "duckdb-spatial-extension" }),
+    );
+  });
+
+  it("carries an embedded COG projection into the publication without epsg.io", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.sources.push({
+      id: "projected-dem",
+      kind: "cog",
+      label: "Projected DEM",
+      locator: "projected-dem.tif",
+      attribution: null,
+      sizeBytes: 901_326,
+      delivery: "included",
+      cog: {
+        epsg: 32618,
+        definition:
+          "+proj=utm +zone=18 +datum=WGS84 +units=m +no_defs +type=crs",
+      },
+    });
+
+    const result = compileProject(fixture);
+    expect(
+      result.assets.find((asset) => asset.id === "projected-dem")?.cog,
+    ).toEqual(fixture.sources.at(-1).cog);
+    expect(result.externalDependencies).not.toContainEqual(
+      expect.objectContaining({ resourceId: "cog-epsg-resolver" }),
+    );
+
+    fixture.sources.push({
+      ...fixture.sources.at(-1),
+      id: "projection-unknown",
+      cog: null,
+    });
+    expect(compileProject(fixture).externalDependencies).toContainEqual(
+      expect.objectContaining({ resourceId: "cog-epsg-resolver" }),
+    );
+  });
+
   it("compiles overlays, temporal Zarr, COPC, video, and flyover chapters", async () => {
     const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
     fixture.sources.push(

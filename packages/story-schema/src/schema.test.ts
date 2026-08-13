@@ -9,8 +9,43 @@ import {
   projectSourceSchema,
   storyProjectSchema,
 } from "./project.js";
+import { publicationAssetSchema } from "./publication.js";
 
 describe("storyProjectSchema", () => {
+  it("defaults the optional COG projection on legacy publication assets", () => {
+    const asset = publicationAssetSchema.parse({
+      id: "legacy-cog",
+      label: "Legacy COG",
+      kind: "cog",
+      delivery: "included",
+      href: "assets/legacy-cog.tif",
+      attribution: null,
+      sizeBytes: 901_326,
+      tileType: "raster",
+      presentation: {
+        opacity: 1,
+        color: "#336699",
+        strokeColor: "#ffffff",
+        radius: 4,
+        sourceLayer: null,
+        rasterBand: 1,
+        rescale: null,
+        colormap: "viridis",
+        legendTitle: "",
+        legendVisible: false,
+        symbolProperty: null,
+        categoryColors: {},
+        filterProperty: null,
+        filterValue: null,
+      },
+      zarr: null,
+      trajectory: null,
+      copc: null,
+    });
+
+    expect(asset.cog).toBeNull();
+  });
+
   it("accepts the representative project", async () => {
     const fixture = JSON.parse(
       await readFile(

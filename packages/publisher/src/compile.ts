@@ -157,6 +157,7 @@ function compileAsset(
   const specialized = (value?: Partial<PublicationAsset>) => ({
     provenance: source.provenance,
     zarr: null,
+    cog: null,
     trajectory: null,
     copc: null,
     ...value,
@@ -261,7 +262,7 @@ function compileAsset(
         sizeBytes: source.sizeBytes,
         tileType: null,
         presentation,
-        ...specialized(),
+        ...specialized({ cog: source.cog ?? null }),
       };
     }
     case "xyz":
@@ -460,21 +461,7 @@ export function compileProject(input: unknown): PublicationManifest {
             ? (["network", "cors", "byte-ranges"] as const)
             : (["network", "cors"] as const),
       })),
-      ...(assets.some((asset) => asset.kind === "geoparquet")
-        ? [
-            {
-              resourceId: "earth-stories-geoparquet-runtime",
-              href: "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/",
-              requirements: ["network", "cors"] as const,
-            },
-            {
-              resourceId: "duckdb-spatial-extension",
-              href: "https://extensions.duckdb.org/",
-              requirements: ["network", "cors"] as const,
-            },
-          ]
-        : []),
-      ...(assets.some((asset) => asset.kind === "cog")
+      ...(assets.some((asset) => asset.kind === "cog" && asset.cog === null)
         ? [
             {
               resourceId: "cog-epsg-resolver",

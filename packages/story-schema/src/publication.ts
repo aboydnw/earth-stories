@@ -83,6 +83,13 @@ export const publicationAssetSchema = z.object({
         .nullable(),
     })
     .nullable(),
+  cog: z
+    .object({
+      epsg: z.number().int().positive(),
+      definition: z.string().min(1),
+    })
+    .nullable()
+    .default(null),
   trajectory: z.object({ trailLength: z.number().positive() }).nullable(),
   copc: z
     .object({

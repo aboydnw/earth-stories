@@ -6,6 +6,10 @@ import type { Table } from "apache-arrow";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { DeckOverlay } from "./DeckOverlay.js";
 import { geoJsonBounds, type GeographicBounds } from "./geoBounds.js";
+import {
+  duckDbSpatialSetupSql,
+  publicationDuckDbRuntime,
+} from "./duckdbRuntime.js";
 
 const FEATURE_CAP = 100_000;
 let databasePromise: Promise<{
@@ -16,7 +20,8 @@ let databasePromise: Promise<{
 async function database() {
   if (databasePromise) return databasePromise;
   databasePromise = (async () => {
-    const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
+    const runtime = publicationDuckDbRuntime(new URL(window.location.href));
+    const bundle = await duckdb.selectBundle(runtime.bundles);
     if (!bundle.mainModule || !bundle.mainWorker)
       throw new Error("No compatible in-browser GeoParquet runtime was found.");
     const workerResponse = await fetch(bundle.mainWorker);
@@ -33,7 +38,7 @@ async function database() {
     );
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
     const connection = await db.connect();
-    await connection.query("INSTALL spatial; LOAD spatial;");
+    await connection.query(duckDbSpatialSetupSql(runtime.extensionRepository));
     return { db, connection };
   })().catch((cause) => {
     databasePromise = null;

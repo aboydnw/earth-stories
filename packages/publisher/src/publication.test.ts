@@ -317,6 +317,7 @@ describe("publication hardening", () => {
       tileType: "raster",
       presentation: manifest.assets[0]!.presentation,
       zarr: null,
+      cog: null,
       trajectory: null,
       copc: null,
     });

@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { GeoTIFF } from "@developmentseed/geotiff";
-import {
-  epsgResolver,
-  parseWkt,
-  type ProjectionDefinition,
-} from "@developmentseed/proj";
 import proj4 from "proj4";
 import { useMap } from "react-map-gl/maplibre";
 import { buildCogLayers } from "./CogLayer.js";
 import { deriveCogRescale, supportsInferredPipeline } from "./cogPipeline.js";
 import { DeckOverlay } from "./DeckOverlay.js";
+import {
+  resolveCogProjection,
+  type CogProjectionDefinition,
+} from "./cogProjection.js";
 
 export function CogOverlay({
   asset,
@@ -28,7 +27,7 @@ export function CogOverlay({
   const maps = useMap();
   const raster = useRef<{
     geotiff: GeoTIFF;
-    projection: ProjectionDefinition;
+    projection: CogProjectionDefinition;
   } | null>(null);
   const [inspection, setInspection] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<{
@@ -51,9 +50,7 @@ export function CogOverlay({
         const absoluteUrl = new URL(url, window.location.href).toString();
         const source = await GeoTIFF.fromUrl(absoluteUrl);
         const crs = source.crs;
-        const projection = (
-          typeof crs === "number" ? await epsgResolver(crs) : parseWkt(crs)
-        ) as ProjectionDefinition;
+        const projection = await resolveCogProjection(crs, asset.cog);
         let rescale: [number, number] | null =
           rescaleMin !== null && rescaleMax !== null
             ? [rescaleMin, rescaleMax]

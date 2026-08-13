@@ -1,0 +1,13 @@
+# Offline viewer third-party runtime notices
+
+The offline GeoParquet runtime contains the exact artifacts below. Checksums
+are enforced by `apps/viewer/src/offlineRuntimeAssets.test.ts`.
+
+| Component                     | Version / platform                                                        | Upstream license evidence                                                                                                                                     | Redistribution status                                                                                                                                                                                                                                            |
+| ----------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DuckDB-Wasm worker and module | npm `@duckdb/duckdb-wasm` 1.32.0; DuckDB v1.4.3; `wasm_eh` and `wasm_mvp` | Package metadata declares MIT; source: <https://github.com/duckdb/duckdb-wasm/tree/v1.32.0>                                                                   | Source license permits redistribution with its copyright/license notice. A release notice payload still needs the version-pinned upstream license text.                                                                                                          |
+| DuckDB spatial extension      | DuckDB v1.4.3; `wasm_eh` and `wasm_mvp`                                   | Signed official artifacts from <https://extensions.duckdb.org/v1.4.3/>; extension source declares MIT: <https://github.com/duckdb/duckdb-spatial/tree/v1.4.3> | **Release gate:** the binary bundles GDAL and transitive native libraries. Generate a component SBOM and complete notice/counsel review before public redistribution. Do not interpret the extension project's MIT license as clearing every bundled dependency. |
+
+The worker files preserve their bundled JavaScript license comments. This
+inventory records technical provenance; it is not legal advice and does not
+clear the unresolved release gate above.
