@@ -89,6 +89,23 @@ function sha256(value: string | Buffer) {
 }
 
 describe("publication materialization", () => {
+  it("requires an explicit viewer directory for bundled runtime dependencies", async () => {
+    const paths = await workspace();
+    const project = projectWith({
+      id: "parquet",
+      kind: "geoparquet",
+      label: "Parquet",
+      locator: "data/table.parquet",
+      attribution: null,
+      sizeBytes: null,
+      delivery: "included",
+    });
+
+    await expect(materializePublication({ ...paths, project })).rejects.toThrow(
+      /viewer directory.*runtime dependencies/i,
+    );
+  });
+
   it("rejects a truncated remote response and removes partial files", async () => {
     const paths = await workspace();
     const fetchRemote = vi.fn(
@@ -131,7 +148,7 @@ describe("publication materialization", () => {
     ).rejects.toThrow(/checksum/i);
 
     const cacheFiles = await readdir(paths.cacheDirectory, { recursive: true });
-    expect(cacheFiles).not.toContain(sha256("changed"));
+    expect(cacheFiles).not.toContain(join("sha256", sha256("changed")));
   });
 
   it("reuses a verified persistent cache without contacting the remote locator", async () => {

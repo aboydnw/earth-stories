@@ -401,6 +401,13 @@ async function buildLatestPublicationUnlocked(
       maxRetries: 5,
       retryDelay: 75,
     });
+    await rm(
+      join(
+        projectDirectory,
+        ".earth-stories-publication-verification-failed.json",
+      ),
+      { force: true },
+    );
     return { manifest, preflight, directory: target, totalBytes, builtAt };
   } finally {
     await rm(temporary, {

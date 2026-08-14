@@ -2,9 +2,12 @@ import {
   chmod,
   mkdir,
   mkdtemp,
+  lstat,
   readFile,
   readdir,
   stat,
+  symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -200,6 +203,52 @@ describe("DesktopTools", () => {
     await value.manager.removeCapability("raster");
     await expect(stat(environment)).rejects.toThrow();
     await expect(stat(config.manifestDirectory)).resolves.toBeTruthy();
+  });
+
+  it("counts symlink entries without following their targets", async () => {
+    const value = await fixture();
+    const config = await value.manager.prepareRuntime();
+    const environment = join(
+      config.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+    const outside = join(value.root, "outside");
+    await mkdir(environment, { recursive: true });
+    await mkdir(outside);
+    await writeFile(join(outside, "large.bin"), "x".repeat(10_000));
+    const link = join(environment, "outside-link");
+    await symlink(outside, link, "dir");
+
+    await expect(value.manager.listInstalled()).resolves.toEqual([
+      expect.objectContaining({
+        capability: "raster",
+        apparentBytes: (await lstat(link)).size,
+      }),
+    ]);
+  });
+
+  it("reuses an environment size until that environment directory changes", async () => {
+    const value = await fixture();
+    const config = await value.manager.prepareRuntime();
+    const environment = join(
+      config.manifestDirectory,
+      ".pixi",
+      "envs",
+      "raster",
+    );
+    await mkdir(environment, { recursive: true });
+    const existing = join(environment, "one.bin");
+    await writeFile(existing, "123");
+
+    expect((await value.manager.listInstalled())[0]?.apparentBytes).toBe(3);
+    await writeFile(existing, "123456");
+    expect((await value.manager.listInstalled())[0]?.apparentBytes).toBe(3);
+    await writeFile(join(environment, "two.bin"), "12");
+    const changed = new Date(Date.now() + 2_000);
+    await utimes(environment, changed, changed);
+    expect((await value.manager.listInstalled())[0]?.apparentBytes).toBe(8);
   });
 
   it("recovers after a crash once a complete generation is staged", async () => {

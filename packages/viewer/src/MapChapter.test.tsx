@@ -24,6 +24,7 @@ vi.mock("react-map-gl/maplibre", async () => {
           children?: React.ReactNode;
           mapStyle?: string;
           projection?: { type: string };
+          terrain?: { source: string };
           onError?: (event: { error: Error }) => void;
           onLoad?: () => void;
         },
@@ -42,6 +43,7 @@ vi.mock("react-map-gl/maplibre", async () => {
           <div
             data-testid="map-root"
             data-projection={props.projection?.type ?? "mercator"}
+            data-terrain={props.terrain?.source ?? "none"}
           >
             {props.children}
           </div>
@@ -239,6 +241,10 @@ describe("MapChapter", () => {
     );
 
     expect(screen.queryByTestId("source-earth-stories-terrain")).toBeNull();
+    expect(screen.getByTestId("map-root").getAttribute("data-terrain")).toBe(
+      "none",
+    );
+    expect(screen.getByText(/terrain is unavailable/i)).toBeTruthy();
     expect(
       screen.queryByTestId("source-earth-stories-buildings-source"),
     ).toBeNull();

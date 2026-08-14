@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { ConversionCapability } from "@earth-stories/story-schema";
 
+declare const __EARTH_STORIES_VERSION__: string;
+
 export interface DesktopBridge {
   version: string;
   platform: NodeJS.Platform;
@@ -28,7 +30,10 @@ export interface DesktopBridge {
 }
 
 const bridge: DesktopBridge = Object.freeze({
-  version: process.env.npm_package_version ?? "0.1.0",
+  version:
+    typeof __EARTH_STORIES_VERSION__ === "string"
+      ? __EARTH_STORIES_VERSION__
+      : "0.1.0",
   platform: process.platform,
   chooseWorkspace: () => ipcRenderer.invoke("desktop:choose-workspace"),
   exportDiagnostics: () => ipcRenderer.invoke("desktop:export-diagnostics"),

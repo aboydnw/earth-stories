@@ -52,6 +52,27 @@ describe("compileProject", () => {
     expect(() => compileProject(fixture)).toThrow(/source:survey-sites:data/);
   });
 
+  it.each(["connected", "portable"] as const)(
+    "keeps an explicit unresolved dependency in %s compilation",
+    async (profile) => {
+      const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+      fixture.schema = "earth-stories/project/v2";
+      fixture.publication = {
+        ...fixture.publication,
+        profile,
+        offlineBasemap: { mode: "neutral" },
+      };
+
+      expect(compileProject(fixture).dependencies).toContainEqual(
+        expect.objectContaining({
+          id: "source:survey-sites:data",
+          delivery: "unsupported",
+          reason: expect.stringMatching(/SHA-256/),
+        }),
+      );
+    },
+  );
+
   it("is deterministic and includes local assets", async () => {
     const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as unknown;
     const first = compileProject(fixture);

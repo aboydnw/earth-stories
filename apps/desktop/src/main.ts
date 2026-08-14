@@ -94,7 +94,10 @@ export interface DesktopMainDependencies {
     options: { origin: string; capabilityToken: string },
   ): void;
   installSessionPolicies(session: unknown, options: { origin: string }): void;
-  probeSession(session: unknown, options: { origin: string }): Promise<void>;
+  probeSession(
+    session: unknown,
+    options: { origin: string; signal: AbortSignal },
+  ): Promise<void>;
   installIpcHandlers(options: { origin: string; session: unknown }): void;
   createWindow(options: {
     origin: string;
@@ -274,19 +277,25 @@ export function requestBrowserWindowClose(
 ): Promise<boolean> {
   if (browserWindow.isDestroyed()) return Promise.resolve(true);
   return new Promise<boolean>((resolveClose) => {
-    const onClosed = () => {
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    const settle = (closed: boolean) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      browserWindow.removeListener("closed", onClosed);
       browserWindow.webContents.removeListener(
         "will-prevent-unload",
         onPrevented,
       );
-      resolveClose(true);
+      resolveClose(closed);
     };
-    const onPrevented = () => {
-      browserWindow.removeListener("closed", onClosed);
-      resolveClose(false);
-    };
+    const onClosed = () => settle(true);
+    const onPrevented = () => settle(false);
     browserWindow.once("closed", onClosed);
     browserWindow.webContents.once("will-prevent-unload", onPrevented);
+    timer = setTimeout(() => settle(true), 5_000);
+    timer.unref?.();
     browserWindow.close();
   });
 }
@@ -382,7 +391,20 @@ export async function launchDesktopMain(
       capabilityToken: dependencies.service.capabilityToken,
     });
     dependencies.installSessionPolicies(desktopSession, { origin });
-    await dependencies.probeSession(desktopSession, { origin });
+    const probeController = new AbortController();
+    const probeTimer = setTimeout(
+      () => probeController.abort(new Error("startup probe timed out")),
+      10_000,
+    );
+    probeTimer.unref?.();
+    try {
+      await dependencies.probeSession(desktopSession, {
+        origin,
+        signal: probeController.signal,
+      });
+    } finally {
+      clearTimeout(probeTimer);
+    }
     dependencies.installIpcHandlers({ origin, session: desktopSession });
     const dimensions = await dependencies.readDimensions(
       dependencies.paths.windowPreferencesFile,
@@ -462,106 +484,129 @@ export async function runElectronDesktop(): Promise<void> {
     app.quit();
     return;
   }
+  const pendingFiles: string[] = [];
+  let secondInstanceListener: ((argv: string[]) => void) | null = null;
+  let openFileListener: ((path: string) => void) | null = null;
+  app.on("second-instance", (_event, argv) => {
+    if (secondInstanceListener) secondInstanceListener(argv);
+    else pendingFiles.push(...fileArguments(argv));
+  });
+  app.on("open-file", (event, path) => {
+    event.preventDefault();
+    if (openFileListener) openFileListener(path);
+    else pendingFiles.push(path);
+  });
   const sourceDirectory = dirname(fileURLToPath(import.meta.url));
-  let paths = resolveDesktopPaths({
-    isPackaged: app.isPackaged,
-    applicationDirectory: app.isPackaged
-      ? app.getAppPath()
-      : resolve(sourceDirectory, ".."),
-    resourcesDirectory: process.resourcesPath,
-    userDataDirectory: app.getPath("userData"),
-    documentsDirectory: app.getPath("documents"),
-    platform: process.platform,
-  });
-  await mkdir(paths.logsDirectory, { recursive: true });
-  await app.whenReady();
-  const diagnostics = new DesktopDiagnostics({
-    directory: paths.logsDirectory,
-    appVersion: app.getVersion(),
-    platform: process.platform,
-  });
-  const pickFolder = async (): Promise<string | null> => {
-    const result = await dialog.showOpenDialog({
-      title: "Choose an Earth Stories workspace",
-      properties: ["openDirectory", "createDirectory"],
+  let paths!: DesktopPaths;
+  let diagnostics!: DesktopDiagnostics;
+  let pickFolder!: () => Promise<string | null>;
+  let desktopTools!: DesktopTools;
+  let localService!: DesktopService;
+  try {
+    paths = resolveDesktopPaths({
+      isPackaged: app.isPackaged,
+      applicationDirectory: app.isPackaged
+        ? app.getAppPath()
+        : resolve(sourceDirectory, ".."),
+      resourcesDirectory: process.resourcesPath,
+      userDataDirectory: app.getPath("userData"),
+      documentsDirectory: app.getPath("documents"),
+      platform: process.platform,
     });
-    return result.canceled ? null : (result.filePaths[0] ?? null);
-  };
-  const selectedWorkspace = await resolveLaunchWorkspace({
-    pointerFile: paths.workspacePointerFile,
-    defaultPath: paths.projectsDirectory,
-    choose: async (defaultPath) => {
-      const result = await dialog.showMessageBox({
-        type: "question",
-        title: "Choose where Earth Stories keeps your work",
-        message: "Choose your Earth Stories workspace",
-        detail: `The default folder is:\n${defaultPath}\n\nEarth Stories will not scan for or move existing projects.`,
-        buttons: [
-          "Use default",
-          "Choose existing workspace",
-          "Use another folder",
-          "Cancel",
-        ],
-        cancelId: 3,
-        defaultId: 0,
+    await mkdir(paths.logsDirectory, { recursive: true });
+    await app.whenReady();
+    diagnostics = new DesktopDiagnostics({
+      directory: paths.logsDirectory,
+      appVersion: app.getVersion(),
+      platform: process.platform,
+    });
+    pickFolder = async (): Promise<string | null> => {
+      const result = await dialog.showOpenDialog({
+        title: "Choose an Earth Stories workspace",
+        properties: ["openDirectory", "createDirectory"],
       });
-      if (result.response === 0) return { kind: "default" };
-      if (result.response === 3) return null;
-      const path = await pickFolder();
-      return path
-        ? ({
-            kind: result.response === 1 ? "existing" : "other",
-            path,
-          } satisfies Exclude<FirstRunChoice, null>)
-        : null;
-    },
-    confirm: async ({ path, willCreate, containsProjects }) => {
-      const result = await dialog.showMessageBox({
-        type: "question",
-        title: "Confirm workspace",
-        message: willCreate
-          ? "Create this workspace?"
-          : containsProjects
-            ? "Use this existing workspace?"
-            : "Use this empty folder as a new workspace?",
-        detail: path,
-        buttons: [willCreate ? "Create workspace" : "Use folder", "Cancel"],
-        defaultId: 0,
-        cancelId: 1,
-      });
-      return result.response === 0;
-    },
-    reportInvalid: async ({ findings }) => {
-      await dialog.showMessageBox({
-        type: "error",
-        title: "This folder cannot be used",
-        message: findings[0]?.message ?? "Choose another workspace folder.",
-      });
-    },
-  });
-  if (!selectedWorkspace) {
+      return result.canceled ? null : (result.filePaths[0] ?? null);
+    };
+    const selectedWorkspace = await resolveLaunchWorkspace({
+      pointerFile: paths.workspacePointerFile,
+      defaultPath: paths.projectsDirectory,
+      choose: async (defaultPath) => {
+        const result = await dialog.showMessageBox({
+          type: "question",
+          title: "Choose where Earth Stories keeps your work",
+          message: "Choose your Earth Stories workspace",
+          detail: `The default folder is:\n${defaultPath}\n\nEarth Stories will not scan for or move existing projects.`,
+          buttons: [
+            "Use default",
+            "Choose existing workspace",
+            "Use another folder",
+            "Cancel",
+          ],
+          cancelId: 3,
+          defaultId: 0,
+        });
+        if (result.response === 0) return { kind: "default" };
+        if (result.response === 3) return null;
+        const path = await pickFolder();
+        return path
+          ? ({
+              kind: result.response === 1 ? "existing" : "other",
+              path,
+            } satisfies Exclude<FirstRunChoice, null>)
+          : null;
+      },
+      confirm: async ({ path, willCreate, containsProjects }) => {
+        const result = await dialog.showMessageBox({
+          type: "question",
+          title: "Confirm workspace",
+          message: willCreate
+            ? "Create this workspace?"
+            : containsProjects
+              ? "Use this existing workspace?"
+              : "Use this empty folder as a new workspace?",
+          detail: path,
+          buttons: [willCreate ? "Create workspace" : "Use folder", "Cancel"],
+          defaultId: 0,
+          cancelId: 1,
+        });
+        return result.response === 0;
+      },
+      reportInvalid: async ({ findings }) => {
+        await dialog.showMessageBox({
+          type: "error",
+          title: "This folder cannot be used",
+          message: findings[0]?.message ?? "Choose another workspace folder.",
+        });
+      },
+    });
+    if (!selectedWorkspace) {
+      app.quit();
+      return;
+    }
+    paths = { ...paths, projectsDirectory: selectedWorkspace };
+    desktopTools = new DesktopTools({
+      appVersion: app.getVersion(),
+      masterDirectory: paths.conversionManifestDirectory,
+      toolsDirectory: paths.toolsDirectory,
+      pixiExecutable: paths.pixiExecutable,
+      workerDirectory: paths.conversionWorkerDirectory,
+      installerScript: app.isPackaged
+        ? resolve(process.resourcesPath, "conversion/install-pixi.mjs")
+        : resolve(sourceDirectory, "../../../scripts/install-pixi.mjs"),
+    });
+    const toolRuntime = await desktopTools.prepareRuntime();
+    localService = new DesktopService(paths, {
+      tools: toolRuntime,
+      bootstrapPixi: desktopTools.bootstrapPixi,
+      createCredentialStore:
+        createSafeStorageCredentialStoreFactory(safeStorage),
+    });
+  } catch (cause) {
+    dialog.showErrorBox("Earth Stories could not start", startupMessage(cause));
     app.quit();
     return;
   }
-  paths = { ...paths, projectsDirectory: selectedWorkspace };
-  const desktopTools = new DesktopTools({
-    appVersion: app.getVersion(),
-    masterDirectory: paths.conversionManifestDirectory,
-    toolsDirectory: paths.toolsDirectory,
-    pixiExecutable: paths.pixiExecutable,
-    workerDirectory: paths.conversionWorkerDirectory,
-    installerScript: app.isPackaged
-      ? resolve(process.resourcesPath, "conversion/install-pixi.mjs")
-      : resolve(sourceDirectory, "../../../scripts/install-pixi.mjs"),
-  });
-  const toolRuntime = await desktopTools.prepareRuntime();
-  const localService = new DesktopService(paths, {
-    tools: toolRuntime,
-    bootstrapPixi: desktopTools.bootstrapPixi,
-    createCredentialStore: createSafeStorageCredentialStoreFactory(safeStorage),
-  });
   // Routing infrastructure only: the later handoff importer will consume these.
-  const pendingFiles: string[] = [];
   let primaryWebContents: DesktopIpcWebContents | null = null;
   let primaryBrowserWindow: Electron.BrowserWindow | null = null;
   let currentOrigin = "";
@@ -575,13 +620,10 @@ export async function runElectronDesktop(): Promise<void> {
       whenReady: () => app.whenReady(),
       quit: () => app.quit(),
       onSecondInstance: (listener) => {
-        app.on("second-instance", (_event, argv) => listener(argv));
+        secondInstanceListener = listener;
       },
       onOpenFile: (listener) => {
-        app.on("open-file", (event, path) => {
-          event.preventDefault();
-          listener(path);
-        });
+        openFileListener = listener;
       },
       onBeforeQuit: (listener) => {
         app.on("before-quit", (event) => listener(event));
@@ -701,9 +743,10 @@ export async function runElectronDesktop(): Promise<void> {
         origin,
       );
     },
-    probeSession: async (desktopSession, { origin }) => {
+    probeSession: async (desktopSession, { origin, signal }) => {
       const response = await (desktopSession as Electron.Session).fetch(
         `${origin}/health`,
+        { signal },
       );
       if (!response.ok)
         throw new Error(
@@ -797,7 +840,4 @@ export async function runElectronDesktop(): Promise<void> {
   }
 }
 
-const entrypoint = process.argv[1]
-  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-  : false;
-if (entrypoint && process.versions.electron) void runElectronDesktop();
+if (process.versions.electron) void runElectronDesktop();

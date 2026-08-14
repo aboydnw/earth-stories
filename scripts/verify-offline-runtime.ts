@@ -41,7 +41,7 @@ const presentation = {
   filterValue: null,
 };
 
-async function preparePublication(directory: string, origin: string) {
+async function preparePublication(directory: string) {
   await cp("dist/viewer", directory, { recursive: true });
   await cp("fixtures/offline-runtime", join(directory, "assets"), {
     recursive: true,
@@ -57,23 +57,25 @@ async function preparePublication(directory: string, origin: string) {
   await writeFile(
     join(directory, "publication.json"),
     `${JSON.stringify({
-      schema: "earth-stories/publication/v1",
+      schema: "earth-stories/publication/v2",
       build: {
         id: "offline-runtime-proof",
         projectId: "offline-runtime-proof",
         projectDigest: "0".repeat(64),
         runtimeVersion: "0.1.0",
+        dependencyDigests: [],
       },
       metadata: {
         title: "Offline runtime acceptance",
         description: "Exact-origin runtime proof",
         author: null,
       },
-      publication: { profile: "portable", theme: "cng" },
+      publication: { profile: "offline", theme: "cng" },
       basemap: {
+        delivery: "included",
         id: "local-neutral",
         label: "Local neutral",
-        styleUrl: `${origin}/style.json`,
+        styleHref: "style.json",
         attribution: null,
       },
       assets: [
@@ -174,6 +176,65 @@ async function preparePublication(directory: string, origin: string) {
           transition: "instant",
         },
       ],
+      connectivity: {
+        requested: "offline",
+        state: "verified",
+        verified: "offline",
+      },
+      dependencies: [],
+      projectionDefinitions: [
+        {
+          epsg: 32618,
+          definition:
+            "+proj=utm +zone=18 +datum=WGS84 +units=m +no_defs +type=crs",
+        },
+      ],
+      runtimeAssets: [
+        [
+          "duckdb-browser-mvp.worker.js",
+          "runtime/duckdb/duckdb-browser-mvp.worker.js",
+          "b0387027f174e2b60c2d5cfa31cecca9b89d8a9762346b6449a784cd1c4dde3c",
+        ],
+        [
+          "duckdb-mvp.wasm",
+          "runtime/duckdb/duckdb-mvp.wasm",
+          "45d72a81fba8e57693d890da837c7041310e385e75619a8559839b15388dfe97",
+        ],
+        [
+          "duckdb-browser-eh.worker.js",
+          "runtime/duckdb/duckdb-browser-eh.worker.js",
+          "f8ab72b6b90b3ad83077d47426d4a99d5d9a4c7e07cba1a2be37d655adc7c1ab",
+        ],
+        [
+          "duckdb-eh.wasm",
+          "runtime/duckdb/duckdb-eh.wasm",
+          "4c221bfa59c11f24dbd750e70c90b9252eca6eec5633936e6a2ec766e55fd879",
+        ],
+        [
+          "parquet-mvp",
+          "runtime/duckdb/extensions/v1.4.3/wasm_mvp/parquet.duckdb_extension.wasm",
+          "0785c6c95d003eff4faa7b3b4b660f02c9c92f6d68d135ddf330d42e3a650600",
+        ],
+        [
+          "spatial-mvp",
+          "runtime/duckdb/extensions/v1.4.3/wasm_mvp/spatial.duckdb_extension.wasm",
+          "7a745cfc5259f69b46f077bc6afeb7a6aefb8ef8d8b336bb0b770e5449708bb4",
+        ],
+        [
+          "parquet-eh",
+          "runtime/duckdb/extensions/v1.4.3/wasm_eh/parquet.duckdb_extension.wasm",
+          "22765c8f7dc741cda2b571a66ac7bb355295d7d69a6c37e5315b265672984f55",
+        ],
+        [
+          "spatial-eh",
+          "runtime/duckdb/extensions/v1.4.3/wasm_eh/spatial.duckdb_extension.wasm",
+          "04b776946da64a15a7b14501790c75093e38f876acc46b2922f0daeb6aaa1d60",
+        ],
+      ].map(([id, href, sha256]) => ({
+        id: `runtime:duckdb:${id}`,
+        href,
+        sha256,
+      })),
       externalDependencies: [],
       hostingRequirements: ["static-http", "byte-ranges"],
     })}\n`,
@@ -201,12 +262,32 @@ class CdpClient {
       }
       for (const listener of this.events) listener(message);
     });
+    const rejectPending = () => {
+      const error = new Error("CDP socket closed before receiving a response");
+      for (const pending of this.#pending.values()) pending.reject(error);
+      this.#pending.clear();
+    };
+    socket.addEventListener("close", rejectPending, { once: true });
+    socket.addEventListener("error", rejectPending, { once: true });
   }
 
   send(method: string, params: Record<string, unknown> = {}) {
     const id = ++this.#nextId;
     return new Promise<any>((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
+      const timeout = setTimeout(() => {
+        this.#pending.delete(id);
+        reject(new Error(`CDP request timed out: ${method}`));
+      }, 10_000);
+      this.#pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timeout);
+          resolve(value);
+        },
+        reject: (cause) => {
+          clearTimeout(timeout);
+          reject(cause);
+        },
+      });
       this.socket.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -506,7 +587,7 @@ try {
     if (!address || typeof address === "string")
       throw new Error("Acceptance server did not bind a TCP port");
     const origin = `http://127.0.0.1:${address.port}`;
-    await preparePublication(publicationDirectory, origin);
+    await preparePublication(publicationDirectory);
     await verifyInBrowser(origin, profileDirectory);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));

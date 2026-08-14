@@ -129,15 +129,20 @@ deployed; other private-network addresses cannot be checked and say so.
 
 The publication workshop can put a story on GitHub Pages, free hosting the
 author owns. Publishing needs no git binary or GitHub CLI knowledge. Earth
-Stories can use the GitHub CLI's existing sign-in when this computer already
-has it; otherwise it runs GitHub's device flow, and the panel shows a code to
-enter at `github.com/login/device`. A token obtained through device flow is
-stored at `~/.earth-stories/credentials.json` with mode `0600`, deliberately
+Stories first reuses a token stored in `~/.earth-stories/credentials.json`, then
+checks the GitHub CLI's existing sign-in, and only then starts GitHub's device
+flow, where the panel shows a code to enter at `github.com/login/device`. A
+token obtained through device flow is stored in that credentials file with mode
+`0600`, deliberately
 outside every project directory, because project directories get exported,
 zipped, and published to a public repository. An existing GitHub CLI token is
 read fresh and is not copied there. Windows does not apply POSIX modes, so there
 the file is protected by the account's own profile permissions rather than by
 `0600`.
+
+After the first successful device-flow sign-in, later publishes reuse the
+stored token without showing another sign-in prompt unless the credential is
+missing, invalid, or revoked.
 
 The published address is `https://<account>.github.io/<repo>/`. It is known
 before the first upload, so the release is built with that URL already in its

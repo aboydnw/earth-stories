@@ -33,6 +33,48 @@ describe("terminateProcessTree", () => {
 });
 
 describe("ProcessTreeRunner termination boundary", () => {
+  it("uses taskkill for the complete Windows process tree on abort", async () => {
+    const child = controlledProcess(4321);
+    const taskkill = vi.fn(async () => undefined);
+    const runner = new ProcessTreeRunner({
+      spawn: vi.fn(() => child),
+      platform: "win32",
+      taskkill,
+    });
+    const controller = new AbortController();
+    const running = runner.run({
+      executable: "injected",
+      args: [],
+      cwd: process.cwd(),
+      signal: controller.signal,
+    });
+
+    controller.abort();
+    await vi.waitFor(() => expect(taskkill).toHaveBeenCalledWith(4321));
+    child.emit("exit", 0);
+    await running;
+    expect(child.kill).not.toHaveBeenCalled();
+  });
+
+  it("drains output streams when no callbacks are configured", async () => {
+    const child = controlledProcess(4321);
+    const runner = new ProcessTreeRunner({
+      spawn: vi.fn(() => child),
+      platform: "linux",
+    });
+
+    const running = runner.run({
+      executable: "injected",
+      args: [],
+      cwd: process.cwd(),
+    });
+
+    expect(child.stdout.readableFlowing).toBe(true);
+    expect(child.stderr.readableFlowing).toBe(true);
+    child.emit("exit", 0);
+    await running;
+  });
+
   it("rejects a pre-aborted command without spawning", async () => {
     const spawnProcess = vi.fn();
     const runner = new ProcessTreeRunner({

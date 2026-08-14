@@ -221,6 +221,10 @@ describe("ConversionJobs", () => {
 
     const retried = jobs.retry(created.id);
     expect(retried?.id).toBe(created.id);
+    expect(retried?.events).toHaveLength(1);
+    expect(retried?.events[0]).toMatchObject({
+      type: "provisioning-disclosure",
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(jobs.acknowledge(created.id)).toBe(true);
     await jobs.whenIdle();

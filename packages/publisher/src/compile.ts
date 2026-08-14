@@ -445,10 +445,21 @@ function resolvedDependencies(
     throw new Error(
       `Offline compilation requires resolved SHA-256 digests for: ${missing.map(({ id }) => id).join(", ")}`,
     );
-  return inventory.filter(
-    (dependency) =>
-      dependency.delivery !== "included" || "sha256" in dependency,
-  );
+  return inventory.map((dependency) => {
+    if (dependency.delivery !== "included" || "sha256" in dependency)
+      return dependency;
+    return {
+      id: dependency.id,
+      owner: dependency.owner,
+      locator: dependency.locator,
+      estimatedBytes: dependency.estimatedBytes,
+      delivery: "unsupported" as const,
+      materialization: "none" as const,
+      requirements: dependency.requirements,
+      reason:
+        "Included bytes have not been materialized and verified with a SHA-256 digest.",
+    };
+  });
 }
 
 export function compileProject(

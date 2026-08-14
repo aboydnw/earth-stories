@@ -284,6 +284,8 @@ export class PagesJobs {
         const limits = checkReleaseLimits(
           await this.#deps.inspectRelease(built.directory),
         );
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
         if (limits.blocked) throw new Error(limits.message ?? "");
         if (limits.message)
           this.#note(snapshot, "building", limits.message, "warning");
@@ -346,7 +348,9 @@ export class PagesJobs {
           "waiting-for-site",
           "Waiting for GitHub to build the site. The first build takes a minute or two…",
         );
-        const served = await this.#deps.waitForPages(url);
+        const served = await this.#deps.waitForPages(url, {
+          signal: controller.signal,
+        });
         if (controller.signal.aborted)
           throw new Error("Publishing was canceled.");
         if (!served)

@@ -108,6 +108,7 @@ export function GeoParquetOverlay({
   runtimeAssets?: PublicationManifest["runtimeAssets"];
   offline?: boolean;
 }) {
+  const runtimeAssetsKey = JSON.stringify(runtimeAssets);
   const [data, setData] = useState<ReturnType<typeof rowsToGeoJson> | null>(
     null,
   );
@@ -173,7 +174,7 @@ export function GeoParquetOverlay({
     return () => {
       active = false;
     };
-  }, [asset.href, offline, onBounds, onError, runtimeAssets]);
+  }, [asset.href, offline, onBounds, onError, runtimeAssetsKey]);
   const layers = useMemo<DeckLayer[]>(() => {
     if (!data) return [];
     const presentation = asset.presentation;

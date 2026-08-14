@@ -41,6 +41,35 @@ describe("resolveLaunchWorkspace", () => {
     expect(choose).not.toHaveBeenCalled();
   });
 
+  it("reports a stored-pointer read failure and ends first run cleanly", async () => {
+    const directory = await root();
+    const reportInvalid = vi.fn();
+    const choose = vi.fn();
+
+    await expect(
+      resolveLaunchWorkspace({
+        pointerFile: join(directory, "workspace.json"),
+        defaultPath: join(directory, "default"),
+        readPointer: async () => {
+          throw new Error("profile unavailable");
+        },
+        choose,
+        confirm: vi.fn(),
+        reportInvalid,
+      }),
+    ).resolves.toBeNull();
+    expect(reportInvalid).toHaveBeenCalledWith({
+      ok: false,
+      findings: [
+        expect.objectContaining({
+          code: "inspect-failed",
+          message: expect.stringMatching(/workspace setting/i),
+        }),
+      ],
+    });
+    expect(choose).not.toHaveBeenCalled();
+  });
+
   it("shows the default path and creates it only after confirmation", async () => {
     const directory = await root();
     const workspace = join(directory, "Earth Stories");

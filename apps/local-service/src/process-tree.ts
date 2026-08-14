@@ -98,7 +98,8 @@ export class ProcessTreeRunner {
     const pid = child.pid;
     const onAbort = () => {
       if (!pid) return;
-      if (this.#platform === "win32") child.kill("SIGTERM");
+      if (this.#platform === "win32")
+        void (this.#taskkill ?? taskkill)(pid).catch(() => undefined);
       else {
         try {
           this.#kill(-pid, "SIGTERM");
@@ -113,7 +114,9 @@ export class ProcessTreeRunner {
       child.stdout.setEncoding("utf8");
       child.stderr.setEncoding("utf8");
       if (command.onStdout) child.stdout.on("data", command.onStdout);
+      else child.stdout.resume();
       if (command.onStderr) child.stderr.on("data", command.onStderr);
+      else child.stderr.resume();
       child.once("error", rejectCommand);
       child.once("exit", (code) =>
         code === 0

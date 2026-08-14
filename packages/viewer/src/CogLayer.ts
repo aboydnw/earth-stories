@@ -90,10 +90,18 @@ export function buildCogLayers(
   onError: (message: string) => void,
   rescale: [number, number] | null = asset.presentation.rescale,
   onGeoTiffLoad?: () => void,
+  projectionDefinitions: Array<{ epsg: number; definition: string }> = [],
+  offline = false,
 ): Layer[] {
   const { presentation } = asset;
   const resolveAssetEpsg = (epsg: number) =>
-    resolveCogLayerProjection(epsg, asset.cog);
+    resolveCogLayerProjection(
+      epsg,
+      asset.cog,
+      undefined,
+      projectionDefinitions,
+      offline,
+    );
   if (!rescale)
     return [
       new COGLayer({

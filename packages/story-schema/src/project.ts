@@ -342,7 +342,9 @@ export const storyProjectV2Schema = z
   .strict();
 
 function migrateStoryProjectV1(value: unknown): unknown {
-  const legacy = storyProjectV1Schema.parse(value);
+  const parsed = storyProjectV1Schema.safeParse(value);
+  if (!parsed.success) return value;
+  const legacy = parsed.data;
   return {
     ...legacy,
     schema: "earth-stories/project/v2" as const,

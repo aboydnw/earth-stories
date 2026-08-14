@@ -51,6 +51,10 @@ function lockPlatform(): string {
   if (process.platform === "win32") return "win-64";
   if (process.platform === "darwin")
     return process.arch === "arm64" ? "osx-arm64" : "osx-64";
+  if (process.platform === "linux" && process.arch === "arm64")
+    throw new Error(
+      "Linux ARM64 is not supported because the packaged Pixi lock has no linux-aarch64 target.",
+    );
   return "linux-64";
 }
 
@@ -316,7 +320,11 @@ export class ConversionRuntime {
         signal,
       });
     } catch (cause) {
-      await this.#cleanupCapability(capability);
+      try {
+        await this.#cleanupCapability(capability);
+      } catch {
+        // Preserve the provisioning failure; cleanup is best-effort here.
+      }
       throw cause;
     }
     this.#ready.add(capability);
@@ -342,6 +350,7 @@ export class ConversionRuntime {
     const acquisition = this.#acquireCapability(request.capability);
     const releaseCapability =
       acquisition instanceof Promise ? await acquisition : acquisition;
+    let executionFailure: unknown;
     try {
       await this.provision(
         request.capability,
@@ -394,8 +403,15 @@ export class ConversionRuntime {
           });
         }
       }
+    } catch (cause) {
+      executionFailure = cause;
+      throw cause;
     } finally {
-      await releaseCapability();
+      try {
+        await releaseCapability();
+      } catch (releaseFailure) {
+        if (executionFailure === undefined) throw releaseFailure;
+      }
     }
   }
 }

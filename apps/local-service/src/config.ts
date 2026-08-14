@@ -74,9 +74,12 @@ export async function resolveLocalServiceConfig(
     throw new Error(
       "The local service port must be an integer from 0 to 65535.",
     );
-  if (config.capabilityToken !== null && !/\S/.test(config.capabilityToken))
+  if (
+    config.capabilityToken !== null &&
+    (config.capabilityToken.length < 32 || !/\S/.test(config.capabilityToken))
+  )
     throw new Error(
-      "capabilityToken must be null or contain a non-whitespace character.",
+      "capabilityToken must be null or contain at least 32 characters, including a non-whitespace character.",
     );
 
   requireAbsolute("projectsDirectory", config.projectsDirectory);
@@ -111,9 +114,15 @@ export async function resolveLocalServiceConfig(
 
   try {
     await mkdir(config.projectsDirectory, { recursive: true });
-    await access(config.projectsDirectory, constants.R_OK | constants.W_OK);
   } catch {
     throw new Error("The configured projects directory cannot be created.");
+  }
+  try {
+    await access(config.projectsDirectory, constants.R_OK | constants.W_OK);
+  } catch {
+    throw new Error(
+      "The configured projects directory does not have read/write permission.",
+    );
   }
 
   return {

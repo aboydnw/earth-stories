@@ -304,4 +304,48 @@ describe("PagesJobs", () => {
     await jobs.whenIdle();
     expect(jobs.activity()).toBe(0);
   });
+
+  it("passes cancellation to Pages polling and stops before repository preparation", async () => {
+    let finishInspection!: () => void;
+    const inspectRelease = vi.fn(
+      () =>
+        new Promise<{
+          totalBytes: number;
+          largestFile: { path: string; bytes: number };
+        }>((resolve) => {
+          finishInspection = () =>
+            resolve({
+              totalBytes: 20_000_000,
+              largestFile: { path: "index.html", bytes: 1_000 },
+            });
+        }),
+    );
+    const waitForPages = vi.fn(async () => true);
+    const deps = dependencies({ inspectRelease, waitForPages });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    while (!inspectRelease.mock.calls.length)
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+    jobs.cancelRunning();
+    finishInspection();
+    await jobs.whenIdle();
+
+    expect(jobs.get(id)?.status).toBe("failed");
+    expect(deps.ensureRepository).not.toHaveBeenCalled();
+    expect(waitForPages).not.toHaveBeenCalled();
+  });
+
+  it("passes the job signal to Pages polling", async () => {
+    const waitForPages = vi.fn(async () => true);
+    const deps = dependencies({ waitForPages });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    await settle(jobs, id);
+
+    expect(waitForPages).toHaveBeenCalledWith(
+      "https://mapper.github.io/field-notes-a-coastline/",
+      { signal: expect.any(AbortSignal) },
+    );
+  });
 });

@@ -597,6 +597,25 @@ describe("publication hardening", () => {
     );
     expect(JSON.stringify(failed)).not.toContain("secret");
     expect(JSON.stringify(failed)).not.toContain("token");
+
+    await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+      browserVerifier: async ({ expectedChapterIds }) => ({
+        attemptedOutsideOrigin: [],
+        runtimeErrors: [],
+        webgl: true,
+        chapterReadiness: expectedChapterIds.map((chapterId) => ({
+          chapterId,
+          ready: true,
+        })),
+      }),
+    });
+    await expect(
+      readFile(
+        join(project, ".earth-stories-publication-verification-failed.json"),
+      ),
+    ).rejects.toThrow();
   });
 
   it("shares local findings and preserves warning-only provenance in folder and archive outputs", async () => {

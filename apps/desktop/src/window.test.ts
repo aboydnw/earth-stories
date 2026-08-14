@@ -117,6 +117,10 @@ describe("desktop session policies", () => {
         }),
     );
     expect(directives).toMatchObject({
+      "default-src": "'self'",
+      "base-uri": "'none'",
+      "frame-ancestors": "'none'",
+      "form-action": "'none'",
       "script-src": "'self'",
       "connect-src": "'self' http://127.0.0.1:45123 https:",
       "img-src": "'self' http://127.0.0.1:45123 https: data:",

@@ -135,12 +135,21 @@ function listen(
   signal: AbortSignal,
 ): Promise<number> {
   return new Promise((resolveListen, rejectListen) => {
-    const onError = (cause: Error) => {
+    const cleanup = () => {
+      server.off("error", onError);
       server.off("listening", onListening);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      rejectListen(closedBeforeReady(signal));
+    };
+    const onError = (cause: Error) => {
+      cleanup();
       rejectListen(cause);
     };
     const onListening = () => {
-      server.off("error", onError);
+      cleanup();
       const address = server.address();
       if (!address || typeof address === "string") {
         rejectListen(new Error("The local service did not bind a TCP port."));
@@ -150,6 +159,11 @@ function listen(
     };
     server.once("error", onError);
     server.once("listening", onListening);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
     server.listen({ port, host: "127.0.0.1", signal });
   });
 }

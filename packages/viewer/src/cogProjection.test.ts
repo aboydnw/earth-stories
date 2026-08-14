@@ -80,6 +80,21 @@ describe("resolveCogProjection", () => {
     ).resolves.toBe("+proj=utm +zone=18");
   });
 
+  it("uses a manifest projection in the deck COG layer resolver", async () => {
+    const projection = await resolveCogLayerProjection(
+      32618,
+      null,
+      async () => {
+        throw new Error("remote resolver called");
+      },
+      [{ epsg: 32618, definition: "+proj=utm +zone=18" }],
+      true,
+    );
+
+    expect(projection.projName).toBe("utm");
+    expect(projection.zone).toBe(18);
+  });
+
   it("reports unsupported CRS without a remote request in offline mode", async () => {
     const resolver = async () => {
       throw new Error("remote resolver called");

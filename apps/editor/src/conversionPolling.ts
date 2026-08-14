@@ -15,6 +15,7 @@ export async function pollConversionJob(
   } = {},
 ): Promise<
   | { kind: "completed"; job: ConversionJobSnapshot }
+  | { kind: "approval-pending"; job: ConversionJobSnapshot }
   | { kind: "workspace-changed"; message: string }
 > {
   const load = options.load ?? getConversionJob;
@@ -41,5 +42,7 @@ export async function pollConversionJob(
     options.onUpdate?.(job);
   }
 
-  return { kind: "completed", job };
+  return job.status === "awaiting-approval"
+    ? { kind: "approval-pending", job }
+    : { kind: "completed", job };
 }

@@ -225,11 +225,24 @@ export function inventoryBasemapStyleResources(
   if (sources && typeof sources === "object")
     for (const source of Object.values(sources as Record<string, unknown>)) {
       if (!source || typeof source !== "object") continue;
-      const resource = source as { url?: unknown; tiles?: unknown };
+      const resource = source as {
+        url?: unknown;
+        tiles?: unknown;
+        data?: unknown;
+      };
       if (typeof resource.url === "string") locators.add(resource.url);
+      if (typeof resource.data === "string") locators.add(resource.data);
       if (Array.isArray(resource.tiles))
         for (const tile of resource.tiles)
           if (typeof tile === "string") locators.add(tile);
+    }
+  const imports = style.imports;
+  if (Array.isArray(imports))
+    for (const entry of imports) {
+      if (!entry || typeof entry !== "object") continue;
+      const resource = entry as { url?: unknown; data?: unknown };
+      if (typeof resource.url === "string") locators.add(resource.url);
+      if (typeof resource.data === "string") locators.add(resource.data);
     }
   return [...locators].sort();
 }

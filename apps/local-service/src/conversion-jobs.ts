@@ -94,6 +94,7 @@ export class ConversionJobs {
     )
       return null;
     snapshot.status = "queued";
+    snapshot.events = [];
     snapshot.updatedAt = new Date().toISOString();
     const controller = new AbortController();
     this.#controllers.set(id, controller);

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import {
   access,
   lstat,
@@ -272,29 +273,42 @@ async function startVerificationServer(directory: string): Promise<{
         response.writeHead(404).end();
         return;
       }
-      const bytes = await readFile(target);
-      const range = parseRange(request.headers.range, bytes.byteLength);
+      const details = await stat(target);
+      if (!details.isFile()) {
+        response.writeHead(404).end();
+        return;
+      }
+      const range = parseRange(request.headers.range, details.size);
       if (range === undefined) {
         response
-          .writeHead(416, { "content-range": `bytes */${bytes.byteLength}` })
+          .writeHead(416, { "content-range": `bytes */${details.size}` })
           .end();
         return;
       }
-      const body = range ? bytes.subarray(range.start, range.end + 1) : bytes;
+      const contentLength = range ? range.end - range.start + 1 : details.size;
       response.writeHead(range ? 206 : 200, {
         "accept-ranges": "bytes",
         "cache-control": "no-store",
-        "content-length": body.byteLength,
+        "content-length": contentLength,
         "content-type":
           MIME_TYPES[extname(target).toLowerCase()] ??
           "application/octet-stream",
         ...(range
           ? {
-              "content-range": `bytes ${range.start}-${range.end}/${bytes.byteLength}`,
+              "content-range": `bytes ${range.start}-${range.end}/${details.size}`,
             }
           : {}),
       });
-      response.end(request.method === "HEAD" ? undefined : body);
+      if (request.method === "HEAD") {
+        response.end();
+        return;
+      }
+      const stream = createReadStream(
+        target,
+        range ? { start: range.start, end: range.end } : undefined,
+      );
+      stream.once("error", (error) => response.destroy(error));
+      stream.pipe(response);
     } catch {
       if (!response.headersSent) response.writeHead(404);
       response.end();
@@ -335,6 +349,13 @@ class CdpClient {
         for (const listener of this.events) listener(message);
       }
     });
+    const rejectPending = () => {
+      const error = new Error("Chrome debugging socket closed");
+      for (const pending of this.#pending.values()) pending.reject(error);
+      this.#pending.clear();
+    };
+    socket.addEventListener("close", rejectPending, { once: true });
+    socket.addEventListener("error", rejectPending, { once: true });
   }
 
   send(method: string, params: Record<string, unknown> = {}) {

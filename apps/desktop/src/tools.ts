@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import {
   access,
+  lstat,
   mkdir,
   readFile,
   readdir,
@@ -58,8 +59,10 @@ async function directoryBytes(directory: string): Promise<number> {
   let total = 0;
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) total += await directoryBytes(path);
-    else if (entry.isFile()) total += (await stat(path)).size;
+    const metadata = await lstat(path);
+    if (metadata.isSymbolicLink()) total += metadata.size;
+    else if (metadata.isDirectory()) total += await directoryBytes(path);
+    else if (metadata.isFile()) total += metadata.size;
   }
   return total;
 }
@@ -86,6 +89,10 @@ export class DesktopTools {
   readonly #afterManifestPointerActivated: () => void;
   readonly #beforeCapabilityRemoval: () => Promise<void>;
   readonly #activeCapabilities = new Map<DesktopToolCapability, number>();
+  readonly #environmentSizeCache = new Map<
+    string,
+    { mtimeMs: number; ctimeMs: number; apparentBytes: number }
+  >();
   readonly #capabilityOperations = new Map<
     DesktopToolCapability,
     Promise<void>
@@ -272,9 +279,22 @@ export class DesktopTools {
       for (const entry of entries) {
         if (!entry.isDirectory() || !isCapability(entry.name)) continue;
         const destination = join(environments, entry.name);
+        const metadata = await lstat(destination);
+        const cached = this.#environmentSizeCache.get(destination);
+        const apparentBytes =
+          cached &&
+          cached.mtimeMs === metadata.mtimeMs &&
+          cached.ctimeMs === metadata.ctimeMs
+            ? cached.apparentBytes
+            : await directoryBytes(destination);
+        this.#environmentSizeCache.set(destination, {
+          mtimeMs: metadata.mtimeMs,
+          ctimeMs: metadata.ctimeMs,
+          apparentBytes,
+        });
         installed.push({
           capability: entry.name,
-          apparentBytes: await directoryBytes(destination),
+          apparentBytes,
           destination,
         });
       }
@@ -340,9 +360,10 @@ export class DesktopTools {
       await Promise.all(
         installed
           .filter((entry) => entry.capability === capability)
-          .map((entry) =>
-            rm(entry.destination, { recursive: true, force: true }),
-          ),
+          .map(async (entry) => {
+            this.#environmentSizeCache.delete(entry.destination);
+            await rm(entry.destination, { recursive: true, force: true });
+          }),
       );
     });
   }

@@ -73,6 +73,13 @@ export interface MapChapterProps {
   onReady?: () => void;
 }
 
+const DEFAULT_RUNTIME_POLICY: PublicationRuntimePolicy = {
+  offline: false,
+  runtimeAssets: [],
+  projectionDefinitions: [],
+  dependencies: [],
+};
+
 let protocol: Protocol | null = null;
 function ensurePmtilesProtocol() {
   if (protocol) return;
@@ -428,12 +435,7 @@ export function MapChapter({
   asset,
   overlayAssets = [],
   basemapStyle,
-  runtimePolicy = {
-    offline: false,
-    runtimeAssets: [],
-    projectionDefinitions: [],
-    dependencies: [],
-  },
+  runtimePolicy = DEFAULT_RUNTIME_POLICY,
   controlled = false,
   interactive,
   followCamera,
@@ -669,7 +671,7 @@ export function MapChapter({
         interactive={interaction.interactive}
         projection={globeEnabled ? { type: "globe" } : undefined}
         terrain={
-          terrainEnabled
+          terrainLocator
             ? {
                 source: "earth-stories-terrain",
                 exaggeration: chapter.camera.terrain?.exaggeration ?? 1,
@@ -826,7 +828,7 @@ export function MapChapter({
           Zoom in to street level to see 3D buildings.
         </div>
       ) : null}
-      {chapter.camera.terrain?.enabled && !terrainEnabled ? (
+      {chapter.camera.terrain?.enabled && !terrainLocator ? (
         <div className="story-map__hint" role="status">
           Terrain is unavailable for this dataset renderer.
         </div>

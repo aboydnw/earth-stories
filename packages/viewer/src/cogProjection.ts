@@ -70,8 +70,16 @@ export async function resolveCogLayerProjection(
   epsg: number,
   embedded: EmbeddedCogProjection | null,
   resolveEpsg: (epsg: number) => Promise<ProjectionDefinition> = epsgResolver,
+  projectionDefinitions: EmbeddedCogProjection[] = [],
+  offline = false,
 ): Promise<ProjectionDefinition> {
-  const definition = await resolveCogProjection(epsg, embedded, resolveEpsg);
+  const definition = await resolveCogProjection(
+    epsg,
+    embedded,
+    resolveEpsg,
+    projectionDefinitions,
+    offline,
+  );
   if (typeof definition !== "string") return definition;
   const projection = new proj4.Proj(
     definition,

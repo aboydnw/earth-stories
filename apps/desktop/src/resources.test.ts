@@ -12,6 +12,8 @@ const verifyScript = join(packageDirectory, "scripts/verify-resources.mjs");
 
 const fixtureFiles: Record<string, string> = {
   "apps/local-service/dist/service.js": "export const service = true;\n",
+  "apps/local-service/dist/service.js.LICENSE.txt":
+    "Bundled service licenses\n",
   "dist/editor/index.html": "<main>editor</main>\n",
   "dist/viewer/index.html": "<main>viewer</main>\n",
   "pixi.toml": "[workspace]\nname = 'fixture'\n",
@@ -31,6 +33,7 @@ const expectedFiles = [
   "editor/index.html",
   "resource-manifest.json",
   "service/service.js",
+  "service/service.js.LICENSE.txt",
   "viewer/index.html",
   "conversion/contract/conversion-v1.schema.json",
   "conversion/install-pixi.mjs",

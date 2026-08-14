@@ -629,6 +629,51 @@ describe("ensureRepository", () => {
 });
 
 describe("pushRelease", () => {
+  it("preserves nested branch path separators in GitHub ref URLs", async () => {
+    const directory = await oneFileRelease();
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.endsWith("/git/ref/heads/releases/preview"))
+          return jsonResponse({ message: "Not Found" }, 404);
+        if (url.endsWith("/git/blobs"))
+          return jsonResponse(
+            { sha: "6c70bcfe4d48d15f8a6531d6b491e65d641a377c" },
+            201,
+          );
+        if (url.endsWith("/git/trees"))
+          return jsonResponse({ sha: "tree-sha" }, 201);
+        if (url.endsWith("/git/commits"))
+          return jsonResponse({ sha: "commit-sha" }, 201);
+        if (
+          init?.method === "PATCH" &&
+          url.endsWith("/git/refs/heads/releases/preview")
+        )
+          return jsonResponse({}, 200);
+        throw new Error(`Unexpected request: ${init?.method ?? "GET"} ${url}`);
+      },
+    ) as unknown as typeof fetch;
+
+    await pushRelease({
+      directory,
+      token: "token",
+      owner: "mapper",
+      repo: "notes",
+      branch: "releases/preview",
+      fetchImpl,
+    });
+
+    expect(urls).toContain(
+      "https://api.github.com/repos/mapper/notes/git/ref/heads/releases/preview",
+    );
+    expect(urls).toContain(
+      "https://api.github.com/repos/mapper/notes/git/refs/heads/releases/preview",
+    );
+    expect(urls.some((url) => url.includes("releases%2Fpreview"))).toBe(false);
+  });
+
   it("uploads every file into an orphan commit and creates a missing branch", async () => {
     const directory = await releaseDirectory();
     const requests: Array<{
@@ -1019,11 +1064,16 @@ describe("pushRelease", () => {
       await writeFile(join(directory, `file-${index}.txt`), `file ${index}`);
     let active = 0;
     let maximum = 0;
+    let releaseUploads!: () => void;
+    const uploadsReady = new Promise<void>((resolve) => {
+      releaseUploads = resolve;
+    });
     const github = fakeGitHub({
       blobResponse: async (body) => {
         active += 1;
         maximum = Math.max(maximum, active);
-        await new Promise((done) => setTimeout(done, 5));
+        if (active === 4) releaseUploads();
+        await uploadsReady;
         active -= 1;
         const contents = Buffer.from(String(body.content), "base64");
         const sha = createHash("sha1")

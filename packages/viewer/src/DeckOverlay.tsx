@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Layer } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { useControl } from "react-map-gl/maplibre";
@@ -17,6 +17,7 @@ export function DeckOverlay({
   onAfterRenderRef.current = onAfterRender;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const [mapReady, setMapReady] = useState(false);
   const overlay = useControl(({ map }) => {
     mapRef.current = map.getMap();
     return new MapboxOverlay({
@@ -31,14 +32,30 @@ export function DeckOverlay({
         ),
     });
   });
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const eventMap = map as {
+      loaded?: () => boolean;
+      once?: (event: string, listener: () => void) => void;
+      off?: (event: string, listener: () => void) => void;
+    };
+    if (eventMap.loaded?.()) {
+      setMapReady(true);
+      return;
+    }
+    const ready = () => setMapReady(true);
+    eventMap.once?.("load", ready);
+    return () => eventMap.off?.("load", ready);
+  }, []);
   const initialRender = useRef(true);
   useEffect(() => {
     if (initialRender.current) {
       initialRender.current = false;
       return;
     }
-    if (overlay.getCanvas() === null || !mapRef.current?.style) return;
+    if (!mapReady || overlay.getCanvas() === null) return;
     overlay.setProps({ layers });
-  }, [overlay, layers]);
+  }, [overlay, layers, mapReady]);
   return null;
 }

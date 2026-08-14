@@ -19,9 +19,10 @@ export function resolveStandaloneConfig(
   const repositoryDirectory =
     paths.repositoryDirectory ?? defaultRepositoryDirectory();
   const cwd = paths.cwd ?? process.cwd();
+  const configuredPort = environment.EARTH_STORIES_PORT?.trim();
   return {
     host: "127.0.0.1",
-    port: Number(environment.EARTH_STORIES_PORT ?? 4317),
+    port: Number(configuredPort || 4317),
     projectsDirectory: resolve(
       cwd,
       environment.EARTH_STORIES_PROJECTS_DIR ?? "./earth-stories-projects",
@@ -85,15 +86,18 @@ export async function runStandalone(): Promise<void> {
     const stop = () => {
       if (stopping) return;
       stopping = true;
-      void service.close().then(
-        () => process.exit(0),
-        (cause) => {
-          process.stderr.write(
-            `${cause instanceof Error ? cause.message : String(cause)}\n`,
-          );
-          process.exit(1);
-        },
-      );
+      void service
+        .drain()
+        .then(() => service.close())
+        .then(
+          () => process.exit(0),
+          (cause) => {
+            process.stderr.write(
+              `${cause instanceof Error ? cause.message : String(cause)}\n`,
+            );
+            process.exit(1);
+          },
+        );
     };
     process.on("SIGINT", stop);
     process.on("SIGTERM", stop);

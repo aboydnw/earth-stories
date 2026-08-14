@@ -133,9 +133,11 @@ export function CogOverlay({
             onError,
             prepared.rescale,
             () => setInitializedLayerKey(preparedKey),
+            projectionDefinitions,
+            offline,
           )
         : [],
-    [asset, onError, prepared, preparedKey],
+    [asset, offline, onError, prepared, preparedKey, projectionDefinitions],
   );
   const reportRendered = useCallback(() => {
     if (

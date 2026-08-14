@@ -60,7 +60,7 @@ describe("FileCredentialStore", () => {
 
   it("keeps the troubleshooting path under the requested home directory", () => {
     expect(credentialsPath("/users/mapper")).toBe(
-      "/users/mapper/.earth-stories/credentials.json",
+      join("/users/mapper", ".earth-stories", "credentials.json"),
     );
   });
 });

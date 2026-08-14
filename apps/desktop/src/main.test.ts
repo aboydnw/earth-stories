@@ -80,6 +80,7 @@ function harness(
     loadError?: Error;
     deferredLoad?: boolean;
     closeAllowed?: boolean;
+    probeWaitsForAbort?: boolean;
   } = {},
 ) {
   const events: string[] = [];
@@ -136,9 +137,20 @@ function harness(
       if (options.hookError) throw options.hookError;
     },
     installSessionPolicies: () => events.push("session:policies"),
-    probeSession: async () => {
+    probeSession: async (_session, probeOptions) => {
       events.push("session:probe");
       if (options.probeError) throw options.probeError;
+      if (options.probeWaitsForAbort) {
+        const signal = (probeOptions as { signal?: AbortSignal }).signal;
+        if (!signal) throw new Error("probe did not receive an abort signal");
+        await new Promise<void>((_resolve, reject) =>
+          signal.addEventListener(
+            "abort",
+            () => reject(new Error("startup probe timed out")),
+            { once: true },
+          ),
+        );
+      }
     },
     installIpcHandlers: (...args: unknown[]) => {
       const options = args[0] as
@@ -501,6 +513,24 @@ describe("launchDesktopMain", () => {
       "error:The local service reported an invalid origin.:/profile/logs",
     );
   });
+
+  it("aborts a startup probe that does not settle", async () => {
+    vi.useFakeTimers();
+    try {
+      const value = harness({ probeWaitsForAbort: true });
+      const launching = launchDesktopMain(value.dependencies);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      const lifecycle = await launching;
+
+      expect(lifecycle.launched).toBe(false);
+      expect(value.events).toContain(
+        "error:startup probe timed out:/profile/logs",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("workspace change transaction", () => {
@@ -587,6 +617,45 @@ describe("browser window close adapter", () => {
 
     await expect(requestBrowserWindowClose(browserWindow)).resolves.toBe(true);
     expect(calls).toEqual([]);
+  });
+
+  it("settles and removes listeners when the window emits no close event", async () => {
+    vi.useFakeTimers();
+    try {
+      const removeClosed = vi.fn();
+      const removePrevented = vi.fn();
+      const browserWindow = {
+        isDestroyed: () => false,
+        close: vi.fn(),
+        once: vi.fn(),
+        removeListener: removeClosed,
+        webContents: {
+          once: vi.fn(),
+          removeListener: removePrevented,
+        },
+      } as unknown as Parameters<typeof requestBrowserWindowClose>[0];
+
+      const closing = Promise.race([
+        requestBrowserWindowClose(browserWindow),
+        new Promise<boolean>((_resolve, reject) =>
+          setTimeout(
+            () => reject(new Error("window close stayed pending")),
+            60_000,
+          ),
+        ),
+      ]);
+      const settled = expect(closing).resolves.toBe(true);
+      await vi.runAllTimersAsync();
+
+      await settled;
+      expect(removeClosed).toHaveBeenCalledWith("closed", expect.any(Function));
+      expect(removePrevented).toHaveBeenCalledWith(
+        "will-prevent-unload",
+        expect.any(Function),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

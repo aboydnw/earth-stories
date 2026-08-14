@@ -1,9 +1,9 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProjectStore } from "@earth-stories/project-store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CredentialStore, LocalServiceConfig } from "./config.js";
 import {
   beginLocalService,
@@ -43,23 +43,47 @@ async function config(): Promise<LocalServiceConfig> {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true })),
   );
 });
 
 describe("startLocalService", () => {
+  it("rejects readiness when close aborts a pending bind", async () => {
+    const listen = vi
+      .spyOn(Server.prototype, "listen")
+      .mockImplementation(function (this: Server) {
+        return this;
+      });
+    const starting = beginLocalService(await config());
+    while (!listen.mock.calls.length)
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await starting.close();
+
+    await expect(
+      Promise.race([
+        starting.ready,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("readiness stayed pending")), 50),
+        ),
+      ]),
+    ).rejects.toThrow(/closed before it was ready/i);
+    listen.mockRestore();
+  });
+
   it("imports without starting a server", async () => {
-    const before = (process as unknown as { _getActiveHandles(): unknown[] })
-      ._getActiveHandles()
-      .filter((handle) => handle instanceof Object && "address" in handle);
+    const before = process
+      .getActiveResourcesInfo()
+      .filter((resource) => /TCPServer/i.test(resource));
     await import(
       /* @vite-ignore */ new URL("./runtime.js?import-safe", import.meta.url)
         .href
     );
-    const after = (process as unknown as { _getActiveHandles(): unknown[] })
-      ._getActiveHandles()
-      .filter((handle) => handle instanceof Object && "address" in handle);
+    const after = process
+      .getActiveResourcesInfo()
+      .filter((resource) => /TCPServer/i.test(resource));
     expect(after).toHaveLength(before.length);
   });
 
@@ -100,9 +124,9 @@ describe("startLocalService", () => {
   });
 
   it("closes before readiness without leaving a listener", async () => {
-    const before = (process as unknown as { _getActiveHandles(): unknown[] })
-      ._getActiveHandles()
-      .filter((handle) => handle instanceof Object && "address" in handle);
+    const before = process
+      .getActiveResourcesInfo()
+      .filter((resource) => /TCPServer/i.test(resource));
     const starting = beginLocalService(await config());
 
     await expect(
@@ -110,9 +134,9 @@ describe("startLocalService", () => {
     ).resolves.toEqual([undefined, undefined]);
     await expect(starting.ready).rejects.toThrow(/closed before it was ready/i);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const after = (process as unknown as { _getActiveHandles(): unknown[] })
-      ._getActiveHandles()
-      .filter((handle) => handle instanceof Object && "address" in handle);
+    const after = process
+      .getActiveResourcesInfo()
+      .filter((resource) => /TCPServer/i.test(resource));
     expect(after).toHaveLength(before.length);
   });
 

@@ -418,6 +418,17 @@ export async function materializePublication({
         .map(({ id }) => id)
         .join(", ")}`,
     );
+  if (
+    !viewerDirectory &&
+    dependencies.some(
+      (dependency) =>
+        dependency.delivery === "included" &&
+        dependency.owner.type === "runtime",
+    )
+  )
+    throw new Error(
+      "A viewer directory is required to bundle publication runtime dependencies.",
+    );
   const allowedHosts = new Set(
     authorizedRemoteHosts?.map((host) => host.toLowerCase()) ??
       project.sources.flatMap((source) => {
@@ -448,7 +459,7 @@ export async function materializePublication({
         dependency.id,
       );
     } else if (dependency.owner.type === "runtime") {
-      const runtimeRoot = viewerDirectory ?? resolve("apps/viewer/public");
+      const runtimeRoot = viewerDirectory!;
       cached = await cacheLocalFile(
         containedDestination(runtimeRoot, dependency.locator),
         expectedDigest,

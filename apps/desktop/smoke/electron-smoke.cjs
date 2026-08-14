@@ -91,8 +91,8 @@ app
         tokenContained:
           !renderer.title.includes(token) &&
           !renderer.url.includes(token) &&
-          !renderer.local.includes(token) &&
-          !renderer.session.includes(token),
+          !renderer.local.some((value) => String(value).includes(token)) &&
+          !renderer.session.some((value) => String(value).includes(token)),
       };
       const expectedKeys = [
         "chooseWorkspace",
@@ -100,6 +100,7 @@ app
         "listTools",
         "openExternal",
         "platform",
+        "prepareTools",
         "removeTool",
         "showProjectFolder",
         "showWorkspaceFolder",

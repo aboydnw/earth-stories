@@ -42,9 +42,19 @@ describe("inventoryPublicationDependencies", () => {
             type: "vector",
             tiles: ["https://example.com/{z}/{x}/{y}.pbf"],
           },
+          geojson: {
+            type: "geojson",
+            data: "https://example.com/features.geojson",
+          },
         },
+        imports: [
+          { id: "labels", url: "https://example.com/labels.json" },
+          { id: "inline", data: { version: 8 } },
+        ],
       }),
     ).toEqual([
+      "https://example.com/features.geojson",
+      "https://example.com/labels.json",
       "https://example.com/sprite",
       "https://example.com/{fontstack}/{range}.pbf",
       "https://example.com/{z}/{x}/{y}.pbf",

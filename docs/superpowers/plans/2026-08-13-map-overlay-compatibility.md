@@ -198,7 +198,7 @@ yarn test:publishing:no-git
 
 Expected: every command exits 0; existing bundle-size and jsdom CSS-parser warnings may remain informational.
 
-- [ ] **Step 3: Commit the implementation**
+- [x] **Step 3: Commit the implementation**
 
 Stage only the plan and implementation files and commit with:
 
@@ -206,6 +206,6 @@ Stage only the plan and implementation files and commit with:
 fix: keep map data visible across projections
 ```
 
-- [ ] **Step 4: Push and confirm the pull request**
+- [x] **Step 4: Push and confirm the pull request**
 
 Push `codex/pages-without-git`, confirm the worktree is clean and synchronized, and verify PR #17 remains open with this branch as its head.

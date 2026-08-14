@@ -130,11 +130,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       "The local Earth Stories service is not responding. Return to the terminal, confirm yarn dev is still running, then retry.",
     );
   }
-  const body = (await response.json()) as T | { error?: string };
+  let body: T | { error?: string } | null = null;
+  try {
+    body = (await response.json()) as T | { error?: string };
+  } catch {
+    if (response.ok)
+      throw new Error("Earth Stories received an invalid response.");
+  }
   if (!response.ok) {
     throw Object.assign(
       new Error(
-        "error" in (body as object) &&
+        body !== null &&
+          typeof body === "object" &&
+          "error" in body &&
           typeof (body as { error?: unknown }).error === "string"
           ? (body as { error: string }).error
           : "Earth Stories could not complete that request",

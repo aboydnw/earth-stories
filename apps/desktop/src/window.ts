@@ -52,6 +52,7 @@ function contentSecurityPolicy(origin: string): string {
     "base-uri 'none'",
     "object-src 'none'",
     "frame-ancestors 'none'",
+    "form-action 'none'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     `connect-src 'self' ${origin} https:`,

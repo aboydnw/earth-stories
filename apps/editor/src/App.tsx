@@ -193,9 +193,16 @@ export function App() {
   useEffect(() => {
     if (!desktop || !workspaceSettingsOpen || workspacePath !== null) return;
     let current = true;
-    void desktop.workspacePath().then((path) => {
-      if (current) setWorkspacePath(path);
-    });
+    void desktop
+      .workspacePath()
+      .then((path) => {
+        if (current) setWorkspacePath(path);
+      })
+      .catch((cause) => {
+        if (!current) return;
+        setWorkspacePath("Unavailable");
+        showError(cause);
+      });
     return () => {
       current = false;
     };
@@ -1054,6 +1061,74 @@ export function App() {
     }
   }
 
+  async function continueDataAssetJob(
+    asset: ProjectDataAsset,
+    initial: ConversionJobSnapshot,
+  ) {
+    let result: Awaited<ReturnType<typeof pollConversionJob>>;
+    try {
+      result = await pollConversionJob(initial, {
+        onUpdate: (job) =>
+          setConversionJobs((current) => ({
+            ...current,
+            [asset.id]: job,
+          })),
+      });
+    } catch (cause) {
+      setConversionJobs((current) => {
+        const next = { ...current };
+        delete next[asset.id];
+        return next;
+      });
+      throw cause;
+    }
+    if (result.kind === "workspace-changed") {
+      setConversionJobs((current) => {
+        const next = { ...current };
+        delete next[asset.id];
+        return next;
+      });
+      setError(result.message);
+      return;
+    }
+    setConversionJobs((current) => ({
+      ...current,
+      [asset.id]: result.job,
+    }));
+    if (result.kind === "approval-pending") return;
+
+    const terminal = latestConversionTerminal(result.job);
+    if (terminal?.type === "failure") throw new Error(terminal.message);
+    const intent = conversionIntents.current[asset.id];
+    if (!intent) return;
+    if (intent.operation !== "prepare") {
+      if (intent.capability === "multidim") {
+        const variables =
+          terminal?.type === "result" &&
+          Array.isArray(terminal.output.variables)
+            ? terminal.output.variables
+            : [];
+        const firstVariable = variables.find(
+          (variable) =>
+            variable &&
+            typeof variable === "object" &&
+            typeof (variable as { name?: unknown }).name === "string" &&
+            Array.isArray((variable as { dimensions?: unknown }).dimensions),
+        ) as { name: string } | undefined;
+        if (firstVariable)
+          setMultidimChoices((current) => ({
+            ...current,
+            [asset.id]: current[asset.id] ?? {
+              variable: firstVariable.name,
+              selection: {},
+            },
+          }));
+      }
+      return;
+    }
+    applyPreparedConversion(asset, result.job, intent);
+  }
+
   async function runDataAssetJob(
     asset: ProjectDataAsset,
     operation: "inspect" | "prepare",
@@ -1126,63 +1201,7 @@ export function App() {
         pendingChapterType,
       };
       setConversionJobs((current) => ({ ...current, [asset.id]: started }));
-      let job: ConversionJobSnapshot;
-      try {
-        const result = await pollConversionJob(started, {
-          onUpdate: (job) =>
-            setConversionJobs((current) => ({
-              ...current,
-              [asset.id]: job,
-            })),
-        });
-        if (result.kind === "workspace-changed") {
-          setConversionJobs((current) => {
-            const next = { ...current };
-            delete next[asset.id];
-            return next;
-          });
-          setError(result.message);
-          return;
-        }
-        job = result.job;
-      } catch (cause) {
-        setConversionJobs((current) => {
-          const next = { ...current };
-          delete next[asset.id];
-          return next;
-        });
-        throw cause;
-      }
-      const terminal = latestConversionTerminal(job);
-      if (terminal?.type === "failure") throw new Error(terminal.message);
-      if (operation !== "prepare") {
-        if (capability === "multidim") {
-          const result = [...job.events]
-            .reverse()
-            .find((event) => event.type === "result");
-          const variables =
-            result?.type === "result" && Array.isArray(result.output.variables)
-              ? result.output.variables
-              : [];
-          const firstVariable = variables.find(
-            (variable) =>
-              variable &&
-              typeof variable === "object" &&
-              typeof (variable as { name?: unknown }).name === "string" &&
-              Array.isArray((variable as { dimensions?: unknown }).dimensions),
-          ) as { name: string } | undefined;
-          if (firstVariable)
-            setMultidimChoices((current) => ({
-              ...current,
-              [asset.id]: current[asset.id] ?? {
-                variable: firstVariable.name,
-                selection: {},
-              },
-            }));
-        }
-        return;
-      }
-      applyPreparedConversion(asset, job, conversionIntents.current[asset.id]);
+      await continueDataAssetJob(asset, started);
     } catch (cause) {
       showError(cause);
     }
@@ -2020,33 +2039,10 @@ export function App() {
                                           ...current,
                                           [asset.id]: retried,
                                         }));
-                                        const result = await pollConversionJob(
+                                        await continueDataAssetJob(
+                                          asset,
                                           retried,
-                                          {
-                                            onUpdate: (next) =>
-                                              setConversionJobs((current) => ({
-                                                ...current,
-                                                [asset.id]: next,
-                                              })),
-                                          },
                                         );
-                                        if (result.kind === "completed") {
-                                          setConversionJobs((current) => ({
-                                            ...current,
-                                            [asset.id]: result.job,
-                                          }));
-                                          if (
-                                            latestConversionTerminal(result.job)
-                                              ?.type === "result"
-                                          )
-                                            applyPreparedConversion(
-                                              asset,
-                                              result.job,
-                                              conversionIntents.current[
-                                                asset.id
-                                              ],
-                                            );
-                                        }
                                       })
                                       .catch(showError);
                                   }}
@@ -2580,12 +2576,16 @@ export function App() {
                 disclosure={disclosure}
                 onAcknowledge={() => {
                   void actOnConversionJob(job.id, "acknowledge")
-                    .then((next) =>
+                    .then(async (next) => {
                       setConversionJobs((current) => ({
                         ...current,
                         [assetId]: next,
-                      })),
-                    )
+                      }));
+                      const asset = project?.dataAssets.find(
+                        ({ id }) => id === assetId,
+                      );
+                      if (asset) await continueDataAssetJob(asset, next);
+                    })
                     .catch(showError);
                 }}
                 onCancel={() => {

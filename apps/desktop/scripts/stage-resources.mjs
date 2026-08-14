@@ -19,6 +19,10 @@ const defaultRepository = resolve(scriptDirectory, "../../..");
 
 const resources = [
   ["apps/local-service/dist/service.js", "service/service.js"],
+  [
+    "apps/local-service/dist/service.js.LICENSE.txt",
+    "service/service.js.LICENSE.txt",
+  ],
   ["dist/editor", "editor"],
   ["dist/viewer", "viewer"],
   ["pixi.toml", "conversion/pixi.toml"],
@@ -94,7 +98,9 @@ async function sha256(path) {
 async function stage({ output, repository }) {
   await assertInputs(repository);
   const temporary = `${output}.tmp-${process.pid}`;
+  const backup = `${output}.backup-${process.pid}`;
   await rm(temporary, { force: true, recursive: true });
+  await rm(backup, { force: true, recursive: true });
   await mkdir(temporary, { recursive: true });
   try {
     for (const [source, destination] of resources) {
@@ -121,9 +127,26 @@ async function stage({ output, repository }) {
       join(temporary, "resource-manifest.json"),
       `${JSON.stringify(manifest, null, 2)}\n`,
     );
-    await rm(output, { force: true, recursive: true });
     await mkdir(dirname(output), { recursive: true });
-    await rename(temporary, output);
+    let previousStaged = false;
+    try {
+      await rename(output, backup);
+      previousStaged = true;
+    } catch (cause) {
+      if (
+        !(cause instanceof Error) ||
+        !("code" in cause) ||
+        cause.code !== "ENOENT"
+      )
+        throw cause;
+    }
+    try {
+      await rename(temporary, output);
+    } catch (cause) {
+      if (previousStaged) await rename(backup, output);
+      throw cause;
+    }
+    if (previousStaged) await rm(backup, { recursive: true, force: true });
   } catch (cause) {
     await rm(temporary, { force: true, recursive: true });
     throw cause;

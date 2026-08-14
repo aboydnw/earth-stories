@@ -45,6 +45,14 @@ both `pixi.toml` and `pixi.lock`, restore mismatched copies before execution, us
 `--manifest-path` and `--locked`, and explicitly place Pixi home and cache data
 under the per-user tools directory.
 
+The packaged `pixi.toml` and `pixi.lock` digests must also be bound together in
+an authenticated release-integrity record covered by the application's platform
+signature. Provisioning must verify both packaged files against that record
+before copying them, verify the pair again before atomically promoting the
+writable copy, and verify it immediately before every Pixi execution. A missing,
+invalid, or mismatched record or file fails closed; no desktop release gate may
+be marked complete from an unsigned or partially verified pair.
+
 ## Linux evidence appendix
 
 ### Host, bootstrap, and layout
@@ -194,7 +202,7 @@ env PIXI_HOME=./scratch-userData/tools/pixi-home-raster \
 The worker returned `status: succeeded`, rio-cogeo 5.4.2, no warnings, and a
 1,304-byte output in 8.44 s wall time, 3.41 s user time, 0.27 s system time,
 and 108,676 KiB maximum RSS. The independent command reported
-`tiny-output.cog.tif is a valid cloud optimized GeoTIFF`.
+`tiny-output.cog.tif is a valid cloud-optimized GeoTIFF`.
 
 The worker source was executed from the repository rather than from a bundled
 desktop resource. This proves the locked Linux raster toolchain and worker
@@ -484,6 +492,18 @@ signed installer on a clean Windows x64 host.
 
 ## Revisit triggers and failure path
 
+Performance gates must be reproduced on the declared minimum hardware and OS
+using a versioned representative story fixture and a recorded pan/zoom input
+trace. Before each cold-launch sample, stop the complete application process
+tree and reset the documented application, filesystem, and shader caches; record
+process start, service-ready, first-window, story-interactive, and first-frame
+events. Report the median of five launches. Measure RSS for the complete Electron
+process tree at one-second intervals through launch and the 30-second idle
+window. Capture frame timing from the same browser performance trace while
+replaying the fixed input sequence, and report median FPS plus the percentage of
+frames over 33 ms. Every gate result must identify the machine, OS build,
+fixture revision, cache-reset procedure, trace tooling, and raw sample set.
+
 Replace Electron with a Tauri comparison spike, or revisit the distribution
 architecture, when any of these occurs:
 
@@ -507,7 +527,7 @@ architecture, when any of these occurs:
 
 If hardened-runtime Pixi execution fails, stop before `desktop-02`; do not waive
 the final trigger. First compare a signed, installer-bundled conversion runtime
-under Electron with the same runtime as a Tauri packaged sidecar. Measure both
+under Electron with the same runtime as a Tauri-packaged sidecar. Measure both
 against the 250 MiB ceiling and repeat notarization on a clean Mac. If a signed
 local runtime cannot satisfy both execution and size gates, remove local Pixi
 execution from the desktop design and use a hosted conversion service (with a

@@ -125,9 +125,9 @@ describe("createLocalServer", () => {
     );
     const previous = process.env.EARTH_STORIES_PROJECTS_DIR;
     process.env.EARTH_STORIES_PROJECTS_DIR = projectsDirectory;
-    const before = (process as unknown as { _getActiveHandles(): unknown[] })
-      ._getActiveHandles()
-      .filter((handle) => handle instanceof Object && "address" in handle);
+    const before = process
+      .getActiveResourcesInfo()
+      .filter((resource) => /TCPServer/i.test(resource));
     try {
       await import(
         /* @vite-ignore */ new URL("./server.js?import-safe", import.meta.url)
@@ -175,9 +175,9 @@ describe("createLocalServer", () => {
       if (previous === undefined) delete process.env.EARTH_STORIES_PROJECTS_DIR;
       else process.env.EARTH_STORIES_PROJECTS_DIR = previous;
     }
-    const after = (process as unknown as { _getActiveHandles(): unknown[] })
-      ._getActiveHandles()
-      .filter((handle) => handle instanceof Object && "address" in handle);
+    const after = process
+      .getActiveResourcesInfo()
+      .filter((resource) => /TCPServer/i.test(resource));
     expect(after).toHaveLength(before.length);
     await expect(access(projectsDirectory)).rejects.toThrow();
   });
@@ -641,7 +641,7 @@ describe("createLocalServer", () => {
 
   it("refuses server construction if the test seam disables origin enforcement in capability mode", async () => {
     const { config, store, jobs } = await setup({
-      capabilityToken: "desktop-secret",
+      capabilityToken: "desktop-secret-token-at-least-32-chars",
     });
     const { createLocalServer } = await import("./server.js");
     expect(() =>

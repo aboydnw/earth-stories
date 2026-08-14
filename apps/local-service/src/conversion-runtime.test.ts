@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ConversionJobEvent } from "@earth-stories/story-schema";
 import {
@@ -45,6 +46,31 @@ describe("ConversionRuntime", () => {
     ]);
     expect(versions.pointcloud).toEqual(["PDAL 2.10.2", "python-pdal 3.5.5"]);
   });
+
+  it("rejects Linux ARM64 instead of selecting the x64 lock target", async () => {
+    const originalPlatform = Object.getOwnPropertyDescriptor(
+      process,
+      "platform",
+    );
+    const originalArch = Object.getOwnPropertyDescriptor(process, "arch");
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: "linux",
+    });
+    Object.defineProperty(process, "arch", {
+      configurable: true,
+      value: "arm64",
+    });
+    try {
+      expect(() =>
+        parseLockedCapabilityVersions("version: 6\nenvironments: {}\n"),
+      ).toThrow(/linux arm64.*not supported/i);
+    } finally {
+      if (originalPlatform)
+        Object.defineProperty(process, "platform", originalPlatform);
+      if (originalArch) Object.defineProperty(process, "arch", originalArch);
+    }
+  });
   it("discloses and provisions a capability only once", async () => {
     const commands: RuntimeCommand[] = [];
     const events: ConversionJobEvent[] = [];
@@ -80,7 +106,7 @@ describe("ConversionRuntime", () => {
       type: "provisioning-disclosure",
       capabilityName: "Vector preparation",
       estimatedBytes: CAPABILITY_INSTALL_ESTIMATES.vector.estimatedBytes,
-      destination: "/writable/manifest/.pixi/envs/vector",
+      destination: join("/writable/manifest", ".pixi", "envs", "vector"),
       versions: ["DuckDB 1.5.5", "GDAL 3.13.2", "PyArrow 22.0.0"],
     });
     expect(runtime.acknowledgeProvisioning("request-1")).toBe(true);
@@ -100,7 +126,7 @@ describe("ConversionRuntime", () => {
       args: [
         "install",
         "--manifest-path",
-        "/writable/manifest/pixi.toml",
+        join("/writable/manifest", "pixi.toml"),
         "--locked",
         "-e",
         "vector",
@@ -112,12 +138,12 @@ describe("ConversionRuntime", () => {
       args: [
         "run",
         "--manifest-path",
-        "/writable/manifest/pixi.toml",
+        join("/writable/manifest", "pixi.toml"),
         "--locked",
         "-e",
         "vector",
         "python",
-        "/read-only/worker/worker.py",
+        join("/read-only/worker", "worker.py"),
       ],
     });
   });
@@ -151,8 +177,8 @@ describe("ConversionRuntime", () => {
       "/tools/tree/manifests/generation-three",
     ]);
     expect(commands.map((command) => command.args[2])).toEqual([
-      "/tools/tree/manifests/generation-two/pixi.toml",
-      "/tools/tree/manifests/generation-three/pixi.toml",
+      join("/tools/tree/manifests/generation-two", "pixi.toml"),
+      join("/tools/tree/manifests/generation-three", "pixi.toml"),
     ]);
   });
 
@@ -186,8 +212,8 @@ describe("ConversionRuntime", () => {
       "/tools/tree/manifests/generation-3",
     ]);
     expect(commands.map((command) => command.args[2])).toEqual([
-      "/tools/tree/manifests/generation-2/pixi.toml",
-      "/tools/tree/manifests/generation-3/pixi.toml",
+      join("/tools/tree/manifests/generation-2", "pixi.toml"),
+      join("/tools/tree/manifests/generation-3", "pixi.toml"),
     ]);
   });
 
@@ -259,7 +285,8 @@ describe("ConversionRuntime", () => {
     });
 
     const execution = runtime.execute(request, () => undefined);
-    runtime.acknowledgeProvisioning("request-1");
+    while (!runtime.acknowledgeProvisioning("request-1"))
+      await Promise.resolve();
     await expect(execution).rejects.toThrow();
   });
 
@@ -362,6 +389,77 @@ describe("ConversionRuntime", () => {
     runtime.acknowledgeProvisioning("request-1");
     await retry;
     expect(attempts).toBe(2);
+  });
+
+  it("preserves the provisioning failure when cleanup also fails", async () => {
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      manifestDirectory: "/manifest",
+      workerDirectory: "/workers",
+      pixiHome: null,
+      lockedVersions,
+      executableExists: async () => true,
+      cleanupCapability: async () => {
+        throw new Error("cleanup failed");
+      },
+      run: async (command) => {
+        if (command.args[0] === "install")
+          throw new Error("provisioning failed");
+      },
+    });
+
+    const provisioning = runtime.provision(
+      "vector",
+      "request-1",
+      () => undefined,
+    );
+    runtime.acknowledgeProvisioning("request-1");
+
+    await expect(provisioning).rejects.toThrow("provisioning failed");
+  });
+
+  it("preserves the worker failure when capability release also fails", async () => {
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      manifestDirectory: "/manifest",
+      workerDirectory: "/workers",
+      pixiHome: null,
+      lockedVersions,
+      executableExists: async () => true,
+      acquireCapability: async () => async () => {
+        throw new Error("release failed");
+      },
+      run: async (command) => {
+        if (command.args[0] === "run") throw new Error("worker failed");
+      },
+    });
+
+    const execution = runtime.execute(request, () => undefined);
+    while (!runtime.acknowledgeProvisioning("request-1"))
+      await Promise.resolve();
+
+    await expect(execution).rejects.toThrow("worker failed");
+  });
+
+  it("reports a capability release failure after successful work", async () => {
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      manifestDirectory: "/manifest",
+      workerDirectory: "/workers",
+      pixiHome: null,
+      lockedVersions,
+      executableExists: async () => true,
+      acquireCapability: async () => async () => {
+        throw new Error("release failed");
+      },
+      run: async () => undefined,
+    });
+
+    const execution = runtime.execute(request, () => undefined);
+    while (!runtime.acknowledgeProvisioning("request-1"))
+      await Promise.resolve();
+
+    await expect(execution).rejects.toThrow("release failed");
   });
 
   it("rechecks disk readiness after removal before bypassing disclosure", async () => {

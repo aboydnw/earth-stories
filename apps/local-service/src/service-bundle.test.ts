@@ -1,5 +1,14 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  cp,
+  mkdtemp,
+  mkdir,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -19,14 +28,24 @@ afterAll(async () => {
 
 describe("production service bundle", () => {
   it("runs from a sanitized plain Node child with only the relocated bundle", async () => {
+    await rm(join(packageDirectory, "dist"), { recursive: true, force: true });
     await exec("yarn", ["workspace", "@earth-stories/local-service", "build"], {
       cwd: resolve("."),
+      timeout: 120_000,
     });
-    const root = await mkdtemp(join(tmpdir(), "earth-stories-bundle-"));
+    await access(join(packageDirectory, "dist/standalone.d.ts"));
+    await access(join(packageDirectory, "dist/service.js.LICENSE.txt"));
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "earth-stories-bundle-")),
+    );
     temporaryDirectories.push(root);
     const relocated = join(root, "service.js");
     await cp(join(packageDirectory, "dist/service.js"), relocated);
     await cp(join(packageDirectory, "dist/service.js.map"), `${relocated}.map`);
+    await cp(
+      join(packageDirectory, "dist/service.js.LICENSE.txt"),
+      join(root, "service.js.LICENSE.txt"),
+    );
     await cp(resolve("pixi.lock"), join(root, "pixi.lock"));
     const harness = join(root, "harness.mjs");
     await writeFile(
@@ -39,7 +58,9 @@ const post = (origin, path, body, headers = {}) => fetch(origin + path, { method
 const waitForJob = async (origin, id) => {
   let acknowledged = false;
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const job = await (await fetch(origin + "/api/conversion-jobs/" + id)).json();
+    const response = await fetch(origin + "/api/conversion-jobs/" + id);
+    if (!response.ok) throw new Error("conversion job polling failed (" + response.status + ")");
+    const job = await response.json();
     if (job.status === "awaiting-approval" && !acknowledged) {
       acknowledged = true;
       const response = await post(origin, "/api/conversion-jobs/" + id + "/acknowledge", "");
@@ -120,6 +141,7 @@ process.stdout.write(JSON.stringify(result) + "\\n");
       "harness.mjs",
       "pixi.lock",
       "service.js",
+      "service.js.LICENSE.txt",
       "service.js.map",
     ]);
     const environment = { ...process.env };
@@ -148,5 +170,5 @@ process.stdout.write(JSON.stringify(result) + "\\n");
     });
     const parsed = JSON.parse(stdout) as { before: number; after: number };
     expect(parsed.after).toBe(parsed.before);
-  });
+  }, 180_000);
 });

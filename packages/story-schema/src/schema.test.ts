@@ -232,6 +232,16 @@ describe("storyProjectSchema", () => {
     ).toThrow("Unsupported Earth Stories project schema");
   });
 
+  it("returns a failed safeParse result for malformed v1 projects", () => {
+    expect(() =>
+      storyProjectSchema.safeParse({ schema: "earth-stories/project/v1" }),
+    ).not.toThrow();
+    expect(
+      storyProjectSchema.safeParse({ schema: "earth-stories/project/v1" })
+        .success,
+    ).toBe(false);
+  });
+
   it("defaults legacy flyover keyframe captions independently", () => {
     const flyover = projectChapterSchema.parse({
       id: "flight",

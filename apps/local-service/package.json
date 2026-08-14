@@ -5,12 +5,15 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/standalone.ts",
+      "types": "./dist/standalone.d.ts",
       "default": "./dist/service.js"
     }
   },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "yarn --cwd ../.. tsc --build apps/local-service/tsconfig.json --force --pretty false && node scripts/build.mjs",
     "dev": "node --import tsx src/standalone.ts",
     "start": "node dist/service.js"
   },

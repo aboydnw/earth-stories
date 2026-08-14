@@ -11,7 +11,19 @@ const running: ConversionJobSnapshot = {
   updatedAt: "2026-08-13T00:00:00.000Z",
 };
 
+const awaitingApproval: ConversionJobSnapshot = {
+  ...running,
+  status: "awaiting-approval",
+};
+
 describe("pollConversionJob", () => {
+  it("returns an approval-pending result that callers can resume", async () => {
+    await expect(pollConversionJob(awaitingApproval)).resolves.toEqual({
+      kind: "approval-pending",
+      job: awaitingApproval,
+    });
+  });
+
   it("ends normally with workspace-change guidance when the job is missing", async () => {
     const load = vi.fn(async () => {
       throw Object.assign(new Error("Job not found"), { status: 404 });

@@ -1,5 +1,5 @@
 import { platform } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createStandaloneRuntimeDependencies,
@@ -43,10 +43,24 @@ describe("resolveStandaloneConfig", () => {
       { repositoryDirectory: "/repo", cwd: "/cwd" },
     );
     expect(config.port).toBe(9000);
-    expect(config.projectsDirectory).toBe("/cwd/relative-projects");
-    expect(config.viewerDirectory).toBe("/cwd/relative-viewer");
-    expect(config.conversion.pixiExecutable).toBe("/cwd/relative-pixi");
+    expect(config.projectsDirectory).toBe(resolve("/cwd", "relative-projects"));
+    expect(config.viewerDirectory).toBe(resolve("/cwd", "relative-viewer"));
+    expect(config.conversion.pixiExecutable).toBe(
+      resolve("/cwd", "relative-pixi"),
+    );
   });
+
+  it.each(["", "   ", "\t\n"])(
+    "uses the default port when EARTH_STORIES_PORT is blank %j",
+    (configuredPort) => {
+      const config = resolveStandaloneConfig(
+        { EARTH_STORIES_PORT: configuredPort },
+        { repositoryDirectory: "/repo", cwd: "/cwd" },
+      );
+
+      expect(config.port).toBe(4317);
+    },
+  );
 });
 
 describe("createStandaloneRuntimeDependencies", () => {
@@ -64,7 +78,7 @@ describe("createStandaloneRuntimeDependencies", () => {
       {
         executable: process.execPath,
         args: [
-          resolve("/opt/earth-stories", "scripts/install-pixi.mjs"),
+          join("/opt/earth-stories", "scripts/install-pixi.mjs"),
           "/tools/pixi",
         ],
         cwd: "/opt/earth-stories",

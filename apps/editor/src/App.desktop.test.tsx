@@ -308,6 +308,30 @@ describe("desktop editor controls", () => {
     ).toBeTruthy();
   });
 
+  it("settles workspace settings when the desktop path lookup fails", async () => {
+    window.history.replaceState(null, "", "/?workspace=settings");
+    window.earthStoriesDesktop = {
+      version: "9.8.7",
+      platform: "linux",
+      workspacePath: async () => {
+        throw new Error("Workspace path unavailable");
+      },
+      showWorkspaceFolder: async () => undefined,
+      chooseWorkspace: async () => null,
+      exportDiagnostics: async () => "cancelled",
+      showProjectFolder: async () => undefined,
+      openExternal: async () => undefined,
+      listTools: async () => [],
+      prepareTools: async () => [],
+      removeTool: async () => undefined,
+    } satisfies DesktopBridge;
+
+    renderApp();
+
+    expect(await screen.findByText("Workspace path unavailable")).toBeTruthy();
+    expect(screen.queryByText("Loading workspace…")).toBeNull();
+  });
+
   it("completes prepared-source attachment after failed provisioning retries on the same job", async () => {
     window.history.replaceState(null, "", "/stories/project-one");
     const opened = {
@@ -365,6 +389,7 @@ describe("desktop editor controls", () => {
     });
     let finishInitial!: (value: unknown) => void;
     let finishRetry!: (value: unknown) => void;
+    let runningPolls = 0;
     api.openProject.mockResolvedValue(opened);
     api.startConversion.mockResolvedValue(
       snapshot("awaiting-approval", [disclosure]),
@@ -374,25 +399,19 @@ describe("desktop editor controls", () => {
         ? snapshot("awaiting-approval", [disclosure])
         : snapshot("running", [disclosure]),
     );
-    conversion.poll
-      .mockImplementationOnce(
-        (_job, options) =>
-          new Promise((resolve) => {
-            finishInitial = (value: any) => {
-              options.onUpdate(value.job);
-              resolve(value);
-            };
-          }),
-      )
-      .mockImplementationOnce(
-        (_job, options) =>
-          new Promise((resolve) => {
-            finishRetry = (value: any) => {
-              options.onUpdate(value.job);
-              resolve(value);
-            };
-          }),
-      );
+    conversion.poll.mockImplementation((job, options) => {
+      if (job.status === "awaiting-approval")
+        return Promise.resolve({ kind: "approval-pending", job });
+      runningPolls += 1;
+      return new Promise((resolve) => {
+        const finish = (value: any) => {
+          options.onUpdate(value.job);
+          resolve(value);
+        };
+        if (runningPolls === 1) finishInitial = finish;
+        else finishRetry = finish;
+      });
+    });
     renderApp();
     await screen.findByText("Retry story");
     await userEvent.click(screen.getByRole("button", { name: /story data/i }));

@@ -255,6 +255,10 @@ interface HashedReleaseFile extends ReleaseFile {
   sha: string;
 }
 
+function encodePathSegments(value: string): string {
+  return value.split("/").map(encodeURIComponent).join("/");
+}
+
 const MAX_RATE_LIMIT_RETRIES = 3;
 const MAX_RETRY_DELAY_MS = 60_000;
 
@@ -393,7 +397,7 @@ async function readExistingBlobs(
   const ref = await githubObjectRequest({
     fetchImpl,
     token: options.token,
-    url: `${root}/ref/heads/${encodeURIComponent(branch)}`,
+    url: `${root}/ref/heads/${encodePathSegments(branch)}`,
     operation: "Reading the publication branch",
   });
   if (ref.status === 404) {
@@ -574,7 +578,7 @@ async function forceUpdateRef(
   const updated = await githubObjectRequest({
     fetchImpl,
     token: options.token,
-    url: `${root}/refs/heads/${encodeURIComponent(branch)}`,
+    url: `${root}/refs/heads/${encodePathSegments(branch)}`,
     operation: "Updating the publication branch",
     init: { method: "PATCH" },
     body: jsonBody({ sha: commit, force: true }),
@@ -682,7 +686,8 @@ export interface WaitForPagesOptions {
   fetchImpl?: typeof fetch;
   deadlineMs?: number;
   intervalMs?: number;
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  signal?: AbortSignal;
   now?: () => number;
   onAttempt?: (attempt: number) => void;
 }
@@ -706,28 +711,33 @@ export async function waitForPages(
   const started = now();
 
   for (let attempt = 1; ; attempt += 1) {
+    if (options.signal?.aborted)
+      throw options.signal.reason instanceof Error
+        ? options.signal.reason
+        : new Error("Publishing was canceled.");
     const remaining = deadlineMs - (now() - started);
     if (remaining <= 0) return false;
     options.onAttempt?.(attempt);
 
-    const controller = new AbortController();
-    const abortTimer = setTimeout(() => controller.abort(), remaining);
-    abortTimer.unref?.();
+    const timeout = AbortSignal.timeout(remaining);
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, timeout])
+      : timeout;
     let served = false;
     try {
       const response = await fetchImpl(url, {
         redirect: "follow",
-        signal: controller.signal,
+        signal,
       });
       await response.body?.cancel();
       served = response.ok;
-    } catch {
+    } catch (cause) {
+      if (options.signal?.aborted) throw cause;
       served = false;
-    } finally {
-      clearTimeout(abortTimer);
     }
     if (served) return true;
     if (now() - started >= deadlineMs) return false;
-    await sleep(intervalMs);
+    if (options.sleep) await sleep(intervalMs, options.signal);
+    else await waitForRetry(intervalMs, options.signal);
   }
 }
