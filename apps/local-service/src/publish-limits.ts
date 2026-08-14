@@ -1,5 +1,5 @@
-import { readdir, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { stat } from "node:fs/promises";
+import { collectReleaseFiles } from "./git-objects.js";
 
 export const PAGES_SITE_LIMIT_BYTES = 1_000_000_000;
 export const PAGES_SITE_WARN_BYTES = 800_000_000;
@@ -54,26 +54,12 @@ export async function inspectRelease(
   let totalBytes = 0;
   let largestFile: ReleaseInspection["largestFile"] = null;
 
-  async function walk(current: string): Promise<void> {
-    const entries = await readdir(current, { withFileTypes: true });
-    for (const entry of entries) {
-      const path = join(current, entry.name);
-      if (entry.isDirectory()) {
-        await walk(path);
-        continue;
-      }
-      if (!entry.isFile()) continue;
-      const info = await stat(path);
-      totalBytes += info.size;
-      if (!largestFile || info.size > largestFile.bytes)
-        largestFile = {
-          path: relative(directory, path).replaceAll("\\", "/"),
-          bytes: info.size,
-        };
-    }
+  for (const file of await collectReleaseFiles(directory)) {
+    const info = await stat(file.absolute);
+    totalBytes += info.size;
+    if (!largestFile || info.size > largestFile.bytes)
+      largestFile = { path: file.path, bytes: info.size };
   }
-
-  await walk(directory);
   return { totalBytes, largestFile };
 }
 

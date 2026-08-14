@@ -55,27 +55,22 @@ export function runProgrammaticMove(
 ) {
   let fallback: ReturnType<typeof setTimeout> | null = null;
   let finished = false;
-  const finish = () => {
+  const cancel = () => {
     if (finished) return;
     finished = true;
     if (fallback !== null) clearTimeout(fallback);
     fallback = null;
     map.off("moveend", finish);
     programmatic.current = false;
+  };
+  const finish = () => {
+    if (finished) return;
+    cancel();
     onComplete?.();
   };
   programmatic.current = true;
   map.once("moveend", finish);
-  if (fallbackMs !== undefined)
-    fallback = setTimeout(() => {
-      fallback = null;
-      programmatic.current = false;
-    }, fallbackMs);
+  if (fallbackMs !== undefined) fallback = setTimeout(cancel, fallbackMs);
   move();
-  return () => {
-    if (fallback !== null) clearTimeout(fallback);
-    fallback = null;
-    map.off("moveend", finish);
-    programmatic.current = false;
-  };
+  return cancel;
 }

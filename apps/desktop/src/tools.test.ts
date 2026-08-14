@@ -59,19 +59,20 @@ describe("DesktopTools", () => {
     const value = await fixture({
       provision: async ({ capability, manifestDirectory }) => {
         provisioned.push(capability);
-        await mkdir(join(manifestDirectory, ".pixi", "envs", capability), {
-          recursive: true,
-        });
-        await writeFile(
-          join(manifestDirectory, ".pixi", "envs", capability, "ready"),
+        const environment = join(
+          manifestDirectory,
+          ".pixi",
+          "envs",
           capability,
         );
+        await mkdir(join(environment, "conda-meta"), { recursive: true });
+        await writeFile(join(environment, "conda-meta", "history"), capability);
       },
     });
     const runtime = await value.manager.prepareRuntime();
-    await mkdir(join(runtime.manifestDirectory, ".pixi", "envs", "core"), {
-      recursive: true,
-    });
+    const core = join(runtime.manifestDirectory, ".pixi", "envs", "core");
+    await mkdir(join(core, "conda-meta"), { recursive: true });
+    await writeFile(join(core, "conda-meta", "history"), "core");
 
     await value.manager.prepareCapabilities(["core", "raster", "vector"]);
 
@@ -79,6 +80,16 @@ describe("DesktopTools", () => {
     expect(
       (await value.manager.listInstalled()).map(({ capability }) => capability),
     ).toEqual(["core", "raster", "vector"]);
+  });
+
+  it("does not treat a partial capability directory as installed", async () => {
+    const value = await fixture();
+    const runtime = await value.manager.prepareRuntime();
+    await mkdir(join(runtime.manifestDirectory, ".pixi", "envs", "raster"), {
+      recursive: true,
+    });
+
+    await expect(runtime.capabilityReady("raster")).resolves.toBe(false);
   });
 
   it("removes a partial environment after preparation fails so retry is safe", async () => {
@@ -95,6 +106,8 @@ describe("DesktopTools", () => {
         await mkdir(environment, { recursive: true });
         await writeFile(join(environment, "partial"), "partial");
         if (attempts === 1) throw new Error("download interrupted");
+        await mkdir(join(environment, "conda-meta"), { recursive: true });
+        await writeFile(join(environment, "conda-meta", "history"), "ready");
       },
     });
     const runtime = await value.manager.prepareRuntime();

@@ -3,6 +3,16 @@ import type { Camera } from "@earth-stories/story-schema";
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const lerp = (a: number, b: number, amount: number) => a + (b - a) * amount;
 
+export function flyoverTrackHeight({
+  scrollLength,
+  keyframeCount,
+}: {
+  scrollLength: number;
+  keyframeCount: number;
+}): string {
+  return `${Math.max(120, scrollLength * 100 * (keyframeCount - 1) + 100)}vh`;
+}
+
 function sample(values: number[], index: number) {
   if (index < 0) return 2 * values[0]! - values[1]!;
   if (index >= values.length) return 2 * values.at(-1)! - values.at(-2)!;

@@ -8,6 +8,7 @@ import type {
 import { LEGACY_DEFAULT_CAMERA } from "@earth-stories/story-schema";
 import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
 import { VisualizationProvenance } from "./VisualizationProvenance.js";
+import { flyoverTrackHeight } from "./flyover.js";
 import type { PublicationRuntimePolicy } from "./publicationRuntime.js";
 
 const MapChapter = lazy(async () => ({
@@ -149,14 +150,30 @@ export function PublicationChapterRenderer({
         <StoryMapHydrationBoundary
           eager={snapshotMode || composition === "authoring-map"}
           fallback={
-            <div className="story-map story-map--loading story-map--flyover-placeholder">
+            <div
+              className="story-map story-map--loading story-map--flyover-placeholder"
+              style={{
+                minHeight: flyoverTrackHeight({
+                  scrollLength: chapter.scrollLength,
+                  keyframeCount: chapter.keyframes.length,
+                }),
+              }}
+            >
               Preparing flyover…
             </div>
           }
         >
           <Suspense
             fallback={
-              <div className="story-map story-map--loading story-map--flyover-placeholder">
+              <div
+                className="story-map story-map--loading story-map--flyover-placeholder"
+                style={{
+                  minHeight: flyoverTrackHeight({
+                    scrollLength: chapter.scrollLength,
+                    keyframeCount: chapter.keyframes.length,
+                  }),
+                }}
+              >
                 Preparing flyover…
               </div>
             }

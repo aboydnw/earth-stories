@@ -45,6 +45,12 @@ describe("ConversionRuntime", () => {
       "rio-cogeo 5.4.2",
     ]);
     expect(versions.pointcloud).toEqual(["PDAL 2.10.2", "python-pdal 3.5.5"]);
+    expect(
+      parseLockedCapabilityVersions(
+        await readFile("pixi.lock", "utf8"),
+        "win-64",
+      ).core,
+    ).toContain("Pydantic 2.13.4");
   });
 
   it("rejects Linux ARM64 instead of selecting the x64 lock target", async () => {
@@ -229,6 +235,7 @@ describe("ConversionRuntime", () => {
       lockedVersions,
       bootstrap: async (pixi) => void bootstraps.push(pixi),
       executableExists: async () => false,
+      capabilityReady: async () => false,
       run: async (command) => {
         commands.push(command);
       },
@@ -239,7 +246,10 @@ describe("ConversionRuntime", () => {
       "request-1",
       () => undefined,
     );
-    runtime.acknowledgeProvisioning("request-1");
+    expect(bootstraps).toEqual([]);
+    while (!runtime.acknowledgeProvisioning("request-1"))
+      await Promise.resolve();
+    expect(bootstraps).toEqual([]);
     await provisioning;
 
     expect(bootstraps).toEqual(["/missing/pixi"]);
@@ -480,7 +490,8 @@ describe("ConversionRuntime", () => {
       },
     });
     const first = runtime.provision("raster", "request-1", () => undefined);
-    runtime.acknowledgeProvisioning("request-1");
+    while (!runtime.acknowledgeProvisioning("request-1"))
+      await Promise.resolve();
     await first;
     installed = false;
     const events: ConversionJobEvent[] = [];
@@ -488,16 +499,65 @@ describe("ConversionRuntime", () => {
     const afterRemoval = runtime.provision("raster", "request-2", (event) =>
       events.push(event),
     );
-    await Promise.resolve();
+    while (!runtime.acknowledgeProvisioning("request-2"))
+      await Promise.resolve();
 
     expect(events[0]).toMatchObject({ type: "provisioning-disclosure" });
     expect(
       commands.filter((command) => command.args[0] === "install"),
     ).toHaveLength(1);
-    runtime.acknowledgeProvisioning("request-2");
     await afterRemoval;
     expect(
       commands.filter((command) => command.args[0] === "install"),
     ).toHaveLength(2);
+  });
+
+  it("uses a capability already installed on disk without asking again after restart", async () => {
+    const events: ConversionJobEvent[] = [];
+    const commands: RuntimeCommand[] = [];
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      manifestDirectory: "/manifest",
+      workerDirectory: "/workers",
+      pixiHome: "/tools/home",
+      pixiCacheDirectory: "/tools/cache",
+      lockedVersions,
+      capabilityReady: async () => true,
+      executableExists: async () => true,
+      run: async (command) => {
+        commands.push(command);
+      },
+    });
+
+    await runtime.provision("raster", "request-after-restart", (event) =>
+      events.push(event),
+    );
+
+    expect(events).toEqual([]);
+    expect(commands).toEqual([]);
+  });
+
+  it("restores Pixi before accepting an installed capability after restart", async () => {
+    const events: ConversionJobEvent[] = [];
+    let bootstraps = 0;
+    const runtime = new ConversionRuntime({
+      pixi: "/tools/pixi",
+      manifestDirectory: "/manifest",
+      workerDirectory: "/workers",
+      pixiHome: "/tools/home",
+      lockedVersions,
+      capabilityReady: async () => true,
+      executableExists: async () => false,
+      bootstrap: async () => {
+        bootstraps += 1;
+      },
+    });
+
+    await runtime.provision("raster", "request-after-restart", (event) =>
+      events.push(event),
+    );
+
+    expect(bootstraps).toBe(1);
+    expect(events).toEqual([]);
   });
 });

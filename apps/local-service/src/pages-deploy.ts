@@ -10,9 +10,13 @@ const API_ROOT = "https://api.github.com";
 const COMMIT_AUTHOR_NAME = "Earth Stories";
 const COMMIT_AUTHOR_EMAIL = "earth-stories@users.noreply.github.com";
 const REPOSITORY_SEED_PATH = ".earth-stories-seed";
-const REPOSITORY_SEED_CONTENT =
-  "RWFydGggU3RvcmllcyBwdWJsaWNhdGlvbiByZXBvc2l0b3J5Cg==";
 export const DEFAULT_PAGES_BRANCH = "gh-pages";
+
+function repositorySeedContent(projectId: string): string {
+  return Buffer.from(
+    `Earth Stories publication repository\nProject: ${projectId}\n`,
+  ).toString("base64");
+}
 
 export interface GitHubRequestOptions {
   token: string;
@@ -60,6 +64,7 @@ async function readError(response: Response): Promise<string> {
 export interface EnsureRepositoryOptions extends GitHubRequestOptions {
   owner: string;
   repo: string;
+  projectId: string;
   description?: string;
   expectExisting?: boolean;
 }
@@ -68,7 +73,7 @@ function repositorySeedEndpoint(options: EnsureRepositoryOptions): string {
   return `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/contents/${REPOSITORY_SEED_PATH}`;
 }
 
-function matchesRepositorySeed(value: unknown): boolean {
+function matchesRepositorySeed(value: unknown, projectId: string): boolean {
   if (
     typeof value !== "object" ||
     value === null ||
@@ -85,7 +90,7 @@ function matchesRepositorySeed(value: unknown): boolean {
   )
     return false;
   return Buffer.from(normalized, "base64").equals(
-    Buffer.from(REPOSITORY_SEED_CONTENT, "base64"),
+    Buffer.from(repositorySeedContent(projectId), "base64"),
   );
 }
 
@@ -114,7 +119,7 @@ async function hasValidRepositorySeed(
     );
   }
   try {
-    return matchesRepositorySeed(await response.json());
+    return matchesRepositorySeed(await response.json(), options.projectId);
   } catch {
     return false;
   }
@@ -132,7 +137,7 @@ async function initializeEmptyRepository(
       headers: apiHeaders(options.token),
       body: JSON.stringify({
         message: "Initialize Earth Stories repository",
-        content: REPOSITORY_SEED_CONTENT,
+        content: repositorySeedContent(options.projectId),
       }),
     });
   } catch (cause) {
@@ -235,6 +240,7 @@ export interface PushReleaseOptions {
   message?: string;
   fetchImpl?: typeof fetch;
   onProgress?: (progress: PushReleaseProgress) => void;
+  signal?: AbortSignal;
 }
 
 export interface PushReleaseProgress {
@@ -399,6 +405,7 @@ async function readExistingBlobs(
     token: options.token,
     url: `${root}/ref/heads/${encodePathSegments(branch)}`,
     operation: "Reading the publication branch",
+    init: { signal: options.signal },
   });
   if (ref.status === 404) {
     await ref.body?.cancel();
@@ -417,6 +424,7 @@ async function readExistingBlobs(
     token: options.token,
     url: `${root}/commits/${encodeURIComponent(refBody.object.sha)}`,
     operation: "Reading the previous publication commit",
+    init: { signal: options.signal },
   });
   const commitBody = await responseJson<{ tree?: { sha?: unknown } }>(
     commit,
@@ -433,6 +441,7 @@ async function readExistingBlobs(
     token: options.token,
     url: `${root}/trees/${encodeURIComponent(commitBody.tree.sha)}?recursive=1`,
     operation: "Reading the previous publication tree",
+    init: { signal: options.signal },
   });
   const treeBody = await responseJson<{
     truncated?: unknown;
@@ -463,30 +472,33 @@ async function uploadMissingBlobs(
   let failed = false;
   let failure: unknown;
   const uploads = new AbortController();
+  const signal = options.signal
+    ? AbortSignal.any([uploads.signal, options.signal])
+    : uploads.signal;
   options.onProgress?.({ uploaded, skipped });
 
   async function worker(): Promise<void> {
-    while (!uploads.signal.aborted) {
+    while (!signal.aborted) {
       const index = next++;
       const file = missing[index];
       if (!file) return;
-      if (uploads.signal.aborted) return;
+      if (signal.aborted) return;
       try {
         const response = await githubObjectRequest({
           fetchImpl,
           token: options.token,
           url: endpoint,
           operation: `Uploading ${file.path}`,
-          init: { method: "POST", signal: uploads.signal },
+          init: { method: "POST", signal },
           body: () => base64BlobBody(file.absolute),
         });
-        if (uploads.signal.aborted) return;
+        if (signal.aborted) return;
         const result = await responseJson<{ sha?: unknown }>(
           response,
           `Uploading ${file.path}`,
           options.token,
         );
-        if (uploads.signal.aborted) return;
+        if (signal.aborted) return;
         if (result.sha !== file.sha)
           throw new Error(
             `Uploading ${file.path} returned a blob SHA that did not match the local file.`,
@@ -508,6 +520,10 @@ async function uploadMissingBlobs(
     Array.from({ length: Math.min(4, missing.length) }, () => worker()),
   );
   if (failed) throw failure;
+  if (options.signal?.aborted)
+    throw options.signal.reason instanceof Error
+      ? options.signal.reason
+      : new Error("Publishing was canceled.");
 }
 
 async function createTree(
@@ -519,7 +535,7 @@ async function createTree(
     token: options.token,
     url: `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/trees`,
     operation: "Creating the publication tree",
-    init: { method: "POST" },
+    init: { method: "POST", signal: options.signal },
     body: jsonBody({
       tree: [
         ...files.map(({ path, sha }) => ({
@@ -551,7 +567,7 @@ async function createCommit(
     token: options.token,
     url: `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/commits`,
     operation: "Creating the publication commit",
-    init: { method: "POST" },
+    init: { method: "POST", signal: options.signal },
     body: jsonBody({
       message: options.message ?? "Publish Earth Story",
       tree,
@@ -580,14 +596,15 @@ async function forceUpdateRef(
     token: options.token,
     url: `${root}/refs/heads/${encodePathSegments(branch)}`,
     operation: "Updating the publication branch",
-    init: { method: "PATCH" },
+    init: { method: "PATCH", signal: options.signal },
     body: jsonBody({ sha: commit, force: true }),
   });
   if (updated.ok) {
     await updated.body?.cancel();
     return;
   }
-  if (updated.status === 404) await updated.body?.cancel();
+  if (updated.status === 404 || updated.status === 422)
+    await updated.body?.cancel();
   else
     await responseJson(
       updated,
@@ -600,7 +617,7 @@ async function forceUpdateRef(
     token: options.token,
     url: `${root}/refs`,
     operation: "Creating the publication branch",
-    init: { method: "POST" },
+    init: { method: "POST", signal: options.signal },
     body: jsonBody({ ref: `refs/heads/${branch}`, sha: commit }),
   });
   if (created.ok) await created.body?.cancel();

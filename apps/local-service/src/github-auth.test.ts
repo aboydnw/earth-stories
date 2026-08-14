@@ -77,7 +77,7 @@ describe("resolveToken", () => {
     });
   });
 
-  it("retains stored credentials after GitHub returns 403", async () => {
+  it("retains stored credentials and tries the CLI after GitHub returns 403", async () => {
     let clears = 0;
     let cliCalls = 0;
     const store: CredentialStore = {
@@ -88,20 +88,29 @@ describe("resolveToken", () => {
       },
     };
 
+    const fetchImpl = vi.fn(async (_input, init) =>
+      String(new Headers(init?.headers).get("authorization")).includes(
+        "stored-token",
+      )
+        ? jsonResponse({ message: "rate limited" }, 403)
+        : userResponse("fallback-user"),
+    ) as typeof fetch;
     await expect(
       resolveToken({
         store,
-        fetchImpl: vi.fn(async () =>
-          jsonResponse({ message: "rate limited" }, 403),
-        ) as typeof fetch,
+        fetchImpl,
         run: async () => {
           cliCalls += 1;
           return { stdout: "fallback-token", stderr: "" };
         },
       }),
-    ).rejects.toThrow(/verify the saved sign-in/i);
+    ).resolves.toEqual({
+      token: "fallback-token",
+      login: "fallback-user",
+      source: "gh",
+    });
     expect(clears).toBe(0);
-    expect(cliCalls).toBe(0);
+    expect(cliCalls).toBe(1);
   });
 
   it("persists a device token through the injected store", async () => {

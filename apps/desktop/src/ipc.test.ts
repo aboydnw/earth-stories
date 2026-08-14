@@ -1,8 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  isContainedProjectPath,
   registerDesktopIpcHandlers,
   type DesktopIpcDependencies,
 } from "./ipc.js";
+import { win32 } from "node:path";
+
+it("rejects a project path on another Windows drive", () => {
+  expect(
+    isContainedProjectPath(
+      "C:\\Users\\mapper\\Earth Stories",
+      "D:\\outside\\story",
+      win32,
+    ),
+  ).toBe(false);
+});
 
 function harness(
   resolveProjectDirectory: (projectId: string) => Promise<string> = async (

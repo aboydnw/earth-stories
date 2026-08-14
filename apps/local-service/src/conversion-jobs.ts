@@ -77,7 +77,10 @@ export class ConversionJobs {
 
   cancel(id: string): boolean {
     const controller = this.#controllers.get(id);
-    if (!controller) return false;
+    const snapshot = this.#jobs.get(id);
+    if (!controller || !snapshot) return false;
+    snapshot.status = "cancelled";
+    snapshot.updatedAt = new Date().toISOString();
     controller.abort();
     return true;
   }
@@ -216,6 +219,7 @@ export class ConversionJobs {
       await this.#runtime.execute(
         request,
         (event) => {
+          if (controller.signal.aborted) return;
           const publicEvent =
             event.type === "result" && typeof event.output.path === "string"
               ? {
@@ -241,7 +245,8 @@ export class ConversionJobs {
         },
         controller.signal,
       );
-      if (snapshot.status === "running") snapshot.status = "succeeded";
+      if (controller.signal.aborted) snapshot.status = "cancelled";
+      else if (snapshot.status === "running") snapshot.status = "succeeded";
     } catch (cause) {
       const cancelled = controller.signal.aborted;
       snapshot.status = cancelled ? "cancelled" : "failed";

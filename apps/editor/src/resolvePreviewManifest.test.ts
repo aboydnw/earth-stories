@@ -6,11 +6,28 @@ import {
   defaultSourceProvenance,
   storyProjectSchema,
 } from "@earth-stories/story-schema";
-import { resolvePreviewManifest } from "./resolvePreviewManifest";
+import {
+  previewReadinessError,
+  resolvePreviewManifest,
+} from "./resolvePreviewManifest";
 
 const fixturePath = join(process.cwd(), "fixtures/field-notes/story.json");
 
 describe("resolvePreviewManifest", () => {
+  it("uses the first blocking readiness finding when compilation has no manifest", () => {
+    expect(
+      previewReadinessError([
+        {
+          id: "chapter-source-kind-map",
+          area: "data",
+          severity: "error",
+          message: "The map cannot use this CSV source.",
+          resolution: "Choose compatible data.",
+        },
+      ]),
+    ).toBe("The map cannot use this CSV source.");
+  });
+
   it("resolves included project assets without mutating compiler output", async () => {
     const project = storyProjectSchema.parse(
       JSON.parse(await readFile(fixturePath, "utf8")) as unknown,

@@ -57,4 +57,25 @@ describe("pollConversionJob", () => {
       }),
     ).rejects.toBe(failure);
   });
+
+  it("does not report unchanged polling snapshots as updates", async () => {
+    const onUpdate = vi.fn();
+    const completed = {
+      ...running,
+      status: "succeeded" as const,
+      updatedAt: "2026-08-13T00:00:01.000Z",
+    };
+    let loads = 0;
+
+    await pollConversionJob(running, {
+      load: async () => (loads++ === 0 ? { ...running } : completed),
+      wait: async () => undefined,
+      now: () => 0,
+      deadline: 100,
+      onUpdate,
+    });
+
+    expect(onUpdate).toHaveBeenCalledOnce();
+    expect(onUpdate).toHaveBeenCalledWith(completed);
+  });
 });

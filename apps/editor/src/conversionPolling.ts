@@ -33,13 +33,14 @@ export async function pollConversionJob(
       );
     await wait();
     try {
-      job = await load(job.id);
+      const next = await load(job.id);
+      if (next.updatedAt !== job.updatedAt) options.onUpdate?.(next);
+      job = next;
     } catch (cause) {
       if (isMissingJobError(cause))
         return { kind: "workspace-changed", message: WORKSPACE_CHANGE_MESSAGE };
       throw cause;
     }
-    options.onUpdate?.(job);
   }
 
   return job.status === "awaiting-approval"

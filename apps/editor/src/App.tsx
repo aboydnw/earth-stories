@@ -69,7 +69,10 @@ import { detectDesktopBridge } from "./desktop";
 import { DesktopToolsPanel } from "./DesktopToolsPanel";
 import { DesktopDiagnosticsPanel } from "./DesktopDiagnosticsPanel";
 import { ProvisioningDialog } from "./ProvisioningDialog";
-import { resolvePreviewManifest } from "./resolvePreviewManifest";
+import {
+  previewReadinessError,
+  resolvePreviewManifest,
+} from "./resolvePreviewManifest";
 import { captureKeyframe } from "./flyoverPath";
 import { pollConversionJob } from "./conversionPolling";
 
@@ -343,9 +346,7 @@ export function App() {
     if (!project || !localReadiness?.manifest)
       return {
         manifest: null,
-        error:
-          localReadiness?.findings.find(({ id }) => id === "compile")
-            ?.message ?? null,
+        error: previewReadinessError(localReadiness?.findings ?? []),
       };
     return {
       error: null,

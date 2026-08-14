@@ -93,7 +93,7 @@ export function parseLockedCapabilityVersions(
     for (const [packageName] of DISCLOSED_PACKAGES[environment]) {
       const match = filename.match(
         new RegExp(
-          `^${escapeRegex(packageName)}-([^-]+)-.+\\.(?:conda|tar\\.bz2)$`,
+          `^${escapeRegex(packageName)}-([0-9][^-]*)-.+\\.(?:conda|tar\\.bz2)$`,
         ),
       );
       if (match) found[environment].set(packageName, match[1]);
@@ -145,9 +145,8 @@ export class ConversionRuntime {
   readonly #cleanupCapability: (
     capability: ConversionCapability,
   ) => Promise<void>;
-  readonly #capabilityReady: (
-    capability: ConversionCapability,
-  ) => Promise<boolean>;
+  readonly #capabilityReady:
+    ((capability: ConversionCapability) => Promise<boolean>) | undefined;
   readonly #acquireCapability: (
     capability: ConversionCapability,
   ) => (() => void | Promise<void>) | Promise<() => void | Promise<void>>;
@@ -190,7 +189,7 @@ export class ConversionRuntime {
     this.#verifyManifest = options.verifyManifest ?? (async () => undefined);
     this.#cleanupCapability =
       options.cleanupCapability ?? (async () => undefined);
-    this.#capabilityReady = options.capabilityReady ?? (async () => true);
+    this.#capabilityReady = options.capabilityReady;
     this.#acquireCapability =
       options.acquireCapability ?? (() => () => undefined);
     this.#lockedVersions = options.lockedVersions ?? null;
@@ -255,9 +254,15 @@ export class ConversionRuntime {
     onEvent: (event: ConversionJobEvent) => void,
     signal?: AbortSignal,
   ): Promise<void> {
-    if (this.#ready.has(capability)) {
-      if (await this.#capabilityReady(capability)) return;
+    if (this.#capabilityReady) {
+      if (await this.#capabilityReady(capability)) {
+        await this.#ensureExecutable(signal);
+        this.#ready.add(capability);
+        return;
+      }
       this.#ready.delete(capability);
+    } else if (this.#ready.has(capability)) {
+      return;
     }
     const initialManifestResolution = this.#resolveManifestDirectory();
     const initialManifestDirectory =

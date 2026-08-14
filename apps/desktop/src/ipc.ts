@@ -1,4 +1,5 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import type { PlatformPath } from "node:path";
 import {
   CONVERSION_CAPABILITIES,
   type ConversionCapability,
@@ -118,10 +119,27 @@ function requireCapabilities(args: unknown[]) {
   return capabilities;
 }
 
-function isContainedProjectPath(root: string, candidate: string): boolean {
-  if (!isAbsolute(candidate)) return false;
-  const path = relative(resolve(root), resolve(candidate));
-  return path !== "" && !path.startsWith(`..${sep}`) && path !== "..";
+export function isContainedProjectPath(
+  root: string,
+  candidate: string,
+  pathApi: Pick<PlatformPath, "isAbsolute" | "relative" | "resolve" | "sep"> = {
+    isAbsolute,
+    relative,
+    resolve,
+    sep,
+  },
+): boolean {
+  if (!pathApi.isAbsolute(candidate)) return false;
+  const path = pathApi.relative(
+    pathApi.resolve(root),
+    pathApi.resolve(candidate),
+  );
+  return (
+    path !== "" &&
+    !pathApi.isAbsolute(path) &&
+    !path.startsWith(`..${pathApi.sep}`) &&
+    path !== ".."
+  );
 }
 
 function requireAuthorizedSender(

@@ -183,6 +183,7 @@ describe("ensureRepository", () => {
       token: "t",
       owner: "mapper",
       repo: "field-notes",
+      projectId: "story-1",
       fetchImpl,
     });
     expect(result.created).toBe(true);
@@ -203,6 +204,7 @@ describe("ensureRepository", () => {
         token: "t",
         owner: "mapper",
         repo: "field-notes",
+        projectId: "story-1",
         fetchImpl,
       }),
     ).resolves.toEqual({ created: false });
@@ -218,6 +220,7 @@ describe("ensureRepository", () => {
         token: "t",
         owner: "mapper",
         repo: "notes",
+        projectId: "story-1",
         fetchImpl,
       }),
     ).rejects.toThrow(/Choose another name/);
@@ -232,6 +235,7 @@ describe("ensureRepository", () => {
         token: "t",
         owner: "mapper",
         repo: "notes",
+        projectId: "story-1",
         expectExisting: true,
         fetchImpl,
       }),
@@ -247,6 +251,7 @@ describe("ensureRepository", () => {
         token: "t",
         owner: "mapper",
         repo: "notes",
+        projectId: "story-1",
         fetchImpl,
       }),
     ).rejects.toThrow(/belongs to someone else/);
@@ -320,6 +325,7 @@ describe("ensureRepository", () => {
         token,
         owner: "mapper",
         repo: "notes",
+        projectId: "story-1",
         fetchImpl,
       });
       await expect(
@@ -338,7 +344,9 @@ describe("ensureRepository", () => {
       expect(seed?.method).toBe("PUT");
       expect(seed?.body).toEqual({
         message: "Initialize Earth Stories repository",
-        content: "RWFydGggU3RvcmllcyBwdWJsaWNhdGlvbiByZXBvc2l0b3J5Cg==",
+        content: Buffer.from(
+          "Earth Stories publication repository\nProject: story-1\n",
+        ).toString("base64"),
       });
       expect(seed?.body).not.toHaveProperty("branch");
       const publicationCommit = requests.find(({ url }) =>
@@ -372,6 +380,7 @@ describe("ensureRepository", () => {
       token,
       owner: "mapper",
       repo: "notes",
+      projectId: "story-1",
       fetchImpl,
     }).catch((cause: unknown) => cause);
 
@@ -393,7 +402,9 @@ describe("ensureRepository", () => {
             : jsonResponse({
                 type: "file",
                 encoding: "base64",
-                content: "RWFydGggU3RvcmllcyBwdWJsaWNhdGlvbiByZXBvc2l0b3J5Cg==",
+                content: Buffer.from(
+                  "Earth Stories publication repository\nProject: story-1\n",
+                ).toString("base64"),
               });
         return jsonResponse({ owner: { login: "mapper" }, size: 0 });
       },
@@ -404,6 +415,7 @@ describe("ensureRepository", () => {
         token: "token",
         owner: "mapper",
         repo: "notes",
+        projectId: "story-1",
         fetchImpl,
       }),
     ).resolves.toEqual({ created: false });
@@ -412,6 +424,61 @@ describe("ensureRepository", () => {
       "PUT",
       "GET",
     ]);
+  });
+
+  it("accepts an interrupted publish only for the project that created the seed", async () => {
+    let seedContent: string | null = null;
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        if (url.endsWith("/repos/mapper/notes"))
+          return jsonResponse({
+            owner: { login: "mapper" },
+            size: seedContent ? 1 : 0,
+          });
+        if (url.endsWith("/contents/.earth-stories-seed")) {
+          if (method === "PUT") {
+            seedContent = String(
+              (JSON.parse(String(init?.body)) as { content?: unknown }).content,
+            );
+            return jsonResponse({ commit: { sha: "seed" } }, 201);
+          }
+          return jsonResponse({
+            type: "file",
+            encoding: "base64",
+            content: seedContent,
+          });
+        }
+        throw new Error(`Unexpected request: ${method} ${url}`);
+      },
+    ) as unknown as typeof fetch;
+
+    await ensureRepository({
+      token: "token",
+      owner: "mapper",
+      repo: "notes",
+      projectId: "story-one",
+      fetchImpl,
+    });
+    await expect(
+      ensureRepository({
+        token: "token",
+        owner: "mapper",
+        repo: "notes",
+        projectId: "story-one",
+        fetchImpl,
+      }),
+    ).resolves.toEqual({ created: false });
+    await expect(
+      ensureRepository({
+        token: "token",
+        owner: "mapper",
+        repo: "notes",
+        projectId: "story-two",
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/choose another name/i);
   });
 
   it.each(["seed-only", "gh-pages"] as const)(
@@ -509,6 +576,7 @@ describe("ensureRepository", () => {
         token: "token",
         owner: "mapper",
         repo: "notes",
+        projectId: "story-1",
         fetchImpl,
       });
       if (interruption === "gh-pages")
@@ -525,6 +593,7 @@ describe("ensureRepository", () => {
           token: "token",
           owner: "mapper",
           repo: "notes",
+          projectId: "story-1",
           expectExisting: false,
           fetchImpl,
         }),
@@ -594,6 +663,7 @@ describe("ensureRepository", () => {
           token: "token",
           owner: "mapper",
           repo: "notes",
+          projectId: "story-1",
           expectExisting: false,
           fetchImpl,
         }),
@@ -617,6 +687,7 @@ describe("ensureRepository", () => {
       token,
       owner: "mapper",
       repo: "notes",
+      projectId: "story-1",
       expectExisting: false,
       fetchImpl,
     }).catch((cause: unknown) => cause);
@@ -716,7 +787,7 @@ describe("pushRelease", () => {
         if (url.endsWith("/git/commits"))
           return jsonResponse({ sha: "commit-sha" }, 201);
         if (method === "PATCH")
-          return jsonResponse({ message: "Reference does not exist" }, 404);
+          return jsonResponse({ message: "Reference does not exist" }, 422);
         if (url.endsWith("/git/refs")) return jsonResponse({}, 201);
         throw new Error(`Unexpected request: ${method} ${url}`);
       },
@@ -1155,6 +1226,45 @@ describe("pushRelease", () => {
     expect(aborted).toBe(3);
     expect(progress).toEqual(progressAtFailure);
     expect(progress).toEqual([{ uploaded: 0, skipped: 0 }]);
+  });
+
+  it("aborts in-flight uploads with the publish job signal", async () => {
+    const directory = await oneFileRelease();
+    const controller = new AbortController();
+    let uploadStarted!: () => void;
+    const started = new Promise<void>((resolve) => (uploadStarted = resolve));
+    const fetchImpl = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/git/ref/heads/gh-pages"))
+          return jsonResponse({ message: "Not Found" }, 404);
+        if (!url.endsWith("/git/blobs"))
+          throw new Error(
+            `Unexpected request: ${init?.method ?? "GET"} ${url}`,
+          );
+        uploadStarted();
+        return new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          ),
+        );
+      },
+    ) as unknown as typeof fetch;
+
+    const publishing = pushRelease({
+      directory,
+      token: "token",
+      owner: "mapper",
+      repo: "notes",
+      fetchImpl,
+      signal: controller.signal,
+    });
+    await started;
+    controller.abort(new Error("Publishing was canceled."));
+
+    await expect(publishing).rejects.toThrow("Publishing was canceled.");
   });
 
   it("sends blob JSON as a cancellable stream on an early rejection", async () => {

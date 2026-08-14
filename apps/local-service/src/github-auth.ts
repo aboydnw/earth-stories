@@ -45,7 +45,7 @@ export interface ResolveTokenOptions {
 type LoginResolution =
   | { status: "valid"; login: string }
   | { status: "invalid" }
-  | { status: "unavailable" };
+  | { status: "unavailable"; reason: "response" | "transport" };
 
 async function resolveLogin(
   token: string,
@@ -62,14 +62,14 @@ async function resolveLogin(
       signal: requestSignal(signal),
     });
     if (response.status === 401) return { status: "invalid" };
-    if (!response.ok) return { status: "unavailable" };
+    if (!response.ok) return { status: "unavailable", reason: "response" };
     const body = (await response.json()) as { login?: unknown };
     return typeof body.login === "string" && body.login
       ? { status: "valid", login: body.login }
-      : { status: "unavailable" };
+      : { status: "unavailable", reason: "response" };
   } catch {
     throwIfAborted(signal);
-    return { status: "unavailable" };
+    return { status: "unavailable", reason: "transport" };
   }
 }
 
@@ -280,6 +280,7 @@ export async function resolveToken(
   throwIfAborted(options.signal);
 
   const stored = await store.read();
+  let storedUnavailable = false;
   if (stored) {
     const resolved = await resolveLogin(
       stored.token,
@@ -292,9 +293,11 @@ export async function resolveToken(
         login: resolved.login,
         source: "stored",
       };
-    if (resolved.status === "unavailable")
-      throw new Error(STORED_TOKEN_UNAVAILABLE_MESSAGE);
-    await store.clear();
+    if (resolved.status === "unavailable") {
+      if (resolved.reason === "transport")
+        throw new Error(STORED_TOKEN_UNAVAILABLE_MESSAGE);
+      storedUnavailable = true;
+    } else await store.clear();
   }
 
   const ghToken = await tokenFromGhCli(run, options.signal);
@@ -308,7 +311,9 @@ export async function resolveToken(
     options.clientId ?? process.env.EARTH_STORIES_GITHUB_CLIENT_ID;
   if (!clientId)
     throw new Error(
-      "Signing in to GitHub needs EARTH_STORIES_GITHUB_CLIENT_ID, or the GitHub CLI (`gh auth login`) on this computer.",
+      storedUnavailable
+        ? STORED_TOKEN_UNAVAILABLE_MESSAGE
+        : "Signing in to GitHub needs EARTH_STORIES_GITHUB_CLIENT_ID, or the GitHub CLI (`gh auth login`) on this computer.",
     );
 
   const token = await deviceFlow({

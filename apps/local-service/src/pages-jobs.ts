@@ -212,6 +212,21 @@ export class PagesJobs {
     snapshot.updatedAt = new Date().toISOString();
   }
 
+  #progress(snapshot: PublishJobSnapshot, message: string): void {
+    const latest = snapshot.events.at(-1);
+    const event = {
+      stage: "uploading" as const,
+      severity: "info" as const,
+      message,
+      at: new Date().toISOString(),
+    };
+    if (latest?.stage === "uploading" && latest.message.startsWith("Uploaded "))
+      snapshot.events[snapshot.events.length - 1] = event;
+    else snapshot.events.push(event);
+    snapshot.stage = "uploading";
+    snapshot.updatedAt = event.at;
+  }
+
   async #run(
     snapshot: PublishJobSnapshot,
     context: {
@@ -299,6 +314,7 @@ export class PagesJobs {
           token: identity.token,
           owner: identity.login,
           repo: context.repo,
+          projectId: snapshot.projectId,
           expectExisting:
             context.existing?.repo === context.repo &&
             context.existing.owner === identity.login,
@@ -316,13 +332,13 @@ export class PagesJobs {
             owner: identity.login,
             repo: context.repo,
             branch,
+            signal: controller.signal,
             onProgress: ({ uploaded, skipped }) => {
               if (!acceptingUploadProgress) return;
               const uploadedLabel = uploaded === 1 ? "file" : "files";
               const skippedLabel = skipped === 1 ? "file" : "files";
-              this.#note(
+              this.#progress(
                 snapshot,
-                "uploading",
                 `Uploaded ${uploaded} ${uploadedLabel}; skipped ${skipped} unchanged ${skippedLabel}.`,
               );
             },

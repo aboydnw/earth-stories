@@ -278,7 +278,62 @@ describe("ConversionJobs", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(jobs.cancel(created.id)).toBe(true);
+    expect(jobs.get(created.id)?.status).toBe("cancelled");
     await jobs.whenIdle();
     expect(jobs.get(created.id)?.status).toBe("cancelled");
+  });
+
+  it("keeps cancellation terminal when a runtime emits late events and resolves", async () => {
+    const root = await mkdtemp(join(tmpdir(), "earth-stories-jobs-"));
+    const store = new ProjectStore(root);
+    await store.initialize();
+    const project = await store.create({ title: "Conversions" });
+    const asset = join(store.projectPath(project.id), "assets/places.geojson");
+    await mkdir(join(store.projectPath(project.id), "assets"), {
+      recursive: true,
+    });
+    await writeFile(asset, "{}");
+    let finish!: () => void;
+    const runtime = {
+      execute: async (
+        request: { requestId: string },
+        onEvent: (event: unknown) => void,
+      ) =>
+        new Promise<void>((resolve) => {
+          finish = () => {
+            onEvent({
+              protocol: "earth-stories/conversion/v1",
+              requestId: request.requestId,
+              type: "progress",
+              stage: "conversion",
+              completed: 1,
+              total: 1,
+              unit: "items",
+              message: "late progress",
+            });
+            onEvent({
+              protocol: "earth-stories/conversion/v1",
+              requestId: request.requestId,
+              type: "result",
+              output: { path: asset, mediaType: null, sizeBytes: 2 },
+            });
+            resolve();
+          };
+        }),
+    } as unknown as ConversionRuntime;
+    const jobs = new ConversionJobs(store, runtime);
+    const created = await jobs.create(project.id, {
+      operation: "prepare",
+      capability: "vector",
+      assetPath: "assets/places.geojson",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(jobs.cancel(created.id)).toBe(true);
+    finish();
+    await jobs.whenIdle();
+
+    expect(jobs.get(created.id)?.status).toBe("cancelled");
+    expect(jobs.get(created.id)?.events).toEqual([]);
   });
 });

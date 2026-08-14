@@ -224,16 +224,17 @@ export class DesktopTools {
         }),
       capabilityReady: async (capability) => {
         try {
-          return (
-            await stat(
-              join(
-                await this.#resolveManifest(treeDirectory),
-                ".pixi",
-                "envs",
-                capability,
-              ),
-            )
-          ).isDirectory();
+          const environment = join(
+            await this.#resolveManifest(treeDirectory),
+            ".pixi",
+            "envs",
+            capability,
+          );
+          const [directory, history] = await Promise.all([
+            stat(environment),
+            stat(join(environment, "conda-meta", "history")),
+          ]);
+          return directory.isDirectory() && history.isFile();
         } catch {
           return false;
         }

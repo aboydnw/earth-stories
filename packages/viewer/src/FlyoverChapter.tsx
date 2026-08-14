@@ -5,7 +5,7 @@ import type {
   PublicationChapter,
 } from "@earth-stories/story-schema";
 import { MapChapter } from "./MapChapter.js";
-import { interpolateFlyover } from "./flyover.js";
+import { flyoverTrackHeight, interpolateFlyover } from "./flyover.js";
 import { useFlyoverScroll } from "./useFlyoverScroll.js";
 import type { PublicationRuntimePolicy } from "./publicationRuntime.js";
 
@@ -20,6 +20,8 @@ interface Props {
   cameraOverride?: Camera | null;
   onCameraChange?: (camera: Camera) => void;
 }
+
+export { flyoverTrackHeight } from "./flyover.js";
 
 export function FlyoverChapter({
   chapter,
@@ -65,7 +67,10 @@ export function FlyoverChapter({
       ref={container}
       className="story-flyover"
       style={{
-        height: `${Math.max(120, chapter.scrollLength * 100 * (chapter.keyframes.length - 1) + 100)}vh`,
+        height: flyoverTrackHeight({
+          scrollLength: chapter.scrollLength,
+          keyframeCount: chapter.keyframes.length,
+        }),
       }}
     >
       <div className="story-flyover__sticky">

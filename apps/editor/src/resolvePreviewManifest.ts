@@ -3,6 +3,13 @@ import type {
   ProjectSource,
   StoryProject,
 } from "@earth-stories/story-schema";
+import type { ReadinessFinding } from "@earth-stories/publisher/readiness";
+
+export function previewReadinessError(
+  findings: ReadonlyArray<ReadinessFinding>,
+): string | null {
+  return findings.find(({ severity }) => severity === "error")?.message ?? null;
+}
 
 function sourcePath(source: ProjectSource) {
   if (

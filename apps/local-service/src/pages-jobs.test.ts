@@ -161,7 +161,7 @@ describe("PagesJobs", () => {
     expect(deps.writePublishRecord).not.toHaveBeenCalled();
   });
 
-  it("adds upload progress events while blobs are transferred", async () => {
+  it("replaces upload progress instead of growing the event list per file", async () => {
     const deps = dependencies({
       pushRelease: vi.fn(async (options) => {
         options.onProgress?.({ uploaded: 0, skipped: 2 });
@@ -177,7 +177,6 @@ describe("PagesJobs", () => {
     );
     expect(uploadEvents.map(({ message }) => message)).toEqual([
       "Uploading the release…",
-      "Uploaded 0 files; skipped 2 unchanged files.",
       "Uploaded 1 file; skipped 2 unchanged files.",
     ]);
   });
@@ -336,13 +335,16 @@ describe("PagesJobs", () => {
     expect(waitForPages).not.toHaveBeenCalled();
   });
 
-  it("passes the job signal to Pages polling", async () => {
+  it("passes the job signal through upload and Pages polling", async () => {
     const waitForPages = vi.fn(async () => true);
     const deps = dependencies({ waitForPages });
     const jobs = new PagesJobs(store, deps);
     const { id } = await jobs.create("story-1");
     await settle(jobs, id);
 
+    expect(deps.pushRelease).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(waitForPages).toHaveBeenCalledWith(
       "https://mapper.github.io/field-notes-a-coastline/",
       { signal: expect.any(AbortSignal) },
