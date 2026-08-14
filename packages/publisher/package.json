@@ -10,7 +10,8 @@
     "./focused-preview": "./src/focusedPreview.ts",
     "./readiness": "./src/readiness.ts",
     "./share": "./src/share.ts",
-    "./build": "./src/build.ts"
+    "./build": "./src/build.ts",
+    "./materialize": "./src/materialize.ts"
   },
   "scripts": {
     "build:fixture": "node --import tsx src/cli.ts ../../fixtures/field-notes ../../dist/publications/field-notes ../../dist/viewer"

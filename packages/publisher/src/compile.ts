@@ -8,9 +8,16 @@ import type {
 } from "@earth-stories/story-schema";
 import {
   publicationManifestSchema,
-  storyProjectSchema,
+  parseStoryProject,
 } from "@earth-stories/story-schema";
 import { projectCompileIssues } from "./compileValidation.js";
+import {
+  inventoryBasemapStyleResources,
+  inventoryPublicationDependencies,
+  NEUTRAL_BASEMAP_STYLE,
+  NEUTRAL_BASEMAP_STYLE_HREF,
+  type PublicationDependencyPlan,
+} from "./dependencies.js";
 
 export const RUNTIME_VERSION = "0.1.0";
 
@@ -59,13 +66,7 @@ function canonicalize(value: unknown): string {
   return JSON.stringify(value);
 }
 
-export function digestProject(project: StoryProject): string {
-  const { updated: _updated, ...stableMetadata } = project.metadata;
-  const stableProject = {
-    ...project,
-    metadata: stableMetadata,
-  };
-  const input = new TextEncoder().encode(canonicalize(stableProject));
+function digestBytes(input: Uint8Array): string {
   const bitLength = input.length * 8;
   const paddedLength = Math.ceil((input.length + 9) / 64) * 64;
   const padded = new Uint8Array(paddedLength);
@@ -146,6 +147,19 @@ export function digestProject(project: StoryProject): string {
     .join("");
 }
 
+function digestCanonical(value: unknown): string {
+  return digestBytes(new TextEncoder().encode(canonicalize(value)));
+}
+
+export function digestText(value: string): string {
+  return digestBytes(new TextEncoder().encode(value));
+}
+
+export function digestProject(project: StoryProject): string {
+  const { updated: _updated, ...stableMetadata } = project.metadata;
+  return digestCanonical({ ...project, metadata: stableMetadata });
+}
+
 function compileAsset(
   source: ProjectSource,
   profile: StoryProject["publication"]["profile"],
@@ -157,6 +171,7 @@ function compileAsset(
   const specialized = (value?: Partial<PublicationAsset>) => ({
     provenance: source.provenance,
     zarr: null,
+    cog: null,
     trajectory: null,
     copc: null,
     ...value,
@@ -165,7 +180,7 @@ function compileAsset(
   const profileDelivery = (locator: string) => {
     if (requestedDelivery !== "auto") return requestedDelivery;
     if (
-      profile === "portable" &&
+      (profile === "portable" || profile === "offline") &&
       source.kind !== "xyz" &&
       source.kind !== "local-geojson" &&
       source.kind !== "image" &&
@@ -261,7 +276,7 @@ function compileAsset(
         sizeBytes: source.sizeBytes,
         tileType: null,
         presentation,
-        ...specialized(),
+        ...specialized({ cog: source.cog ?? null }),
       };
     }
     case "xyz":
@@ -414,76 +429,150 @@ function compileChapter(chapter: ProjectChapter): PublicationChapter {
   }
 }
 
-export function compileProject(input: unknown): PublicationManifest {
-  const project = storyProjectSchema.parse(input);
+export interface CompileProjectOptions {
+  dependencyDigests?: Readonly<Record<string, string>>;
+}
+
+function resolvedDependencies(
+  inventory: PublicationDependencyPlan[],
+  offline: boolean,
+) {
+  const missing = inventory.filter(
+    (dependency) =>
+      dependency.delivery === "included" && !("sha256" in dependency),
+  );
+  if (offline && missing.length)
+    throw new Error(
+      `Offline compilation requires resolved SHA-256 digests for: ${missing.map(({ id }) => id).join(", ")}`,
+    );
+  return inventory.map((dependency) => {
+    if (dependency.delivery !== "included" || "sha256" in dependency)
+      return dependency;
+    return {
+      id: dependency.id,
+      owner: dependency.owner,
+      locator: dependency.locator,
+      estimatedBytes: dependency.estimatedBytes,
+      delivery: "unsupported" as const,
+      materialization: "none" as const,
+      requirements: dependency.requirements,
+      reason:
+        "Included bytes have not been materialized and verified with a SHA-256 digest.",
+    };
+  });
+}
+
+export function compileProject(
+  input: unknown,
+  options: CompileProjectOptions = {},
+): PublicationManifest {
+  const project = parseStoryProject(input);
   const [issue] = projectCompileIssues(project);
   if (issue) throw new Error(issue.message);
   const projectDigest = digestProject(project);
   const assets = project.sources.map((source) =>
     compileAsset(source, project.publication.profile),
   );
-  const connectedAssets = assets.filter(
-    (asset) => asset.delivery === "connected",
+  const inventory = inventoryPublicationDependencies(project, options).map(
+    (dependency) => {
+      if (
+        dependency.delivery !== "included" ||
+        "sha256" in dependency ||
+        !dependency.id.endsWith(":projection")
+      )
+        return dependency;
+      const source = project.sources.find(
+        ({ id }) => id === dependency.owner.id,
+      );
+      return source?.kind === "cog" && source.cog
+        ? { ...dependency, sha256: digestText(source.cog.definition) }
+        : dependency;
+    },
   );
+  const dependencies = resolvedDependencies(
+    inventory,
+    project.publication.profile === "offline",
+  );
+  const dependencyDigests = dependencies
+    .filter(
+      (
+        dependency,
+      ): dependency is Extract<
+        (typeof dependencies)[number],
+        { delivery: "included" }
+      > => dependency.delivery === "included",
+    )
+    .map(({ id, sha256 }) => ({ id, sha256 }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const buildId = dependencyDigests.length
+    ? digestCanonical({ projectDigest, dependencyDigests }).slice(0, 16)
+    : projectDigest.slice(0, 16);
+  const connectedDependencies = dependencies.filter(
+    ({ delivery }) => delivery === "connected",
+  );
+  if (
+    project.publication.profile === "offline" &&
+    inventoryBasemapStyleResources(JSON.parse(NEUTRAL_BASEMAP_STYLE)).length
+  )
+    throw new Error("The neutral offline basemap has undeclared resources");
 
   return publicationManifestSchema.parse({
-    schema: "earth-stories/publication/v1",
+    schema: "earth-stories/publication/v2",
     build: {
-      id: projectDigest.slice(0, 16),
+      id: buildId,
       projectId: project.id,
       projectDigest,
       runtimeVersion: RUNTIME_VERSION,
+      dependencyDigests,
     },
     metadata: {
       title: project.metadata.title,
       description: project.metadata.description,
       author: project.metadata.author,
     },
-    publication: project.publication,
-    basemap: project.basemap,
+    publication: {
+      profile: project.publication.profile,
+      theme: project.publication.theme,
+    },
+    basemap:
+      project.publication.profile === "offline"
+        ? {
+            delivery: "included",
+            id: "neutral",
+            label: "Neutral",
+            styleHref: NEUTRAL_BASEMAP_STYLE_HREF,
+            attribution: null,
+          }
+        : { delivery: "connected", ...project.basemap },
     assets,
     chapters: project.chapters.map(compileChapter),
-    externalDependencies: [
-      {
-        resourceId: project.basemap.id,
-        href: project.basemap.styleUrl,
-        requirements: ["network", "cors"],
-      },
-      ...connectedAssets.map((asset) => ({
-        resourceId: asset.id,
-        href: asset.href,
-        requirements:
-          asset.kind === "cog" ||
-          asset.kind === "pmtiles" ||
-          asset.kind === "geoparquet" ||
-          asset.kind === "copc"
-            ? (["network", "cors", "byte-ranges"] as const)
-            : (["network", "cors"] as const),
-      })),
-      ...(assets.some((asset) => asset.kind === "geoparquet")
+    connectivity: {
+      requested: project.publication.profile,
+      state: "pending",
+    },
+    dependencies,
+    externalDependencies: connectedDependencies.map((dependency) => ({
+      resourceId:
+        dependency.locator === "https://epsg.io/"
+          ? "cog-epsg-resolver"
+          : dependency.owner.id,
+      href: dependency.locator,
+      requirements: dependency.requirements,
+    })),
+    projectionDefinitions: project.sources.flatMap((source) =>
+      source.kind === "cog" && source.cog ? [source.cog] : [],
+    ),
+    runtimeAssets: dependencies.flatMap((dependency) =>
+      dependency.delivery === "included" && dependency.owner.type === "runtime"
         ? [
             {
-              resourceId: "earth-stories-geoparquet-runtime",
-              href: "https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/",
-              requirements: ["network", "cors"] as const,
-            },
-            {
-              resourceId: "duckdb-spatial-extension",
-              href: "https://extensions.duckdb.org/",
-              requirements: ["network", "cors"] as const,
+              id: dependency.id,
+              href: dependency.locator,
+              sha256: dependency.sha256,
             },
           ]
-        : []),
-      ...(assets.some((asset) => asset.kind === "cog")
-        ? [
-            {
-              resourceId: "cog-epsg-resolver",
-              href: "https://epsg.io/",
-              requirements: ["network", "cors"] as const,
-            },
-          ]
-        : []),
-    ],
+        : [],
+    ),
     hostingRequirements: [
       "static-http",
       ...(assets.some(

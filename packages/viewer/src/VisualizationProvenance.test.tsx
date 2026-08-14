@@ -44,6 +44,7 @@ const asset = {
     filterValue: "active",
   },
   zarr: null,
+  cog: null,
   trajectory: null,
   copc: null,
 } satisfies PublicationAsset;

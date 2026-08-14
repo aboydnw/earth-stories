@@ -1,4 +1,7 @@
-import type { ReadinessFinding } from "@earth-stories/publisher/readiness";
+import {
+  referencedSourceIds,
+  type ReadinessFinding,
+} from "@earth-stories/publisher/readiness";
 import type { ProjectChapter, StoryProject } from "@earth-stories/story-schema";
 import { rankReadinessFindings } from "./readinessPriority";
 
@@ -41,11 +44,7 @@ export function deriveChapterReadiness(
 }
 
 export function referencedSources(chapter: ProjectChapter) {
-  if (chapter.type === "prose" || chapter.type === "video") return [];
-  return [
-    ...(chapter.sourceId ? [chapter.sourceId] : []),
-    ...("overlaySourceIds" in chapter ? (chapter.overlaySourceIds ?? []) : []),
-  ];
+  return referencedSourceIds(chapter);
 }
 
 function findingLabel(finding: ReadinessFinding, chapter: ProjectChapter) {

@@ -1,8 +1,13 @@
 # Implementation plan: verified offline publications
 
-Status: proposed
+Status: implemented
 
 Priority: highest user value
+
+Implementation note: the product behavior and local verification gates in this
+plan are implemented. Runtime/font redistribution review, signed desktop
+artifacts, and target-platform validation remain external release gates; no CI
+workflow was added.
 
 Depends on: shared dependency inventory described below
 

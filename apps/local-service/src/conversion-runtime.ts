@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
-import { access } from "node:fs/promises";
-import { resolve } from "node:path";
+import { access, readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import {
+  CAPABILITY_INSTALL_ESTIMATES,
   CONVERSION_PROTOCOL_VERSION,
   conversionJobEventSchema,
   conversionJobRequestSchema,
@@ -9,88 +9,293 @@ import {
   type ConversionJobEvent,
   type ConversionJobRequest,
 } from "@earth-stories/story-schema";
+import { ProcessTreeRunner } from "./process-tree.js";
 
-export const CAPABILITY_DOWNLOAD_ESTIMATES: Record<
+export { CAPABILITY_INSTALL_ESTIMATES } from "@earth-stories/story-schema";
+
+export type LockedCapabilityVersions = Record<
   ConversionCapability,
-  number
+  readonly string[]
+>;
+
+const DISCLOSED_PACKAGES: Record<
+  ConversionCapability,
+  ReadonlyArray<readonly [packageName: string, displayName: string]>
 > = {
-  core: 45_000_000,
-  vector: 430_000_000,
-  raster: 360_000_000,
-  multidim: 410_000_000,
-  pointcloud: 310_000_000,
+  core: [
+    ["python", "Python"],
+    ["pydantic", "Pydantic"],
+  ],
+  vector: [
+    ["duckdb", "DuckDB"],
+    ["gdal", "GDAL"],
+    ["pyarrow", "PyArrow"],
+  ],
+  raster: [
+    ["gdal", "GDAL"],
+    ["rasterio", "Rasterio"],
+    ["rio-cogeo", "rio-cogeo"],
+  ],
+  multidim: [
+    ["gdal", "GDAL"],
+    ["xarray", "Xarray"],
+    ["zarr", "Zarr"],
+  ],
+  pointcloud: [
+    ["pdal", "PDAL"],
+    ["python-pdal", "python-pdal"],
+  ],
 };
+
+function lockPlatform(): string {
+  if (process.platform === "win32") return "win-64";
+  if (process.platform === "darwin")
+    return process.arch === "arm64" ? "osx-arm64" : "osx-64";
+  if (process.platform === "linux" && process.arch === "arm64")
+    throw new Error(
+      "Linux ARM64 is not supported because the packaged Pixi lock has no linux-aarch64 target.",
+    );
+  return "linux-64";
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function parseLockedCapabilityVersions(
+  contents: string,
+  platform = lockPlatform(),
+): LockedCapabilityVersions {
+  const found = Object.fromEntries(
+    Object.keys(DISCLOSED_PACKAGES).map((capability) => [
+      capability,
+      new Map<string, string>(),
+    ]),
+  ) as Record<ConversionCapability, Map<string, string>>;
+  let environment: ConversionCapability | null = null;
+  let inPlatform = false;
+  for (const line of contents.split(/\r?\n/)) {
+    const environmentMatch = line.match(/^  ([a-z]+):$/);
+    if (environmentMatch) {
+      environment = conversionCapability(environmentMatch[1]);
+      inPlatform = false;
+      continue;
+    }
+    const platformMatch = line.match(/^      ([a-z0-9-]+):$/);
+    if (platformMatch) {
+      inPlatform = environment !== null && platformMatch[1] === platform;
+      continue;
+    }
+    if (!environment || !inPlatform) continue;
+    const urlMatch = line.match(/^      - conda: (https:\/\/\S+)$/);
+    if (!urlMatch) continue;
+    const filename = basename(new URL(urlMatch[1]).pathname);
+    for (const [packageName] of DISCLOSED_PACKAGES[environment]) {
+      const match = filename.match(
+        new RegExp(
+          `^${escapeRegex(packageName)}-([0-9][^-]*)-.+\\.(?:conda|tar\\.bz2)$`,
+        ),
+      );
+      if (match) found[environment].set(packageName, match[1]);
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(DISCLOSED_PACKAGES).map(([capability, packages]) => [
+      capability,
+      packages.map(([packageName, displayName]) => {
+        const version =
+          found[capability as ConversionCapability].get(packageName);
+        if (!version)
+          throw new Error(
+            `pixi.lock does not pin ${packageName} for ${capability} on ${platform}.`,
+          );
+        return `${displayName} ${version}`;
+      }),
+    ]),
+  ) as unknown as LockedCapabilityVersions;
+}
+
+function conversionCapability(value: string): ConversionCapability | null {
+  return value in DISCLOSED_PACKAGES ? (value as ConversionCapability) : null;
+}
 
 export interface RuntimeCommand {
   executable: string;
   args: string[];
+  cwd: string;
+  env?: Record<string, string>;
   input?: string;
   onStdout?: (chunk: string) => void;
   onStderr?: (chunk: string) => void;
+  signal?: AbortSignal;
 }
 
 export type RuntimeCommandRunner = (command: RuntimeCommand) => Promise<void>;
 
-const runCommand: RuntimeCommandRunner = (command) =>
-  new Promise((resolveCommand, rejectCommand) => {
-    const child = spawn(command.executable, command.args, {
-      cwd: resolve("."),
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    if (command.onStdout) child.stdout.on("data", command.onStdout);
-    if (command.onStderr) child.stderr.on("data", command.onStderr);
-    child.once("error", rejectCommand);
-    child.once("exit", (code) =>
-      code === 0
-        ? resolveCommand()
-        : rejectCommand(new Error(`Conversion process exited with ${code}`)),
-    );
-    child.stdin.end(command.input ?? "");
-  });
-
 export class ConversionRuntime {
   readonly #pixi: string;
-  readonly #repositoryRoot: string;
+  readonly #manifestDirectory: string;
+  readonly #resolveManifestDirectory: () => string | Promise<string>;
+  readonly #workerDirectory: string;
+  readonly #environment: Record<string, string> | undefined;
   readonly #run: RuntimeCommandRunner;
-  readonly #ensureExecutable: () => Promise<void>;
+  readonly #forceTerminate: () => Promise<void>;
+  readonly #ensureExecutable: (signal?: AbortSignal) => Promise<void>;
+  readonly #verifyManifest: () => Promise<void>;
+  readonly #cleanupCapability: (
+    capability: ConversionCapability,
+  ) => Promise<void>;
+  readonly #capabilityReady:
+    ((capability: ConversionCapability) => Promise<boolean>) | undefined;
+  readonly #acquireCapability: (
+    capability: ConversionCapability,
+  ) => (() => void | Promise<void>) | Promise<() => void | Promise<void>>;
+  readonly #lockedVersions: LockedCapabilityVersions | null;
   readonly #ready = new Set<ConversionCapability>();
+  readonly #approvals = new Map<string, () => void>();
 
   constructor(options: {
     pixi: string;
-    repositoryRoot?: string;
+    manifestDirectory: string;
+    resolveManifestDirectory?: () => string | Promise<string>;
+    workerDirectory: string;
+    pixiHome: string | null;
+    pixiCacheDirectory?: string | null;
     run?: RuntimeCommandRunner;
-    ensureExecutable?: () => Promise<void>;
+    forceTerminate?: () => Promise<void>;
+    bootstrap?: (pixiExecutable: string, signal?: AbortSignal) => Promise<void>;
+    executableExists?: (path: string) => Promise<boolean>;
+    verifyManifest?: () => Promise<void>;
+    cleanupCapability?: (capability: ConversionCapability) => Promise<void>;
+    capabilityReady?: (capability: ConversionCapability) => Promise<boolean>;
+    acquireCapability?: (
+      capability: ConversionCapability,
+    ) => Promise<() => void | Promise<void>>;
+    lockedVersions?: LockedCapabilityVersions;
   }) {
     this.#pixi = options.pixi;
-    this.#repositoryRoot = resolve(options.repositoryRoot ?? ".");
-    this.#run = options.run ?? runCommand;
-    this.#ensureExecutable =
-      options.ensureExecutable ??
-      (async () => {
+    this.#manifestDirectory = options.manifestDirectory;
+    this.#resolveManifestDirectory =
+      options.resolveManifestDirectory ?? (() => this.#manifestDirectory);
+    this.#workerDirectory = options.workerDirectory;
+    this.#environment = options.pixiHome
+      ? {
+          PIXI_HOME: options.pixiHome,
+          ...(options.pixiCacheDirectory
+            ? { PIXI_CACHE_DIR: options.pixiCacheDirectory }
+            : {}),
+        }
+      : undefined;
+    this.#verifyManifest = options.verifyManifest ?? (async () => undefined);
+    this.#cleanupCapability =
+      options.cleanupCapability ?? (async () => undefined);
+    this.#capabilityReady = options.capabilityReady;
+    this.#acquireCapability =
+      options.acquireCapability ?? (() => () => undefined);
+    this.#lockedVersions = options.lockedVersions ?? null;
+    const processTrees = new ProcessTreeRunner();
+    this.#run = options.run ?? ((command) => processTrees.run(command));
+    this.#forceTerminate =
+      options.forceTerminate ?? (() => processTrees.forceTerminate());
+    const executableExists =
+      options.executableExists ??
+      (async (path: string) => {
         try {
-          await access(this.#pixi);
+          await access(path);
+          return true;
         } catch {
-          await this.#run({
-            executable: process.execPath,
-            args: [
-              resolve(this.#repositoryRoot, "scripts/install-pixi.mjs"),
-              this.#pixi,
-            ],
-          });
+          return false;
         }
       });
+    this.#ensureExecutable = async (signal) => {
+      if (await executableExists(this.#pixi)) return;
+      if (!options.bootstrap)
+        throw new Error(
+          "Pixi is missing and this service host did not provide a bootstrap.",
+        );
+      await options.bootstrap(this.#pixi, signal);
+    };
+  }
+
+  forceTerminate(): Promise<void> {
+    return this.#forceTerminate();
+  }
+
+  acknowledgeProvisioning(requestId: string): boolean {
+    const approve = this.#approvals.get(requestId);
+    if (!approve) return false;
+    approve();
+    return true;
+  }
+
+  async #waitForApproval(
+    requestId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (signal?.aborted) throw abortError();
+    await new Promise<void>((resolveApproval, rejectApproval) => {
+      const onAbort = () => {
+        this.#approvals.delete(requestId);
+        rejectApproval(abortError());
+      };
+      const approve = () => {
+        this.#approvals.delete(requestId);
+        signal?.removeEventListener("abort", onAbort);
+        resolveApproval();
+      };
+      this.#approvals.set(requestId, approve);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
   }
 
   async provision(
     capability: ConversionCapability,
     requestId: string,
     onEvent: (event: ConversionJobEvent) => void,
+    signal?: AbortSignal,
   ): Promise<void> {
-    if (this.#ready.has(capability)) return;
-    await this.#ensureExecutable();
-    const total = CAPABILITY_DOWNLOAD_ESTIMATES[capability];
+    if (this.#capabilityReady) {
+      if (await this.#capabilityReady(capability)) {
+        await this.#ensureExecutable(signal);
+        this.#ready.add(capability);
+        return;
+      }
+      this.#ready.delete(capability);
+    } else if (this.#ready.has(capability)) {
+      return;
+    }
+    const initialManifestResolution = this.#resolveManifestDirectory();
+    const initialManifestDirectory =
+      typeof initialManifestResolution === "string"
+        ? initialManifestResolution
+        : await initialManifestResolution;
+    const disclosure = CAPABILITY_INSTALL_ESTIMATES[capability];
+    const lockedVersions =
+      this.#lockedVersions ??
+      parseLockedCapabilityVersions(
+        await readFile(join(initialManifestDirectory, "pixi.lock"), "utf8"),
+      );
+    const versions = lockedVersions[capability];
+    onEvent({
+      protocol: CONVERSION_PROTOCOL_VERSION,
+      requestId,
+      type: "provisioning-disclosure",
+      capability,
+      capabilityName: disclosure.name,
+      versions: [...versions],
+      estimatedBytes: disclosure.estimatedBytes,
+      estimateKind: disclosure.estimateKind,
+      destination: join(initialManifestDirectory, ".pixi", "envs", capability),
+      credits: [
+        { name: "Pixi", license: "BSD-3-Clause" },
+        {
+          name: "conda-forge packages",
+          license: "See the pinned pixi.lock and third-party notices",
+        },
+      ],
+    });
+    await this.#waitForApproval(requestId, signal);
+    const total = disclosure.estimatedBytes;
     onEvent({
       protocol: CONVERSION_PROTOCOL_VERSION,
       requestId,
@@ -99,18 +304,34 @@ export class ConversionRuntime {
       completed: 0,
       total,
       unit: "bytes",
-      message: `Downloading the ${capability} data tools (up to ${Math.ceil(total / 1_000_000)} MB)`,
+      message: `Installing ${disclosure.name} (estimated ${Math.ceil(total / 1_000_000)} MB apparent file size)`,
     });
-    await this.#run({
-      executable: this.#pixi,
-      args: [
-        "install",
-        "--manifest-path",
-        resolve(this.#repositoryRoot, "pixi.toml"),
-        "-e",
-        capability,
-      ],
-    });
+    try {
+      await this.#ensureExecutable(signal);
+      await this.#verifyManifest();
+      const manifestDirectory = await this.#resolveManifestDirectory();
+      await this.#run({
+        executable: this.#pixi,
+        cwd: manifestDirectory,
+        env: this.#environment,
+        args: [
+          "install",
+          "--manifest-path",
+          join(manifestDirectory, "pixi.toml"),
+          "--locked",
+          "-e",
+          capability,
+        ],
+        signal,
+      });
+    } catch (cause) {
+      try {
+        await this.#cleanupCapability(capability);
+      } catch {
+        // Preserve the provisioning failure; cleanup is best-effort here.
+      }
+      throw cause;
+    }
     this.#ready.add(capability);
     onEvent({
       protocol: CONVERSION_PROTOCOL_VERSION,
@@ -120,55 +341,88 @@ export class ConversionRuntime {
       completed: total,
       total,
       unit: "bytes",
-      message: `${capability} data tools are ready`,
+      message: `${disclosure.name} tools are ready`,
     });
   }
 
   async execute(
     input: unknown,
     onEvent: (event: ConversionJobEvent) => void,
+    signal?: AbortSignal,
   ): Promise<void> {
     const request: ConversionJobRequest =
       conversionJobRequestSchema.parse(input);
-    await this.provision(request.capability, request.requestId, onEvent);
-    let buffered = "";
-    let parseFailure: unknown;
-    await this.#run({
-      executable: this.#pixi,
-      args: [
-        "run",
-        "--manifest-path",
-        resolve(this.#repositoryRoot, "pixi.toml"),
-        "-e",
+    const acquisition = this.#acquireCapability(request.capability);
+    const releaseCapability =
+      acquisition instanceof Promise ? await acquisition : acquisition;
+    let executionFailure: unknown;
+    try {
+      await this.provision(
         request.capability,
-        "python",
-        resolve(this.#repositoryRoot, "conversion/worker/worker.py"),
-      ],
-      input: `${JSON.stringify(request)}\n`,
-      onStdout: (chunk) => {
-        if (parseFailure) return;
-        buffered += chunk;
-        const lines = buffered.split("\n");
-        buffered = lines.pop() ?? "";
-        try {
-          for (const line of lines) {
-            if (line.trim())
-              onEvent(conversionJobEventSchema.parse(JSON.parse(line)));
+        request.requestId,
+        onEvent,
+        signal,
+      );
+      await this.#verifyManifest();
+      const manifestDirectory = await this.#resolveManifestDirectory();
+      let buffered = "";
+      let parseFailure: unknown;
+      await this.#run({
+        executable: this.#pixi,
+        cwd: manifestDirectory,
+        env: this.#environment,
+        args: [
+          "run",
+          "--manifest-path",
+          join(manifestDirectory, "pixi.toml"),
+          "--locked",
+          "-e",
+          request.capability,
+          "python",
+          join(this.#workerDirectory, "worker.py"),
+        ],
+        input: `${JSON.stringify(request)}\n`,
+        signal,
+        onStdout: (chunk) => {
+          if (parseFailure) return;
+          buffered += chunk;
+          const lines = buffered.split("\n");
+          buffered = lines.pop() ?? "";
+          try {
+            for (const line of lines) {
+              if (line.trim())
+                onEvent(conversionJobEventSchema.parse(JSON.parse(line)));
+            }
+          } catch (cause) {
+            parseFailure = cause;
           }
+        },
+      });
+      if (parseFailure) throw parseFailure;
+      if (buffered.trim()) {
+        try {
+          onEvent(conversionJobEventSchema.parse(JSON.parse(buffered)));
         } catch (cause) {
-          parseFailure = cause;
+          throw new Error("The conversion worker returned an invalid event.", {
+            cause,
+          });
         }
-      },
-    });
-    if (parseFailure) throw parseFailure;
-    if (buffered.trim()) {
+      }
+    } catch (cause) {
+      executionFailure = cause;
+      throw cause;
+    } finally {
       try {
-        onEvent(conversionJobEventSchema.parse(JSON.parse(buffered)));
-      } catch (cause) {
-        throw new Error("The conversion worker returned an invalid event.", {
-          cause,
-        });
+        await releaseCapability();
+      } catch (releaseFailure) {
+        if (executionFailure === undefined) throw releaseFailure;
       }
     }
   }
+}
+
+function abortError(): Error {
+  const error = new Error("Provisioning was cancelled.");
+  error.name = "AbortError";
+  return error;
 }

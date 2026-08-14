@@ -1,9 +1,14 @@
 import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from "react";
-import type { Camera, PublicationManifest } from "@earth-stories/story-schema";
+import {
+  publicationBasemapHref,
+  type Camera,
+  type PublicationManifest,
+} from "@earth-stories/story-schema";
 import { groupChaptersIntoBlocks } from "./chapterBlocks.js";
 import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
 import { VisualizationProvenance } from "./VisualizationProvenance.js";
 import { PublicationChapterRenderer } from "./PublicationChapterRenderer.js";
+import { publicationRuntimePolicy } from "./publicationRuntime.js";
 import "./viewer.css";
 
 const ScrollytellingBlock = lazy(async () => ({
@@ -33,6 +38,10 @@ export function StoryViewer({
   const chapterBlocks = useMemo(
     () => groupChaptersIntoBlocks(manifest.chapters),
     [manifest.chapters],
+  );
+  const runtimePolicy = useMemo(
+    () => publicationRuntimePolicy(manifest),
+    [manifest],
   );
   useEffect(() => {
     if (embed) return;
@@ -121,7 +130,8 @@ export function StoryViewer({
                       chapters={block.chapters}
                       startIndex={block.startIndex}
                       assets={assets}
-                      basemapStyle={manifest.basemap.styleUrl}
+                      basemapStyle={publicationBasemapHref(manifest.basemap)}
+                      runtimePolicy={runtimePolicy}
                       snapshotMode={snapshotMode}
                     />
                   </Suspense>
@@ -137,7 +147,8 @@ export function StoryViewer({
               chapter={chapter}
               index={index}
               assets={assets}
-              basemapStyle={manifest.basemap.styleUrl}
+              basemapStyle={publicationBasemapHref(manifest.basemap)}
+              runtimePolicy={runtimePolicy}
               snapshotMode={snapshotMode}
               onCameraChange={(camera) =>
                 onChapterCameraChange?.(chapter.id, camera)

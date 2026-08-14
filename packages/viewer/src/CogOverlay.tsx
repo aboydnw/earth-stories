@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { GeoTIFF } from "@developmentseed/geotiff";
-import {
-  epsgResolver,
-  parseWkt,
-  type ProjectionDefinition,
-} from "@developmentseed/proj";
 import proj4 from "proj4";
 import { useMap } from "react-map-gl/maplibre";
 import { buildCogLayers } from "./CogLayer.js";
 import { deriveCogRescale, supportsInferredPipeline } from "./cogPipeline.js";
 import { DeckOverlay } from "./DeckOverlay.js";
+import {
+  cogPreparationKey,
+  resolveCogProjection,
+  type CogProjectionDefinition,
+} from "./cogProjection.js";
 
 export function CogOverlay({
   asset,
@@ -18,17 +18,21 @@ export function CogOverlay({
   onError,
   onBounds,
   onReady,
+  projectionDefinitions = [],
+  offline = false,
 }: {
   asset: PublicationAsset;
   url: string;
   onError: (message: string) => void;
   onBounds?: (bounds: [number, number, number, number]) => void;
   onReady?: () => void;
+  projectionDefinitions?: Array<{ epsg: number; definition: string }>;
+  offline?: boolean;
 }) {
   const maps = useMap();
   const raster = useRef<{
     geotiff: GeoTIFF;
-    projection: ProjectionDefinition;
+    projection: CogProjectionDefinition;
   } | null>(null);
   const [inspection, setInspection] = useState<string | null>(null);
   const [prepared, setPrepared] = useState<{
@@ -36,6 +40,10 @@ export function CogOverlay({
     source: GeoTIFF;
     rescale: [number, number] | null;
   } | null>(null);
+  const [initializedLayerKey, setInitializedLayerKey] = useState<string | null>(
+    null,
+  );
+  const renderedLayerKey = useRef<string | null>(null);
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
   const onBoundsRef = useRef(onBounds);
@@ -43,7 +51,15 @@ export function CogOverlay({
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
   const [rescaleMin, rescaleMax] = asset.presentation.rescale ?? [null, null];
-  const preparedKey = `${url}|${asset.presentation.rasterBand}|${rescaleMin}|${rescaleMax}`;
+  const preparedKey = cogPreparationKey({
+    url,
+    rasterBand: asset.presentation.rasterBand,
+    rescaleMin,
+    rescaleMax,
+    projection: asset.cog,
+    projectionDefinitions,
+    offline,
+  });
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -51,9 +67,13 @@ export function CogOverlay({
         const absoluteUrl = new URL(url, window.location.href).toString();
         const source = await GeoTIFF.fromUrl(absoluteUrl);
         const crs = source.crs;
-        const projection = (
-          typeof crs === "number" ? await epsgResolver(crs) : parseWkt(crs)
-        ) as ProjectionDefinition;
+        const projection = await resolveCogProjection(
+          crs,
+          asset.cog,
+          undefined,
+          projectionDefinitions,
+          offline,
+        );
         let rescale: [number, number] | null =
           rescaleMin !== null && rescaleMax !== null
             ? [rescaleMin, rescaleMax]
@@ -88,7 +108,6 @@ export function CogOverlay({
           Math.max(...lons),
           Math.max(...lats),
         ]);
-        onReadyRef.current?.();
         setPrepared({ key: preparedKey, source, rescale });
       } catch (cause) {
         if (!cancelled)
@@ -108,10 +127,27 @@ export function CogOverlay({
   const layers = useMemo(
     () =>
       prepared?.key === preparedKey
-        ? buildCogLayers(asset, prepared.source, onError, prepared.rescale)
+        ? buildCogLayers(
+            asset,
+            prepared.source,
+            onError,
+            prepared.rescale,
+            () => setInitializedLayerKey(preparedKey),
+            projectionDefinitions,
+            offline,
+          )
         : [],
-    [asset, onError, prepared, preparedKey],
+    [asset, offline, onError, prepared, preparedKey, projectionDefinitions],
   );
+  const reportRendered = useCallback(() => {
+    if (
+      initializedLayerKey !== preparedKey ||
+      renderedLayerKey.current === preparedKey
+    )
+      return;
+    renderedLayerKey.current = preparedKey;
+    onReadyRef.current?.();
+  }, [initializedLayerKey, preparedKey]);
   useEffect(() => {
     const map = maps.current?.getMap();
     if (!map) return;
@@ -173,7 +209,11 @@ export function CogOverlay({
   }, [asset.presentation.rasterBand, maps, onError]);
   return (
     <>
-      <DeckOverlay layers={layers} />
+      <DeckOverlay
+        layers={layers}
+        onAfterRender={reportRendered}
+        onError={onError}
+      />
       {inspection ? (
         <output className="story-map__pixel">{inspection}</output>
       ) : null}

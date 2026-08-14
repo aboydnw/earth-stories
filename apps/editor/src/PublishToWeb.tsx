@@ -20,6 +20,7 @@ import {
   type PublishRecord,
 } from "./api";
 import { captureMapSnapshots } from "./captureSnapshots";
+import { isMissingJobError } from "./httpErrors";
 
 interface Props {
   project: StoryProject;
@@ -87,6 +88,11 @@ export function PublishToWeb({
         })
         .catch((cause: unknown) => {
           if (cancelled) return;
+          if (isMissingJobError(cause)) {
+            setJob(null);
+            setError("This publish job ended when the workspace changed.");
+            return;
+          }
           setError(
             cause instanceof Error
               ? cause.message

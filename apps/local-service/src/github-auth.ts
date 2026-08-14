@@ -1,7 +1,11 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
 import { runCommand, type CommandRunner } from "./command-runner.js";
+import {
+  FileCredentialStore,
+  credentialsPath,
+  type CredentialStore,
+} from "./credentials.js";
+
+export { credentialsPath } from "./credentials.js";
 
 export const GITHUB_SCOPES = "public_repo";
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
@@ -10,6 +14,8 @@ const USER_URL = "https://api.github.com/user";
 const DEFAULT_POLL_SECONDS = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
 const GH_CLI_TIMEOUT_MS = 15_000;
+const STORED_TOKEN_UNAVAILABLE_MESSAGE =
+  "GitHub could not verify the saved sign-in. Check your connection and try again.";
 
 export type TokenSource = "stored" | "gh" | "device";
 
@@ -29,55 +35,23 @@ export interface ResolveTokenOptions {
   run?: CommandRunner;
   fetchImpl?: typeof fetch;
   credentialsPath?: string;
+  store?: CredentialStore;
   clientId?: string;
   onDeviceCode?: (prompt: DeviceCodePrompt) => void;
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  signal?: AbortSignal;
 }
 
-/**
- * Location of the stored token. Deliberately under the home directory rather
- * than a project folder: project folders are exported, zipped, and pushed to a
- * public repository, and a token must never be able to reach a release.
- */
-export function credentialsPath(): string {
-  return join(homedir(), ".earth-stories", "credentials.json");
-}
-
-interface StoredCredentials {
-  token?: unknown;
-  login?: unknown;
-}
-
-async function readStored(path: string): Promise<GitHubIdentity | null> {
-  try {
-    const parsed = JSON.parse(
-      await readFile(path, "utf8"),
-    ) as StoredCredentials;
-    if (typeof parsed.token !== "string" || !parsed.token) return null;
-    if (typeof parsed.login !== "string" || !parsed.login) return null;
-    return { token: parsed.token, login: parsed.login, source: "stored" };
-  } catch {
-    return null;
-  }
-}
-
-async function writeStored(
-  path: string,
-  identity: GitHubIdentity,
-): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(
-    path,
-    `${JSON.stringify({ token: identity.token, login: identity.login }, null, 2)}\n`,
-    { mode: 0o600 },
-  );
-  await chmod(path, 0o600);
-}
+type LoginResolution =
+  | { status: "valid"; login: string }
+  | { status: "invalid" }
+  | { status: "unavailable"; reason: "response" | "transport" };
 
 async function resolveLogin(
   token: string,
   fetchImpl: typeof fetch,
-): Promise<string | null> {
+  signal?: AbortSignal,
+): Promise<LoginResolution> {
   try {
     const response = await fetchImpl(USER_URL, {
       headers: {
@@ -85,26 +59,71 @@ async function resolveLogin(
         accept: "application/vnd.github+json",
         "user-agent": "earth-stories",
       },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(signal),
     });
-    if (!response.ok) return null;
+    if (response.status === 401) return { status: "invalid" };
+    if (!response.ok) return { status: "unavailable", reason: "response" };
     const body = (await response.json()) as { login?: unknown };
-    return typeof body.login === "string" && body.login ? body.login : null;
+    return typeof body.login === "string" && body.login
+      ? { status: "valid", login: body.login }
+      : { status: "unavailable", reason: "response" };
   } catch {
-    return null;
+    throwIfAborted(signal);
+    return { status: "unavailable", reason: "transport" };
   }
 }
 
-async function tokenFromGhCli(run: CommandRunner): Promise<string | null> {
+function cancellationError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error("GitHub sign-in was canceled.");
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw cancellationError(signal);
+}
+
+function requestSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+async function waitWithSignal(
+  waiting: Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  throwIfAborted(signal);
+  if (!signal) return waiting;
+  await new Promise<void>((resolveWait, rejectWait) => {
+    const onAbort = () => settle(() => rejectWait(cancellationError(signal)));
+    const settle = (finish: () => void) => {
+      signal.removeEventListener("abort", onAbort);
+      finish();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    waiting.then(
+      () => settle(resolveWait),
+      (cause) => settle(() => rejectWait(cause)),
+    );
+  });
+}
+
+async function tokenFromGhCli(
+  run: CommandRunner,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  throwIfAborted(signal);
   try {
     const { stdout } = await run({
       executable: "gh",
       args: ["auth", "token"],
       timeoutMs: GH_CLI_TIMEOUT_MS,
+      signal,
     });
     const token = stdout.trim();
     return token || null;
   } catch {
+    throwIfAborted(signal);
     return null;
   }
 }
@@ -127,7 +146,9 @@ async function postJson<T>(
   url: string,
   body: Record<string, string>,
   fetchImpl: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<T> {
+  throwIfAborted(signal);
   let response: Response;
   try {
     response = await fetchImpl(url, {
@@ -137,9 +158,10 @@ async function postJson<T>(
         "content-type": "application/json",
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: requestSignal(signal),
     });
   } catch {
+    throwIfAborted(signal);
     throw new Error(
       "GitHub did not respond. Check your connection and try again.",
     );
@@ -156,12 +178,14 @@ async function deviceFlow(
     fetchImpl: typeof fetch;
     clientId: string;
     onDeviceCode?: (prompt: DeviceCodePrompt) => void;
+    signal?: AbortSignal;
   },
 ): Promise<string> {
   const start = await postJson<DeviceCodeResponse>(
     DEVICE_CODE_URL,
     { client_id: options.clientId, scope: GITHUB_SCOPES },
     options.fetchImpl,
+    options.signal,
   );
   if (
     typeof start.device_code !== "string" ||
@@ -184,7 +208,10 @@ async function deviceFlow(
       : DEFAULT_POLL_SECONDS;
   const attempts = Math.ceil(expiresInSeconds / intervalSeconds);
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    await options.sleep(intervalSeconds * 1000);
+    await waitWithSignal(
+      options.sleep(intervalSeconds * 1000, options.signal),
+      options.signal,
+    );
     const result = await postJson<AccessTokenResponse>(
       ACCESS_TOKEN_URL,
       {
@@ -193,6 +220,7 @@ async function deviceFlow(
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
       },
       options.fetchImpl,
+      options.signal,
     );
     if (typeof result.access_token === "string" && result.access_token)
       return result.access_token;
@@ -227,28 +255,65 @@ export async function resolveToken(
 ): Promise<GitHubIdentity> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const run = options.run ?? runCommand;
-  const path = options.credentialsPath ?? credentialsPath();
+  const store =
+    options.store ??
+    new FileCredentialStore(options.credentialsPath ?? credentialsPath());
   const sleep =
     options.sleep ??
-    ((ms: number) => new Promise((done) => setTimeout(done, ms)));
+    ((ms: number, signal?: AbortSignal) =>
+      new Promise<void>((resolveSleep, rejectSleep) => {
+        if (signal?.aborted) {
+          rejectSleep(cancellationError(signal));
+          return;
+        }
+        let timer: NodeJS.Timeout;
+        const onAbort = () =>
+          settle(() => rejectSleep(cancellationError(signal!)));
+        const settle = (finish: () => void) => {
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+          finish();
+        };
+        timer = setTimeout(() => settle(resolveSleep), ms);
+        signal?.addEventListener("abort", onAbort, { once: true });
+      }));
+  throwIfAborted(options.signal);
 
-  const stored = await readStored(path);
+  const stored = await store.read();
+  let storedUnavailable = false;
   if (stored) {
-    const login = await resolveLogin(stored.token, fetchImpl);
-    if (login) return { token: stored.token, login, source: "stored" };
+    const resolved = await resolveLogin(
+      stored.token,
+      fetchImpl,
+      options.signal,
+    );
+    if (resolved.status === "valid")
+      return {
+        token: stored.token,
+        login: resolved.login,
+        source: "stored",
+      };
+    if (resolved.status === "unavailable") {
+      if (resolved.reason === "transport")
+        throw new Error(STORED_TOKEN_UNAVAILABLE_MESSAGE);
+      storedUnavailable = true;
+    } else await store.clear();
   }
 
-  const ghToken = await tokenFromGhCli(run);
+  const ghToken = await tokenFromGhCli(run, options.signal);
   if (ghToken) {
-    const login = await resolveLogin(ghToken, fetchImpl);
-    if (login) return { token: ghToken, login, source: "gh" };
+    const resolved = await resolveLogin(ghToken, fetchImpl, options.signal);
+    if (resolved.status === "valid")
+      return { token: ghToken, login: resolved.login, source: "gh" };
   }
 
   const clientId =
     options.clientId ?? process.env.EARTH_STORIES_GITHUB_CLIENT_ID;
   if (!clientId)
     throw new Error(
-      "Signing in to GitHub needs EARTH_STORIES_GITHUB_CLIENT_ID, or the GitHub CLI (`gh auth login`) on this computer.",
+      storedUnavailable
+        ? STORED_TOKEN_UNAVAILABLE_MESSAGE
+        : "Signing in to GitHub needs EARTH_STORIES_GITHUB_CLIENT_ID, or the GitHub CLI (`gh auth login`) on this computer.",
     );
 
   const token = await deviceFlow({
@@ -256,11 +321,16 @@ export async function resolveToken(
     clientId,
     sleep,
     onDeviceCode: options.onDeviceCode,
+    signal: options.signal,
   });
-  const login = await resolveLogin(token, fetchImpl);
-  if (!login)
+  const resolved = await resolveLogin(token, fetchImpl, options.signal);
+  if (resolved.status !== "valid")
     throw new Error("GitHub signed in but did not return an account name.");
-  const identity: GitHubIdentity = { token, login, source: "device" };
-  await writeStored(path, identity);
+  const identity: GitHubIdentity = {
+    token,
+    login: resolved.login,
+    source: "device",
+  };
+  await store.write({ token: identity.token, login: identity.login });
   return identity;
 }

@@ -3,11 +3,10 @@ import { access, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
+  type Server,
   type ServerResponse,
 } from "node:http";
-import { dirname, extname, join, relative, resolve } from "node:path";
-import { platform } from "node:os";
-import { fileURLToPath } from "node:url";
+import { extname, join, relative } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { ProjectStore } from "@earth-stories/project-store";
@@ -28,39 +27,22 @@ import {
   findExampleStory,
 } from "./examples.js";
 import { loadExampleAssetFiles } from "./exampleAssets.js";
-import { isTrustedMutationOrigin } from "./security.js";
+import {
+  assertCapabilitySecurity,
+  isTrustedMutationOrigin,
+  requireCapability,
+} from "./security.js";
 import { checkShareLink, decodeShareCard } from "./share-health.js";
 import { storeShareCard } from "./share-card.js";
-import { ConversionRuntime } from "./conversion-runtime.js";
+import {
+  canonicalizeRequestPath,
+  loadImmutableEditorPaths,
+  serveEditorFile,
+  staticNotFound,
+} from "./static.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 import { PagesJobs } from "./pages-jobs.js";
-
-const HOST = "127.0.0.1";
-const PORT = Number(process.env.EARTH_STORIES_PORT ?? 4317);
-const PROJECTS_DIRECTORY = resolve(
-  process.env.EARTH_STORIES_PROJECTS_DIR ?? "./earth-stories-projects",
-);
-const MAX_BODY_BYTES = 2 * 1024 * 1024;
-const MAX_ASSET_BYTES = 5 * 1024 * 1024 * 1024;
-const MAX_EXPORT_BODY_BYTES = 50 * 1024 * 1024;
-const MAX_SHARE_CARD_BODY_BYTES = 8 * 1024 * 1024;
-const REPOSITORY_DIRECTORY = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../..",
-);
-const VIEWER_DIRECTORY = resolve(
-  process.env.EARTH_STORIES_VIEWER_DIR ??
-    join(REPOSITORY_DIRECTORY, "dist/viewer"),
-);
-const PIXI_EXECUTABLE = resolve(
-  process.env.EARTH_STORIES_PIXI ??
-    join(
-      REPOSITORY_DIRECTORY,
-      platform() === "win32"
-        ? ".earth-stories/bin/pixi.exe"
-        : ".earth-stories/bin/pixi",
-    ),
-);
+import type { ResolvedLocalServiceConfig } from "./config.js";
 
 const contentTypes: Record<string, string> = {
   ".geojson": "application/geo+json",
@@ -86,15 +68,16 @@ function json(response: ServerResponse, status: number, value: unknown): void {
 
 async function readJson(
   request: IncomingMessage,
-  limit = MAX_BODY_BYTES,
+  limit: number,
 ): Promise<unknown> {
   return JSON.parse((await readBody(request, limit)).toString("utf8"));
 }
 
 async function readOptionalJson(
   request: IncomingMessage,
+  limit: number,
 ): Promise<Record<string, unknown>> {
-  const body = await readBody(request, MAX_EXPORT_BODY_BYTES);
+  const body = await readBody(request, limit);
   return body.length
     ? (JSON.parse(body.toString("utf8")) as Record<string, unknown>)
     : {};
@@ -246,7 +229,7 @@ async function streamZip(
 }
 
 const publicationLocks = new Map<string, Promise<void>>();
-async function withProjectPublicationLock<T>(
+export async function withProjectPublicationLock<T>(
   projectId: string,
   operation: () => Promise<T>,
 ): Promise<T> {
@@ -280,23 +263,39 @@ const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function createLocalServer(
   store: ProjectStore,
-  conversionJobs = new ConversionJobs(
-    store,
-    new ConversionRuntime({
-      pixi: PIXI_EXECUTABLE,
-      repositoryRoot: REPOSITORY_DIRECTORY,
-    }),
-  ),
-  pagesJobs = new PagesJobs(store, {
-    viewerDirectory: VIEWER_DIRECTORY,
-    withLock: withProjectPublicationLock,
-  }),
-) {
-  return createServer(async (request, response) => {
+  config: ResolvedLocalServiceConfig,
+  jobs: {
+    conversion: ConversionJobs;
+    pages: PagesJobs;
+  },
+  internal: {
+    testOnlyDisableTrustedMutationOrigin?: boolean;
+    testOnlyBeforeStaticIdentityCheck?: (path: string) => Promise<void>;
+    testOnlyAfterStaticOpen?: (path: string) => Promise<void>;
+  } = {},
+): Server {
+  assertCapabilitySecurity(
+    config.capabilityToken,
+    !internal.testOnlyDisableTrustedMutationOrigin,
+  );
+  const conversionJobs = jobs.conversion;
+  const pagesJobs = jobs.pages;
+  const immutableEditorPaths = config.editorDirectory
+    ? loadImmutableEditorPaths(config.editorDirectory)
+    : Promise.resolve(new Set<string>());
+  let server: Server;
+  server = createServer(async (request, response) => {
     response.setHeader("x-content-type-options", "nosniff");
-    const url = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
+    const address = server.address();
+    const port =
+      address && typeof address !== "string" ? address.port : config.port;
+    const url = new URL(request.url ?? "/", `http://${config.host}:${port}`);
 
     try {
+      if (!requireCapability(request, config.capabilityToken)) {
+        json(response, 401, { error: "Unauthorized" });
+        return;
+      }
       if (
         MUTATING_METHODS.has(request.method ?? "") &&
         !isTrustedMutationOrigin(request.headers.origin)
@@ -315,7 +314,9 @@ export function createLocalServer(
       }
 
       if (url.pathname === "/api/discover" && request.method === "POST") {
-        const body = (await readJson(request)) as { url?: unknown };
+        const body = (await readJson(request, config.limits.maxBodyBytes)) as {
+          url?: unknown;
+        };
         if (typeof body.url !== "string")
           throw new Error("Enter a public data URL to inspect");
         json(response, 200, await discoverRemoteSource(body.url));
@@ -367,7 +368,7 @@ export function createLocalServer(
       }
 
       if (url.pathname === "/api/projects" && request.method === "POST") {
-        const body = (await readJson(request)) as {
+        const body = (await readJson(request, config.limits.maxBodyBytes)) as {
           title?: unknown;
           description?: unknown;
           author?: unknown;
@@ -415,7 +416,7 @@ export function createLocalServer(
           202,
           await conversionJobs.create(
             projectId,
-            (await readJson(request)) as {
+            (await readJson(request, config.limits.maxBodyBytes)) as {
               operation?: unknown;
               capability?: unknown;
               assetPath?: unknown;
@@ -437,6 +438,31 @@ export function createLocalServer(
           return;
         }
         json(response, 200, job);
+        return;
+      }
+      const conversionActionMatch = url.pathname.match(
+        /^\/api\/conversion-jobs\/([^/]+)\/(acknowledge|cancel|retry)$/,
+      );
+      if (conversionActionMatch && request.method === "POST") {
+        const id = decodeURIComponent(conversionActionMatch[1]);
+        if (!conversionJobs.get(id)) {
+          json(response, 404, { error: "Conversion job not found" });
+          return;
+        }
+        const action = conversionActionMatch[2];
+        const accepted =
+          action === "acknowledge"
+            ? conversionJobs.acknowledge(id)
+            : action === "cancel"
+              ? conversionJobs.cancel(id)
+              : conversionJobs.retry(id);
+        if (!accepted) {
+          json(response, 409, {
+            error: `The conversion cannot ${action} from its current state.`,
+          });
+          return;
+        }
+        json(response, 200, conversionJobs.get(id));
         return;
       }
       const preflightMatch = url.pathname.match(
@@ -476,7 +502,10 @@ export function createLocalServer(
         await store.read(id).catch(() => {
           throw new Error(`Project "${id}" was not found`);
         });
-        const body = (await readJson(request, MAX_SHARE_CARD_BODY_BYTES)) as {
+        const body = (await readJson(
+          request,
+          config.limits.maxShareCardBodyBytes,
+        )) as {
           image?: unknown;
         } | null;
         const card = decodeShareCard(body?.image);
@@ -497,7 +526,10 @@ export function createLocalServer(
           202,
           await pagesJobs.create(
             projectId,
-            (await readOptionalJson(request)) as {
+            (await readOptionalJson(
+              request,
+              config.limits.maxExportBodyBytes,
+            )) as {
               repo?: unknown;
               mapSnapshots?: unknown;
             },
@@ -533,7 +565,9 @@ export function createLocalServer(
         url.pathname === "/api/share/link-health" &&
         request.method === "POST"
       ) {
-        const body = (await readJson(request)) as { url?: unknown };
+        const body = (await readJson(request, config.limits.maxBodyBytes)) as {
+          url?: unknown;
+        };
         if (typeof body.url !== "string")
           throw new Error("Enter the URL where you published the story");
         json(response, 200, await checkShareLink(body.url));
@@ -548,8 +582,11 @@ export function createLocalServer(
         const format = url.searchParams.get("format") ?? "zip";
         if (!["zip", "folder", "archive", "embed"].includes(format))
           throw new Error("Unknown export format");
-        await access(join(VIEWER_DIRECTORY, "index.html"));
-        const body = await readOptionalJson(request);
+        await access(join(config.viewerDirectory, "index.html"));
+        const body = await readOptionalJson(
+          request,
+          config.limits.maxExportBodyBytes,
+        );
         const snapshots =
           typeof body.mapSnapshots === "object" && body.mapSnapshots !== null
             ? (body.mapSnapshots as Record<string, string>)
@@ -561,7 +598,7 @@ export function createLocalServer(
         await withProjectPublicationLock(id, async () => {
           const latest = await buildLatestPublication({
             projectDirectory: store.projectPath(id),
-            viewerDirectory: VIEWER_DIRECTORY,
+            viewerDirectory: config.viewerDirectory,
             mapSnapshots: snapshots,
             publicationUrl,
           });
@@ -624,7 +661,7 @@ export function createLocalServer(
           decodeURIComponent(assetCollectionMatch[1]),
           filename,
           request,
-          MAX_ASSET_BYTES,
+          config.limits.maxAssetBytes,
         );
         json(response, 201, imported);
         return;
@@ -678,7 +715,10 @@ export function createLocalServer(
         json(
           response,
           200,
-          await store.save(route.id, await readJson(request)),
+          await store.save(
+            route.id,
+            await readJson(request, config.limits.maxBodyBytes),
+          ),
         );
         return;
       }
@@ -687,6 +727,55 @@ export function createLocalServer(
         await store.archive(route.id);
         response.writeHead(204, { "cache-control": "no-store" });
         response.end();
+        return;
+      }
+
+      const canonicalPath = canonicalizeRequestPath(url.pathname);
+      const isApiPath =
+        canonicalPath === "/api" || canonicalPath?.startsWith("/api/");
+      if (
+        config.editorDirectory !== null &&
+        !isApiPath &&
+        (request.method === "GET" || request.method === "HEAD")
+      ) {
+        if (canonicalPath === null) {
+          staticNotFound(response);
+          return;
+        }
+        const immutablePaths = await immutableEditorPaths;
+        const exactPath = canonicalPath === "/" ? "/index.html" : canonicalPath;
+        const exactResult = await serveEditorFile(
+          request,
+          response,
+          config.editorDirectory,
+          exactPath,
+          {
+            beforeIdentityCheck: internal.testOnlyBeforeStaticIdentityCheck,
+            afterOpen: internal.testOnlyAfterStaticOpen,
+            immutablePaths,
+          },
+        );
+        if (exactResult === "served") return;
+        if (exactResult === "rejected") {
+          staticNotFound(response);
+          return;
+        }
+        if (
+          extname(canonicalPath) === "" &&
+          (await serveEditorFile(
+            request,
+            response,
+            config.editorDirectory,
+            "/index.html",
+            {
+              beforeIdentityCheck: internal.testOnlyBeforeStaticIdentityCheck,
+              afterOpen: internal.testOnlyAfterStaticOpen,
+              immutablePaths,
+            },
+          )) === "served"
+        )
+          return;
+        staticNotFound(response);
         return;
       }
 
@@ -699,30 +788,5 @@ export function createLocalServer(
       json(response, status, { error: message });
     }
   });
+  return server;
 }
-
-const store = new ProjectStore(PROJECTS_DIRECTORY);
-await store.initialize();
-const server = createLocalServer(store);
-server.on("error", (cause: NodeJS.ErrnoException) => {
-  const message =
-    cause.code === "EADDRINUSE"
-      ? `Earth Stories could not start because port ${PORT} is already in use. Stop the other local service or set EARTH_STORIES_PORT to an available port.`
-      : cause.code === "EACCES"
-        ? `Earth Stories does not have permission to listen on port ${PORT}. Set EARTH_STORIES_PORT to an unprivileged port.`
-        : `Earth Stories local service could not start: ${cause.message}`;
-  process.stderr.write(`${message}\n`);
-  process.exitCode = 1;
-});
-server.listen(PORT, HOST, () => {
-  process.stdout.write(
-    `Earth Stories local service ready at http://${HOST}:${PORT}\nProjects: ${PROJECTS_DIRECTORY}\n`,
-  );
-});
-
-function stop(): void {
-  server.close(() => process.exit(0));
-}
-
-process.on("SIGINT", stop);
-process.on("SIGTERM", stop);

@@ -780,7 +780,7 @@ function exampleDataItem(example: ExampleConnection): DataItem {
               }
             : { ...common, kind: example.kind };
   const project: StoryProject = {
-    schema: "earth-stories/project/v1",
+    schema: "earth-stories/project/v2",
     id: `catalog-${example.id}`,
     metadata: {
       title: example.title,
@@ -795,7 +795,11 @@ function exampleDataItem(example: ExampleConnection): DataItem {
       styleUrl: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
       attribution: "© OpenStreetMap contributors © CARTO",
     },
-    publication: { profile: "connected", theme: "cng" },
+    publication: {
+      profile: "connected",
+      theme: "cng",
+      offlineBasemap: { mode: "neutral" },
+    },
     sources: [source],
     dataAssets: [],
     chapters: [

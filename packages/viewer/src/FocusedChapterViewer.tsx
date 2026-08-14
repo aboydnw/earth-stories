@@ -1,6 +1,11 @@
 import { useMemo } from "react";
-import type { Camera, PublicationManifest } from "@earth-stories/story-schema";
+import {
+  publicationBasemapHref,
+  type Camera,
+  type PublicationManifest,
+} from "@earth-stories/story-schema";
 import { PublicationChapterRenderer } from "./PublicationChapterRenderer.js";
+import { publicationRuntimePolicy } from "./publicationRuntime.js";
 
 export interface FocusedChapterViewerProps {
   manifest: PublicationManifest;
@@ -30,6 +35,10 @@ export function FocusedChapterViewer({
     [manifest.assets],
   );
   const chapter = manifest.chapters.find(({ id }) => id === chapterId);
+  const runtimePolicy = useMemo(
+    () => publicationRuntimePolicy(manifest),
+    [manifest],
+  );
   if (!chapter)
     return (
       <div className="story-focused-state" role="status">
@@ -45,7 +54,8 @@ export function FocusedChapterViewer({
         <PublicationChapterRenderer
           chapter={chapter}
           assets={assets}
-          basemapStyle={manifest.basemap.styleUrl}
+          basemapStyle={publicationBasemapHref(manifest.basemap)}
+          runtimePolicy={runtimePolicy}
           composition={interactiveMap ? "authoring-map" : "focused-preview"}
           interactiveMap={interactiveMap}
           fitRequestToken={fitRequestToken}

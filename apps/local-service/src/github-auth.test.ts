@@ -4,6 +4,7 @@ import { isAbsolute, join, relative } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { credentialsPath, resolveToken } from "./github-auth.js";
 import type { CommandRunner } from "./command-runner.js";
+import type { CredentialStore, StoredCredentials } from "./credentials.js";
 
 const nowhere: CommandRunner = async () => {
   throw new Error("gh is not installed");
@@ -39,6 +40,294 @@ describe("credentialsPath", () => {
 });
 
 describe("resolveToken", () => {
+  it("reads and clears an invalid token through the injected store", async () => {
+    let stored: StoredCredentials | null = {
+      token: "expired-token",
+      login: "old-login",
+    };
+    let clears = 0;
+    const store: CredentialStore = {
+      read: async () => stored,
+      write: async (value) => {
+        stored = value;
+      },
+      clear: async () => {
+        clears += 1;
+        stored = null;
+      },
+    };
+
+    const identity = await resolveToken({
+      store,
+      run: async () => ({ stdout: "fresh-token\n", stderr: "" }),
+      fetchImpl: vi.fn(async (_input, init) =>
+        String(new Headers(init?.headers).get("authorization")).includes(
+          "expired-token",
+        )
+          ? jsonResponse({ message: "Bad credentials" }, 401)
+          : userResponse("mapper"),
+      ) as typeof fetch,
+    });
+
+    expect(clears).toBe(1);
+    expect(identity).toEqual({
+      token: "fresh-token",
+      login: "mapper",
+      source: "gh",
+    });
+  });
+
+  it("retains stored credentials and tries the CLI after GitHub returns 403", async () => {
+    let clears = 0;
+    let cliCalls = 0;
+    const store: CredentialStore = {
+      read: async () => ({ token: "stored-token", login: "mapper" }),
+      write: async () => undefined,
+      clear: async () => {
+        clears += 1;
+      },
+    };
+
+    const fetchImpl = vi.fn(async (_input, init) =>
+      String(new Headers(init?.headers).get("authorization")).includes(
+        "stored-token",
+      )
+        ? jsonResponse({ message: "rate limited" }, 403)
+        : userResponse("fallback-user"),
+    ) as typeof fetch;
+    await expect(
+      resolveToken({
+        store,
+        fetchImpl,
+        run: async () => {
+          cliCalls += 1;
+          return { stdout: "fallback-token", stderr: "" };
+        },
+      }),
+    ).resolves.toEqual({
+      token: "fallback-token",
+      login: "fallback-user",
+      source: "gh",
+    });
+    expect(clears).toBe(0);
+    expect(cliCalls).toBe(1);
+  });
+
+  it("persists a device token through the injected store", async () => {
+    let stored: StoredCredentials | null = null;
+    const store: CredentialStore = {
+      read: async () => stored,
+      write: async (value) => {
+        stored = value;
+      },
+      clear: async () => {
+        stored = null;
+      },
+    };
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/login/device/code"))
+        return jsonResponse({
+          device_code: "device-code",
+          user_code: "WXYZ-1234",
+          verification_uri: "https://github.com/login/device",
+          expires_in: 900,
+          interval: 1,
+        });
+      if (url.endsWith("/login/oauth/access_token"))
+        return jsonResponse({ access_token: "device-token" });
+      return userResponse("mapper");
+    }) as unknown as typeof fetch;
+
+    await resolveToken({
+      store,
+      clientId: "client-id",
+      run: nowhere,
+      fetchImpl,
+      sleep: async () => undefined,
+    });
+
+    expect(stored).toEqual({ token: "device-token", login: "mapper" });
+  });
+
+  it.each([
+    {
+      name: "network failure",
+      fetchImpl: async () => {
+        throw new Error("offline");
+      },
+      signal: undefined,
+      message: /connection|respond|verify/i,
+    },
+    {
+      name: "timeout",
+      fetchImpl: async (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          ),
+        ),
+      signal: AbortSignal.timeout(5),
+      message: /timeout|timed out|verify/i,
+    },
+  ])(
+    "retains stored credentials after $name",
+    async ({ fetchImpl, signal, message }) => {
+      const stored = { token: "stored-token", login: "mapper" };
+      let clears = 0;
+      const store: CredentialStore = {
+        read: async () => stored,
+        write: async () => undefined,
+        clear: async () => {
+          clears += 1;
+        },
+      };
+      let cliCalls = 0;
+
+      await expect(
+        resolveToken({
+          store,
+          fetchImpl: fetchImpl as typeof fetch,
+          run: async () => {
+            cliCalls += 1;
+            return { stdout: "fresh-token", stderr: "" };
+          },
+          signal,
+        }),
+      ).rejects.toThrow(message);
+      expect(clears).toBe(0);
+      expect(cliCalls).toBe(0);
+    },
+  );
+
+  it("retains stored credentials after caller cancellation", async () => {
+    const controller = new AbortController();
+    let clears = 0;
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => (requestStarted = resolve));
+    const store: CredentialStore = {
+      read: async () => ({ token: "stored-token", login: "mapper" }),
+      write: async () => undefined,
+      clear: async () => {
+        clears += 1;
+      },
+    };
+    const resolving = resolveToken({
+      store,
+      signal: controller.signal,
+      run: nowhere,
+      fetchImpl: (async (_input, init) => {
+        requestStarted();
+        return new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          ),
+        );
+      }) as typeof fetch,
+    });
+    await started;
+    controller.abort(new Error("stop validation"));
+
+    await expect(resolving).rejects.toThrow(/stop validation/);
+    expect(clears).toBe(0);
+  });
+
+  it("cancels an in-flight GitHub request with the caller signal", async () => {
+    const controller = new AbortController();
+    let requestStarted!: () => void;
+    const started = new Promise<void>((resolve) => (requestStarted = resolve));
+    const resolving = resolveToken({
+      credentialsPath: await scratchCredentials(),
+      clientId: "client-id",
+      run: nowhere,
+      signal: controller.signal,
+      fetchImpl: (async (_input, init) => {
+        requestStarted();
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(init.signal?.reason),
+            { once: true },
+          );
+        });
+      }) as typeof fetch,
+    });
+    await started;
+    controller.abort(new Error("stop request"));
+
+    await expect(resolving).rejects.toThrow(/stop request/);
+  });
+
+  it("cancels an in-flight GitHub CLI lookup", async () => {
+    const controller = new AbortController();
+    let cliStarted!: () => void;
+    const started = new Promise<void>((resolve) => (cliStarted = resolve));
+    const resolving = resolveToken({
+      credentialsPath: await scratchCredentials(),
+      signal: controller.signal,
+      run: async (command) => {
+        cliStarted();
+        if (!command.signal) throw new Error("CLI signal was not supplied");
+        return new Promise((_, reject) =>
+          command.signal?.addEventListener(
+            "abort",
+            () => reject(command.signal?.reason),
+            { once: true },
+          ),
+        );
+      },
+    });
+    await started;
+    controller.abort(new Error("stop CLI"));
+
+    await expect(resolving).rejects.toThrow(/stop CLI/);
+  });
+
+  it("cancels the device-flow wait", async () => {
+    const controller = new AbortController();
+    let promptShown!: () => void;
+    const prompted = new Promise<void>((resolve) => (promptShown = resolve));
+    let waitSignal: AbortSignal | undefined;
+    const resolving = resolveToken({
+      credentialsPath: await scratchCredentials(),
+      clientId: "client-id",
+      run: nowhere,
+      signal: controller.signal,
+      fetchImpl: vi.fn(async (input: RequestInfo | URL) =>
+        String(input).endsWith("/login/device/code")
+          ? jsonResponse({
+              device_code: "device-code",
+              user_code: "WXYZ-1234",
+              verification_uri: "https://github.com/login/device",
+              expires_in: 900,
+              interval: 1,
+            })
+          : jsonResponse({ error: "authorization_pending" }),
+      ) as typeof fetch,
+      sleep: async (_ms, signal) => {
+        waitSignal = signal;
+        return new Promise<void>(() => undefined);
+      },
+      onDeviceCode: () => promptShown(),
+    });
+    await prompted;
+    controller.abort(new Error("stop wait"));
+
+    await expect(
+      Promise.race([
+        resolving,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("cancellation ignored")), 100),
+        ),
+      ]),
+    ).rejects.toThrow(/stop wait/);
+    expect(waitSignal).toBe(controller.signal);
+  });
+
   it("uses a stored token when it still works", async () => {
     const path = await scratchCredentials();
     await writeFile(

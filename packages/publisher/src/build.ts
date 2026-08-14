@@ -9,15 +9,15 @@ import {
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { setTimeout as wait } from "node:timers/promises";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import { createWriteStream } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import type {
   PublicationManifest,
   StoryProject,
 } from "@earth-stories/story-schema";
-import { storyProjectSchema } from "@earth-stories/story-schema";
+import {
+  parsePublicationManifest,
+  storyProjectSchema,
+} from "@earth-stories/story-schema";
 import { compileProject } from "./compile.js";
 import { buildArchivalHtml } from "./archive.js";
 import { embedInstructions } from "./embed.js";
@@ -25,8 +25,10 @@ import {
   preflightPublication,
   type PublicationPreflight,
 } from "./preflight.js";
-import { containedRealPath } from "./paths.js";
-import { authorizedFetch } from "./remote-fetch.js";
+import {
+  materializePublication,
+  type MaterializedPublication,
+} from "./materialize.js";
 import {
   buildShareKit,
   injectShareMeta,
@@ -34,10 +36,10 @@ import {
   SHARE_CARD_SOURCE_FILENAME,
   SHARE_POST_TEXT_PATH,
 } from "./share.js";
-import { verifyPublication } from "./verify.js";
-
-const MAX_REMOTE_ASSET_BYTES = 2 * 1024 * 1024 * 1024;
-const REMOTE_ASSET_TIMEOUT_MS = 5 * 60 * 1000;
+import {
+  verifyPublication,
+  type PublicationBrowserVerifier,
+} from "./verify.js";
 
 async function retryFileOperation(operation: () => Promise<void>) {
   for (let attempt = 0; ; attempt += 1) {
@@ -61,6 +63,8 @@ export interface BuildPublicationOptions {
   viewerDirectory?: string;
   mapSnapshots?: Record<string, string>;
   publicationUrl?: string;
+  browserVerifier?: PublicationBrowserVerifier;
+  verificationTimeoutMs?: number;
 }
 
 export interface LatestPublication {
@@ -102,95 +106,10 @@ function escapeHtml(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
-async function copyIncludedAssets(
-  project: StoryProject,
-  projectDirectory: string,
-  outputDirectory: string,
-): Promise<void> {
-  const assetsDirectory = join(outputDirectory, "assets");
-  await mkdir(assetsDirectory, { recursive: true });
-
-  const manifest = compileProject(project);
-  for (const source of project.sources) {
-    const asset = manifest.assets.find(
-      (candidate) => candidate.id === source.id,
-    );
-    if (!asset || asset.delivery !== "included") continue;
-    const sourceLocator =
-      source.kind === "local-geojson" ||
-      source.kind === "image" ||
-      source.kind === "csv"
-        ? source.path
-        : source.kind === "pmtiles" ||
-            source.kind === "geoparquet" ||
-            source.kind === "cog" ||
-            source.kind === "trajectory" ||
-            source.kind === "copc"
-          ? source.locator
-          : null;
-    if (!sourceLocator) continue;
-    const destinationPath = join(outputDirectory, asset.href);
-    await mkdir(dirname(destinationPath), { recursive: true });
-    if (/^https?:\/\//i.test(sourceLocator)) {
-      const temporaryPath = `${destinationPath}.partial-${randomUUID()}`;
-      const controller = new AbortController();
-      const timeout = setTimeout(
-        () => controller.abort(new Error("Remote asset download timed out.")),
-        REMOTE_ASSET_TIMEOUT_MS,
-      );
-      try {
-        const response = await authorizedFetch(sourceLocator, {
-          signal: controller.signal,
-        });
-        if (!response.ok || !response.body)
-          throw new Error(
-            `Could not include “${source.label}” (${response.status})`,
-          );
-        const declaredSize = Number(response.headers.get("content-length"));
-        if (
-          Number.isFinite(declaredSize) &&
-          declaredSize > MAX_REMOTE_ASSET_BYTES
-        )
-          throw new Error(
-            `“${source.label}” exceeds the 2 GB inclusion limit.`,
-          );
-        let downloaded = 0;
-        const limit = new Transform({
-          transform(chunk: Buffer, _encoding, callback) {
-            downloaded += chunk.length;
-            if (downloaded > MAX_REMOTE_ASSET_BYTES)
-              callback(
-                new Error(
-                  `“${source.label}” exceeds the 2 GB inclusion limit.`,
-                ),
-              );
-            else callback(null, chunk);
-          },
-        });
-        await pipeline(
-          Readable.fromWeb(
-            response.body as import("node:stream/web").ReadableStream,
-          ),
-          limit,
-          createWriteStream(temporaryPath),
-        );
-        await retryFileOperation(() => rename(temporaryPath, destinationPath));
-      } finally {
-        clearTimeout(timeout);
-        await rm(temporaryPath, { force: true });
-      }
-    } else {
-      const sourcePath = await containedRealPath(
-        projectDirectory,
-        sourceLocator,
-        `Asset ${source.id} escapes the project directory`,
-      );
-      await cp(sourcePath, destinationPath);
-    }
-  }
-}
-
-function reportHtml(manifest: PublicationManifest): string {
+function reportHtml(
+  manifest: PublicationManifest,
+  materialized: MaterializedPublication,
+): string {
   const included = manifest.assets.filter(
     (asset) => asset.delivery === "included",
   );
@@ -206,13 +125,20 @@ function reportHtml(manifest: PublicationManifest): string {
               `<li><strong>${escapeHtml(asset.label)}</strong> — ${escapeHtml(asset.href)}</li>`,
           )
           .join("")}</ul>`;
-  const dependencies = manifest.externalDependencies
+  const dependencies = manifest.dependencies
     .map(
       (dependency) =>
-        `<li><code>${escapeHtml(dependency.resourceId)}</code> — ${escapeHtml(dependency.href)}<br><small>${escapeHtml(dependency.requirements.join(", "))}</small></li>`,
+        `<li><code>${escapeHtml(dependency.id)}</code> — ${escapeHtml(dependency.delivery)} — ${escapeHtml(dependency.locator)}<br><small>${escapeHtml(dependency.requirements.join(", ") || "no runtime requirements")}</small></li>`,
     )
     .join("");
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Publication report</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:16px/1.55 system-ui;color:#332b27}h1,h2{font-family:Georgia,serif}code{background:#f2ede7;padding:2px 5px}</style><body><h1>Publication report</h1><p><strong>${escapeHtml(manifest.metadata.title)}</strong></p><p>Build <code>${escapeHtml(manifest.build.id)}</code> · Runtime ${escapeHtml(manifest.build.runtimeVersion)} · Profile ${escapeHtml(manifest.publication.profile)}</p><h2>Hosting requirements</h2><p>${escapeHtml(manifest.hostingRequirements.join(", "))}</p><h2>Included assets</h2>${list(included)}<h2>Connected data assets</h2>${list(connected)}<h2>All external dependencies</h2><ul>${dependencies}</ul><p>External dependencies must remain publicly accessible for the story to work.</p></body></html>`;
+  const needsRuntimeInternet = manifest.dependencies.some(
+    (dependency) => dependency.delivery === "connected",
+  );
+  const includedBytes = materialized.materializedFiles.reduce(
+    (total, file) => total + file.sizeBytes,
+    0,
+  );
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Publication report</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:16px/1.55 system-ui;color:#332b27}h1,h2{font-family:Georgia,serif}code{background:#f2ede7;padding:2px 5px}</style><body><h1>Publication report</h1><p><strong>${escapeHtml(manifest.metadata.title)}</strong></p><p>Build <code>${escapeHtml(manifest.build.id)}</code> · Runtime ${escapeHtml(manifest.build.runtimeVersion)} · Profile ${escapeHtml(manifest.publication.profile)}</p><h2>Connectivity</h2><p>Internet needed to assemble: ${materialized.downloadedBytes > 0 ? "yes" : "no"}<br>Internet needed at runtime: ${needsRuntimeInternet ? "yes" : "no"}<br>Downloaded during assembly: ${materialized.downloadedBytes.toLocaleString("en-US")} bytes<br>Included materialized files: ${includedBytes.toLocaleString("en-US")} bytes</p><h2>Hosting requirements</h2><p>${escapeHtml(manifest.hostingRequirements.join(", "))}</p><h2>Included assets</h2>${list(included)}<h2>Connected data assets</h2>${list(connected)}<h2>Authoritative dependencies</h2><ul>${dependencies}</ul>${needsRuntimeInternet ? "<p>Connected dependencies must remain publicly accessible for the story to work.</p>" : "<p>No publication dependency requires internet access at runtime.</p>"}</body></html>`;
 }
 
 async function writeShareKit(
@@ -251,7 +177,6 @@ export async function buildPublication({
   const project = storyProjectSchema.parse(
     JSON.parse(await readFile(projectPath, "utf8")) as unknown,
   );
-  const manifest = compileProject(project);
 
   await rm(outputDirectory, {
     recursive: true,
@@ -260,7 +185,6 @@ export async function buildPublication({
     retryDelay: 75,
   });
   await mkdir(outputDirectory, { recursive: true });
-  await copyIncludedAssets(project, projectDirectory, outputDirectory);
 
   if (viewerDirectory) {
     await cp(viewerDirectory, outputDirectory, { recursive: true });
@@ -274,6 +198,15 @@ export async function buildPublication({
       '<!doctype html><html lang="en"><meta charset="utf-8"><title>Build the viewer first</title><body><p>The publication manifest is ready. Build the viewer application before release.</p></body></html>',
     );
   }
+  const materialized = await materializePublication({
+    project,
+    projectDirectory,
+    outputDirectory,
+    viewerDirectory,
+  });
+  const manifest = compileProject(project, {
+    dependencyDigests: materialized.dependencyDigests,
+  });
 
   await writeShareKit(
     project,
@@ -302,7 +235,7 @@ export async function buildPublication({
     );
   await writeFile(
     join(outputDirectory, "publication-report.html"),
-    reportHtml(manifest),
+    reportHtml(manifest, materialized),
   );
   await writeFile(
     join(outputDirectory, "README.txt"),
@@ -325,6 +258,45 @@ async function directorySize(directory: string): Promise<number> {
         : 0;
   }
   return total;
+}
+
+async function writeJsonAtomically(
+  path: string,
+  value: unknown,
+): Promise<void> {
+  const temporaryPath = `${path}.partial-${randomUUID()}`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, {
+      flag: "wx",
+    });
+    await retryFileOperation(() => rename(temporaryPath, path));
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
+}
+
+async function preserveFailedVerification(
+  projectDirectory: string,
+  candidateDirectory: string,
+): Promise<void> {
+  try {
+    const report = JSON.parse(
+      await readFile(
+        join(candidateDirectory, "publication-verification.json"),
+        "utf8",
+      ),
+    );
+    await writeJsonAtomically(
+      join(
+        projectDirectory,
+        ".earth-stories-publication-verification-failed.json",
+      ),
+      report,
+    );
+  } catch {
+    // The original verification error remains authoritative when a report
+    // cannot be preserved (for example, a read-only project directory).
+  }
 }
 
 export async function buildLatestPublication(
@@ -359,19 +331,33 @@ async function buildLatestPublicationUnlocked(
     );
   const builtAt = new Date().toISOString();
   try {
-    const manifest = await buildPublication({
+    let manifest = await buildPublication({
       ...options,
       projectDirectory,
       outputDirectory: temporary,
     });
-    const verification = await verifyPublication(temporary, manifest, {
-      requireEmbed: Boolean(options.viewerDirectory),
-      requireShareKit: true,
-    });
-    await writeFile(
-      join(temporary, "publication-verification.json"),
-      `${JSON.stringify(verification, null, 2)}\n`,
-    );
+    try {
+      await verifyPublication(temporary, manifest, {
+        requireEmbed: Boolean(options.viewerDirectory),
+        requireShareKit: true,
+        browserVerifier: options.browserVerifier,
+        timeoutMs: options.verificationTimeoutMs,
+      });
+    } catch (cause) {
+      await preserveFailedVerification(projectDirectory, temporary);
+      throw cause;
+    }
+    if (manifest.connectivity.requested === "offline") {
+      manifest = parsePublicationManifest({
+        ...manifest,
+        connectivity: {
+          requested: "offline",
+          state: "verified",
+          verified: "offline",
+        },
+      });
+      await writeJsonAtomically(join(temporary, "publication.json"), manifest);
+    }
     let totalBytes = await directorySize(temporary);
     const summaryPath = join(temporary, "publication-summary.json");
     for (;;) {
@@ -415,6 +401,13 @@ async function buildLatestPublicationUnlocked(
       maxRetries: 5,
       retryDelay: 75,
     });
+    await rm(
+      join(
+        projectDirectory,
+        ".earth-stories-publication-verification-failed.json",
+      ),
+      { force: true },
+    );
     return { manifest, preflight, directory: target, totalBytes, builtAt };
   } finally {
     await rm(temporary, {

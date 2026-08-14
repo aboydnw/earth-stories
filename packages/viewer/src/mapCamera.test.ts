@@ -83,11 +83,11 @@ describe("cameraCommand", () => {
     vi.advanceTimersByTime(1_250);
 
     expect(programmatic.current).toBe(false);
-    expect(map.off).not.toHaveBeenCalled();
+    expect(map.off).toHaveBeenCalledWith("moveend", finish);
     expect(onComplete).not.toHaveBeenCalled();
     (finish as (() => void) | null)?.();
     expect(map.off).toHaveBeenCalledWith("moveend", finish);
-    expect(onComplete).toHaveBeenCalledOnce();
+    expect(onComplete).not.toHaveBeenCalled();
   });
 
   it("separates interaction from following camera props with controlled compatibility", () => {

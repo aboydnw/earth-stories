@@ -128,25 +128,32 @@ deployed; other private-network addresses cannot be checked and say so.
 ## Publish to GitHub Pages
 
 The publication workshop can put a story on GitHub Pages, free hosting the
-author owns. Earth Stories signs in with the GitHub CLI when this computer
-already has it, and otherwise runs GitHub's device flow: the panel shows a code
-to enter at `github.com/login/device`, which needs no git or CLI knowledge. The
-resulting token is stored at `~/.earth-stories/credentials.json` with mode
-`0600`, deliberately outside every project directory, because project
-directories get exported, zipped, and pushed to a public repository. Windows
-does not apply POSIX modes, so there the file is protected by the account's own
-profile permissions rather than by `0600`.
+author owns. Publishing needs no git binary or GitHub CLI knowledge. Earth
+Stories first reuses a token stored in `~/.earth-stories/credentials.json`, then
+checks the GitHub CLI's existing sign-in, and only then starts GitHub's device
+flow, where the panel shows a code to enter at `github.com/login/device`. A
+token obtained through device flow is stored in that credentials file with mode
+`0600`, deliberately
+outside every project directory, because project directories get exported,
+zipped, and published to a public repository. An existing GitHub CLI token is
+read fresh and is not copied there. Windows does not apply POSIX modes, so there
+the file is protected by the account's own profile permissions rather than by
+`0600`.
+
+After the first successful device-flow sign-in, later publishes reuse the
+stored token without showing another sign-in prompt unless the credential is
+missing, invalid, or revoked.
 
 The published address is `https://<account>.github.io/<repo>/`. It is known
-before the first push, so the release is built with that URL already in its
+before the first upload, so the release is built with that URL already in its
 share metadata — on this path there is no paste-your-URL-and-export-again
 rebake. Re-publishing reuses the recorded repository, so the address stays
 stable and links already shared keep working. The location is recorded in
 `.earth-stories/publish.json` beside the project.
 
 Only the built `publication/` folder is uploaded, never the project directory
-with its `story.json` and backups. Each publish force-pushes a single orphan
-commit into the `gh-pages` branch, matching the latest-only lifecycle below:
+with its `story.json` and backups. Each publish force-replaces the `gh-pages`
+branch with a single orphan commit, matching the latest-only lifecycle below:
 the repository does not accumulate history for map data that is replaced
 wholesale each build. A `.nojekyll` marker is added so Pages serves the release
 as-is.

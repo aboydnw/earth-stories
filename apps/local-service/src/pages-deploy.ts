@@ -1,12 +1,22 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { runCommand, type CommandRunner } from "./command-runner.js";
+import { Buffer } from "node:buffer";
+import {
+  blobSha,
+  collectReleaseFiles,
+  encodeBase64Stream,
+  type ReleaseFile,
+} from "./git-objects.js";
 
 const API_ROOT = "https://api.github.com";
 const COMMIT_AUTHOR_NAME = "Earth Stories";
 const COMMIT_AUTHOR_EMAIL = "earth-stories@users.noreply.github.com";
+const REPOSITORY_SEED_PATH = ".earth-stories-seed";
 export const DEFAULT_PAGES_BRANCH = "gh-pages";
+
+function repositorySeedContent(projectId: string): string {
+  return Buffer.from(
+    `Earth Stories publication repository\nProject: ${projectId}\n`,
+  ).toString("base64");
+}
 
 export interface GitHubRequestOptions {
   token: string;
@@ -54,8 +64,99 @@ async function readError(response: Response): Promise<string> {
 export interface EnsureRepositoryOptions extends GitHubRequestOptions {
   owner: string;
   repo: string;
+  projectId: string;
   description?: string;
   expectExisting?: boolean;
+}
+
+function repositorySeedEndpoint(options: EnsureRepositoryOptions): string {
+  return `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/contents/${REPOSITORY_SEED_PATH}`;
+}
+
+function matchesRepositorySeed(value: unknown, projectId: string): boolean {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    (value as { type?: unknown }).type !== "file" ||
+    (value as { encoding?: unknown }).encoding !== "base64" ||
+    typeof (value as { content?: unknown }).content !== "string"
+  )
+    return false;
+  const normalized = (value as { content: string }).content.replace(/\s/g, "");
+  if (
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      normalized,
+    )
+  )
+    return false;
+  return Buffer.from(normalized, "base64").equals(
+    Buffer.from(repositorySeedContent(projectId), "base64"),
+  );
+}
+
+async function hasValidRepositorySeed(
+  options: EnsureRepositoryOptions,
+  fetchImpl: typeof fetch,
+): Promise<boolean> {
+  let response: Response;
+  try {
+    response = await fetchImpl(repositorySeedEndpoint(options), {
+      headers: apiHeaders(options.token),
+    });
+  } catch (cause) {
+    throw new Error(
+      `GitHub could not verify an interrupted Earth Stories publish: ${safeMessage(cause, options.token)}`,
+    );
+  }
+  if (response.status === 404) {
+    await response.body?.cancel();
+    return false;
+  }
+  if (!response.ok) {
+    const detail = safeMessage(await readError(response), options.token);
+    throw new Error(
+      `GitHub could not verify an interrupted Earth Stories publish (${response.status}).${detail ? ` ${detail}` : ""}`,
+    );
+  }
+  try {
+    return matchesRepositorySeed(await response.json(), options.projectId);
+  } catch {
+    return false;
+  }
+}
+
+async function initializeEmptyRepository(
+  options: EnsureRepositoryOptions,
+  fetchImpl: typeof fetch,
+): Promise<void> {
+  const endpoint = repositorySeedEndpoint(options);
+  let response: Response;
+  try {
+    response = await fetchImpl(endpoint, {
+      method: "PUT",
+      headers: apiHeaders(options.token),
+      body: JSON.stringify({
+        message: "Initialize Earth Stories repository",
+        content: repositorySeedContent(options.projectId),
+      }),
+    });
+  } catch (cause) {
+    throw new Error(
+      `The repository default branch could not be initialized: ${safeMessage(cause, options.token)}`,
+    );
+  }
+  if (!response.ok) {
+    const detail = safeMessage(await readError(response), options.token);
+    if (
+      response.status === 422 &&
+      (await hasValidRepositorySeed(options, fetchImpl))
+    )
+      return;
+    throw new Error(
+      `The repository default branch could not be initialized (${response.status}).${detail ? ` ${detail}` : ""}`,
+    );
+  }
+  await response.body?.cancel();
 }
 
 /**
@@ -87,17 +188,24 @@ export async function ensureRepository(
         `The repository ${options.owner}/${options.repo} belongs to someone else. Choose another name.`,
       );
     const empty = body.size === 0;
-    if (!options.expectExisting && !empty)
-      throw new Error(
-        `You already have a repository named "${options.repo}" with files in it. Choose another name so nothing is overwritten.`,
-      );
+    if (!options.expectExisting && !empty) {
+      const interrupted = await hasValidRepositorySeed(options, fetchImpl);
+      if (!interrupted)
+        throw new Error(
+          `You already have a repository named "${options.repo}" with files in it. Choose another name so nothing is overwritten.`,
+        );
+    }
+    if (empty) await initializeEmptyRepository(options, fetchImpl);
     return { created: false };
   }
 
-  if (existing.status !== 404)
+  if (existing.status !== 404) {
+    const detail = safeMessage(await readError(existing), options.token);
     throw new Error(
-      `GitHub could not be reached (${existing.status}). ${await readError(existing)}`.trim(),
+      `GitHub could not be reached (${existing.status}). ${detail}`.trim(),
     );
+  }
+  await existing.body?.cancel();
 
   const created = await fetchImpl(`${API_ROOT}/user/repos`, {
     method: "POST",
@@ -112,10 +220,14 @@ export async function ensureRepository(
       has_wiki: false,
     }),
   });
-  if (!created.ok)
+  if (!created.ok) {
+    const detail = safeMessage(await readError(created), options.token);
     throw new Error(
-      `The repository could not be created (${created.status}). ${await readError(created)}`.trim(),
+      `The repository could not be created (${created.status}). ${detail}`.trim(),
     );
+  }
+  await created.body?.cancel();
+  await initializeEmptyRepository(options, fetchImpl);
   return { created: true };
 }
 
@@ -126,45 +238,420 @@ export interface PushReleaseOptions {
   repo: string;
   branch?: string;
   message?: string;
-  run?: CommandRunner;
+  fetchImpl?: typeof fetch;
+  onProgress?: (progress: PushReleaseProgress) => void;
+  signal?: AbortSignal;
+}
+
+export interface PushReleaseProgress {
+  uploaded: number;
+  skipped: number;
+}
+
+interface GitHubObjectRequest {
+  fetchImpl: typeof fetch;
+  token: string;
+  url: string;
+  operation: string;
+  init?: Omit<RequestInit, "body">;
+  body?: () => BodyInit;
+}
+
+interface HashedReleaseFile extends ReleaseFile {
+  sha: string;
+}
+
+function encodePathSegments(value: string): string {
+  return value.split("/").map(encodeURIComponent).join("/");
+}
+
+const MAX_RATE_LIMIT_RETRIES = 3;
+const MAX_RETRY_DELAY_MS = 60_000;
+
+function safeMessage(value: unknown, token: string): string {
+  const message = value instanceof Error ? value.message : String(value);
+  return token ? message.split(token).join("[REDACTED]") : message;
+}
+
+function retryDelay(response: Response): number | null {
+  const header = response.headers.get("retry-after");
+  if (header === null) return response.status === 429 ? 1_000 : null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds))
+    return Math.min(MAX_RETRY_DELAY_MS, Math.max(0, seconds * 1_000));
+  const date = Date.parse(header);
+  return Number.isNaN(date)
+    ? 1_000
+    : Math.min(MAX_RETRY_DELAY_MS, Math.max(0, date - Date.now()));
+}
+
+function waitForRetry(ms: number, signal?: AbortSignal | null): Promise<void> {
+  if (!signal)
+    return new Promise((done) => {
+      setTimeout(done, ms);
+    });
+  if (signal.aborted)
+    return Promise.reject(
+      signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
+    );
+
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(
+        signal.reason instanceof Error ? signal.reason : new Error("Aborted"),
+      );
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function githubObjectRequest({
+  fetchImpl,
+  token,
+  url,
+  operation,
+  init,
+  body,
+}: GitHubObjectRequest): Promise<Response> {
+  for (let attempt = 0; ; attempt += 1) {
+    let response: Response;
+    try {
+      const requestInit: RequestInit & { duplex?: "half" } = {
+        ...init,
+        headers: apiHeaders(token),
+        body: body?.(),
+      };
+      if (body) requestInit.duplex = "half";
+      response = await fetchImpl(url, requestInit);
+    } catch (cause) {
+      throw new Error(`${operation} failed: ${safeMessage(cause, token)}`);
+    }
+
+    const delay = retryDelay(response);
+    const rateLimited =
+      (response.status === 403 || response.status === 429) && delay !== null;
+    if (rateLimited && attempt < MAX_RATE_LIMIT_RETRIES) {
+      await response.body?.cancel();
+      await waitForRetry(delay, init?.signal);
+      continue;
+    }
+    if (rateLimited) {
+      await response.body?.cancel();
+      throw new Error(
+        `${operation} failed because GitHub's rate limit remained active after ${attempt + 1} attempts.`,
+      );
+    }
+    return response;
+  }
+}
+
+function jsonBody(value: unknown): () => BodyInit {
+  return () => JSON.stringify(value);
+}
+
+function base64BlobBody(path: string): BodyInit {
+  const encoder = new TextEncoder();
+  const chunks = (async function* () {
+    yield encoder.encode('{"content":"');
+    for await (const chunk of encodeBase64Stream(path))
+      yield encoder.encode(chunk);
+    yield encoder.encode('\",\"encoding\":\"base64\"}');
+  })();
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const next = await chunks.next();
+      if (next.done) controller.close();
+      else controller.enqueue(next.value);
+    },
+    async cancel() {
+      await chunks.return(undefined);
+    },
+  });
+}
+
+async function responseJson<T>(
+  response: Response,
+  operation: string,
+  token: string,
+): Promise<T> {
+  if (!response.ok) {
+    const detail = safeMessage(await readError(response), token);
+    throw new Error(
+      `${operation} failed (${response.status}).${detail ? ` ${detail}` : ""}`,
+    );
+  }
+  try {
+    return (await response.json()) as T;
+  } catch (cause) {
+    throw new Error(
+      `${operation} returned an invalid response: ${safeMessage(cause, token)}`,
+    );
+  }
+}
+
+async function readExistingBlobs(
+  options: PushReleaseOptions,
+  branch: string,
+): Promise<Set<string>> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const root = `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git`;
+  const ref = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/ref/heads/${encodePathSegments(branch)}`,
+    operation: "Reading the publication branch",
+    init: { signal: options.signal },
+  });
+  if (ref.status === 404) {
+    await ref.body?.cancel();
+    return new Set();
+  }
+  const refBody = await responseJson<{ object?: { sha?: unknown } }>(
+    ref,
+    "Reading the publication branch",
+    options.token,
+  );
+  if (typeof refBody.object?.sha !== "string")
+    throw new Error("Reading the publication branch returned no commit SHA.");
+
+  const commit = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/commits/${encodeURIComponent(refBody.object.sha)}`,
+    operation: "Reading the previous publication commit",
+    init: { signal: options.signal },
+  });
+  const commitBody = await responseJson<{ tree?: { sha?: unknown } }>(
+    commit,
+    "Reading the previous publication commit",
+    options.token,
+  );
+  if (typeof commitBody.tree?.sha !== "string")
+    throw new Error(
+      "Reading the previous publication commit returned no tree SHA.",
+    );
+
+  const tree = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/trees/${encodeURIComponent(commitBody.tree.sha)}?recursive=1`,
+    operation: "Reading the previous publication tree",
+    init: { signal: options.signal },
+  });
+  const treeBody = await responseJson<{
+    truncated?: unknown;
+    tree?: Array<{ type?: unknown; sha?: unknown }>;
+  }>(tree, "Reading the previous publication tree", options.token);
+  if (treeBody.truncated === true) return new Set();
+  return new Set(
+    (treeBody.tree ?? [])
+      .filter(
+        (entry): entry is { type: "blob"; sha: string } =>
+          entry.type === "blob" && typeof entry.sha === "string",
+      )
+      .map(({ sha }) => sha),
+  );
+}
+
+async function uploadMissingBlobs(
+  options: PushReleaseOptions,
+  files: HashedReleaseFile[],
+  existing: Set<string>,
+): Promise<void> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const endpoint = `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/blobs`;
+  const missing = files.filter(({ sha }) => !existing.has(sha));
+  const skipped = files.length - missing.length;
+  let uploaded = 0;
+  let next = 0;
+  let failed = false;
+  let failure: unknown;
+  const uploads = new AbortController();
+  const signal = options.signal
+    ? AbortSignal.any([uploads.signal, options.signal])
+    : uploads.signal;
+  options.onProgress?.({ uploaded, skipped });
+
+  async function worker(): Promise<void> {
+    while (!signal.aborted) {
+      const index = next++;
+      const file = missing[index];
+      if (!file) return;
+      if (signal.aborted) return;
+      try {
+        const response = await githubObjectRequest({
+          fetchImpl,
+          token: options.token,
+          url: endpoint,
+          operation: `Uploading ${file.path}`,
+          init: { method: "POST", signal },
+          body: () => base64BlobBody(file.absolute),
+        });
+        if (signal.aborted) return;
+        const result = await responseJson<{ sha?: unknown }>(
+          response,
+          `Uploading ${file.path}`,
+          options.token,
+        );
+        if (signal.aborted) return;
+        if (result.sha !== file.sha)
+          throw new Error(
+            `Uploading ${file.path} returned a blob SHA that did not match the local file.`,
+          );
+        uploaded += 1;
+        options.onProgress?.({ uploaded, skipped });
+      } catch (cause) {
+        if (!failed) {
+          failed = true;
+          failure = cause;
+          uploads.abort(cause);
+        }
+        return;
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(4, missing.length) }, () => worker()),
+  );
+  if (failed) throw failure;
+  if (options.signal?.aborted)
+    throw options.signal.reason instanceof Error
+      ? options.signal.reason
+      : new Error("Publishing was canceled.");
+}
+
+async function createTree(
+  options: PushReleaseOptions,
+  files: HashedReleaseFile[],
+): Promise<string> {
+  const response = await githubObjectRequest({
+    fetchImpl: options.fetchImpl ?? fetch,
+    token: options.token,
+    url: `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/trees`,
+    operation: "Creating the publication tree",
+    init: { method: "POST", signal: options.signal },
+    body: jsonBody({
+      tree: [
+        ...files.map(({ path, sha }) => ({
+          path,
+          mode: "100644",
+          type: "blob",
+          sha,
+        })),
+        { path: ".nojekyll", mode: "100644", type: "blob", content: "" },
+      ],
+    }),
+  });
+  const result = await responseJson<{ sha?: unknown }>(
+    response,
+    "Creating the publication tree",
+    options.token,
+  );
+  if (typeof result.sha !== "string")
+    throw new Error("Creating the publication tree returned no SHA.");
+  return result.sha;
+}
+
+async function createCommit(
+  options: PushReleaseOptions,
+  tree: string,
+): Promise<string> {
+  const response = await githubObjectRequest({
+    fetchImpl: options.fetchImpl ?? fetch,
+    token: options.token,
+    url: `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/commits`,
+    operation: "Creating the publication commit",
+    init: { method: "POST", signal: options.signal },
+    body: jsonBody({
+      message: options.message ?? "Publish Earth Story",
+      tree,
+      author: { name: COMMIT_AUTHOR_NAME, email: COMMIT_AUTHOR_EMAIL },
+    }),
+  });
+  const result = await responseJson<{ sha?: unknown }>(
+    response,
+    "Creating the publication commit",
+    options.token,
+  );
+  if (typeof result.sha !== "string")
+    throw new Error("Creating the publication commit returned no SHA.");
+  return result.sha;
+}
+
+async function forceUpdateRef(
+  options: PushReleaseOptions,
+  branch: string,
+  commit: string,
+): Promise<void> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const root = `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git`;
+  const updated = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/refs/heads/${encodePathSegments(branch)}`,
+    operation: "Updating the publication branch",
+    init: { method: "PATCH", signal: options.signal },
+    body: jsonBody({ sha: commit, force: true }),
+  });
+  if (updated.ok) {
+    await updated.body?.cancel();
+    return;
+  }
+  if (updated.status === 404 || updated.status === 422)
+    await updated.body?.cancel();
+  else
+    await responseJson(
+      updated,
+      "Updating the publication branch",
+      options.token,
+    );
+
+  const created = await githubObjectRequest({
+    fetchImpl,
+    token: options.token,
+    url: `${root}/refs`,
+    operation: "Creating the publication branch",
+    init: { method: "POST", signal: options.signal },
+    body: jsonBody({ ref: `refs/heads/${branch}`, sha: commit }),
+  });
+  if (created.ok) await created.body?.cancel();
+  else
+    await responseJson(
+      created,
+      "Creating the publication branch",
+      options.token,
+    );
 }
 
 /**
- * Force-pushes the built release as a single orphan commit. The release is
- * copied into a temporary directory first, so no git metadata is ever written
- * into the project folder and nothing outside `publication/` can be uploaded.
+ * Uploads the built release as Git objects and force-replaces the Pages branch
+ * with one orphan commit. File contents are streamed and unchanged blobs from
+ * the previous publication are reused.
  */
 export async function pushRelease(
   options: PushReleaseOptions,
 ): Promise<{ branch: string }> {
-  const run = options.run ?? runCommand;
-  const branch = options.branch ?? DEFAULT_PAGES_BRANCH;
-  const remote = `https://x-access-token:${options.token}@github.com/${options.owner}/${options.repo}.git`;
-  const secrets = [options.token, remote];
-  const workspace = await mkdtemp(join(tmpdir(), "earth-stories-publish-"));
-
   try {
-    await cp(options.directory, workspace, { recursive: true });
-    await rm(join(workspace, ".git"), { recursive: true, force: true });
-    await writeFile(join(workspace, ".nojekyll"), "");
-    const git = (args: string[]) =>
-      run({ executable: "git", args, cwd: workspace, secrets });
-
-    await git(["init", "-b", branch]);
-    await git(["add", "-A"]);
-    await git([
-      "-c",
-      `user.name=${COMMIT_AUTHOR_NAME}`,
-      "-c",
-      `user.email=${COMMIT_AUTHOR_EMAIL}`,
-      "commit",
-      "-m",
-      options.message ?? "Publish Earth Story",
-    ]);
-    await git(["push", "--force", remote, `${branch}:${branch}`]);
+    const branch = options.branch ?? DEFAULT_PAGES_BRANCH;
+    const files: HashedReleaseFile[] = [];
+    for (const file of (await collectReleaseFiles(options.directory)).filter(
+      ({ path }) => path !== ".nojekyll",
+    ))
+      files.push({ ...file, sha: await blobSha(file.absolute) });
+    const existing = await readExistingBlobs(options, branch);
+    await uploadMissingBlobs(options, files, existing);
+    const tree = await createTree(options, files);
+    const commit = await createCommit(options, tree);
+    await forceUpdateRef(options, branch, commit);
     return { branch };
-  } finally {
-    await rm(workspace, { recursive: true, force: true });
+  } catch (cause) {
+    throw new Error(safeMessage(cause, options.token));
   }
 }
 
@@ -190,11 +677,15 @@ export async function enablePages(options: EnablePagesOptions): Promise<void> {
     headers: apiHeaders(options.token),
     body: JSON.stringify({ source }),
   });
-  if (created.ok || created.status === 201) return;
+  if (created.ok || created.status === 201) {
+    await created.body?.cancel();
+    return;
+  }
   if (created.status !== 409 && created.status !== 422)
     throw new Error(
       `GitHub Pages could not be enabled (${created.status}). ${await readError(created)}`.trim(),
     );
+  await created.body?.cancel();
 
   const updated = await fetchImpl(endpoint, {
     method: "PUT",
@@ -205,13 +696,15 @@ export async function enablePages(options: EnablePagesOptions): Promise<void> {
     throw new Error(
       `GitHub Pages could not be updated (${updated.status}). ${await readError(updated)}`.trim(),
     );
+  await updated.body?.cancel();
 }
 
 export interface WaitForPagesOptions {
   fetchImpl?: typeof fetch;
   deadlineMs?: number;
   intervalMs?: number;
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  signal?: AbortSignal;
   now?: () => number;
   onAttempt?: (attempt: number) => void;
 }
@@ -235,28 +728,33 @@ export async function waitForPages(
   const started = now();
 
   for (let attempt = 1; ; attempt += 1) {
+    if (options.signal?.aborted)
+      throw options.signal.reason instanceof Error
+        ? options.signal.reason
+        : new Error("Publishing was canceled.");
     const remaining = deadlineMs - (now() - started);
     if (remaining <= 0) return false;
     options.onAttempt?.(attempt);
 
-    const controller = new AbortController();
-    const abortTimer = setTimeout(() => controller.abort(), remaining);
-    abortTimer.unref?.();
+    const timeout = AbortSignal.timeout(remaining);
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, timeout])
+      : timeout;
     let served = false;
     try {
       const response = await fetchImpl(url, {
         redirect: "follow",
-        signal: controller.signal,
+        signal,
       });
       await response.body?.cancel();
       served = response.ok;
-    } catch {
+    } catch (cause) {
+      if (options.signal?.aborted) throw cause;
       served = false;
-    } finally {
-      clearTimeout(abortTimer);
     }
     if (served) return true;
     if (now() - started >= deadlineMs) return false;
-    await sleep(intervalMs);
+    if (options.sleep) await sleep(intervalMs, options.signal);
+    else await waitForRetry(intervalMs, options.signal);
   }
 }

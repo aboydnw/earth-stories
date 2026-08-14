@@ -32,10 +32,10 @@ import {
 import { reorderChapters } from "./chapterOrder";
 import {
   createProject,
+  actOnConversionJob,
   createExampleStory,
   discoverSource,
   getExamples,
-  getConversionJob,
   importAsset,
   listProjects,
   openProject,
@@ -65,8 +65,16 @@ import type { GuidanceDestination } from "./editorReadiness";
 import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
 import { usePublicationReadiness } from "./usePublicationReadiness";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
-import { resolvePreviewManifest } from "./resolvePreviewManifest";
+import { detectDesktopBridge } from "./desktop";
+import { DesktopToolsPanel } from "./DesktopToolsPanel";
+import { DesktopDiagnosticsPanel } from "./DesktopDiagnosticsPanel";
+import { ProvisioningDialog } from "./ProvisioningDialog";
+import {
+  previewReadinessError,
+  resolvePreviewManifest,
+} from "./resolvePreviewManifest";
 import { captureKeyframe } from "./flyoverPath";
+import { pollConversionJob } from "./conversionPolling";
 
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
@@ -97,7 +105,23 @@ const presentation = {
   filterProperty: null,
   filterValue: null,
 };
+
+function latestConversionTerminal(job: ConversionJobSnapshot) {
+  return [...job.events]
+    .reverse()
+    .find((event) => event.type === "result" || event.type === "failure");
+}
 export function App() {
+  const [desktop] = useState(detectDesktopBridge);
+  const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(
+    () =>
+      desktop !== null &&
+      (sessionStorage.getItem("earth-stories:workspace-settings") === "open" ||
+        new URLSearchParams(window.location.search).get("workspace") ===
+          "settings"),
+  );
+  const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+  const [workspaceBusy, setWorkspaceBusy] = useState(false);
   const persistedProjectRef = useRef<StoryProject | null>(null);
   const prePublishViewRef = useRef<{
     canvasMode: CanvasMode;
@@ -146,12 +170,46 @@ export function App() {
   const [conversionJobs, setConversionJobs] = useState<
     Record<string, ConversionJobSnapshot>
   >({});
+  const conversionIntents = useRef<
+    Record<
+      string,
+      {
+        operation: "inspect" | "prepare";
+        capability: ConversionCapability;
+        targetChapterId?: string;
+        pendingChapterType: PendingChapterType | null;
+      }
+    >
+  >({});
   const [multidimChoices, setMultidimChoices] = useState<
     Record<string, MultidimChoice>
   >({});
   const [previewReceiptVersion, setPreviewReceiptVersion] = useState(0);
   const chapterAddRef = useRef<HTMLDivElement>(null);
   const publicationReadiness = usePublicationReadiness(project);
+  const pendingProvisioning = Object.entries(conversionJobs).find(
+    ([, job]) =>
+      job.status === "awaiting-approval" &&
+      job.events.some((event) => event.type === "provisioning-disclosure"),
+  );
+
+  useEffect(() => {
+    if (!desktop || !workspaceSettingsOpen || workspacePath !== null) return;
+    let current = true;
+    void desktop
+      .workspacePath()
+      .then((path) => {
+        if (current) setWorkspacePath(path);
+      })
+      .catch((cause) => {
+        if (!current) return;
+        setWorkspacePath("Unavailable");
+        showError(cause);
+      });
+    return () => {
+      current = false;
+    };
+  }, [desktop, workspacePath, workspaceSettingsOpen]);
 
   function navigate(next: AppRoute, replace = false) {
     window.history[replace ? "replaceState" : "pushState"](
@@ -288,9 +346,7 @@ export function App() {
     if (!project || !localReadiness?.manifest)
       return {
         manifest: null,
-        error:
-          localReadiness?.findings.find(({ id }) => id === "compile")
-            ?.message ?? null,
+        error: previewReadinessError(localReadiness?.findings ?? []),
       };
     return {
       error: null,
@@ -357,6 +413,49 @@ export function App() {
       activate(await openProject(id));
       navigate({ page: "story", storyId: id, preview: false });
     } catch (cause) {
+      showError(cause);
+    }
+  }
+  async function handleShowProjectFolder(id: string) {
+    if (!desktop) return;
+    try {
+      await desktop.showProjectFolder(id);
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  async function openWorkspaceSettings() {
+    if (!desktop) return;
+    sessionStorage.setItem("earth-stories:workspace-settings", "open");
+    setWorkspaceSettingsOpen(true);
+    try {
+      setWorkspacePath(await desktop.workspacePath());
+    } catch (cause) {
+      showError(cause);
+    }
+  }
+  function closeWorkspaceSettings() {
+    sessionStorage.removeItem("earth-stories:workspace-settings");
+    if (new URLSearchParams(window.location.search).has("workspace"))
+      window.history.replaceState(null, "", window.location.pathname);
+    setWorkspaceSettingsOpen(false);
+  }
+  async function chooseWorkspace() {
+    if (!desktop) return;
+    setWorkspaceBusy(true);
+    try {
+      if (
+        project &&
+        (saveState === "changed" || saveState === "save-error") &&
+        !(await persist())
+      ) {
+        setWorkspaceBusy(false);
+        return;
+      }
+      const selected = await desktop.chooseWorkspace();
+      if (!selected) setWorkspaceBusy(false);
+    } catch (cause) {
+      setWorkspaceBusy(false);
       showError(cause);
     }
   }
@@ -885,6 +984,152 @@ export function App() {
       showError(cause);
     }
   }
+  function applyPreparedConversion(
+    asset: ProjectDataAsset,
+    job: ConversionJobSnapshot,
+    intent: (typeof conversionIntents.current)[string],
+  ) {
+    if (intent.operation !== "prepare") return;
+    const result = latestConversionTerminal(job);
+    if (result?.type !== "result" || typeof result.output.path !== "string")
+      throw new Error("The prepared data path was not returned");
+    const sourceId = `prepared-${job.id}`;
+    const common = {
+      id: sourceId,
+      label: asset.label.replace(/\.[^.]+$/, ""),
+      locator: result.output.path,
+      attribution: null,
+      sizeBytes:
+        typeof result.output.sizeBytes === "number"
+          ? result.output.sizeBytes
+          : null,
+      delivery: "included" as const,
+      provenance: createDefaultSourceProvenance(),
+    };
+    const source: ProjectSource =
+      intent.capability === "raster" || intent.capability === "multidim"
+        ? { ...common, kind: "cog" }
+        : intent.capability === "pointcloud"
+          ? { ...common, kind: "copc", colorMode: "elevation", pointSize: 2 }
+          : asset.format === "gpx"
+            ? { ...common, kind: "trajectory", trailLength: 600 }
+            : { ...common, kind: "geoparquet" };
+    const intendedChapter: ProjectChapter | null =
+      !intent.targetChapterId &&
+      (intent.pendingChapterType === "map" ||
+        intent.pendingChapterType === "scrolly")
+        ? {
+            id: `${sourceId}-chapter`,
+            type: intent.pendingChapterType,
+            title: source.label,
+            narrative: "",
+            sourceId,
+            overlaySourceIds: [],
+            camera,
+            ...(intent.pendingChapterType === "scrolly"
+              ? {
+                  transition: "fly-to" as const,
+                  overlayPosition: "left" as const,
+                }
+              : {}),
+          }
+        : null;
+    changeProject((current) => ({
+      ...current,
+      dataAssets: current.dataAssets.map((item) =>
+        item.id === asset.id ? { ...item, preparedSourceId: sourceId } : item,
+      ),
+      sources: current.sources.some(({ id }) => id === sourceId)
+        ? current.sources
+        : [...current.sources, source],
+      chapters: intent.targetChapterId
+        ? current.chapters.map((chapter) =>
+            chapter.id === intent.targetChapterId &&
+            (chapter.type === "map" || chapter.type === "scrolly")
+              ? { ...chapter, sourceId }
+              : chapter,
+          )
+        : intendedChapter &&
+            !current.chapters.some(({ id }) => id === intendedChapter.id)
+          ? [...current.chapters, intendedChapter]
+          : current.chapters,
+    }));
+    if (intendedChapter) {
+      setActiveChapter(intendedChapter.id);
+      setInspectorMode("chapter");
+      setPendingChapterType(null);
+      requestInitialFit(intendedChapter.id, sourceId);
+    }
+  }
+
+  async function continueDataAssetJob(
+    asset: ProjectDataAsset,
+    initial: ConversionJobSnapshot,
+  ) {
+    let result: Awaited<ReturnType<typeof pollConversionJob>>;
+    try {
+      result = await pollConversionJob(initial, {
+        onUpdate: (job) =>
+          setConversionJobs((current) => ({
+            ...current,
+            [asset.id]: job,
+          })),
+      });
+    } catch (cause) {
+      setConversionJobs((current) => {
+        const next = { ...current };
+        delete next[asset.id];
+        return next;
+      });
+      throw cause;
+    }
+    if (result.kind === "workspace-changed") {
+      setConversionJobs((current) => {
+        const next = { ...current };
+        delete next[asset.id];
+        return next;
+      });
+      setError(result.message);
+      return;
+    }
+    setConversionJobs((current) => ({
+      ...current,
+      [asset.id]: result.job,
+    }));
+    if (result.kind === "approval-pending") return;
+
+    const terminal = latestConversionTerminal(result.job);
+    if (terminal?.type === "failure") throw new Error(terminal.message);
+    const intent = conversionIntents.current[asset.id];
+    if (!intent) return;
+    if (intent.operation !== "prepare") {
+      if (intent.capability === "multidim") {
+        const variables =
+          terminal?.type === "result" &&
+          Array.isArray(terminal.output.variables)
+            ? terminal.output.variables
+            : [];
+        const firstVariable = variables.find(
+          (variable) =>
+            variable &&
+            typeof variable === "object" &&
+            typeof (variable as { name?: unknown }).name === "string" &&
+            Array.isArray((variable as { dimensions?: unknown }).dimensions),
+        ) as { name: string } | undefined;
+        if (firstVariable)
+          setMultidimChoices((current) => ({
+            ...current,
+            [asset.id]: current[asset.id] ?? {
+              variable: firstVariable.name,
+              selection: {},
+            },
+          }));
+      }
+      return;
+    }
+    applyPreparedConversion(asset, result.job, intent);
+  }
+
   async function runDataAssetJob(
     asset: ProjectDataAsset,
     operation: "inspect" | "prepare",
@@ -950,132 +1195,14 @@ export function App() {
                 }
               : undefined,
       });
-      setConversionJobs((current) => ({ ...current, [asset.id]: started }));
-      let job = started;
-      const deadline = Date.now() + 30 * 60 * 1_000;
-      try {
-        while (job.status === "queued" || job.status === "running") {
-          if (Date.now() >= deadline)
-            throw new Error(
-              "The conversion is still running. Try preparing this source again later.",
-            );
-          await new Promise((resolveWait) => setTimeout(resolveWait, 750));
-          job = await getConversionJob(job.id);
-          setConversionJobs((current) => ({ ...current, [asset.id]: job }));
-        }
-      } catch (cause) {
-        setConversionJobs((current) => {
-          const next = { ...current };
-          delete next[asset.id];
-          return next;
-        });
-        throw cause;
-      }
-      const failure = [...job.events]
-        .reverse()
-        .find((event) => event.type === "failure");
-      if (failure?.type === "failure") throw new Error(failure.message);
-      if (operation !== "prepare") {
-        if (capability === "multidim") {
-          const result = [...job.events]
-            .reverse()
-            .find((event) => event.type === "result");
-          const variables =
-            result?.type === "result" && Array.isArray(result.output.variables)
-              ? result.output.variables
-              : [];
-          const firstVariable = variables.find(
-            (variable) =>
-              variable &&
-              typeof variable === "object" &&
-              typeof (variable as { name?: unknown }).name === "string" &&
-              Array.isArray((variable as { dimensions?: unknown }).dimensions),
-          ) as { name: string } | undefined;
-          if (firstVariable)
-            setMultidimChoices((current) => ({
-              ...current,
-              [asset.id]: current[asset.id] ?? {
-                variable: firstVariable.name,
-                selection: {},
-              },
-            }));
-        }
-        return;
-      }
-      const result = [...job.events]
-        .reverse()
-        .find((event) => event.type === "result");
-      if (result?.type !== "result" || typeof result.output.path !== "string")
-        throw new Error("The prepared data path was not returned");
-      const path = result.output.path;
-      const sourceId = crypto.randomUUID();
-      const common = {
-        id: sourceId,
-        label: asset.label.replace(/\.[^.]+$/, ""),
-        locator: path,
-        attribution: null,
-        sizeBytes:
-          typeof result.output.sizeBytes === "number"
-            ? result.output.sizeBytes
-            : null,
-        delivery: "included" as const,
-        provenance: createDefaultSourceProvenance(),
+      conversionIntents.current[asset.id] = {
+        operation,
+        capability,
+        targetChapterId,
+        pendingChapterType,
       };
-      const source: ProjectSource =
-        capability === "raster" || capability === "multidim"
-          ? { ...common, kind: "cog" }
-          : capability === "pointcloud"
-            ? {
-                ...common,
-                kind: "copc",
-                colorMode: "elevation",
-                pointSize: 2,
-              }
-            : asset.format === "gpx"
-              ? { ...common, kind: "trajectory", trailLength: 600 }
-              : { ...common, kind: "geoparquet" };
-      const intendedChapter: ProjectChapter | null =
-        !targetChapterId &&
-        (pendingChapterType === "map" || pendingChapterType === "scrolly")
-          ? {
-              id: crypto.randomUUID(),
-              type: pendingChapterType,
-              title: source.label,
-              narrative: "",
-              sourceId,
-              overlaySourceIds: [],
-              camera,
-              ...(pendingChapterType === "scrolly"
-                ? {
-                    transition: "fly-to" as const,
-                    overlayPosition: "left" as const,
-                  }
-                : {}),
-            }
-          : null;
-      changeProject((current) => ({
-        ...current,
-        dataAssets: current.dataAssets.map((item) =>
-          item.id === asset.id ? { ...item, preparedSourceId: sourceId } : item,
-        ),
-        sources: [...current.sources, source],
-        chapters: targetChapterId
-          ? current.chapters.map((chapter) =>
-              chapter.id === targetChapterId &&
-              (chapter.type === "map" || chapter.type === "scrolly")
-                ? { ...chapter, sourceId }
-                : chapter,
-            )
-          : intendedChapter
-            ? [...current.chapters, intendedChapter]
-            : current.chapters,
-      }));
-      if (intendedChapter) {
-        setActiveChapter(intendedChapter.id);
-        setInspectorMode("chapter");
-        setPendingChapterType(null);
-        requestInitialFit(intendedChapter.id, sourceId);
-      }
+      setConversionJobs((current) => ({ ...current, [asset.id]: started }));
+      await continueDataAssetJob(asset, started);
     } catch (cause) {
       showError(cause);
     }
@@ -1403,6 +1530,9 @@ export function App() {
         onCreate={handleCreate}
         onOpen={(id) => void handleOpen(id)}
         onRename={(item) => void handleRename(item)}
+        onShowProjectFolder={
+          desktop ? (id) => void handleShowProjectFolder(id) : undefined
+        }
         onRequestDelete={handleDelete}
         onConfirmDelete={() => void confirmDelete()}
         onDismissDelete={() => setDeleteTarget(null)}
@@ -1419,6 +1549,28 @@ export function App() {
               : { page: "stories" },
           );
         }}
+        applicationVersion={desktop?.version ?? null}
+        workspacePath={workspacePath}
+        workspaceSettingsOpen={workspaceSettingsOpen}
+        workspaceBusy={workspaceBusy}
+        onOpenWorkspaceSettings={
+          desktop ? () => void openWorkspaceSettings() : undefined
+        }
+        onCloseWorkspaceSettings={closeWorkspaceSettings}
+        onChooseWorkspace={() => void chooseWorkspace()}
+        onShowWorkspaceFolder={
+          desktop
+            ? () => void desktop.showWorkspaceFolder().catch(showError)
+            : undefined
+        }
+        toolsPanel={
+          desktop ? (
+            <>
+              <DesktopToolsPanel desktop={desktop} />
+              <DesktopDiagnosticsPanel desktop={desktop} />
+            </>
+          ) : undefined
+        }
       />
     );
 
@@ -1853,7 +2005,8 @@ export function App() {
                                 type="button"
                                 disabled={
                                   job?.status === "queued" ||
-                                  job?.status === "running"
+                                  job?.status === "running" ||
+                                  job?.status === "awaiting-approval"
                                 }
                                 onClick={() =>
                                   void runDataAssetJob(asset, "inspect")
@@ -1866,13 +2019,36 @@ export function App() {
                                   type="button"
                                   disabled={
                                     job?.status === "queued" ||
-                                    job?.status === "running"
+                                    job?.status === "running" ||
+                                    job?.status === "awaiting-approval"
                                   }
                                   onClick={() =>
                                     void runDataAssetJob(asset, "prepare")
                                   }
                                 >
                                   Prepare
+                                </button>
+                              ) : null}
+                              {job?.status === "failed" ||
+                              job?.status === "cancelled" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void actOnConversionJob(job.id, "retry")
+                                      .then(async (retried) => {
+                                        setConversionJobs((current) => ({
+                                          ...current,
+                                          [asset.id]: retried,
+                                        }));
+                                        await continueDataAssetJob(
+                                          asset,
+                                          retried,
+                                        );
+                                      })
+                                      .catch(showError);
+                                  }}
+                                >
+                                  Retry tool installation
                                 </button>
                               ) : null}
                             </div>
@@ -2390,6 +2566,43 @@ export function App() {
           }
         }}
       />
+      {pendingProvisioning
+        ? (() => {
+            const [assetId, job] = pendingProvisioning;
+            const disclosure = job.events.find(
+              (event) => event.type === "provisioning-disclosure",
+            );
+            return disclosure?.type === "provisioning-disclosure" ? (
+              <ProvisioningDialog
+                disclosure={disclosure}
+                onAcknowledge={() => {
+                  void actOnConversionJob(job.id, "acknowledge")
+                    .then(async (next) => {
+                      setConversionJobs((current) => ({
+                        ...current,
+                        [assetId]: next,
+                      }));
+                      const asset = project?.dataAssets.find(
+                        ({ id }) => id === assetId,
+                      );
+                      if (asset) await continueDataAssetJob(asset, next);
+                    })
+                    .catch(showError);
+                }}
+                onCancel={() => {
+                  void actOnConversionJob(job.id, "cancel")
+                    .then((next) =>
+                      setConversionJobs((current) => ({
+                        ...current,
+                        [assetId]: next,
+                      })),
+                    )
+                    .catch(showError);
+                }}
+              />
+            ) : null;
+          })()
+        : null}
     </div>
   );
 }

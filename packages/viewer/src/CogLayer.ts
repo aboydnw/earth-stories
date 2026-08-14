@@ -4,6 +4,7 @@ import { CreateTexture } from "@developmentseed/deck.gl-raster/gpu-modules";
 import type { Texture } from "@luma.gl/core";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import type { GeoTIFF } from "@developmentseed/geotiff";
+import { resolveCogLayerProjection } from "./cogProjection.js";
 
 const ramps = {
   viridis: [
@@ -88,13 +89,26 @@ export function buildCogLayers(
   source: GeoTIFF | string,
   onError: (message: string) => void,
   rescale: [number, number] | null = asset.presentation.rescale,
+  onGeoTiffLoad?: () => void,
+  projectionDefinitions: Array<{ epsg: number; definition: string }> = [],
+  offline = false,
 ): Layer[] {
   const { presentation } = asset;
+  const resolveAssetEpsg = (epsg: number) =>
+    resolveCogLayerProjection(
+      epsg,
+      asset.cog,
+      undefined,
+      projectionDefinitions,
+      offline,
+    );
   if (!rescale)
     return [
       new COGLayer({
         id: `${asset.id}-cog`,
         geotiff: source,
+        epsgResolver: resolveAssetEpsg,
+        onGeoTIFFLoad: onGeoTiffLoad,
         opacity: presentation.opacity,
         maxError: 0.03,
       }),
@@ -173,6 +187,8 @@ export function buildCogLayers(
     new COGLayer({
       id: `${asset.id}-cog`,
       geotiff: source,
+      epsgResolver: resolveAssetEpsg,
+      onGeoTIFFLoad: onGeoTiffLoad,
       opacity: presentation.opacity,
       getTileData,
       renderTile,

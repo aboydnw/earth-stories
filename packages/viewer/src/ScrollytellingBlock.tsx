@@ -5,6 +5,7 @@ import type {
   PublicationChapter,
 } from "@earth-stories/story-schema";
 import { MapChapter } from "./MapChapter.js";
+import type { PublicationRuntimePolicy } from "./publicationRuntime.js";
 
 type ScrollyChapter = Extract<PublicationChapter, { type: "scrolly" }>;
 
@@ -16,12 +17,14 @@ export function ScrollytellingBlock({
   startIndex,
   assets,
   basemapStyle,
+  runtimePolicy,
   snapshotMode = false,
 }: {
   chapters: ScrollyChapter[];
   startIndex: number;
   assets: Map<string, PublicationAsset>;
   basemapStyle: string;
+  runtimePolicy: PublicationRuntimePolicy;
   snapshotMode?: boolean;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -118,6 +121,7 @@ export function ScrollytellingBlock({
                   asset={scene.asset}
                   overlayAssets={scene.overlays}
                   basemapStyle={basemapStyle}
+                  runtimePolicy={runtimePolicy}
                   controlled
                   snapshotMode={snapshotMode}
                   onReady={

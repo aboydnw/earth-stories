@@ -161,6 +161,48 @@ describe("PagesJobs", () => {
     expect(deps.writePublishRecord).not.toHaveBeenCalled();
   });
 
+  it("replaces upload progress instead of growing the event list per file", async () => {
+    const deps = dependencies({
+      pushRelease: vi.fn(async (options) => {
+        options.onProgress?.({ uploaded: 0, skipped: 2 });
+        options.onProgress?.({ uploaded: 1, skipped: 2 });
+        return { branch: "gh-pages" };
+      }),
+    });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    const finished = await settle(jobs, id);
+    const uploadEvents = finished.events.filter(
+      ({ stage }) => stage === "uploading",
+    );
+    expect(uploadEvents.map(({ message }) => message)).toEqual([
+      "Uploading the release…",
+      "Uploaded 1 file; skipped 2 unchanged files.",
+    ]);
+  });
+
+  it("ignores uploader progress callbacks after the upload has failed", async () => {
+    let reportProgress:
+      ((progress: { uploaded: number; skipped: number }) => void) | undefined;
+    const deps = dependencies({
+      pushRelease: vi.fn(async (options) => {
+        reportProgress = options.onProgress;
+        options.onProgress?.({ uploaded: 1, skipped: 0 });
+        throw new Error("blob upload failed");
+      }),
+    });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    const finished = await settle(jobs, id);
+    const eventCount = finished.events.length;
+
+    reportProgress?.({ uploaded: 2, skipped: 0 });
+
+    expect(finished.status).toBe("failed");
+    expect(finished.events).toHaveLength(eventCount);
+    expect(finished.events.at(-1)?.message).toBe("blob upload failed");
+  });
+
   it("keeps the existing repository and URL when republishing", async () => {
     const deps = dependencies({
       readPublishRecord: vi.fn(async () => ({
@@ -215,11 +257,97 @@ describe("PagesJobs", () => {
   });
 
   it("never puts the token in a job event", async () => {
-    const deps = dependencies();
+    const deps = dependencies({
+      pushRelease: vi.fn(async () => {
+        throw new Error("upload failed with ghp_secret");
+      }),
+    });
     const jobs = new PagesJobs(store, deps);
     const { id } = await jobs.create("story-1");
     const finished = await settle(jobs, id);
+    expect(finished.error).not.toContain("ghp_secret");
     for (const event of finished.events)
       expect(event.message).not.toContain("ghp_secret");
+  });
+
+  it("reports active work, refuses new jobs, and requests cancellation", async () => {
+    let finishSignIn!: () => void;
+    let cancellationRequested = false;
+    const deps = dependencies({
+      resolveToken: vi.fn(async (options) => {
+        await new Promise<void>((resolve) => {
+          finishSignIn = resolve;
+          options?.signal?.addEventListener(
+            "abort",
+            () => {
+              cancellationRequested = true;
+            },
+            { once: true },
+          );
+        });
+        return { token: "t", login: "mapper", source: "device" as const };
+      }),
+    });
+    const jobs = new PagesJobs(store, deps);
+
+    await jobs.create("story-1");
+    await new Promise((resolveWait) => setTimeout(resolveWait, 0));
+    expect(jobs.activity()).toBe(1);
+
+    jobs.refuseNewJobs();
+    jobs.cancelRunning();
+    expect(cancellationRequested).toBe(true);
+    await expect(jobs.create("story-1")).rejects.toThrow(/shutting down/i);
+
+    finishSignIn();
+    await jobs.whenIdle();
+    expect(jobs.activity()).toBe(0);
+  });
+
+  it("passes cancellation to Pages polling and stops before repository preparation", async () => {
+    let finishInspection!: () => void;
+    const inspectRelease = vi.fn(
+      () =>
+        new Promise<{
+          totalBytes: number;
+          largestFile: { path: string; bytes: number };
+        }>((resolve) => {
+          finishInspection = () =>
+            resolve({
+              totalBytes: 20_000_000,
+              largestFile: { path: "index.html", bytes: 1_000 },
+            });
+        }),
+    );
+    const waitForPages = vi.fn(async () => true);
+    const deps = dependencies({ inspectRelease, waitForPages });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    while (!inspectRelease.mock.calls.length)
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+    jobs.cancelRunning();
+    finishInspection();
+    await jobs.whenIdle();
+
+    expect(jobs.get(id)?.status).toBe("failed");
+    expect(deps.ensureRepository).not.toHaveBeenCalled();
+    expect(waitForPages).not.toHaveBeenCalled();
+  });
+
+  it("passes the job signal through upload and Pages polling", async () => {
+    const waitForPages = vi.fn(async () => true);
+    const deps = dependencies({ waitForPages });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    await settle(jobs, id);
+
+    expect(deps.pushRelease).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(waitForPages).toHaveBeenCalledWith(
+      "https://mapper.github.io/field-notes-a-coastline/",
+      { signal: expect.any(AbortSignal) },
+    );
   });
 });

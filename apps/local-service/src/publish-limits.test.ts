@@ -44,6 +44,8 @@ describe("inspectRelease", () => {
     await writeFile(join(directory, "index.html"), "a".repeat(100));
     await mkdir(join(directory, "assets"), { recursive: true });
     await writeFile(join(directory, "assets", "map.pmtiles"), "b".repeat(500));
+    await mkdir(join(directory, ".git"), { recursive: true });
+    await writeFile(join(directory, ".git", "ignored"), "c".repeat(1_000));
     const inspection = await inspectRelease(directory);
     expect(inspection.totalBytes).toBe(600);
     expect(inspection.largestFile).toEqual({

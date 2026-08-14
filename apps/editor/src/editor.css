@@ -654,6 +654,54 @@ nav {
   color: var(--es-fg-muted);
   font-size: 10px;
 }
+.publication-connectivity {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.publication-connectivity section {
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+  background: var(--es-bg-subtle);
+}
+.publication-connectivity h3 {
+  margin: 0;
+  color: var(--es-fg-muted);
+  font-size: 11px;
+}
+.publication-connectivity strong {
+  font-size: 13px;
+}
+.publication-connectivity span {
+  color: var(--es-fg-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.desktop-tools__list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.desktop-tools__list label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+}
+.desktop-tools__list span,
+.desktop-tools__list small {
+  display: block;
+}
+.desktop-tools__list small {
+  color: var(--es-fg-muted);
+}
 .publication-profiles {
   margin: 18px 0 0;
   padding: 12px;

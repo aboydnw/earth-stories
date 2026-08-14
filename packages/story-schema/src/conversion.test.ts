@@ -35,4 +35,31 @@ describe("conversion protocol", () => {
       }),
     ).toThrow();
   });
+
+  it("carries the complete author disclosure before provisioning", () => {
+    expect(
+      conversionJobEventSchema.parse({
+        protocol: "earth-stories/conversion/v1",
+        requestId: "request-1",
+        type: "provisioning-disclosure",
+        capability: "raster",
+        capabilityName: "Raster preparation",
+        versions: ["GDAL >=3.10,<4", "Rasterio >=1.4,<2"],
+        estimatedBytes: 668_962_511,
+        estimateKind: "measured-apparent-installed-footprint",
+        destination: "/profile/tools/0.1.0-lock/.pixi/envs/raster",
+        credits: [
+          { name: "Pixi", license: "BSD-3-Clause" },
+          {
+            name: "conda-forge packages",
+            license: "See pixi.lock and notices",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      type: "provisioning-disclosure",
+      estimatedBytes: 668_962_511,
+      estimateKind: "measured-apparent-installed-footprint",
+    });
+  });
 });

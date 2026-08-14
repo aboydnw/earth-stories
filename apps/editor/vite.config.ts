@@ -20,5 +20,9 @@ export default defineConfig({
       "/api": `http://127.0.0.1:${localServicePort}`,
     },
   },
-  build: { outDir: "../../dist/editor", emptyOutDir: true },
+  build: {
+    outDir: "../../dist/editor",
+    emptyOutDir: true,
+    manifest: true,
+  },
 });

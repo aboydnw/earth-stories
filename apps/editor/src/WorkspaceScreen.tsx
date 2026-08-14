@@ -1,5 +1,11 @@
-import type { FormEvent } from "react";
-import { MapTrifold, PencilSimple, Plus, Trash } from "@phosphor-icons/react";
+import type { FormEvent, ReactNode } from "react";
+import {
+  FolderOpen,
+  MapTrifold,
+  PencilSimple,
+  Plus,
+  Trash,
+} from "@phosphor-icons/react";
 import {
   ActionButton,
   ConfirmDialog,
@@ -24,6 +30,7 @@ export function WorkspaceScreen({
   onCreate,
   onOpen,
   onRename,
+  onShowProjectFolder,
   onRequestDelete,
   onConfirmDelete,
   onDismissDelete,
@@ -32,6 +39,15 @@ export function WorkspaceScreen({
   onViewChange,
   selectedDatasetId,
   onDatasetChange,
+  applicationVersion,
+  workspacePath,
+  workspaceSettingsOpen,
+  workspaceBusy,
+  onOpenWorkspaceSettings,
+  onCloseWorkspaceSettings,
+  onChooseWorkspace,
+  onShowWorkspaceFolder,
+  toolsPanel,
 }: {
   projects: ProjectSummary[];
   examples: ExampleCatalog | null;
@@ -44,6 +60,7 @@ export function WorkspaceScreen({
   onCreate: (event: FormEvent) => void;
   onOpen: (id: string) => void;
   onRename: (project: ProjectSummary) => void;
+  onShowProjectFolder?: (id: string) => void;
   onRequestDelete: (project: ProjectSummary) => void;
   onConfirmDelete: () => void;
   onDismissDelete: () => void;
@@ -52,6 +69,15 @@ export function WorkspaceScreen({
   onViewChange: (view: "stories" | "data") => void;
   selectedDatasetId: string | null;
   onDatasetChange: (id: string | null) => void;
+  applicationVersion: string | null;
+  workspacePath?: string | null;
+  workspaceSettingsOpen?: boolean;
+  workspaceBusy?: boolean;
+  onOpenWorkspaceSettings?: () => void;
+  onCloseWorkspaceSettings?: () => void;
+  onChooseWorkspace?: () => void;
+  onShowWorkspaceFolder?: () => void;
+  toolsPanel?: ReactNode;
 }) {
   return (
     <div className="workspace-screen">
@@ -159,6 +185,16 @@ export function WorkspaceScreen({
                     onOpen={() => onOpen(item.id)}
                     actions={
                       <>
+                        {onShowProjectFolder ? (
+                          <IconButton
+                            size="sm"
+                            variant="ghost"
+                            label={`Show project folder for ${item.title}`}
+                            onClick={() => onShowProjectFolder(item.id)}
+                          >
+                            <FolderOpen size={16} />
+                          </IconButton>
+                        ) : null}
                         <IconButton
                           size="sm"
                           variant="ghost"
@@ -193,7 +229,11 @@ export function WorkspaceScreen({
                       number={String(story.chapterCount).padStart(2, "0")}
                       title={story.title}
                       description={story.description}
-                      meta={story.formats.join(" + ")}
+                      meta={`${story.formats.join(" + ")} · ${
+                        story.authoringConnectivity === "local"
+                          ? "Available offline"
+                          : "Network required"
+                      }`}
                       badge={<mark className="project-list__tag">Example</mark>}
                       onOpen={() => onOpenExample(story.id)}
                     />
@@ -211,8 +251,50 @@ export function WorkspaceScreen({
       )}
       <footer className="workspace-footer">
         <span>Built for portable geospatial storytelling</span>
+        {applicationVersion ? <span>Version {applicationVersion}</span> : null}
+        {onOpenWorkspaceSettings ? (
+          <button type="button" onClick={onOpenWorkspaceSettings}>
+            Workspace settings
+          </button>
+        ) : null}
         <span>No account required</span>
       </footer>
+      {workspaceSettingsOpen ? (
+        <div
+          className="workspace-settings"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Workspace settings"
+        >
+          <h2>Workspace settings</h2>
+          <p>Earth Stories stores projects in this folder.</p>
+          <code>{workspacePath ?? "Loading workspace…"}</code>
+          {toolsPanel}
+          <div>
+            <button
+              type="button"
+              disabled={workspaceBusy}
+              onClick={onShowWorkspaceFolder}
+            >
+              Show folder
+            </button>
+            <button
+              type="button"
+              disabled={workspaceBusy}
+              onClick={onChooseWorkspace}
+            >
+              Choose workspace
+            </button>
+            <button
+              type="button"
+              disabled={workspaceBusy}
+              onClick={onCloseWorkspaceSettings}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title={`Remove ${deleteTarget?.title ?? "this story"}?`}

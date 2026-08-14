@@ -5,25 +5,30 @@ import type {
   PublicationChapter,
 } from "@earth-stories/story-schema";
 import { MapChapter } from "./MapChapter.js";
-import { interpolateFlyover } from "./flyover.js";
+import { flyoverTrackHeight, interpolateFlyover } from "./flyover.js";
 import { useFlyoverScroll } from "./useFlyoverScroll.js";
+import type { PublicationRuntimePolicy } from "./publicationRuntime.js";
 
 interface Props {
   chapter: Extract<PublicationChapter, { type: "flyover" }>;
   asset: PublicationAsset | null;
   overlayAssets: PublicationAsset[];
   basemapStyle: string;
+  runtimePolicy?: PublicationRuntimePolicy;
   snapshotMode?: boolean;
   interactive?: boolean;
   cameraOverride?: Camera | null;
   onCameraChange?: (camera: Camera) => void;
 }
 
+export { flyoverTrackHeight } from "./flyover.js";
+
 export function FlyoverChapter({
   chapter,
   asset,
   overlayAssets,
   basemapStyle,
+  runtimePolicy,
   snapshotMode = false,
   interactive = false,
   cameraOverride,
@@ -62,7 +67,10 @@ export function FlyoverChapter({
       ref={container}
       className="story-flyover"
       style={{
-        height: `${Math.max(120, chapter.scrollLength * 100 * (chapter.keyframes.length - 1) + 100)}vh`,
+        height: flyoverTrackHeight({
+          scrollLength: chapter.scrollLength,
+          keyframeCount: chapter.keyframes.length,
+        }),
       }}
     >
       <div className="story-flyover__sticky">
@@ -71,6 +79,7 @@ export function FlyoverChapter({
           asset={asset}
           overlayAssets={overlayAssets}
           basemapStyle={basemapStyle}
+          runtimePolicy={runtimePolicy}
           interactive={interactive}
           followCamera
           snapshotMode={snapshotMode}

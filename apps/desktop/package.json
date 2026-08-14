@@ -1,0 +1,34 @@
+{
+  "name": "@earth-stories/desktop",
+  "version": "0.1.0",
+  "description": "Earth Stories desktop authoring application",
+  "author": "Earth Stories contributors",
+  "homepage": "https://github.com/aboydnw/earth-stories",
+  "license": "MIT",
+  "desktopName": "Earth Stories",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "dependencies": {
+    "@earth-stories/story-schema": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc --build && node scripts/build-preload.mjs",
+    "dev": "yarn workspace @earth-stories/local-service build && yarn workspace @earth-stories/viewer-app build && yarn workspace @earth-stories/editor build && yarn build && electron dist/main.js --development",
+    "package:prepare": "yarn workspace @earth-stories/local-service build && yarn workspace @earth-stories/viewer-app build && yarn workspace @earth-stories/editor build && yarn run build && node scripts/stage-resources.mjs",
+    "package:dir": "yarn package:prepare && electron-builder --config electron-builder.yml --dir",
+    "package:linux": "yarn package:prepare && electron-builder --config electron-builder.yml --linux --x64",
+    "release:metadata": "node scripts/release-metadata.mjs generate",
+    "release:verify": "node scripts/release-metadata.mjs verify",
+    "smoke:electron": "yarn build && xvfb-run -a electron --no-sandbox smoke/electron-smoke.cjs",
+    "test": "vitest run src",
+    "verify:resources": "node scripts/verify-resources.mjs"
+  },
+  "devDependencies": {
+    "@earth-stories/local-service": "workspace:*",
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "~0.28.0",
+    "typescript": "^5.9.2"
+  }
+}

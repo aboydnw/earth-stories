@@ -6,6 +6,73 @@ import { compileProject } from "./compile.js";
 const fixturePath = join(process.cwd(), "fixtures/field-notes/story.json");
 
 describe("compileProject", () => {
+  it("emits publication v2 and changes build identity with ordered dependency digests", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.schema = "earth-stories/project/v2";
+    fixture.publication.profile = "offline";
+    fixture.publication.offlineBasemap = { mode: "neutral" };
+    const first = compileProject(fixture, {
+      dependencyDigests: { "source:survey-sites:data": "1".repeat(64) },
+    });
+    const changed = compileProject(fixture, {
+      dependencyDigests: { "source:survey-sites:data": "2".repeat(64) },
+    });
+
+    expect(first.schema).toBe("earth-stories/publication/v2");
+    expect(first.basemap).toEqual(
+      expect.objectContaining({
+        delivery: "included",
+        styleHref: "basemap/neutral-style.json",
+      }),
+    );
+    expect(first.dependencies).toContainEqual(
+      expect.objectContaining({
+        id: "basemap:neutral:style",
+        delivery: "included",
+        locator: "basemap/neutral-style.json",
+      }),
+    );
+    expect(first.connectivity).toEqual({
+      requested: "offline",
+      state: "pending",
+    });
+    expect(first.externalDependencies).toEqual([]);
+    expect(first.build.id).not.toBe(changed.build.id);
+  });
+
+  it("fails offline compilation when included source bytes have no resolved digest", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.schema = "earth-stories/project/v2";
+    fixture.publication = {
+      ...fixture.publication,
+      profile: "offline",
+      offlineBasemap: { mode: "neutral" },
+    };
+
+    expect(() => compileProject(fixture)).toThrow(/source:survey-sites:data/);
+  });
+
+  it.each(["connected", "portable"] as const)(
+    "keeps an explicit unresolved dependency in %s compilation",
+    async (profile) => {
+      const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+      fixture.schema = "earth-stories/project/v2";
+      fixture.publication = {
+        ...fixture.publication,
+        profile,
+        offlineBasemap: { mode: "neutral" },
+      };
+
+      expect(compileProject(fixture).dependencies).toContainEqual(
+        expect.objectContaining({
+          id: "source:survey-sites:data",
+          delivery: "unsupported",
+          reason: expect.stringMatching(/SHA-256/),
+        }),
+      );
+    },
+  );
+
   it("is deterministic and includes local assets", async () => {
     const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as unknown;
     const first = compileProject(fixture);
@@ -222,6 +289,64 @@ describe("compileProject", () => {
       compileProject(fixture).assets.find((asset) => asset.id === "rain")
         ?.delivery,
     ).toBe("connected");
+  });
+
+  it("does not report vendored GeoParquet runtime files as network dependencies", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.sources.push({
+      id: "boundaries",
+      kind: "geoparquet",
+      label: "Boundaries",
+      locator: "boundaries.parquet",
+      attribution: null,
+      sizeBytes: 1024,
+      delivery: "included",
+    });
+
+    const dependencies = compileProject(fixture).externalDependencies;
+    expect(dependencies).not.toContainEqual(
+      expect.objectContaining({
+        resourceId: "earth-stories-geoparquet-runtime",
+      }),
+    );
+    expect(dependencies).not.toContainEqual(
+      expect.objectContaining({ resourceId: "duckdb-spatial-extension" }),
+    );
+  });
+
+  it("carries an embedded COG projection into the publication without epsg.io", async () => {
+    const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
+    fixture.sources.push({
+      id: "projected-dem",
+      kind: "cog",
+      label: "Projected DEM",
+      locator: "projected-dem.tif",
+      attribution: null,
+      sizeBytes: 901_326,
+      delivery: "included",
+      cog: {
+        epsg: 32618,
+        definition:
+          "+proj=utm +zone=18 +datum=WGS84 +units=m +no_defs +type=crs",
+      },
+    });
+
+    const result = compileProject(fixture);
+    expect(
+      result.assets.find((asset) => asset.id === "projected-dem")?.cog,
+    ).toEqual(fixture.sources.at(-1).cog);
+    expect(result.externalDependencies).not.toContainEqual(
+      expect.objectContaining({ resourceId: "cog-epsg-resolver" }),
+    );
+
+    fixture.sources.push({
+      ...fixture.sources.at(-1),
+      id: "projection-unknown",
+      cog: null,
+    });
+    expect(compileProject(fixture).externalDependencies).toContainEqual(
+      expect.objectContaining({ resourceId: "cog-epsg-resolver" }),
+    );
   });
 
   it("compiles overlays, temporal Zarr, COPC, video, and flyover chapters", async () => {

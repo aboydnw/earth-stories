@@ -62,4 +62,33 @@ describe("FocusedChapterViewer", () => {
       "This chapter is not available in the current preview.",
     );
   });
+
+  it("keeps an offline focused video from creating network elements", () => {
+    const connected = manifest();
+    const offline = {
+      ...connected,
+      publication: { ...connected.publication, profile: "offline" as const },
+      connectivity: {
+        requested: "offline" as const,
+        state: "pending" as const,
+      },
+      chapters: [
+        {
+          id: "film",
+          type: "video" as const,
+          title: "Field film",
+          narrative: "",
+          provider: "youtube" as const,
+          videoId: "abc",
+          originalUrl: "https://youtube.com/watch?v=abc",
+        },
+      ],
+    };
+
+    render(<FocusedChapterViewer manifest={offline} chapterId="film" />);
+
+    expect(screen.getByText(/Video is unavailable offline/)).toBeTruthy();
+    expect(document.querySelector("iframe")).toBeNull();
+    expect(document.querySelector('a[href^="http"]')).toBeNull();
+  });
 });

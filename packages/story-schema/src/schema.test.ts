@@ -9,8 +9,88 @@ import {
   projectSourceSchema,
   storyProjectSchema,
 } from "./project.js";
+import { publicationAssetSchema } from "./publication.js";
 
 describe("storyProjectSchema", () => {
+  it("migrates v1 projects losslessly to v2 with the neutral offline basemap default", async () => {
+    const legacy = JSON.parse(
+      await readFile(
+        join(process.cwd(), "fixtures/field-notes/story.json"),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+
+    const migrated = parseStoryProject(legacy);
+
+    expect(migrated.schema).toBe("earth-stories/project/v2");
+    expect(migrated.publication).toEqual({
+      ...(legacy.publication as object),
+      offlineBasemap: { mode: "neutral" },
+    });
+    expect(migrated).toMatchObject({
+      id: legacy.id,
+      metadata: legacy.metadata,
+      basemap: legacy.basemap,
+      sources: legacy.sources,
+      dataAssets: legacy.dataAssets ?? [],
+      chapters: legacy.chapters,
+    });
+  });
+
+  it("accepts the offline profile in project v2", async () => {
+    const legacy = JSON.parse(
+      await readFile(
+        join(process.cwd(), "fixtures/field-notes/story.json"),
+        "utf8",
+      ),
+    ) as Record<string, any>;
+    const project = parseStoryProject({
+      ...legacy,
+      schema: "earth-stories/project/v2",
+      publication: {
+        ...legacy.publication,
+        profile: "offline",
+        offlineBasemap: { mode: "neutral" },
+      },
+    });
+
+    expect(project.publication.profile).toBe("offline");
+  });
+
+  it("defaults the optional COG projection on legacy publication assets", () => {
+    const asset = publicationAssetSchema.parse({
+      id: "legacy-cog",
+      label: "Legacy COG",
+      kind: "cog",
+      delivery: "included",
+      href: "assets/legacy-cog.tif",
+      attribution: null,
+      sizeBytes: 901_326,
+      tileType: "raster",
+      presentation: {
+        opacity: 1,
+        color: "#336699",
+        strokeColor: "#ffffff",
+        radius: 4,
+        sourceLayer: null,
+        rasterBand: 1,
+        rescale: null,
+        colormap: "viridis",
+        legendTitle: "",
+        legendVisible: false,
+        symbolProperty: null,
+        categoryColors: {},
+        filterProperty: null,
+        filterValue: null,
+      },
+      zarr: null,
+      trajectory: null,
+      copc: null,
+    });
+
+    expect(asset.cog).toBeNull();
+  });
+
   it("accepts the representative project", async () => {
     const fixture = JSON.parse(
       await readFile(
@@ -150,6 +230,16 @@ describe("storyProjectSchema", () => {
     expect(() =>
       parseStoryProject({ schema: "earth-stories/project/v99" }),
     ).toThrow("Unsupported Earth Stories project schema");
+  });
+
+  it("returns a failed safeParse result for malformed v1 projects", () => {
+    expect(() =>
+      storyProjectSchema.safeParse({ schema: "earth-stories/project/v1" }),
+    ).not.toThrow();
+    expect(
+      storyProjectSchema.safeParse({ schema: "earth-stories/project/v1" })
+        .success,
+    ).toBe(false);
   });
 
   it("defaults legacy flyover keyframe captions independently", () => {

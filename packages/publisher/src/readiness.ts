@@ -3,6 +3,7 @@ import type {
   StoryProject,
 } from "@earth-stories/story-schema";
 import { referencedSourceIds } from "./chapterSources.js";
+export { referencedSourceIds } from "./chapterSources.js";
 import { compileProject } from "./compile.js";
 import { projectCompileIssues } from "./compileValidation.js";
 import { shareDescription } from "./share.js";

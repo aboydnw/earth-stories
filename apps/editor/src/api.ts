@@ -37,9 +37,14 @@ export interface PublicationPreflight {
   projectId: string;
   buildId: string | null;
   estimatedIncludedBytes: number;
+  requiredDownloadBytes: number;
+  unknownDownloadSizes: number;
+  availableDiskBytes: number | null;
+  needsBuildInternet: boolean;
+  needsRuntimeInternet: boolean;
   includedAssets: number;
   connectedAssets: number;
-  profile: "connected" | "portable" | "custom";
+  profile: "connected" | "portable" | "custom" | "offline";
   issues: PreflightIssue[];
 }
 export type ExportFormat = "zip" | "folder" | "archive" | "embed";
@@ -67,6 +72,7 @@ export interface ExampleCatalog {
     description: string;
     chapterCount: number;
     formats: string[];
+    authoringConnectivity: "local" | "network-required";
   }>;
   connections: ExampleConnection[];
 }
@@ -74,7 +80,13 @@ export interface ExampleCatalog {
 export interface ConversionJobSnapshot {
   id: string;
   projectId: string;
-  status: "queued" | "running" | "succeeded" | "failed";
+  status:
+    | "queued"
+    | "awaiting-approval"
+    | "running"
+    | "succeeded"
+    | "failed"
+    | "cancelled";
   events: ConversionJobEvent[];
   createdAt: string;
   updatedAt: string;
@@ -118,13 +130,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       "The local Earth Stories service is not responding. Return to the terminal, confirm yarn dev is still running, then retry.",
     );
   }
-  const body = (await response.json()) as T | { error?: string };
+  let body: T | { error?: string } | null = null;
+  try {
+    body = (await response.json()) as T | { error?: string };
+  } catch {
+    if (response.ok)
+      throw new Error("Earth Stories received an invalid response.");
+  }
   if (!response.ok) {
-    throw new Error(
-      "error" in (body as object) &&
-        typeof (body as { error?: unknown }).error === "string"
-        ? (body as { error: string }).error
-        : "Earth Stories could not complete that request",
+    throw Object.assign(
+      new Error(
+        body !== null &&
+          typeof body === "object" &&
+          "error" in body &&
+          typeof (body as { error?: unknown }).error === "string"
+          ? (body as { error: string }).error
+          : "Earth Stories could not complete that request",
+      ),
+      { status: response.status },
     );
   }
   return body as T;
@@ -253,6 +276,18 @@ export async function getConversionJob(
 ): Promise<ConversionJobSnapshot> {
   return parseConversionJob(
     await request<unknown>(`/api/conversion-jobs/${encodeURIComponent(id)}`),
+  );
+}
+
+export async function actOnConversionJob(
+  id: string,
+  action: "acknowledge" | "cancel" | "retry",
+): Promise<ConversionJobSnapshot> {
+  return parseConversionJob(
+    await request<unknown>(
+      `/api/conversion-jobs/${encodeURIComponent(id)}/${action}`,
+      { method: "POST" },
+    ),
   );
 }
 

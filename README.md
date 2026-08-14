@@ -155,10 +155,14 @@ export so consumers control when global design tokens are loaded.
 ## Support posture
 
 The current phase is an engineering prototype for Development Seed contributors
-and technically confident pilot users. Clone-and-run is the intended initial
-distribution. The product boundary is already desktop-like—the browser UI talks
-only to a process on the same computer—but native packaging is intentionally
-deferred until this workflow is validated.
+and technically confident pilot users. Clone-and-run remains the intended
+initial distribution. Local unsigned desktop packaging groundwork now exists,
+including provisional Linux x64 outputs, but no platform has a supported public
+installer. Signing, notarization, target-machine testing, release ownership, and
+the other public-release gates remain open. See the
+[desktop application guide](docs/desktop-application.md), the
+[release-readiness checklist](docs/release/desktop-release-readiness.md), and
+the [packaging groundwork devlog](docs/devlog/2026-08-13-desktop-packaging-groundwork.md).
 
 ## Contributor troubleshooting
 

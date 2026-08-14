@@ -13,6 +13,14 @@ first time; later selections reopen that same editable local copy instead of
 creating duplicates. Edits, publication settings, and exports never modify the
 bundled template.
 
+Each catalog row also says **Network required** or **Available offline** for
+authoring. Included images, CSV files, and trajectories are copied from the
+application into the editable project, but an example remains network-required
+when its normal authoring basemap, a connected data source, or a video chapter
+is remote. The label describes opening and editing the example; publication
+preflight independently decides whether a requested release can be verified
+offline.
+
 The initial catalog contains:
 
 - **Antakya from above**, a connected public COG story using OpenAerialMap
@@ -37,6 +45,12 @@ imagery, global country and state/province PMTiles, Fields of The World Zarr,
 and Autzen Stadium COPC. These URLs and their
 attribution are explicit, reviewed source data—not silent dependencies on CNG
 Sandbox.
+
+The geoBoundaries CGAZ connections use the separate ADM0 and ADM1 PMTiles
+archives published by UNDP GeoHub. UNDP is an external host that Earth Stories
+does not control, so these URLs remain subject to the same availability review
+as every other connected example source. The underlying boundary attribution
+and CC BY 4.0 license remain unchanged.
 
 Examples default to connected delivery. Authors can switch the publication
 profile or override the individual asset when they want Earth Stories to copy a

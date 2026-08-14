@@ -11,6 +11,45 @@ export const conversionCapabilitySchema = z.enum([
   "pointcloud",
 ]);
 
+export const CONVERSION_CAPABILITIES = conversionCapabilitySchema.options;
+
+export const CAPABILITY_INSTALL_ESTIMATES = {
+  core: {
+    name: "Core data inspection",
+    estimatedBytes: 321_812_028,
+    estimateKind: "measured-apparent-installed-footprint",
+  },
+  vector: {
+    name: "Vector preparation",
+    estimatedBytes: 430_000_000,
+    estimateKind: "estimated-apparent-installed-footprint",
+  },
+  raster: {
+    name: "Raster preparation",
+    estimatedBytes: 668_962_511,
+    estimateKind: "measured-apparent-installed-footprint",
+  },
+  multidim: {
+    name: "Multidimensional preparation",
+    estimatedBytes: 410_000_000,
+    estimateKind: "estimated-apparent-installed-footprint",
+  },
+  pointcloud: {
+    name: "Point-cloud preparation",
+    estimatedBytes: 310_000_000,
+    estimateKind: "estimated-apparent-installed-footprint",
+  },
+} as const satisfies Record<
+  (typeof CONVERSION_CAPABILITIES)[number],
+  {
+    name: string;
+    estimatedBytes: number;
+    estimateKind:
+      | "measured-apparent-installed-footprint"
+      | "estimated-apparent-installed-footprint";
+  }
+>;
+
 export const conversionOperationSchema = z.enum([
   "inspect",
   "configure",
@@ -56,6 +95,33 @@ export const conversionProgressSchema = z
   })
   .strict();
 
+export const provisioningDisclosureSchema = z
+  .object({
+    protocol: z.literal(CONVERSION_PROTOCOL_VERSION),
+    requestId: z.string().min(1),
+    type: z.literal("provisioning-disclosure"),
+    capability: conversionCapabilitySchema,
+    capabilityName: z.string().min(1),
+    versions: z.array(z.string().min(1)).min(1),
+    estimatedBytes: z.number().int().positive(),
+    estimateKind: z.enum([
+      "measured-apparent-installed-footprint",
+      "estimated-apparent-installed-footprint",
+    ]),
+    destination: z.string().min(1),
+    credits: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1),
+            license: z.string().min(1),
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+
 export const conversionResultSchema = z
   .object({
     protocol: z.literal(CONVERSION_PROTOCOL_VERSION),
@@ -84,6 +150,7 @@ export const conversionFailureSchema = z
   .strict();
 
 export const conversionJobEventSchema = z.discriminatedUnion("type", [
+  provisioningDisclosureSchema,
   conversionProgressSchema,
   conversionResultSchema,
   conversionFailureSchema,

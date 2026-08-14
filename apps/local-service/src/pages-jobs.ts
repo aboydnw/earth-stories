@@ -107,8 +107,11 @@ export interface StartPublishInput {
  */
 export class PagesJobs {
   readonly #jobs = new Map<string, PublishJobSnapshot>();
+  readonly #controllers = new Map<string, AbortController>();
+  readonly #idleWaiters = new Set<() => void>();
   readonly #store: ProjectStore;
   readonly #deps: PagesJobsDependencies;
+  #accepting = true;
 
   constructor(store: ProjectStore, deps: Partial<PagesJobsDependencies> = {}) {
     this.#store = store;
@@ -117,6 +120,23 @@ export class PagesJobs {
 
   get(id: string): PublishJobSnapshot | null {
     return this.#jobs.get(id) ?? null;
+  }
+
+  activity(): number {
+    return this.#controllers.size;
+  }
+
+  refuseNewJobs(): void {
+    this.#accepting = false;
+  }
+
+  cancelRunning(): void {
+    for (const controller of this.#controllers.values()) controller.abort();
+  }
+
+  whenIdle(): Promise<void> {
+    if (this.#controllers.size === 0) return Promise.resolve();
+    return new Promise((resolveIdle) => this.#idleWaiters.add(resolveIdle));
   }
 
   async record(projectId: string): Promise<PublishRecord | null> {
@@ -128,10 +148,18 @@ export class PagesJobs {
     projectId: string,
     input: StartPublishInput = {},
   ): Promise<PublishJobSnapshot> {
+    if (!this.#accepting)
+      throw new Error(
+        "The local service is shutting down and cannot start new jobs.",
+      );
     const project = await this.#store.read(projectId);
     const existing = await this.#deps.readPublishRecord(
       this.#store.projectPath(projectId),
     );
+    if (!this.#accepting)
+      throw new Error(
+        "The local service is shutting down and cannot start new jobs.",
+      );
     const requested =
       typeof input.repo === "string" && input.repo.trim()
         ? slugRepoName(input.repo)
@@ -158,7 +186,13 @@ export class PagesJobs {
       updatedAt: now,
     };
     this.#jobs.set(snapshot.id, snapshot);
-    void this.#run(snapshot, { repo: requested, existing, snapshots });
+    const controller = new AbortController();
+    this.#controllers.set(snapshot.id, controller);
+    void this.#run(
+      snapshot,
+      { repo: requested, existing, snapshots },
+      controller,
+    );
     return snapshot;
   }
 
@@ -178,6 +212,21 @@ export class PagesJobs {
     snapshot.updatedAt = new Date().toISOString();
   }
 
+  #progress(snapshot: PublishJobSnapshot, message: string): void {
+    const latest = snapshot.events.at(-1);
+    const event = {
+      stage: "uploading" as const,
+      severity: "info" as const,
+      message,
+      at: new Date().toISOString(),
+    };
+    if (latest?.stage === "uploading" && latest.message.startsWith("Uploaded "))
+      snapshot.events[snapshot.events.length - 1] = event;
+    else snapshot.events.push(event);
+    snapshot.stage = "uploading";
+    snapshot.updatedAt = event.at;
+  }
+
   async #run(
     snapshot: PublishJobSnapshot,
     context: {
@@ -185,16 +234,19 @@ export class PagesJobs {
       existing: PublishRecord | null;
       snapshots?: Record<string, string>;
     },
+    controller: AbortController,
   ): Promise<void> {
     const projectDirectory = this.#store.projectPath(snapshot.projectId);
     const withLock =
       this.#deps.withLock ?? (<T>(_id: string, run: () => Promise<T>) => run());
+    let token: string | null = null;
     snapshot.status = "running";
     snapshot.updatedAt = new Date().toISOString();
 
     try {
       this.#note(snapshot, "signing-in", "Signing in to GitHub…");
       const identity: GitHubIdentity = await this.#deps.resolveToken({
+        signal: controller.signal,
         onDeviceCode: (prompt) => {
           snapshot.deviceCode = prompt;
           this.#note(
@@ -204,8 +256,13 @@ export class PagesJobs {
           );
         },
       });
+      if (controller.signal.aborted)
+        throw new Error("Publishing was canceled.");
+      token = identity.token;
       snapshot.deviceCode = null;
       await withLock(snapshot.projectId, async () => {
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
         this.#note(
           snapshot,
           "checking",
@@ -213,6 +270,8 @@ export class PagesJobs {
         );
 
         const preflight = await this.#deps.preflight(projectDirectory);
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
         if (!preflight.ready)
           throw new Error(
             "Fix the blocking publication problems before publishing to the web.",
@@ -234,10 +293,14 @@ export class PagesJobs {
           mapSnapshots: context.snapshots,
           publicationUrl: url,
         });
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
 
         const limits = checkReleaseLimits(
           await this.#deps.inspectRelease(built.directory),
         );
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
         if (limits.blocked) throw new Error(limits.message ?? "");
         if (limits.message)
           this.#note(snapshot, "building", limits.message, "warning");
@@ -251,20 +314,40 @@ export class PagesJobs {
           token: identity.token,
           owner: identity.login,
           repo: context.repo,
+          projectId: snapshot.projectId,
           expectExisting:
             context.existing?.repo === context.repo &&
             context.existing.owner === identity.login,
         });
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
 
         const branch = context.existing?.branch ?? DEFAULT_PAGES_BRANCH;
         this.#note(snapshot, "uploading", "Uploading the release…");
-        await this.#deps.pushRelease({
-          directory: built.directory,
-          token: identity.token,
-          owner: identity.login,
-          repo: context.repo,
-          branch,
-        });
+        let acceptingUploadProgress = true;
+        try {
+          await this.#deps.pushRelease({
+            directory: built.directory,
+            token: identity.token,
+            owner: identity.login,
+            repo: context.repo,
+            branch,
+            signal: controller.signal,
+            onProgress: ({ uploaded, skipped }) => {
+              if (!acceptingUploadProgress) return;
+              const uploadedLabel = uploaded === 1 ? "file" : "files";
+              const skippedLabel = skipped === 1 ? "file" : "files";
+              this.#progress(
+                snapshot,
+                `Uploaded ${uploaded} ${uploadedLabel}; skipped ${skipped} unchanged ${skippedLabel}.`,
+              );
+            },
+          });
+          if (controller.signal.aborted)
+            throw new Error("Publishing was canceled.");
+        } finally {
+          acceptingUploadProgress = false;
+        }
 
         this.#note(snapshot, "enabling-pages", "Turning on GitHub Pages…");
         await this.#deps.enablePages({
@@ -273,13 +356,19 @@ export class PagesJobs {
           repo: context.repo,
           branch,
         });
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
 
         this.#note(
           snapshot,
           "waiting-for-site",
           "Waiting for GitHub to build the site. The first build takes a minute or two…",
         );
-        const served = await this.#deps.waitForPages(url);
+        const served = await this.#deps.waitForPages(url, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
         if (!served)
           this.#note(
             snapshot,
@@ -318,10 +407,13 @@ export class PagesJobs {
     } catch (cause) {
       snapshot.status = "failed";
       snapshot.deviceCode = null;
-      snapshot.error =
+      const message =
         cause instanceof Error
           ? cause.message
           : "The story could not be published.";
+      snapshot.error = token
+        ? message.split(token).join("[REDACTED]")
+        : message;
       snapshot.events.push({
         stage: snapshot.stage,
         severity: "warning",
@@ -330,6 +422,11 @@ export class PagesJobs {
       });
     } finally {
       snapshot.updatedAt = new Date().toISOString();
+      this.#controllers.delete(snapshot.id);
+      if (this.#controllers.size === 0) {
+        for (const resolveIdle of this.#idleWaiters) resolveIdle();
+        this.#idleWaiters.clear();
+      }
     }
   }
 }

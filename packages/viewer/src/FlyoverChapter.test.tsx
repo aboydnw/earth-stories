@@ -32,7 +32,7 @@ vi.mock("./MapChapter.js", () => ({
   ),
 }));
 
-import { FlyoverChapter } from "./FlyoverChapter.js";
+import { flyoverTrackHeight, FlyoverChapter } from "./FlyoverChapter.js";
 
 afterEach(() => {
   cleanup();
@@ -55,6 +55,12 @@ const chapter = {
 } as Extract<PublicationChapter, { type: "flyover" }>;
 
 describe("FlyoverChapter", () => {
+  it("derives one track height for both hydration and the rendered flyover", () => {
+    expect(flyoverTrackHeight({ scrollLength: 1.5, keyframeCount: 3 })).toBe(
+      "400vh",
+    );
+  });
+
   it("shows keyframe captions and uses guarded camera following in authoring", () => {
     render(
       <FlyoverChapter
