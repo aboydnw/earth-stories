@@ -23,6 +23,15 @@ const EXAMPLE_ASSET_FILES: Record<string, string[]> = {
   "example-point-cloud": ["autzen-scatter.png", "autzen-classification.csv"],
   "example-temporal-fields": ["fields-iowa.png", "fields-probability.csv"],
   "example-storm-track": ["katrina-track.json", "katrina-intensity.csv"],
+  "example-earthquakes": [
+    "earthquake-history.csv",
+    "earthquake-consequences.csv",
+    "alaska-earthquake-damage.jpg",
+  ],
+  "example-electric-grid": [
+    "generation-by-fuel.csv",
+    "energy-hardware.png",
+  ],
 };
 
 export async function loadExampleAssetFiles(
