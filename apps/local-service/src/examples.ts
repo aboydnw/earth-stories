@@ -2,6 +2,7 @@ import {
   createDefaultSourceProvenance,
   type StoryProject,
 } from "@earth-stories/story-schema";
+import { earthquakeStory, electricGridStory } from "./hifldExamples.js";
 
 const created = "2026-08-05T00:00:00.000Z";
 const basemap = {
@@ -985,6 +986,8 @@ const exampleStories = [
   temporalFields,
   richMedia,
   stormTrack,
+  earthquakeStory,
+  electricGridStory,
 ];
 
 export function exampleCatalog(): {
