@@ -28,10 +28,7 @@ const EXAMPLE_ASSET_FILES: Record<string, string[]> = {
     "earthquake-consequences.csv",
     "alaska-earthquake-damage.jpg",
   ],
-  "example-electric-grid": [
-    "generation-by-fuel.csv",
-    "energy-hardware.png",
-  ],
+  "example-electric-grid": ["generation-by-fuel.csv", "energy-hardware.png"],
 };
 
 export async function loadExampleAssetFiles(

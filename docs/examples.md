@@ -35,7 +35,13 @@ The initial catalog contains:
 - **A story beyond the map**, demonstrating video and ordered map overlays;
 - **Tracking a hurricane**, an animated `trajectory` source built from NOAA's
   public HURDAT2 best-track data for Hurricane Katrina (2005), with a wind-speed
-  chart alongside it.
+  chart alongside it;
+- **The Ground Remembers**, a 12-chapter HIFLD natural-hazards story combining
+  significant earthquakes, plate boundaries, faults, volcanoes, tsunamis,
+  aerial imagery, charts, and a public-domain photograph;
+- **The Grid Between Us**, a 12-chapter HIFLD infrastructure story combining
+  plants, generating units, transmission lines, operational territories, gas
+  pipelines, fueling stations, a capacity chart, and a public-domain image.
 
 ## Example connections
 
@@ -55,6 +61,25 @@ and CC BY 4.0 license remain unchanged.
 Examples default to connected delivery. Authors can switch the publication
 profile or override the individual asset when they want Earth Stories to copy a
 compatible remote file into a portable release.
+
+## HIFLD assumed API configuration
+
+The two HIFLD stories were configured during a catalog-ingestion outage. At
+that time the collection advertised hundreds of datasets but its API exposed
+only `hospitals-3`. That working record established the versioned file layout
+used by both examples:
+
+```text
+https://hifld.publicenvirodata.org/storage/<dataset>/<file>/<version>/pmtiles/<file>.pmtiles
+```
+
+Every anticipated HIFLD source pins a `v1.0.0` PMTiles URL with matching dataset
+and file slugs, plus the corresponding `/api/collections/hifld/datasets/<slug>`
+provenance link. Tests validate that internal convention but deliberately do
+not make live requests to records that have not returned to the API. Once the
+HIFLD ingestion is healthy, recheck each slug, release version, source agency,
+and PMTiles metadata before treating network availability as verified. Keep the
+version pin rather than silently following a mutable latest release.
 
 ## Bundled template assets
 

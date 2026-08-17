@@ -197,7 +197,8 @@ export const earthquakeStory: StoryProject = {
       label: "Antakya post-earthquake aerial imagery",
       locator:
         "https://oin-hotosm-temp.s3.amazonaws.com/63f21def525f0700077ed4e2/0/63f21def525f0700077ed4e3.tif",
-      attribution: "OpenAerialMap contributors / Humanitarian OpenStreetMap Team",
+      attribution:
+        "OpenAerialMap contributors / Humanitarian OpenStreetMap Team",
       sizeBytes: null,
       delivery: "connected",
       provenance: {
@@ -222,7 +223,8 @@ export const earthquakeStory: StoryProject = {
       kind: "csv",
       label: "Significant earthquake records by period",
       path: "assets/earthquake-history.csv",
-      attribution: "NOAA NCEI Significant Earthquake Database, computed by Earth Stories",
+      attribution:
+        "NOAA NCEI Significant Earthquake Database, computed by Earth Stories",
       sizeBytes: null,
       delivery: "included",
       provenance: {
@@ -243,7 +245,8 @@ export const earthquakeStory: StoryProject = {
       kind: "csv",
       label: "Selected earthquake magnitudes and reported fatalities",
       path: "assets/earthquake-consequences.csv",
-      attribution: "NOAA NCEI Significant Earthquake Database, selected by Earth Stories",
+      attribution:
+        "NOAA NCEI Significant Earthquake Database, selected by Earth Stories",
       sizeBytes: null,
       delivery: "included",
       provenance: {
@@ -359,7 +362,8 @@ export const earthquakeStory: StoryProject = {
           zoom: 3,
           bearing: 12,
           pitch: 38,
-          caption: "Indonesia's island arcs record repeated earthquakes and eruptions.",
+          caption:
+            "Indonesia's island arcs record repeated earthquakes and eruptions.",
           globe: true,
         },
         {
@@ -367,7 +371,8 @@ export const earthquakeStory: StoryProject = {
           zoom: 2.8,
           bearing: 2,
           pitch: 34,
-          caption: "Along South America, the Nazca Plate descends beneath the continent.",
+          caption:
+            "Along South America, the Nazca Plate descends beneath the continent.",
           globe: true,
         },
       ],
@@ -484,7 +489,8 @@ export const electricGridStory: StoryProject = {
       slug: "power-plants-1",
       label: "Power plants",
       attribution: "Oak Ridge National Laboratory / EIA / HIFLD Next",
-      publisher: "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
+      publisher:
+        "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
       spatialCoverage: "United States",
       temporalCoverage: { start: "2011-11-30", end: "2024-08-07" },
       presentation: presentation({
@@ -498,7 +504,8 @@ export const electricGridStory: StoryProject = {
       slug: "generating-units-1",
       label: "Generating units",
       attribution: "Oak Ridge National Laboratory / EIA / HIFLD Next",
-      publisher: "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
+      publisher:
+        "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
       spatialCoverage: "United States",
       temporalCoverage: { start: "2011-11-30", end: "2024-08-07" },
       presentation: presentation({
@@ -513,7 +520,8 @@ export const electricGridStory: StoryProject = {
       slug: "transmission-lines-1",
       label: "Electric power transmission lines",
       attribution: "Oak Ridge National Laboratory / HIFLD Next",
-      publisher: "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
+      publisher:
+        "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
       spatialCoverage: "United States",
       presentation: presentation({
         opacity: 0.78,
@@ -526,7 +534,8 @@ export const electricGridStory: StoryProject = {
       id: "nerc-regions",
       slug: "nerc-regions",
       label: "NERC regions and subregions",
-      attribution: "North American Electric Reliability Corporation / HIFLD Next",
+      attribution:
+        "North American Electric Reliability Corporation / HIFLD Next",
       publisher: "U.S. Department of Homeland Security",
       spatialCoverage: "United States",
       temporalCoverage: { start: "2022-12-10", end: "2022-12-10" },
@@ -539,9 +548,10 @@ export const electricGridStory: StoryProject = {
     }),
     hifldSource({
       id: "reliability-coordinators",
-      slug: "nerc-reliability-coordinators",
+      slug: "nerc-reliability-coordinators-1",
       label: "NERC reliability coordinators",
-      attribution: "North American Electric Reliability Corporation / HIFLD Next",
+      attribution:
+        "North American Electric Reliability Corporation / HIFLD Next",
       publisher: "U.S. Department of Homeland Security",
       spatialCoverage: "United States",
       presentation: presentation({
@@ -556,7 +566,8 @@ export const electricGridStory: StoryProject = {
       slug: "electric-retail-service-territories",
       label: "Electric retail service territories",
       attribution: "Oak Ridge National Laboratory / HIFLD Next",
-      publisher: "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
+      publisher:
+        "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
       spatialCoverage: "Canada and United States",
       temporalCoverage: { start: "2024-09-30", end: "2024-09-30" },
       presentation: presentation({
@@ -571,7 +582,8 @@ export const electricGridStory: StoryProject = {
       slug: "electric-planning-areas",
       label: "Electric planning areas",
       attribution: "Oak Ridge National Laboratory / HIFLD Next",
-      publisher: "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
+      publisher:
+        "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
       spatialCoverage: "United States",
       temporalCoverage: { start: "2022-12-10", end: "2022-12-10" },
       presentation: presentation({
@@ -618,7 +630,8 @@ export const electricGridStory: StoryProject = {
       kind: "csv",
       label: "Summer generating capacity by fuel family",
       path: "assets/generation-by-fuel.csv",
-      attribution: "HIFLD-derived Power_Plants service, computed by Earth Stories",
+      attribution:
+        "HIFLD-derived Power_Plants service, computed by Earth Stories",
       sizeBytes: null,
       delivery: "included",
       provenance: {
@@ -641,7 +654,8 @@ export const electricGridStory: StoryProject = {
       kind: "image",
       label: "Wind, solar, and transmission infrastructure",
       path: "assets/energy-hardware.png",
-      attribution: "P. Cryan, M. Huso, and S. Kemp / U.S. Geological Survey, public domain",
+      attribution:
+        "P. Cryan, M. Huso, and S. Kemp / U.S. Geological Survey, public domain",
       sizeBytes: null,
       delivery: "included",
       provenance: {
@@ -652,7 +666,9 @@ export const electricGridStory: StoryProject = {
         licenseName: "Public Domain",
         accessedAt,
         spatialCoverage: "United States",
-        transformations: [],
+        transformations: [
+          "Palette-optimized with pngquant for bundled delivery; full pixel dimensions preserved",
+        ],
       },
     },
   ],
@@ -723,7 +739,8 @@ export const electricGridStory: StoryProject = {
           zoom: 4.3,
           bearing: 30,
           pitch: 38,
-          caption: "Northwestern corridors connect large hydroelectric resources with distant demand.",
+          caption:
+            "Northwestern corridors connect large hydroelectric resources with distant demand.",
         },
         {
           center: [-110, 39],
@@ -737,14 +754,16 @@ export const electricGridStory: StoryProject = {
           zoom: 4.1,
           bearing: 72,
           pitch: 40,
-          caption: "Across the Plains, generation and transmission share broad infrastructure corridors.",
+          caption:
+            "Across the Plains, generation and transmission share broad infrastructure corridors.",
         },
         {
           center: [-82, 39],
           zoom: 4.2,
           bearing: 84,
           pitch: 36,
-          caption: "The eastern network becomes denser around cities, industry, and older infrastructure.",
+          caption:
+            "The eastern network becomes denser around cities, industry, and older infrastructure.",
         },
       ],
     },

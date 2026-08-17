@@ -4,31 +4,32 @@ import { storyProjectSchema } from "@earth-stories/story-schema";
 import { findExampleStory } from "./examples.js";
 
 const expectedSources = {
-  earthquakes: [
-    "significant-earthquakes",
-    "plate-boundaries",
-    "holocene-volcanoes",
-    "quaternary-faults",
-    "tsunami-events",
-    "tsunami-observations",
-    "significant-volcanic-events",
-  ],
-  "electric-grid": [
-    "power-plants",
-    "generating-units",
-    "transmission-lines",
-    "nerc-regions",
-    "reliability-coordinators",
-    "retail-service-territories",
-    "electric-planning-areas",
-    "natural-gas-pipelines",
-    "alternative-fueling-stations",
-  ],
+  earthquakes: {
+    "significant-earthquakes": "historical-significant-earthquake-locations",
+    "plate-boundaries": "plate-boundaries",
+    "holocene-volcanoes": "historical-holocene-volcano-locations",
+    "quaternary-faults": "quaternary-fault-lines",
+    "tsunami-events": "historical-tsunami-event-locations",
+    "tsunami-observations": "historical-tsunami-observations",
+    "significant-volcanic-events":
+      "historical-significant-volcanic-event-locations",
+  },
+  "electric-grid": {
+    "power-plants": "power-plants-1",
+    "generating-units": "generating-units-1",
+    "transmission-lines": "transmission-lines-1",
+    "nerc-regions": "nerc-regions",
+    "reliability-coordinators": "nerc-reliability-coordinators-1",
+    "retail-service-territories": "electric-retail-service-territories",
+    "electric-planning-areas": "electric-planning-areas",
+    "natural-gas-pipelines": "natural-gas-interstate-and-intrastate-pipelines",
+    "alternative-fueling-stations": "alternative-fueling-stations",
+  },
 };
 
 describe.each(Object.entries(expectedSources))(
   "%s HIFLD example",
-  (storyId, sourceIds) => {
+  (storyId, sourceSlugs) => {
     it("is a compilable 12-chapter story using every approved chapter type", () => {
       const story = storyProjectSchema.parse(findExampleStory(storyId));
 
@@ -42,7 +43,7 @@ describe.each(Object.entries(expectedSources))(
     it("pins connected HIFLD PMTiles and records matching API provenance", () => {
       const story = storyProjectSchema.parse(findExampleStory(storyId));
 
-      for (const sourceId of sourceIds) {
+      for (const [sourceId, slug] of Object.entries(sourceSlugs)) {
         const source = story.sources.find(({ id }) => id === sourceId);
         expect(source).toMatchObject({
           kind: "pmtiles",
@@ -52,12 +53,11 @@ describe.each(Object.entries(expectedSources))(
         if (!source || source.kind !== "pmtiles") {
           throw new Error(`Missing HIFLD PMTiles source: ${sourceId}`);
         }
-        const match = source.locator.match(
-          /^https:\/\/hifld\.publicenvirodata\.org\/storage\/([^/]+)\/\1\/v1\.0\.0\/pmtiles\/\1\.pmtiles$/,
+        expect(source.locator).toBe(
+          `https://hifld.publicenvirodata.org/storage/${slug}/${slug}/v1.0.0/pmtiles/${slug}.pmtiles`,
         );
-        expect(match).not.toBeNull();
         expect(source.provenance.sourceUrl).toBe(
-          `https://hifld.publicenvirodata.org/api/collections/hifld/datasets/${match?.[1]}`,
+          `https://hifld.publicenvirodata.org/api/collections/hifld/datasets/${slug}`,
         );
         expect(source.provenance.accessedAt).toBe("2026-08-17");
       }
