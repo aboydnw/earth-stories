@@ -514,12 +514,13 @@ export const electricGridStory: StoryProject = {
         ...createDefaultSourceProvenance(),
         publisher: "U.S. Energy Information Administration / HIFLD Next",
         sourceUrl:
-          "https://hifld.publicenvirodata.org/api/collections/hifld/datasets/generating-units-1",
+          "https://hifld.publicenvirodata.org/storage/generating-units-1/generating-units-1/v1.0.0/geojson/generating-units-1-geojson.geojson",
         dataUpdatedAt: "2023-09-01",
         accessedAt,
         spatialCoverage: "United States",
         transformations: [
           "Grouped 32,344 generating-unit records into ten technology families",
+          "Mapped TYPE values by matching NATURAL GAS, COAL, HYDROELECTRIC, PETROLEUM, LANDFILL GAS, MUNICIPAL SOLID WASTE, WOOD/WOOD WASTE BIOMASS, BATTERIES, and OTHER GASES; retained NUCLEAR, WIND, SOLAR, and GEOTHERMAL as named families",
           "Counted units and summed SUMMER_CAP within each family",
           "Excluded 159 non-positive sentinel values from capacity sums while retaining those records in unit counts",
           "Rounded summer capacity totals to the nearest whole megawatt",

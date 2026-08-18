@@ -113,12 +113,13 @@ Set the tsunami slug to `historical-tsunami-event-locations-`. Replace the Gener
     ...createDefaultSourceProvenance(),
     publisher: "U.S. Energy Information Administration / HIFLD Next",
     sourceUrl:
-      "https://hifld.publicenvirodata.org/api/collections/hifld/datasets/generating-units-1",
+      "https://hifld.publicenvirodata.org/storage/generating-units-1/generating-units-1/v1.0.0/geojson/generating-units-1-geojson.geojson",
     dataUpdatedAt: "2023-09-01",
     accessedAt: "2026-08-18",
     spatialCoverage: "United States",
     transformations: [
       "Grouped 32,344 generating-unit records into ten technology families",
+      "Mapped TYPE values into the documented technology families",
       "Counted units and summed SUMMER_CAP within each family",
       "Excluded 159 non-positive sentinel values from capacity sums while retaining those records in unit counts",
       "Rounded summer capacity totals to the nearest whole megawatt",

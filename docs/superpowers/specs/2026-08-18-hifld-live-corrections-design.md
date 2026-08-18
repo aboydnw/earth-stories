@@ -55,8 +55,8 @@ Alternatives rejected:
   significant earthquakes through 2008, tsunami events through 2025, tsunami
   observations through 2005, and significant volcanic events through 2024.
 - Record Generating Units as an included CSV derived from the HIFLD v1.0.0
-  GeoJSON, with its 2023-09-01 source date and explicit grouping/summing
-  transformations.
+  GeoJSON, with the immutable download URL, its 2023-09-01 source date, and
+  explicit type-mapping, grouping, and summing transformations.
 - Update Alternative Fueling Stations from the guessed 2024 cutoff to the
   archive's 2025 record horizon and describe it as a preserved snapshot rather
   than live station status.
@@ -70,8 +70,9 @@ Alternatives rejected:
 
 The static tests will distinguish mappable HIFLD sources from the non-spatial
 Generating Units source. They will assert the authoritative trailing-hyphen
-tsunami URL, the included generating-units asset and chart contract, audited
-dates, valid chapter references, and successful publication compilation.
+tsunami URL, the exact included generating-units summary and chart contract,
+audited dates, valid chapter references, and successful publication
+compilation.
 
 Verification will include the focused example tests, the full test suite,
 typechecking, production builds, and a live HTTP audit of every configured

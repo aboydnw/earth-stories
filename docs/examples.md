@@ -41,8 +41,8 @@ The initial catalog contains:
   aerial imagery, charts, and a public-domain photograph;
 - **The Grid Between Us**, a 12-chapter HIFLD infrastructure story combining
   plants, a non-spatial generating-units summary, transmission lines,
-  operational territories, gas pipelines, fueling stations, capacity charts,
-  and a public-domain image.
+  operational territories, gas pipelines, fueling stations, capacity and
+  unit-count charts, and a public-domain image.
 
 ## Example connections
 
@@ -86,6 +86,12 @@ file-geodatabase formats, but no PMTiles. Earth Stories therefore ships a small
 counts retain every row; summer-capacity sums omit 159 non-positive sentinel
 values and are rounded to whole megawatts. The source provenance records those
 transformations and the source's 2023-09-01 data date.
+
+The technology-family mapping matches `TYPE` values containing `NATURAL GAS`,
+`COAL`, `HYDROELECTRIC`, or `PETROLEUM` to those four families. `LANDFILL GAS`,
+`MUNICIPAL SOLID WASTE`, and `WOOD/WOOD WASTE BIOMASS` become Biomass and
+waste; `BATTERIES` and `OTHER GASES` become Other and storage. Nuclear, Wind,
+Solar, and Geothermal retain their named families.
 
 The live audit also found upstream HIFLD quality warnings. Reliability
 Coordinators reports 6 invalid geometries out of 13, Electric Retail Service

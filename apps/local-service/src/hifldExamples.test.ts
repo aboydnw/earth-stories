@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compileProject } from "@earth-stories/publisher";
 import { storyProjectSchema } from "@earth-stories/story-schema";
+import { loadExampleAssetFiles } from "./exampleAssets.js";
 import { findExampleStory } from "./examples.js";
 
 const expectedPmtilesSources = {
@@ -107,6 +108,11 @@ describe("live HIFLD catalog corrections", () => {
       provenance: {
         dataUpdatedAt: "2023-09-01",
         accessedAt: "2026-08-18",
+        sourceUrl:
+          "https://hifld.publicenvirodata.org/storage/generating-units-1/generating-units-1/v1.0.0/geojson/generating-units-1-geojson.geojson",
+        transformations: expect.arrayContaining([
+          expect.stringContaining("Mapped TYPE values"),
+        ]),
       },
     });
     expect(
@@ -124,5 +130,63 @@ describe("live HIFLD catalog corrections", () => {
       dataUpdatedAt: "2025-10-22",
       temporalCoverage: { end: "2025-10-22" },
     });
+  });
+
+  it("bundles the audited generating-unit summary", async () => {
+    const assets = await loadExampleAssetFiles("example-electric-grid");
+    const asset = assets.find(
+      ({ path }) => path === "assets/generating-units.csv",
+    );
+    const [header, ...lines] = new TextDecoder()
+      .decode(asset?.contents)
+      .trim()
+      .split("\n");
+    const rows = lines.map((line) => {
+      const [technologyFamily, unitCount, summerCapacityMw] = line.split(",");
+      return {
+        technologyFamily,
+        unitCount: Number(unitCount),
+        summerCapacityMw: Number(summerCapacityMw),
+      };
+    });
+
+    expect(header).toBe("technology_family,unit_count,summer_capacity_mw");
+    expect(rows).toEqual([
+      {
+        technologyFamily: "Natural gas",
+        unitCount: 8078,
+        summerCapacityMw: 635778,
+      },
+      { technologyFamily: "Solar", unitCount: 7214, summerCapacityMw: 176513 },
+      {
+        technologyFamily: "Petroleum",
+        unitCount: 5307,
+        summerCapacityMw: 52917,
+      },
+      {
+        technologyFamily: "Hydroelectric",
+        unitCount: 4511,
+        summerCapacityMw: 107772,
+      },
+      {
+        technologyFamily: "Biomass and waste",
+        unitCount: 2213,
+        summerCapacityMw: 13197,
+      },
+      { technologyFamily: "Wind", unitCount: 1764, summerCapacityMw: 175180 },
+      {
+        technologyFamily: "Other and storage",
+        unitCount: 1651,
+        summerCapacityMw: 59344,
+      },
+      { technologyFamily: "Coal", unitCount: 1176, summerCapacityMw: 294789 },
+      {
+        technologyFamily: "Geothermal",
+        unitCount: 313,
+        summerCapacityMw: 3391,
+      },
+      { technologyFamily: "Nuclear", unitCount: 117, summerCapacityMw: 107664 },
+    ]);
+    expect(rows.reduce((total, row) => total + row.unitCount, 0)).toBe(32344);
   });
 });
