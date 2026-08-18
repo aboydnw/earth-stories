@@ -31,10 +31,12 @@ into an included CSV and render the former plant/unit map chapter as a chart.
 This preserves the dataset and tells a claim the source can actually support.
 
 The summary will group the live `TYPE` values into ten reader-facing technology
-families and include both unit count and summer capacity. The existing capacity
-chart remains based on the separate historical power-plants service, so the two
-chapters contrast facility capacity with the number of individual generating
-machines rather than presenting the same measure twice.
+families and include both unit count and summer capacity. All 32,344 records
+remain in unit counts; 159 non-positive capacity sentinels are excluded only
+from capacity sums. The existing capacity chart remains based on the separate
+historical power-plants service, so the two chapters contrast facility capacity
+with the number of individual generating machines rather than presenting the
+same measure twice.
 
 Alternatives rejected:
 

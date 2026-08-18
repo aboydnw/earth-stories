@@ -22,9 +22,11 @@
 ### Task 1: Lock the live source contract with failing tests
 
 **Files:**
+
 - Modify: `apps/local-service/src/hifldExamples.test.ts`
 
 **Interfaces:**
+
 - Consumes: `findExampleStory(storyId: string)` and `storyProjectSchema`.
 - Produces: regression coverage for the connected PMTiles set, the included Generating Units summary, audited dates, and the corrected chapter type.
 
@@ -38,7 +40,7 @@ expect(source.provenance.accessedAt).toBe("2026-08-18");
 const units = grid.sources.find(({ id }) => id === "generating-units");
 expect(units).toMatchObject({
   kind: "csv",
-  path: "assets/generating-units-by-technology.csv",
+  path: "assets/generating-units.csv",
   delivery: "included",
   provenance: {
     dataUpdatedAt: "2023-09-01",
@@ -74,18 +76,25 @@ git commit -m "test: capture live HIFLD source contracts"
 ### Task 2: Correct sources, story structure, and bundled data
 
 **Files:**
+
 - Modify: `apps/local-service/src/hifldExamples.ts`
 - Modify: `apps/local-service/src/exampleAssets.ts`
-- Create: `apps/local-service/src/example-assets/example-electric-grid/generating-units-by-technology.csv`
+- Create: `apps/local-service/src/example-assets/example-electric-grid/generating-units.csv`
 - Modify: `apps/local-service/src/hifldExamples.test.ts`
 
 **Interfaces:**
+
 - Consumes: the literal contracts added in Task 1 and the live HIFLD Generating Units v1.0.0 GeoJSON.
 - Produces: a schema-valid `StoryProject` whose `generating-units` source is a bundled CSV with columns `technology_family`, `unit_count`, and `summer_capacity_mw`.
 
 - [ ] **Step 1: Build the summarized CSV from the live table**
 
-Download the version-pinned GeoJSON returned by the HIFLD file API. Group `TYPE` values into Coal, Natural gas, Hydroelectric, Nuclear, Wind, Solar, Petroleum, Biomass and waste, Geothermal, and Other and storage. For each family, count records and sum `SUMMER_CAP`, then write the hand-auditable CSV ordered by descending `unit_count`.
+Download the version-pinned GeoJSON returned by the HIFLD file API. Group
+`TYPE` values into Coal, Natural gas, Hydroelectric, Nuclear, Wind, Solar,
+Petroleum, Biomass and waste, Geothermal, and Other and storage. For each
+family, count every record, exclude the 159 non-positive capacity sentinels
+from `SUMMER_CAP` sums, and write the hand-auditable CSV ordered by descending
+`unit_count`.
 
 - [ ] **Step 2: Make the minimal story changes**
 
@@ -96,7 +105,7 @@ Set the tsunami slug to `historical-tsunami-event-locations-`. Replace the Gener
   id: "generating-units",
   kind: "csv",
   label: "Generating units by technology",
-  path: "assets/generating-units-by-technology.csv",
+  path: "assets/generating-units.csv",
   attribution: "EIA / HIFLD Next, summarized by Earth Stories",
   sizeBytes: null,
   delivery: "included",
@@ -111,6 +120,7 @@ Set the tsunami slug to `historical-tsunami-event-locations-`. Replace the Gener
     transformations: [
       "Grouped 32,344 generating-unit records into ten technology families",
       "Counted units and summed SUMMER_CAP within each family",
+      "Excluded 159 non-positive sentinel values from capacity sums while retaining those records in unit counts",
       "Rounded summer capacity totals to the nearest whole megawatt",
     ],
   },
@@ -127,7 +137,8 @@ Set `accessedAt` and story `updated` to `2026-08-18`; apply the literal temporal
 
 - [ ] **Step 4: Register the bundled asset**
 
-Add `generating-units-by-technology.csv` to the `example-electric-grid` entry in `EXAMPLE_ASSET_FILES`.
+Add `generating-units.csv` to the `example-electric-grid` entry in
+`EXAMPLE_ASSET_FILES`.
 
 - [ ] **Step 5: Run the focused tests and verify GREEN**
 
@@ -138,16 +149,18 @@ Expected: PASS with both stories compiling and all included assets materializing
 - [ ] **Step 6: Commit the corrected stories**
 
 ```bash
-git add apps/local-service/src/hifldExamples.ts apps/local-service/src/hifldExamples.test.ts apps/local-service/src/exampleAssets.ts apps/local-service/src/example-assets/example-electric-grid/generating-units-by-technology.csv
+git add apps/local-service/src/hifldExamples.ts apps/local-service/src/hifldExamples.test.ts apps/local-service/src/exampleAssets.ts apps/local-service/src/example-assets/example-electric-grid/generating-units.csv
 git commit -m "fix: align HIFLD examples with live catalog"
 ```
 
 ### Task 3: Replace outage assumptions and verify delivery
 
 **Files:**
+
 - Modify: `docs/examples.md`
 
 **Interfaces:**
+
 - Consumes: the corrected source inventory and the 2026-08-18 live audit evidence.
 - Produces: maintainer documentation that separates connected PMTiles, included derived data, and upstream quality limitations.
 

@@ -40,8 +40,9 @@ The initial catalog contains:
   significant earthquakes, plate boundaries, faults, volcanoes, tsunamis,
   aerial imagery, charts, and a public-domain photograph;
 - **The Grid Between Us**, a 12-chapter HIFLD infrastructure story combining
-  plants, generating units, transmission lines, operational territories, gas
-  pipelines, fueling stations, a capacity chart, and a public-domain image.
+  plants, a non-spatial generating-units summary, transmission lines,
+  operational territories, gas pipelines, fueling stations, capacity charts,
+  and a public-domain image.
 
 ## Example connections
 
@@ -62,24 +63,42 @@ Examples default to connected delivery. Authors can switch the publication
 profile or override the individual asset when they want Earth Stories to copy a
 compatible remote file into a portable release.
 
-## HIFLD assumed API configuration
+## HIFLD live API verification
 
-The two HIFLD stories were configured during a catalog-ingestion outage. At
-that time the collection advertised hundreds of datasets but its API exposed
-only `hospitals-3`. That working record established the versioned file layout
-used by both examples:
+The HIFLD sources in both stories were checked against the live catalog on
+2026-08-18. The earthquake story uses seven connected HIFLD PMTiles archives;
+the electricity story uses eight. Every connected archive pins the `v1.0.0`
+URL returned by its file record and supports the byte-range requests the viewer
+needs:
 
 ```text
 https://hifld.publicenvirodata.org/storage/<dataset>/<file>/<version>/pmtiles/<file>.pmtiles
 ```
 
-Every anticipated HIFLD source pins a `v1.0.0` PMTiles URL with matching dataset
-and file slugs, plus the corresponding `/api/collections/hifld/datasets/<slug>`
-provenance link. Tests validate that internal convention but deliberately do
-not make live requests to records that have not returned to the API. Once the
-HIFLD ingestion is healthy, recheck each slug, release version, source agency,
-and PMTiles metadata before treating network availability as verified. Keep the
-version pin rather than silently following a mutable latest release.
+The Historical Tsunami Event Locations record is an unusual but intentional
+exception to ordinary naming: its dataset, file, and archive slugs all end in a
+hyphen (`historical-tsunami-event-locations-`). Removing that hyphen produces a 404.
+
+Generating Units is a HIFLD dataset but not a connected map layer. Its live
+file record contains 32,344 non-spatial rows and offers GeoJSON, GeoPackage, and
+file-geodatabase formats, but no PMTiles. Earth Stories therefore ships a small
+`generating-units.csv` summary grouped into ten technology families. Unit
+counts retain every row; summer-capacity sums omit 159 non-positive sentinel
+values and are rounded to whole megawatts. The source provenance records those
+transformations and the source's 2023-09-01 data date.
+
+The live audit also found upstream HIFLD quality warnings. Reliability
+Coordinators reports 6 invalid geometries out of 13, Electric Retail Service
+Territories 254 out of 2,931, and Electric Planning Areas 20 out of 95. Natural
+Gas Pipelines fails the overall quality check even though its metadata reports
+zero invalid geometries and does not expose the failing criterion. The affected
+chapters disclose these limitations; Earth Stories does not claim to repair
+the source geometries.
+
+Unit tests validate the exact source inventory, URLs, dates, included-data
+contract, and publication compilation without making the default suite depend
+on network availability. Maintainers should repeat the live API and PMTiles
+header audit before changing a version pin or claiming a later access date.
 
 ## Bundled template assets
 
