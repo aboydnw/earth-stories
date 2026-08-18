@@ -3,20 +3,19 @@ import { compileProject } from "@earth-stories/publisher";
 import { storyProjectSchema } from "@earth-stories/story-schema";
 import { findExampleStory } from "./examples.js";
 
-const expectedSources = {
+const expectedPmtilesSources = {
   earthquakes: {
     "significant-earthquakes": "historical-significant-earthquake-locations",
     "plate-boundaries": "plate-boundaries",
     "holocene-volcanoes": "historical-holocene-volcano-locations",
     "quaternary-faults": "quaternary-fault-lines",
-    "tsunami-events": "historical-tsunami-event-locations",
+    "tsunami-events": "historical-tsunami-event-locations-",
     "tsunami-observations": "historical-tsunami-observations",
     "significant-volcanic-events":
       "historical-significant-volcanic-event-locations",
   },
   "electric-grid": {
     "power-plants": "power-plants-1",
-    "generating-units": "generating-units-1",
     "transmission-lines": "transmission-lines-1",
     "nerc-regions": "nerc-regions",
     "reliability-coordinators": "nerc-reliability-coordinators-1",
@@ -27,7 +26,7 @@ const expectedSources = {
   },
 };
 
-describe.each(Object.entries(expectedSources))(
+describe.each(Object.entries(expectedPmtilesSources))(
   "%s HIFLD example",
   (storyId, sourceSlugs) => {
     it("is a compilable 12-chapter story using every approved chapter type", () => {
@@ -59,8 +58,68 @@ describe.each(Object.entries(expectedSources))(
         expect(source.provenance.sourceUrl).toBe(
           `https://hifld.publicenvirodata.org/api/collections/hifld/datasets/${slug}`,
         );
-        expect(source.provenance.accessedAt).toBe("2026-08-17");
+        expect(source.provenance.accessedAt).toBe("2026-08-18");
       }
+
+      expect(
+        story.sources
+          .filter(
+            (source) =>
+              source.kind === "pmtiles" &&
+              source.locator.startsWith(
+                "https://hifld.publicenvirodata.org/storage/",
+              ),
+          )
+          .map(({ id }) => id),
+      ).toEqual(Object.keys(sourceSlugs));
     });
   },
 );
+
+describe("live HIFLD catalog corrections", () => {
+  it("uses the audited historical record horizons", () => {
+    const earthquakes = storyProjectSchema.parse(
+      findExampleStory("earthquakes"),
+    );
+    const expectedEnds = {
+      "significant-earthquakes": "2008-12-31",
+      "tsunami-events": "2025-12-31",
+      "tsunami-observations": "2005-12-31",
+      "significant-volcanic-events": "2024-12-31",
+    };
+
+    for (const [sourceId, end] of Object.entries(expectedEnds)) {
+      expect(
+        earthquakes.sources.find(({ id }) => id === sourceId)?.provenance
+          .temporalCoverage?.end,
+      ).toBe(end);
+    }
+  });
+
+  it("treats generating units as included non-spatial data", () => {
+    const grid = storyProjectSchema.parse(findExampleStory("electric-grid"));
+    const units = grid.sources.find(({ id }) => id === "generating-units");
+
+    expect(units).toMatchObject({
+      kind: "csv",
+      path: "assets/generating-units-by-technology.csv",
+      delivery: "included",
+      provenance: {
+        dataUpdatedAt: "2023-09-01",
+        accessedAt: "2026-08-18",
+      },
+    });
+    expect(
+      grid.chapters.find(({ id }) => id === "grid-generating-units"),
+    ).toMatchObject({
+      type: "chart",
+      sourceId: "generating-units",
+      xColumn: "technology_family",
+      yColumn: "unit_count",
+    });
+    expect(
+      grid.sources.find(({ id }) => id === "alternative-fueling-stations")
+        ?.provenance.temporalCoverage?.end,
+    ).toBe("2025-10-22");
+  });
+});
