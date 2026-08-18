@@ -119,7 +119,10 @@ describe("live HIFLD catalog corrections", () => {
     });
     expect(
       grid.sources.find(({ id }) => id === "alternative-fueling-stations")
-        ?.provenance.temporalCoverage?.end,
-    ).toBe("2025-10-22");
+        ?.provenance,
+    ).toMatchObject({
+      dataUpdatedAt: "2025-10-22",
+      temporalCoverage: { end: "2025-10-22" },
+    });
   });
 });

@@ -5,7 +5,8 @@ import {
 } from "@earth-stories/story-schema";
 
 const created = "2026-08-17T00:00:00.000Z";
-const accessedAt = "2026-08-17";
+const updated = "2026-08-18T00:00:00.000Z";
+const accessedAt = "2026-08-18";
 const hifldBaseUrl = "https://hifld.publicenvirodata.org";
 
 const basemap = {
@@ -46,6 +47,7 @@ function hifldSource(options: {
   publisher: string;
   spatialCoverage: string;
   presentation: Presentation;
+  dataUpdatedAt?: string;
   temporalCoverage?: { start: string | null; end: string | null };
   transformations?: string[];
 }): PmtilesSource {
@@ -63,6 +65,7 @@ function hifldSource(options: {
       ...createDefaultSourceProvenance(),
       publisher: options.publisher,
       sourceUrl: `${hifldBaseUrl}/api/collections/hifld/datasets/${slug}`,
+      dataUpdatedAt: options.dataUpdatedAt ?? null,
       accessedAt,
       temporalCoverage: options.temporalCoverage ?? null,
       spatialCoverage: options.spatialCoverage,
@@ -83,7 +86,7 @@ export const earthquakeStory: StoryProject = {
       "Follow earthquakes through the records, boundaries, faults, tsunamis, and landscapes that give them meaning.",
     author: "Development Seed",
     created,
-    updated: created,
+    updated,
   },
   basemap,
   publication: {
@@ -100,7 +103,7 @@ export const earthquakeStory: StoryProject = {
       attribution: "NOAA NCEI / HIFLD Next",
       publisher: "NOAA National Centers for Environmental Information",
       spatialCoverage: "Global",
-      temporalCoverage: { start: null, end: accessedAt },
+      temporalCoverage: { start: null, end: "2008-12-31" },
       presentation: presentation({
         color: "#e5484d",
         radius: 4,
@@ -150,12 +153,12 @@ export const earthquakeStory: StoryProject = {
     }),
     hifldSource({
       id: "tsunami-events",
-      slug: "historical-tsunami-event-locations",
+      slug: "historical-tsunami-event-locations-",
       label: "Historical tsunami sources",
       attribution: "NOAA NCEI / HIFLD Next",
       publisher: "NOAA National Centers for Environmental Information",
       spatialCoverage: "Global",
-      temporalCoverage: { start: null, end: accessedAt },
+      temporalCoverage: { start: null, end: "2025-12-31" },
       presentation: presentation({
         color: "#147d92",
         radius: 5,
@@ -169,7 +172,7 @@ export const earthquakeStory: StoryProject = {
       attribution: "NOAA NCEI / HIFLD Next",
       publisher: "NOAA National Centers for Environmental Information",
       spatialCoverage: "Global",
-      temporalCoverage: { start: null, end: accessedAt },
+      temporalCoverage: { start: null, end: "2005-12-31" },
       presentation: presentation({
         opacity: 0.72,
         color: "#3e63dd",
@@ -184,7 +187,7 @@ export const earthquakeStory: StoryProject = {
       attribution: "NOAA NCEI / HIFLD Next",
       publisher: "NOAA National Centers for Environmental Information",
       spatialCoverage: "Global",
-      temporalCoverage: { start: null, end: accessedAt },
+      temporalCoverage: { start: null, end: "2024-12-31" },
       presentation: presentation({
         color: "#8e4ec6",
         radius: 6,
@@ -296,7 +299,7 @@ export const earthquakeStory: StoryProject = {
       type: "map",
       title: "A global record of rupture",
       narrative:
-        "NOAA's Significant Earthquake Database gathers destructive and otherwise notable events from 2150 BCE to the present. It is a history of earthquakes people noticed and preserved—not a uniform catalog of every time the planet moved.",
+        "This preserved HIFLD copy of NOAA's Significant Earthquake Database gathers destructive and otherwise notable events from 2150 BCE through 2008. It is a history of earthquakes people noticed and preserved—not a uniform catalog of every time the planet moved or a current event feed.",
       sourceId: "significant-earthquakes",
       camera: {
         center: [12, 8],
@@ -460,7 +463,7 @@ export const earthquakeStory: StoryProject = {
       type: "prose",
       title: "What the archive remembers",
       narrative:
-        "This story joins seven anticipated HIFLD Next PMTiles sources with NOAA-derived charts, a USGS photograph, and OpenAerialMap imagery. Every layer is a partial record made for a particular purpose. Read together, they show how the ground's long memory becomes evidence—without turning evidence into prediction.",
+        "This story joins seven verified HIFLD Next PMTiles sources with NOAA-derived charts, a USGS photograph, and OpenAerialMap imagery. Every layer is a partial record made for a particular purpose. Read together, they show how the ground's long memory becomes evidence—without turning evidence into prediction.",
     },
   ],
 };
@@ -474,7 +477,7 @@ export const electricGridStory: StoryProject = {
       "Trace the generators, lines, territories, fuels, and roadside infrastructure behind an ordinary electric switch.",
     author: "Development Seed",
     created,
-    updated: created,
+    updated,
   },
   basemap,
   publication: {
@@ -499,22 +502,30 @@ export const electricGridStory: StoryProject = {
         legendTitle: "Power plants",
       }),
     }),
-    hifldSource({
+    {
       id: "generating-units",
-      slug: "generating-units-1",
-      label: "Generating units",
-      attribution: "Oak Ridge National Laboratory / EIA / HIFLD Next",
-      publisher:
-        "Oak Ridge National Laboratory and U.S. Department of Homeland Security",
-      spatialCoverage: "United States",
-      temporalCoverage: { start: "2011-11-30", end: "2024-08-07" },
-      presentation: presentation({
-        opacity: 0.72,
-        color: "#f2b134",
-        radius: 3,
-        legendTitle: "Generating units",
-      }),
-    }),
+      kind: "csv",
+      label: "Generating units by technology",
+      path: "assets/generating-units-by-technology.csv",
+      attribution: "EIA / HIFLD Next, summarized by Earth Stories",
+      sizeBytes: null,
+      delivery: "included",
+      provenance: {
+        ...createDefaultSourceProvenance(),
+        publisher: "U.S. Energy Information Administration / HIFLD Next",
+        sourceUrl:
+          "https://hifld.publicenvirodata.org/api/collections/hifld/datasets/generating-units-1",
+        dataUpdatedAt: "2023-09-01",
+        accessedAt,
+        spatialCoverage: "United States",
+        transformations: [
+          "Grouped 32,344 generating-unit records into ten technology families",
+          "Counted units and summed SUMMER_CAP within each family",
+          "Excluded 159 non-positive sentinel values from capacity sums while retaining those records in unit counts",
+          "Rounded summer capacity totals to the nearest whole megawatt",
+        ],
+      },
+    },
     hifldSource({
       id: "transmission-lines",
       slug: "transmission-lines-1",
@@ -618,7 +629,8 @@ export const electricGridStory: StoryProject = {
       attribution: "NREL Alternative Fuels Data Center / HIFLD Next",
       publisher: "National Renewable Energy Laboratory",
       spatialCoverage: "United States",
-      temporalCoverage: { start: "2010-07-01", end: "2024-10-22" },
+      dataUpdatedAt: "2025-10-22",
+      temporalCoverage: { start: "2010-07-01", end: "2025-10-22" },
       presentation: presentation({
         color: "#30a46c",
         radius: 3,
@@ -716,13 +728,16 @@ export const electricGridStory: StoryProject = {
     },
     {
       id: "grid-generating-units",
-      type: "map",
+      type: "chart",
       title: "One plant, many machines",
       narrative:
-        "A plant is a facility; a generating unit is an individual machine or generator within it. Overlaying units with plants exposes that nested structure and helps explain why two points at nearly the same coordinate can describe different levels of the same system.",
+        "A plant is a facility; a generating unit is an individual machine or generator within it. This summary counts 32,344 non-spatial HIFLD unit records by technology family. Unit count is not capacity: thousands of small solar, petroleum, or gas units can coexist with a much smaller number of very large nuclear or coal machines.",
       sourceId: "generating-units",
-      overlaySourceIds: ["power-plants"],
-      camera: { center: [-90.2, 38.7], zoom: 6.2, bearing: 0, pitch: 28 },
+      chartType: "bar",
+      xColumn: "technology_family",
+      yColumn: "unit_count",
+      xLabel: "Technology family",
+      yLabel: "Generating units (count)",
     },
     {
       id: "grid-transmission-flyover",
@@ -772,7 +787,7 @@ export const electricGridStory: StoryProject = {
       type: "map",
       title: "Who keeps the system connected",
       narrative:
-        "Reliability coordinators maintain a wide-area view and help coordinate operations across utilities and balancing authorities. Their mapped footprints describe responsibility and oversight; they are not physical circuits and can overlap the ways electricity actually moves.",
+        "Reliability coordinators maintain a wide-area view and help coordinate operations across utilities and balancing authorities. Their mapped footprints describe responsibility and oversight; they are not physical circuits. HIFLD's archive quality check flags 6 of 13 coordinator geometries as invalid, so some footprints may be incomplete or distorted.",
       sourceId: "reliability-coordinators",
       overlaySourceIds: ["nerc-regions", "transmission-lines"],
       camera: { center: [-98, 38], zoom: 3.3, bearing: 0, pitch: 8 },
@@ -782,7 +797,7 @@ export const electricGridStory: StoryProject = {
       type: "scrolly",
       title: "The boundaries customers inherit",
       narrative:
-        "Retail service territories describe which utility sells electricity to local customers, while planning areas describe longer-term coordination. These responsibility boundaries are not electrical walls: power can be generated, scheduled, and transmitted across many institutional footprints before reaching a bill.",
+        "Retail service territories describe which utility sells electricity to local customers, while planning areas describe longer-term coordination. These boundaries are not electrical walls. HIFLD's archive quality checks flag 254 of 2,931 territory geometries and 20 of 95 planning-area geometries as invalid, so gaps or distortions may reflect source quality rather than institutional reality.",
       sourceId: "retail-service-territories",
       overlaySourceIds: ["electric-planning-areas", "transmission-lines"],
       transition: "fly-to",
@@ -794,7 +809,7 @@ export const electricGridStory: StoryProject = {
       type: "scrolly",
       title: "The pipeline behind the power line",
       narrative:
-        "Natural-gas plants depend on a fuel system that has its own long-distance geography. This pipeline layer is an archived January 2020 view, and visual proximity does not prove that a particular pipeline supplies a particular plant; network contracts, interconnections, and operating data are needed for that claim.",
+        "Natural-gas plants depend on a fuel system that has its own long-distance geography. This pipeline layer is an archived January 2020 view, and visual proximity does not prove supply. HIFLD marks the archive's overall quality check as failed even though it reports zero invalid geometries and does not expose the reason, so the layer should be treated as indicative rather than complete.",
       sourceId: "natural-gas-pipelines",
       overlaySourceIds: ["power-plants", "transmission-lines"],
       transition: "fly-to",
@@ -817,7 +832,7 @@ export const electricGridStory: StoryProject = {
       type: "map",
       title: "Electricity moves onto the road",
       narrative:
-        "Alternative-fueling stations extend the energy system into transportation. This layer includes multiple fuels, access types, and statuses; a mapped point does not establish that a charger is operating, available, affordable, heavily used, or supported by spare local grid capacity.",
+        "Alternative-fueling stations extend the energy system into transportation. This preserved snapshot includes records through 2025 and multiple fuels, access types, and statuses; a mapped point does not establish that a charger is operating, available, affordable, heavily used, or supported by spare local grid capacity today.",
       sourceId: "alternative-fueling-stations",
       overlaySourceIds: ["retail-service-territories"],
       camera: { center: [-98, 38], zoom: 3.25, bearing: 0, pitch: 10 },
@@ -827,7 +842,7 @@ export const electricGridStory: StoryProject = {
       type: "prose",
       title: "What this map cannot tell us",
       narrative:
-        "This story joins nine anticipated HIFLD Next PMTiles sources with a historical capacity summary and a USGS image. It can show assets, adjacency, and institutional geography. It cannot show live power flows, reliability, emissions, prices, equity, or the condition of equipment—questions that need operational, temporal, and community data beyond this catalog.",
+        "This story joins eight verified HIFLD Next PMTiles sources, an included summary of HIFLD's non-spatial Generating Units table, a historical capacity summary, and a USGS image. It can show assets, adjacency, and institutional geography. It cannot show live power flows, reliability, emissions, prices, equity, or the condition of equipment—questions that need operational, temporal, and community data beyond this catalog.",
     },
   ],
 };
