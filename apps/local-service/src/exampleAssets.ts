@@ -30,7 +30,7 @@ const EXAMPLE_ASSET_FILES: Record<string, string[]> = {
   ],
   "example-electric-grid": [
     "generation-by-fuel.csv",
-    "generating-units-by-technology.csv",
+    "generating-units.csv",
     "energy-hardware.png",
   ],
 };

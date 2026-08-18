@@ -506,7 +506,7 @@ export const electricGridStory: StoryProject = {
       id: "generating-units",
       kind: "csv",
       label: "Generating units by technology",
-      path: "assets/generating-units-by-technology.csv",
+      path: "assets/generating-units.csv",
       attribution: "EIA / HIFLD Next, summarized by Earth Stories",
       sizeBytes: null,
       delivery: "included",

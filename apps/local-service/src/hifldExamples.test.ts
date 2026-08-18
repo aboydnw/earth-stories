@@ -102,7 +102,7 @@ describe("live HIFLD catalog corrections", () => {
 
     expect(units).toMatchObject({
       kind: "csv",
-      path: "assets/generating-units-by-technology.csv",
+      path: "assets/generating-units.csv",
       delivery: "included",
       provenance: {
         dataUpdatedAt: "2023-09-01",
