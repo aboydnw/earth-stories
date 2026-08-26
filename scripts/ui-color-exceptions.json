@@ -110,5 +110,47 @@
     "context": "context.fillStyle = \"rgba(16,26,25,.92)\"",
     "domain": "rendering-boundary",
     "reason": "Concrete canvas background keeps generated-card attribution legible."
+  },
+  {
+    "file": "apps/editor/src/categoricalPreparation.test.ts",
+    "value": "#4E79A7",
+    "context": "color: \"#4E79A7\", label: \"Water\"",
+    "domain": "authored-data",
+    "reason": "Detected raster class color returned by the conversion worker."
+  },
+  {
+    "file": "apps/editor/src/categoricalPreparation.test.ts",
+    "value": "#F28E2B",
+    "context": "color: \"#F28E2B\", label: \"Class 7\"",
+    "domain": "authored-data",
+    "reason": "Detected raster class color returned by the conversion worker."
+  },
+  {
+    "file": "apps/editor/src/categoricalPreparation.test.ts",
+    "value": "#4e79a7",
+    "context": "\"1\": \"#4e79a7\"",
+    "domain": "authored-data",
+    "reason": "Expected lowercased class color stored on the source presentation."
+  },
+  {
+    "file": "apps/editor/src/categoricalPreparation.test.ts",
+    "value": "#f28e2b",
+    "context": "\"7\": \"#f28e2b\"",
+    "domain": "authored-data",
+    "reason": "Expected lowercased class color stored on the source presentation."
+  },
+  {
+    "file": "apps/editor/src/categoricalPreparation.test.ts",
+    "value": "#4E79A7",
+    "context": "color: \"#4E79A7\", label: \"Class 3\"",
+    "domain": "authored-data",
+    "reason": "Detected raster class color returned by the conversion worker."
+  },
+  {
+    "file": "apps/editor/src/categoricalPreparation.test.ts",
+    "value": "red",
+    "context": "color: \"red\"",
+    "domain": "authored-data",
+    "reason": "Malformed worker color the mapper must reject."
   }
 ]

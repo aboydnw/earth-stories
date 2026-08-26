@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type {
   Camera,
@@ -20,6 +20,51 @@ const ChartChapter = lazy(async () => ({
 const FlyoverChapter = lazy(async () => ({
   default: (await import("./FlyoverChapter.js")).FlyoverChapter,
 }));
+const ImageLightbox = lazy(async () => ({
+  default: (await import("./ImageLightbox.js")).ImageLightbox,
+}));
+
+function ImageFigure({
+  src,
+  alt,
+  caption,
+  enlargeable,
+}: {
+  src: string;
+  alt: string;
+  caption: string;
+  enlargeable: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const image = <img src={src} alt={alt} />;
+  return (
+    <figure className="story-image">
+      {enlargeable ? (
+        <button
+          type="button"
+          className="story-image__open"
+          onClick={() => setOpen(true)}
+          aria-label={`Open ${alt || caption || "image"} full size`}
+        >
+          {image}
+        </button>
+      ) : (
+        image
+      )}
+      <figcaption>{caption}</figcaption>
+      {open ? (
+        <Suspense fallback={null}>
+          <ImageLightbox
+            src={src}
+            alt={alt}
+            caption={caption}
+            onClose={() => setOpen(false)}
+          />
+        </Suspense>
+      ) : null}
+    </figure>
+  );
+}
 
 export type ChapterComposition =
   "full-story" | "focused-preview" | "authoring-map";
@@ -193,10 +238,12 @@ export function PublicationChapterRenderer({
         </StoryMapHydrationBoundary>
       ) : null}
       {chapter.type === "image" && asset ? (
-        <figure className="story-image">
-          <img src={asset.href} alt={chapter.alt} />
-          <figcaption>{chapter.caption || asset.label}</figcaption>
-        </figure>
+        <ImageFigure
+          src={asset.href}
+          alt={chapter.alt}
+          caption={chapter.caption || asset.label}
+          enlargeable={!snapshotMode}
+        />
       ) : null}
       {chapter.type === "chart" && asset ? (
         <Suspense
