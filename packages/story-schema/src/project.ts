@@ -423,12 +423,16 @@ export type ProjectChapter = z.infer<typeof projectChapterSchema>;
  * in, and a chart built on one would fail at read time.
  */
 export function supportsTimeseriesChart(source: ProjectSource): boolean {
-  return (
-    source.kind === "zarr" &&
-    source.timeDimension !== null &&
-    source.timesteps.length > 0 &&
-    source.geozarr !== null
-  );
+  if (
+    source.kind !== "zarr" ||
+    source.timeDimension === null ||
+    source.timesteps.length === 0 ||
+    source.geozarr === null
+  )
+    return false;
+  // A degenerate transform has no inverse, so no coordinate maps to a pixel.
+  const [a, b, , d, e] = source.geozarr.transform;
+  return a * e - b * d !== 0;
 }
 
 /** Sources a chart chapter can read: a CSV table, a raster, or a timed Zarr. */

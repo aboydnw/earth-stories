@@ -48,6 +48,20 @@ describe("supportsTimeseriesChart", () => {
       supportsTimeseriesChart(zarr({ ...chartReadyZarr, geozarr: null })),
     ).toBe(false);
   });
+
+  it("rejects a transform with no inverse", () => {
+    expect(
+      supportsTimeseriesChart(
+        zarr({
+          ...chartReadyZarr,
+          geozarr: {
+            ...chartReadyZarr.geozarr,
+            transform: [0, 0, 0, 0, 0, 0],
+          },
+        }),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("supportsChart", () => {
