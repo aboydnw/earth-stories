@@ -46,9 +46,13 @@ During development the bundle step can be skipped:
 claude mcp add earth-stories -- yarn --cwd <repository> workspace @earth-stories/mcp dev
 ```
 
-Set `EARTH_STORIES_SERVICE_URL` when the service listens somewhere other than
-`http://127.0.0.1:4317`. The server exits with a message on stderr when the
-service is unreachable, because stdout carries the protocol.
+Set `EARTH_STORIES_SERVICE_URL` when the service listens on a different port.
+The value must still be a loopback address — `127.0.0.1`, `localhost`, or
+`::1`. The server has no authentication of its own and depends on the service
+being reachable only from this computer, so it refuses to start against a
+remote endpoint rather than quietly moving that boundary. It also exits with a
+message on stderr when the service is unreachable, because stdout carries the
+protocol.
 
 ## Tools
 
@@ -73,8 +77,9 @@ fields it requires, including the three chart series kinds.
 
 ## Scope
 
-Loopback only, one computer, no remote transport, and no authentication beyond
-the service's own origin check. Styling a layer, moving a camera, or rewriting
+Loopback only, one computer: the stdio transport is local by construction, and
+the service endpoint is checked to be a loopback host at startup. There is no
+remote transport and no authentication beyond the service's own origin check. Styling a layer, moving a camera, or rewriting
 a narrative is an ordinary `update_project` call — there are no per-field tools.
 Wiring the desktop application to print a ready-made client configuration is
 follow-up work.

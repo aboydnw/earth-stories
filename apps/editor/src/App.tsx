@@ -81,6 +81,15 @@ import { pollConversionJob } from "./conversionPolling";
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
 type PendingChapterType = "map" | "scrolly" | "image" | "chart";
+
+/** Sources a chart chapter can read: a CSV table, a raster, or a timed Zarr. */
+function chartableSource(source: ProjectSource) {
+  return (
+    source.kind === "csv" ||
+    source.kind === "cog" ||
+    (source.kind === "zarr" && source.timeDimension !== null)
+  );
+}
 interface MultidimChoice {
   variable: string;
   selection: Record<string, number>;
@@ -664,12 +673,7 @@ export function App() {
   }
   function addChart() {
     if (!project) return;
-    const source = project.sources.find(
-      (item) =>
-        item.kind === "csv" ||
-        item.kind === "cog" ||
-        (item.kind === "zarr" && item.timeDimension !== null),
-    );
+    const source = project.sources.find(chartableSource);
     if (!source) {
       showError(
         "Import a CSV, a raster, or a time-aware Zarr before creating a chart chapter.",
@@ -1836,9 +1840,7 @@ export function App() {
                 canAddImage={project.sources.some(
                   (source) => source.kind === "image",
                 )}
-                canAddChart={project.sources.some(
-                  (source) => source.kind === "csv",
-                )}
+                canAddChart={project.sources.some(chartableSource)}
                 onToggle={() => setAddChapterOpen((open) => !open)}
                 onAddProse={addProse}
                 onAddScrolly={() => addMapChapter("scrolly")}

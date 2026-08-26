@@ -20,7 +20,7 @@ attribute table, or an integer band with no more than thirty distinct values.
 When one of those matches, the new source starts with a colour per class and a
 display range spanning the class values, so a land-cover or classification
 raster is legible before any manual styling. Authors edit or clear those colours
-under **Map appearance**.
+under **Filtering and legend**.
 
 For multidimensional inputs, inspection lists variables and dimensions. The
 author chooses a variable and indices for non-spatial dimensions; this release

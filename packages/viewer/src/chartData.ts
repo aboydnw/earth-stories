@@ -1,9 +1,10 @@
 import { GeoTIFF } from "@developmentseed/geotiff";
 import proj4 from "proj4";
 import * as zarr from "zarrita";
-import type {
-  PublicationAsset,
-  PublicationChapter,
+import {
+  parseCsv,
+  type PublicationAsset,
+  type PublicationChapter,
 } from "@earth-stories/story-schema";
 import { selectSampleTiles } from "./cogPipeline.js";
 import { completeZarrSelection, openZarrVariable } from "./zarrNode.js";
@@ -18,14 +19,16 @@ type ChartChapter = Extract<PublicationChapter, { type: "chart" }>;
 
 const HISTOGRAM_SAMPLE_TILES = 8;
 
-function parseCsv(text: string): Record<string, string>[] {
-  const lines = text.trim().split(/\r?\n/);
-  const headers = lines[0]?.split(",").map((item) => item.trim()) ?? [];
-  return lines
-    .slice(1)
-    .map((line) =>
+/** Read CSV text as records keyed by the header row. */
+function csvRecords(text: string): Record<string, string>[] {
+  const [headerRow, ...rows] = parseCsv(text);
+  if (!headerRow) return [];
+  const headers = headerRow.map((item) => item.trim());
+  return rows
+    .filter((row) => row.some((cell) => cell.trim() !== ""))
+    .map((row) =>
       Object.fromEntries(
-        line.split(",").map((value, index) => [headers[index], value.trim()]),
+        headers.map((header, index) => [header, (row[index] ?? "").trim()]),
       ),
     );
 }
@@ -160,5 +163,5 @@ export async function loadChartSeries(
     return readZarrPointSeries(asset.href, asset, chapter.series.point, signal);
   const response = await fetch(asset.href, { signal });
   if (!response.ok) throw new Error("Chart data could not be loaded.");
-  return tablePoints(parseCsv(await response.text()), chapter);
+  return tablePoints(csvRecords(await response.text()), chapter);
 }
