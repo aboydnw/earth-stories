@@ -1,7 +1,8 @@
-import type {
-  ProjectChapter,
-  ProjectSource,
-  StoryProject,
+import {
+  supportsTimeseriesChart,
+  type ProjectChapter,
+  type ProjectSource,
+  type StoryProject,
 } from "@earth-stories/story-schema";
 import { validateRemoteUrl } from "./remote-url.js";
 
@@ -73,7 +74,7 @@ export function chapterCompileIssues(
           chapter.yColumn !== ""
         : kind === "histogram"
           ? source.kind === "cog"
-          : source.kind === "zarr" && source.timeDimension !== null;
+          : supportsTimeseriesChart(source);
     if (!compatible)
       issues.push({
         code: "incompatible-source",
@@ -84,7 +85,7 @@ export function chapterCompileIssues(
             ? `Chart chapter "${chapter.title}" requires a CSV source with X and Y columns`
             : kind === "histogram"
               ? `Histogram chart "${chapter.title}" requires a COG source`
-              : `Timeseries chart "${chapter.title}" requires a Zarr source with a time dimension`,
+              : `Timeseries chart "${chapter.title}" requires a Zarr source with a time dimension, timesteps, and a spatial transform`,
       });
   }
   if (

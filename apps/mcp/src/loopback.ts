@@ -1,4 +1,6 @@
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+const LOOPBACK_HOSTS = new Set(["localhost", "::1", "[::1]"]);
+// RFC 1122 reserves all of 127.0.0.0/8 for loopback, not just 127.0.0.1.
+const IPV4_LOOPBACK = /^127(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
 
 /**
  * Resolve the service endpoint, refusing anything but a loopback host.
@@ -20,7 +22,10 @@ export function resolveServiceUrl(value: string | undefined): string {
     throw new Error(
       `EARTH_STORIES_SERVICE_URL must be an http(s) URL, not ${parsed.protocol}`,
     );
-  if (!LOOPBACK_HOSTS.has(parsed.hostname))
+  if (
+    !LOOPBACK_HOSTS.has(parsed.hostname) &&
+    !IPV4_LOOPBACK.test(parsed.hostname)
+  )
     throw new Error(
       `EARTH_STORIES_SERVICE_URL must point at this computer. ${parsed.hostname} is not a loopback host.`,
     );

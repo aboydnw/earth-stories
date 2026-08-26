@@ -20,7 +20,10 @@ import type {
   ProjectSource,
   StoryProject,
 } from "@earth-stories/story-schema";
-import { createDefaultSourceProvenance } from "@earth-stories/story-schema";
+import {
+  createDefaultSourceProvenance,
+  supportsChart,
+} from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
 import {
   ActionButton,
@@ -82,14 +85,6 @@ type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
 type PendingChapterType = "map" | "scrolly" | "image" | "chart";
 
-/** Sources a chart chapter can read: a CSV table, a raster, or a timed Zarr. */
-function chartableSource(source: ProjectSource) {
-  return (
-    source.kind === "csv" ||
-    source.kind === "cog" ||
-    (source.kind === "zarr" && source.timeDimension !== null)
-  );
-}
 interface MultidimChoice {
   variable: string;
   selection: Record<string, number>;
@@ -673,7 +668,7 @@ export function App() {
   }
   function addChart() {
     if (!project) return;
-    const source = project.sources.find(chartableSource);
+    const source = project.sources.find(supportsChart);
     if (!source) {
       showError(
         "Import a CSV, a raster, or a time-aware Zarr before creating a chart chapter.",
@@ -1840,7 +1835,7 @@ export function App() {
                 canAddImage={project.sources.some(
                   (source) => source.kind === "image",
                 )}
-                canAddChart={project.sources.some(chartableSource)}
+                canAddChart={project.sources.some(supportsChart)}
                 onToggle={() => setAddChapterOpen((open) => !open)}
                 onAddProse={addProse}
                 onAddScrolly={() => addMapChapter("scrolly")}

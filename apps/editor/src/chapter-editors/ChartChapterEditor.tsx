@@ -1,7 +1,8 @@
-import type {
-  ChartSeries,
-  ProjectChapter,
-  ProjectSource,
+import {
+  supportsTimeseriesChart,
+  type ChartSeries,
+  type ProjectChapter,
+  type ProjectSource,
 } from "@earth-stories/story-schema";
 import {
   CollapsibleSection,
@@ -37,7 +38,7 @@ export function ChartChapterEditor({
       ? source.kind === "csv"
       : kind === "histogram"
         ? source.kind === "cog"
-        : source.kind === "zarr" && source.timeDimension !== null,
+        : supportsTimeseriesChart(source),
   );
   return (
     <div className="chapter-type-editor">

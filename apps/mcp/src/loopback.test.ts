@@ -12,6 +12,9 @@ describe("resolveServiceUrl", () => {
       "http://localhost:4319",
     );
     expect(resolveServiceUrl("http://[::1]:4317")).toBe("http://[::1]:4317");
+    expect(resolveServiceUrl("http://127.0.0.2:4317")).toBe(
+      "http://127.0.0.2:4317",
+    );
   });
 
   it("refuses an endpoint on another machine", () => {
@@ -19,6 +22,9 @@ describe("resolveServiceUrl", () => {
       "loopback",
     );
     expect(() => resolveServiceUrl("https://stories.example.com")).toThrow(
+      "loopback",
+    );
+    expect(() => resolveServiceUrl("http://128.0.0.1:4317")).toThrow(
       "loopback",
     );
   });

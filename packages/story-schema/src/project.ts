@@ -415,5 +415,29 @@ export type FlyoverKeyframe = z.infer<typeof flyoverKeyframeSchema>;
 export type ProjectSource = z.infer<typeof projectSourceSchema>;
 export type ProjectDataAsset = z.infer<typeof projectDataAssetSchema>;
 export type ProjectChapter = z.infer<typeof projectChapterSchema>;
+
+/**
+ * Whether a source carries what a timeseries chart needs: a time dimension,
+ * the timesteps to read, and the spatial transform that turns a coordinate
+ * into a pixel. A Zarr connection can be added before discovery fills these
+ * in, and a chart built on one would fail at read time.
+ */
+export function supportsTimeseriesChart(source: ProjectSource): boolean {
+  return (
+    source.kind === "zarr" &&
+    source.timeDimension !== null &&
+    source.timesteps.length > 0 &&
+    source.geozarr !== null
+  );
+}
+
+/** Sources a chart chapter can read: a CSV table, a raster, or a timed Zarr. */
+export function supportsChart(source: ProjectSource): boolean {
+  return (
+    source.kind === "csv" ||
+    source.kind === "cog" ||
+    supportsTimeseriesChart(source)
+  );
+}
 export type StoryProjectV1 = z.infer<typeof storyProjectV1Schema>;
 export type StoryProject = z.infer<typeof storyProjectV2Schema>;

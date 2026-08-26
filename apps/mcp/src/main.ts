@@ -1,11 +1,18 @@
+import { writeSync } from "node:fs";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServiceClient } from "./client.js";
 import { resolveServiceUrl } from "./loopback.js";
 import { createMcpServer } from "./server.js";
 
-// stdout carries the protocol, so every human-facing line goes to stderr.
+/**
+ * Report a startup failure and stop.
+ *
+ * stdout carries the protocol, so every human-facing line goes to stderr, and
+ * the write is synchronous: a piped stderr can lose a buffered write when
+ * process.exit follows immediately.
+ */
 function fail(message: string): never {
-  process.stderr.write(`${message}\n`);
+  writeSync(process.stderr.fd, `${message}\n`);
   process.exit(1);
 }
 
