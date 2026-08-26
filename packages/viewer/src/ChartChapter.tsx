@@ -1,94 +1,42 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   PublicationAsset,
   PublicationChapter,
 } from "@earth-stories/story-schema";
+import { loadChartSeries } from "./chartData.js";
+import type { ChartSeriesData } from "./chartSeries.js";
 
 interface Props {
   chapter: Extract<PublicationChapter, { type: "chart" }>;
   asset: PublicationAsset;
 }
 
-function parseCsv(text: string): Record<string, string>[] {
-  const lines = text.trim().split(/\r?\n/);
-  const headers = lines[0]?.split(",").map((item) => item.trim()) ?? [];
-  return lines
-    .slice(1)
-    .map((line) =>
-      Object.fromEntries(
-        line.split(",").map((value, index) => [headers[index], value.trim()]),
-      ),
-    );
-}
+const SERIES_COLORS = ["#cf3f02", "#126e75", "#7054a0", "#d59d12"];
 
 export function ChartChapter({ chapter, asset }: Props) {
-  const [rows, setRows] = useState<Record<string, string>[]>([]);
-  const [error, setError] = useState(false);
+  const [series, setSeries] = useState<ChartSeriesData[]>([]);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
-    fetch(asset.href, { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error();
-        return response.text();
+    setSeries([]);
+    setError(null);
+    loadChartSeries(chapter, asset, controller.signal)
+      .then((loaded) => {
+        if (!controller.signal.aborted) setSeries(loaded);
       })
-      .then((text) => setRows(parseCsv(text)))
       .catch((cause) => {
-        if (cause instanceof Error && cause.name !== "AbortError")
-          setError(true);
+        if (controller.signal.aborted) return;
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Chart data could not be loaded.",
+        );
       });
     return () => controller.abort();
-  }, [asset.href]);
-  const columns = [chapter.yColumn, ...chapter.yColumns].filter(
-    (value, index, all) => all.indexOf(value) === index,
-  );
-  const withinBound = (
-    raw: string,
-    bound: string | number | null,
-    lower: boolean,
-  ) => {
-    if (bound === null) return true;
-    if (typeof bound === "number") {
-      const value = Number(raw);
-      return (
-        Number.isFinite(value) && (lower ? value >= bound : value <= bound)
-      );
-    }
-    return lower ? raw >= bound : raw <= bound;
-  };
-  const series = useMemo(
-    () =>
-      columns.map((column) => ({
-        column,
-        points: rows
-          .filter((row) =>
-            withinBound(row[chapter.xColumn] ?? "", chapter.xMin, true),
-          )
-          .filter((row) =>
-            withinBound(row[chapter.xColumn] ?? "", chapter.xMax, false),
-          )
-          .map((row) => ({
-            label: row[chapter.xColumn] ?? "",
-            value: Number(row[column]),
-          }))
-          .filter(
-            (point) =>
-              Number.isFinite(point.value) &&
-              (chapter.yScale !== "log" || point.value > 0),
-          )
-          .slice(0, 80),
-      })),
-    [
-      chapter.xColumn,
-      chapter.xMax,
-      chapter.xMin,
-      chapter.yScale,
-      columns.join("|"),
-      rows,
-    ],
-  );
+  }, [asset, chapter]);
   const points = series[0]?.points ?? [];
   const scaleValue = (value: number) =>
-    chapter.yScale === "log" ? Math.log10(value) : value;
+    chapter.yScale === "log" && value > 0 ? Math.log10(value) : value;
   const scaledValues = series.flatMap((item) =>
     item.points.map((point) => scaleValue(point.value)),
   );
@@ -97,27 +45,40 @@ export function ChartChapter({ chapter, asset }: Props) {
   const scaledRange = maximum - minimum || 1;
   const normalized = (value: number) =>
     (scaleValue(value) - minimum) / scaledRange;
-  if (error)
-    return <p className="story-media-error">Chart data could not be loaded.</p>;
+  const caption =
+    chapter.series.kind === "histogram"
+      ? `${asset.label} · value distribution`
+      : chapter.series.kind === "timeseries"
+        ? `${asset.label} · ${chapter.series.point
+            .map((value) => value.toFixed(3))
+            .join(", ")}`
+        : `${asset.label} · ${chapter.xLabel || chapter.xColumn} by ${
+            chapter.yLabel ||
+            series.map((item) => item.name).join(", ") ||
+            chapter.yColumn
+          }`;
+  if (error) return <p className="story-media-error">{error}</p>;
   if (chapter.chartType === "line") {
     return (
       <figure className="story-chart" aria-label={`${chapter.title} chart`}>
         <svg className="story-chart__line" viewBox="0 0 100 100" role="img">
           {series.map((item, seriesIndex) => (
             <polyline
-              key={item.column}
+              key={item.name}
               points={item.points
                 .map(
                   (point, index) =>
-                    `${item.points.length === 1 ? 50 : (index / (item.points.length - 1)) * 100},${96 - normalized(point.value) * 88}`,
+                    `${
+                      item.points.length === 1
+                        ? 50
+                        : (index / (item.points.length - 1)) * 100
+                    },${96 - normalized(point.value) * 88}`,
                 )
                 .join(" ")}
               fill="none"
               vectorEffect="non-scaling-stroke"
               style={{
-                stroke: ["#cf3f02", "#126e75", "#7054a0", "#d59d12"][
-                  seriesIndex % 4
-                ],
+                stroke: SERIES_COLORS[seriesIndex % SERIES_COLORS.length],
               }}
             />
           ))}
@@ -139,10 +100,7 @@ export function ChartChapter({ chapter, asset }: Props) {
             );
           })}
         </svg>
-        <figcaption>
-          {asset.label} · {chapter.xLabel || chapter.xColumn} by{" "}
-          {chapter.yLabel || columns.join(", ")}
-        </figcaption>
+        <figcaption>{caption}</figcaption>
       </figure>
     );
   }
@@ -166,7 +124,7 @@ export function ChartChapter({ chapter, asset }: Props) {
           </div>
         ))}
       </div>
-      <figcaption>{asset.label}</figcaption>
+      <figcaption>{caption}</figcaption>
     </figure>
   );
 }

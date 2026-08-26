@@ -397,6 +397,7 @@ function compileChapter(chapter: ProjectChapter): PublicationChapter {
         ...base,
         type: "chart",
         assetId: chapter.sourceId,
+        series: chapter.series,
         chartType: chapter.chartType,
         xColumn: chapter.xColumn,
         yColumn: chapter.yColumn,

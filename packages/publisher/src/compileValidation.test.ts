@@ -51,6 +51,58 @@ describe("compile validation", () => {
     ).toBe('Scrolly chapter "Tour" requires a geospatial source');
   });
 
+  it("matches each chart series kind to the source it can read", () => {
+    const csv = projectSourceSchema.parse({
+      id: "table",
+      kind: "csv",
+      label: "Table",
+      path: "data/table.csv",
+      delivery: "included",
+      provenance,
+    });
+    const cog = projectSourceSchema.parse({
+      id: "dem",
+      kind: "cog",
+      label: "DEM",
+      locator: "data/dem.tif",
+      delivery: "included",
+      provenance,
+    });
+    const sources = new Map([
+      [csv.id, csv],
+      [cog.id, cog],
+    ]);
+    const chart = {
+      id: "chart",
+      type: "chart",
+      title: "Distribution",
+      narrative: "",
+      sourceId: csv.id,
+      series: { kind: "histogram", bins: 20 },
+      chartType: "bar",
+      xColumn: "",
+      yColumn: "",
+    } as ProjectChapter;
+
+    expect(chapterCompileIssues(chart, sources)[0]?.message).toBe(
+      'Histogram chart "Distribution" requires a COG source',
+    );
+    expect(
+      chapterCompileIssues(
+        { ...chart, sourceId: cog.id } as ProjectChapter,
+        sources,
+      ),
+    ).toEqual([]);
+    expect(
+      chapterCompileIssues(
+        { ...chart, series: { kind: "table" } } as ProjectChapter,
+        sources,
+      )[0]?.message,
+    ).toBe(
+      'Chart chapter "Distribution" requires a CSV source with X and Y columns',
+    );
+  });
+
   it("validates remote XYZ template locators", () => {
     const source = projectSourceSchema.parse({
       id: "tiles",

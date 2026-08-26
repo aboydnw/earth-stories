@@ -581,6 +581,7 @@ export function App() {
           ? {
               id,
               type: "chart",
+              series: { kind: "table" as const },
               title,
               narrative: "",
               sourceId: source.id,
@@ -663,12 +664,36 @@ export function App() {
   }
   function addChart() {
     if (!project) return;
-    const source = project.sources.find((item) => item.kind === "csv");
+    const source = project.sources.find(
+      (item) =>
+        item.kind === "csv" ||
+        item.kind === "cog" ||
+        (item.kind === "zarr" && item.timeDimension !== null),
+    );
     if (!source) {
-      showError("Import a CSV before creating a chart chapter.");
+      showError(
+        "Import a CSV, a raster, or a time-aware Zarr before creating a chart chapter.",
+      );
       return;
     }
-    addChapterFromSource(source);
+    if (source.kind === "csv") {
+      addChapterFromSource(source);
+      return;
+    }
+    addChapter({
+      id: crypto.randomUUID(),
+      type: "chart",
+      series:
+        source.kind === "cog"
+          ? { kind: "histogram", bins: 20 }
+          : { kind: "timeseries", point: camera.center },
+      title: source.label,
+      narrative: "",
+      sourceId: source.id,
+      chartType: source.kind === "cog" ? "bar" : "line",
+      xColumn: "",
+      yColumn: "",
+    });
   }
   function addVideo() {
     addChapter({
@@ -836,6 +861,7 @@ export function App() {
         chapter = {
           id: crypto.randomUUID(),
           type: "chart",
+          series: { kind: "table" as const },
           title: file.name.replace(/\.[^.]+$/, ""),
           narrative: "",
           sourceId: id,
@@ -1031,24 +1057,38 @@ export function App() {
             : { ...common, kind: "geoparquet" };
     const intendedChapter: ProjectChapter | null =
       !intent.targetChapterId &&
-      (intent.pendingChapterType === "map" ||
-        intent.pendingChapterType === "scrolly")
+      intent.pendingChapterType === "chart" &&
+      source.kind === "cog"
         ? {
             id: `${sourceId}-chapter`,
-            type: intent.pendingChapterType,
+            type: "chart",
+            series: { kind: "histogram", bins: 20 },
             title: source.label,
             narrative: "",
             sourceId,
-            overlaySourceIds: [],
-            camera,
-            ...(intent.pendingChapterType === "scrolly"
-              ? {
-                  transition: "fly-to" as const,
-                  overlayPosition: "left" as const,
-                }
-              : {}),
+            chartType: "bar",
+            xColumn: "",
+            yColumn: "",
           }
-        : null;
+        : !intent.targetChapterId &&
+            (intent.pendingChapterType === "map" ||
+              intent.pendingChapterType === "scrolly")
+          ? {
+              id: `${sourceId}-chapter`,
+              type: intent.pendingChapterType,
+              title: source.label,
+              narrative: "",
+              sourceId,
+              overlaySourceIds: [],
+              camera,
+              ...(intent.pendingChapterType === "scrolly"
+                ? {
+                    transition: "fly-to" as const,
+                    overlayPosition: "left" as const,
+                  }
+                : {}),
+            }
+          : null;
     changeProject((current) => ({
       ...current,
       dataAssets: current.dataAssets.map((item) =>

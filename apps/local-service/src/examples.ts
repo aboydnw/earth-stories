@@ -383,6 +383,7 @@ const boundaries: StoryProject = {
     {
       id: "boundaries-pyramid-chart",
       type: "chart",
+      series: { kind: "table" as const },
       title: "What one file actually stores",
       narrative:
         "This compact admin-0 archive addresses 82 tiles across four zoom levels. PMTiles stores its indexed vector tiles in one range-readable file, so the browser can request only the geographic context needed for the current view.",
@@ -407,6 +408,7 @@ const boundaries: StoryProject = {
     {
       id: "boundaries-elevation-chart",
       type: "chart",
+      series: { kind: "table" as const },
       title: "Where all that height goes",
       narrative:
         "A real elevation histogram of the same tile: most of the surface sits in the 3,000–5,500 meter band of high valleys and ridgelines, with a thin tail reaching toward the summit itself.",
@@ -560,6 +562,7 @@ const pointCloud: StoryProject = {
     {
       id: "cloud-classification-chart",
       type: "chart",
+      series: { kind: "table" as const },
       title: "What's actually in the file",
       narrative:
         "Every point in a classified lidar survey is labeled with what it bounced off. Sampled across the archive, three-fifths of Autzen's returns are bare **ground**, a quarter are **high vegetation** — trees taller than about two meters — and the rest split between water, buildings, and points the classifier left unassigned.",
@@ -717,6 +720,7 @@ const temporalFields: StoryProject = {
     {
       id: "fields-probability-chart",
       type: "chart",
+      series: { kind: "table" as const },
       title: "How confident is confident",
       narrative:
         'Across this same window, 85% of pixels score above 0.1 — this is genuinely dense cropland, not noise. Real farmland produces a lopsided distribution: little middle ground between "almost certainly field" and "almost certainly not."',
@@ -966,6 +970,7 @@ const stormTrack: StoryProject = {
     {
       id: "storm-intensity-chart",
       type: "chart",
+      series: { kind: "table" as const },
       title: "Wind speed, fix by fix",
       narrative:
         "The same best-track fixes, plotted as sustained wind speed instead of position: the Gulf crossing shows up as a sharp climb and an almost-as-sharp fall, the signature of a storm intensifying over open water and weakening the moment it meets land.",

@@ -224,6 +224,20 @@ export const projectDataAssetSchema = z.object({
   preparedSourceId: z.string().min(1).nullable().default(null),
 });
 
+export const chartSeriesSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("table") }),
+  z.object({
+    kind: z.literal("histogram"),
+    bins: z.number().int().min(2).max(256).default(20),
+  }),
+  z.object({
+    kind: z.literal("timeseries"),
+    point: z.tuple([z.number(), z.number()]),
+  }),
+]);
+
+export type ChartSeries = z.infer<typeof chartSeriesSchema>;
+
 const chapterBaseSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
@@ -258,9 +272,10 @@ export const projectChapterSchema = z.discriminatedUnion("type", [
   chapterBaseSchema.extend({
     type: z.literal("chart"),
     sourceId: z.string().min(1),
+    series: chartSeriesSchema.default({ kind: "table" }),
     chartType: z.enum(["bar", "line"]),
-    xColumn: z.string().min(1),
-    yColumn: z.string().min(1),
+    xColumn: z.string().default(""),
+    yColumn: z.string().default(""),
     yColumns: z.array(z.string().min(1)).optional(),
     seriesColumn: z.string().nullable().optional(),
     xLabel: z.string().optional(),
