@@ -4,14 +4,16 @@ This is a pilot build for named testers. It is not a released product.
 
 The application is **unsigned and not notarized**: Apple has not checked it, so
 macOS will refuse to open it until you explicitly allow it. That is expected,
-and the steps below are the whole workaround. Do not pass the download on to
-anyone else — the point of a pilot is that everyone running it knows what they
-are running.
+and the steps below are the whole workaround. It is published as a pre-release on a public
+repository, so the file is technically downloadable by anyone, but it is aimed
+at a small group and is not announced. Please do not pass it around — the point
+of a pilot is that everyone running it knows what they are running.
 
 ## Install
 
-1. Find out which Mac you have: **Apple menu → About This Mac**. A chip named
-   "Apple M1/M2/M3/M4" means **arm64**; a chip named "Intel" means **x64**.
+1. Find out which Mac you have: **Apple menu → About This Mac**. A chip whose
+   name begins with **Apple** (any M-series) means **arm64**; a chip named
+   **Intel** means **x64**.
 2. Download the `.dmg` matching that chip from the pilot release.
 3. Open the `.dmg` and drag **Earth Stories** into **Applications**.
 

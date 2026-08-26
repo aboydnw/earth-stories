@@ -59,7 +59,28 @@ Confirm specifically that:
 
 If either is wrong, fix the guide before publishing, not after.
 
-## 4. Publish as a pre-release
+## 4. Clear the font redistribution first
+
+`Satoshi-Variable.woff2` is bundled into the editor and viewer builds, so it
+ships inside the `.dmg`. `apps/desktop/resources/credits/THIRD_PARTY_NOTICES.md`
+records that its redistribution review is unresolved.
+
+A public GitHub release redistributes that font to anyone who downloads it, so
+this cannot wait for the public release that comes after the pilot — the pilot
+_is_ public distribution. Before publishing:
+
+- read the Fontshare / Indian Type Foundry licence terms covering the Satoshi
+  Variable file in this repository,
+- confirm they permit embedding in a redistributed desktop application and note
+  any attribution they require,
+- commit the licence text into the repository beside the font, and
+- update the third-party notices to record the outcome instead of "unresolved".
+
+If the terms do not permit it, the options are to replace the font or to
+distribute the pilot privately instead. Do not publish publicly while the
+notices file still says the review is unresolved.
+
+## 5. Publish as a pre-release
 
 ```bash
 gh release create v0.1.0-pilot.1 \
@@ -69,16 +90,23 @@ gh release create v0.1.0-pilot.1 \
   --notes-file docs/release/pilot-release-notes.md \
   apps/desktop/build/artifacts/earth-stories-0.1.0-pilot.1-mac-arm64.dmg \
   apps/desktop/build/artifacts/earth-stories-0.1.0-pilot.1-mac-x64.dmg \
+  apps/desktop/build/artifacts/earth-stories-0.1.0-pilot.1-mac-arm64.zip \
+  apps/desktop/build/artifacts/earth-stories-0.1.0-pilot.1-mac-x64.zip \
   apps/desktop/build/artifacts/earth-stories-0.1.0-pilot.1-SHA256SUMS.txt \
   apps/desktop/build/artifacts/earth-stories-0.1.0-pilot.1-release-manifest.json \
   apps/desktop/build/artifacts/earth-stories-0.1.0-pilot.1-THIRD_PARTY_NOTICES.md
 ```
 
+The macOS target builds a `.dmg` and a `.zip` for each architecture, and the
+metadata command records all four. Upload all four or the checksum file will
+reference artifacts nobody can download. Testers want the `.dmg`; the `.zip`
+exists so the manifest stays honest.
+
 The repository is public, so the artifact is publicly downloadable even as a
 pre-release. The release notes must therefore say plainly, above the fold, that
 the build is unsigned and intended for named testers.
 
-## 5. Withdrawal
+## 6. Withdrawal
 
 Decided before publishing, not after something goes wrong:
 

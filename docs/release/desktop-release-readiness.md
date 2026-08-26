@@ -16,10 +16,9 @@ Deferred for the pilot:
 - **Signing, notarization, Authenticode, and the signed release manifest.** The
   artifact is unsigned; testers bypass Gatekeeper by hand and are told exactly
   why in [the pilot guide](../pilot-macos.md). Blocking for public release.
-- **SBOM, redistribution clearance, supported-version policy, vulnerability
-  response owner, and the credential renewal calendar.** Not required to hand a
-  build to a named tester who knows what they have. All blocking for public
-  release.
+- **SBOM, supported-version policy, vulnerability response owner, and the
+  credential renewal calendar.** Not required to hand a build to a named tester
+  who knows what they have. All blocking for public release.
 - **The target-machine matrix**, reduced to the author's own Mac plus named
   testers reporting their macOS version and chip. Windows and Linux are out of
   scope for this pilot; their gates are untouched.
@@ -32,6 +31,13 @@ Accepted for the pilot:
 - **The product icon** is a generated placeholder mark, not cleared artwork.
   It removes the default Electron logo, which is the pilot-relevant part.
   Cleared artwork remains required for public release.
+
+**Redistribution clearance is not deferred.** A pre-release on a public
+repository is public distribution, whoever it was aimed at, and the bundled
+Satoshi font ships inside the artifact. The third-party notices still record
+that review as unresolved, so it must be settled before publishing — see step 4
+of [the pilot release checklist](pilot-release-checklist.md). Distributing the
+pilot privately instead would remove this obligation.
 
 Author obligations that are **not** deferred: installing the distributed `.dmg`
 personally before publishing, publishing as a pre-release with the unsigned
