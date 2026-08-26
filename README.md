@@ -37,6 +37,8 @@ The repository now implements the complete first MVP workflow:
   PNG chapter images, and MP4/WebM animated map captures;
 - editable example stories and curated public example connections;
 - a local stdio MCP server for agent-driven authoring ([docs/mcp.md](docs/mcp.md));
+- an unsigned macOS pilot build for named testers
+  ([docs/pilot-macos.md](docs/pilot-macos.md));
 - post-build publication verification before the latest release is promoted.
 
 This is still a pilot release rather than a supported end-user product. The
