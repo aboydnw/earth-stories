@@ -98,6 +98,7 @@ const presentation = {
   rasterBand: 1,
   rescale: null,
   colormap: "viridis" as const,
+  colormapReversed: false,
   legendTitle: "",
   legendVisible: true,
   symbolProperty: null,

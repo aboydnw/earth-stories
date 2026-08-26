@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import { useState } from "react";
 import {
+  COLORMAP_NAMES,
   createDefaultSourceProvenance,
   type ProjectSource,
 } from "@earth-stories/story-schema";
@@ -12,22 +13,29 @@ import { SourcePresentationFields } from "./SourcePresentationFields";
 
 afterEach(cleanup);
 
-function Example() {
-  const [source, setSource] = useState<ProjectSource>({
-    id: "places",
-    kind: "local-geojson",
-    label: "Places",
-    path: "data/places.geojson",
-    attribution: null,
-    sizeBytes: 1,
-    delivery: "included",
-    provenance: createDefaultSourceProvenance(),
-  });
+function Example({ initial }: { initial?: ProjectSource } = {}) {
+  const [source, setSource] = useState<ProjectSource>(
+    initial ?? {
+      id: "places",
+      kind: "local-geojson",
+      label: "Places",
+      path: "data/places.geojson",
+      attribution: null,
+      sizeBytes: 1,
+      delivery: "included",
+      provenance: createDefaultSourceProvenance(),
+    },
+  );
   return (
     <>
       <SourcePresentationFields source={source} onChange={setSource} />
       <output data-testid="category-colors">
         {JSON.stringify(source.presentation?.categoryColors ?? {})}
+      </output>
+      <output data-testid="colormap">
+        {`${source.presentation?.colormap ?? ""}:${String(
+          source.presentation?.colormapReversed ?? false,
+        )}`}
       </output>
     </>
   );
@@ -56,5 +64,38 @@ describe("SourcePresentationFields", () => {
     expect(screen.getByTestId("category-colors").textContent).toBe(
       JSON.stringify({ forest: ["#", "228833"].join("") }),
     );
+  });
+
+  it("offers every colormap and reverses the ramp for raster sources", async () => {
+    render(
+      <EarthStoriesProvider>
+        <Example
+          initial={{
+            id: "dem",
+            kind: "cog",
+            label: "DEM",
+            locator: "data/dem.tif",
+            attribution: null,
+            sizeBytes: 1,
+            delivery: "included",
+            provenance: createDefaultSourceProvenance(),
+          }}
+        />
+      </EarthStoriesProvider>,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /map appearance/i }),
+    );
+    const select = screen.getByRole("combobox", { name: "Colormap" });
+    expect(
+      Array.from(select.querySelectorAll("option")).map(
+        (option) => option.value,
+      ),
+    ).toEqual([...COLORMAP_NAMES]);
+    await userEvent.selectOptions(select, "rdylgn");
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /reverse colormap/i }),
+    );
+    expect(screen.getByTestId("colormap").textContent).toBe("rdylgn:true");
   });
 });

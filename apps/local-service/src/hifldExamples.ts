@@ -29,6 +29,7 @@ function presentation(overrides: Partial<Presentation> = {}): Presentation {
     rasterBand: 1,
     rescale: null,
     colormap: "viridis",
+    colormapReversed: false,
     legendTitle: "",
     legendVisible: true,
     symbolProperty: null,

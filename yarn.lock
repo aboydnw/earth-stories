@@ -730,6 +730,7 @@ __metadata:
   resolution: "@earth-stories/desktop@workspace:apps/desktop"
   dependencies:
     "@earth-stories/local-service": "workspace:*"
+    "@earth-stories/story-schema": "workspace:*"
     electron: "npm:43.4.0"
     electron-builder: "npm:26.15.3"
     esbuild: "npm:~0.28.0"

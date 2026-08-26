@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { COLORMAP_NAMES } from "./colormaps.js";
 import {
   cameraSchema,
   createDefaultSourceProvenance,
@@ -47,7 +48,8 @@ export const publicationAssetSchema = z.object({
     sourceLayer: z.string().nullable(),
     rasterBand: z.number().int().positive(),
     rescale: z.tuple([z.number(), z.number()]).nullable(),
-    colormap: z.enum(["viridis", "magma", "terrain", "grayscale"]),
+    colormap: z.enum(COLORMAP_NAMES),
+    colormapReversed: z.boolean().default(false),
     legendTitle: z.string(),
     legendVisible: z.boolean(),
     symbolProperty: z.string().nullable(),

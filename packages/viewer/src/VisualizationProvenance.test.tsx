@@ -36,6 +36,7 @@ const asset = {
     rasterBand: 1,
     rescale: null,
     colormap: "viridis",
+    colormapReversed: false,
     legendTitle: "",
     legendVisible: true,
     symbolProperty: null,

@@ -5,29 +5,7 @@ import type { Texture } from "@luma.gl/core";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import type { GeoTIFF } from "@developmentseed/geotiff";
 import { resolveCogLayerProjection } from "./cogProjection.js";
-
-const ramps = {
-  viridis: [
-    [0.267, 0.004, 0.329],
-    [0.128, 0.567, 0.551],
-    [0.993, 0.906, 0.144],
-  ],
-  magma: [
-    [0.001, 0, 0.014],
-    [0.716, 0.215, 0.475],
-    [0.987, 0.991, 0.75],
-  ],
-  terrain: [
-    [0.122, 0.467, 0.706],
-    [0.498, 0.788, 0.498],
-    [0.96, 0.96, 0.86],
-  ],
-  grayscale: [
-    [0.08, 0.08, 0.08],
-    [0.5, 0.5, 0.5],
-    [0.96, 0.96, 0.96],
-  ],
-} as const;
+import { colormapStops, type ColormapName } from "@earth-stories/story-schema";
 
 function shaderColor(hex: string) {
   return [1, 3, 5].map(
@@ -46,11 +24,21 @@ function shaderVector(values: readonly number[]) {
 }
 
 export function colorize(
-  name: keyof typeof ramps,
+  name: ColormapName,
+  reversed = false,
   categoryColors: Record<string, string> = {},
   rescale: [number, number] | null = null,
 ) {
-  const [low, middle, high] = ramps[name];
+  const stops = colormapStops(name, reversed);
+  const segments = stops.length - 1;
+  const rampShader = stops
+    .slice(0, -1)
+    .map((stop, index) => {
+      const next = stops[index + 1]!;
+      const start = index / segments;
+      return `if (value >= ${shaderFloat(start)}) mapped = mix(vec3(${shaderVector(stop)}), vec3(${shaderVector(next)}), clamp((value - ${shaderFloat(start)}) * ${shaderFloat(segments)}, 0.0, 1.0));`;
+    })
+    .join("\n");
   const categoryShader = rescale
     ? Object.entries(categoryColors)
         .flatMap(([raw, hex]) => {
@@ -65,17 +53,13 @@ export function colorize(
     : "";
   const [minimum, maximum] = rescale ?? [0, 1];
   return {
-    name: `earth-stories-${name}`,
+    name: `earth-stories-${name}${reversed ? "-reversed" : ""}`,
     inject: {
       "fs:DECKGL_FILTER_COLOR": `
         float encoded = color.r;
         float value = max(0.0, (encoded * 255.0 - 1.0) / 254.0);
-        vec3 low = vec3(${shaderVector(low)});
-        vec3 middle = vec3(${shaderVector(middle)});
-        vec3 high = vec3(${shaderVector(high)});
-        vec3 mapped = value < 0.5
-          ? mix(low, middle, value * 2.0)
-          : mix(middle, high, (value - 0.5) * 2.0);
+        vec3 mapped = vec3(0.0);
+        ${rampShader}
         float rawValue = ${shaderFloat(minimum)} + value * ${shaderFloat(maximum - minimum || 1)};
         ${categoryShader}
         color = vec4(mapped, encoded <= 0.0 ? 0.0 : 1.0);
@@ -177,6 +161,7 @@ export function buildCogLayers(
       {
         module: colorize(
           presentation.colormap,
+          presentation.colormapReversed,
           presentation.categoryColors,
           rescale,
         ),

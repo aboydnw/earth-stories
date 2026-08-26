@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { COLORMAP_NAMES } from "./colormaps.js";
 
 const httpUrlSchema = z
   .string()
@@ -106,9 +107,8 @@ const sourceBaseSchema = z.object({
       sourceLayer: z.string().nullable().default(null),
       rasterBand: z.number().int().positive().default(1),
       rescale: z.tuple([z.number(), z.number()]).nullable().default(null),
-      colormap: z
-        .enum(["viridis", "magma", "terrain", "grayscale"])
-        .default("viridis"),
+      colormap: z.enum(COLORMAP_NAMES).default("viridis"),
+      colormapReversed: z.boolean().default(false),
       legendTitle: z.string().default(""),
       legendVisible: z.boolean().default(true),
       symbolProperty: z.string().nullable().default(null),

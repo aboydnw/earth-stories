@@ -33,6 +33,7 @@ export function publicationAsset(
       rasterBand: 2,
       rescale: [0, 100],
       colormap: "viridis",
+      colormapReversed: false,
       legendTitle: "",
       legendVisible: true,
       symbolProperty: null,

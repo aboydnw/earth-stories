@@ -1,3 +1,4 @@
+export * from "./colormaps.js";
 export * from "./project.js";
 export * from "./publication.js";
 export * from "./conversion.js";
