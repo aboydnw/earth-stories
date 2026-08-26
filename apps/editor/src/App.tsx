@@ -66,6 +66,8 @@ import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
 import { usePublicationReadiness } from "./usePublicationReadiness";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 import { detectDesktopBridge } from "./desktop";
+import { categoricalPresentation } from "./categoricalPreparation";
+import { DEFAULT_PRESENTATION } from "./SourcePresentationFields";
 import { DesktopToolsPanel } from "./DesktopToolsPanel";
 import { DesktopDiagnosticsPanel } from "./DesktopDiagnosticsPanel";
 import { ProvisioningDialog } from "./ProvisioningDialog";
@@ -1007,9 +1009,21 @@ export function App() {
       delivery: "included" as const,
       provenance: createDefaultSourceProvenance(),
     };
+    const categorical =
+      intent.capability === "raster"
+        ? categoricalPresentation(result.output)
+        : null;
     const source: ProjectSource =
       intent.capability === "raster" || intent.capability === "multidim"
-        ? { ...common, kind: "cog" }
+        ? {
+            ...common,
+            kind: "cog",
+            ...(categorical
+              ? {
+                  presentation: { ...DEFAULT_PRESENTATION, ...categorical },
+                }
+              : {}),
+          }
         : intent.capability === "pointcloud"
           ? { ...common, kind: "copc", colorMode: "elevation", pointSize: 2 }
           : asset.format === "gpx"

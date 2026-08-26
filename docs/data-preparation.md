@@ -15,6 +15,13 @@ visible, retryable, and never turns a partial output into a project source.
 | LAS / LAZ            | COPC                               | PDAL                                        |
 | GPX                  | trajectory sidecar JSON            | Earth Stories local worker                  |
 
+Raster preparation also inspects the finished COG for a colour table, a raster
+attribute table, or an integer band with no more than thirty distinct values.
+When one of those matches, the new source starts with a colour per class and a
+display range spanning the class values, so a land-cover or classification
+raster is legible before any manual styling. Authors edit or clear those colours
+under **Map appearance**.
+
 For multidimensional inputs, inspection lists variables and dimensions. The
 author chooses a variable and indices for non-spatial dimensions; this release
 stores and prepares that selected 2D slice. Time-series authoring can build on
