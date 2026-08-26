@@ -18,6 +18,7 @@
     "package:prepare": "yarn workspace @earth-stories/local-service build && yarn workspace @earth-stories/viewer-app build && yarn workspace @earth-stories/editor build && yarn run build && node scripts/stage-resources.mjs",
     "package:dir": "yarn package:prepare && electron-builder --config electron-builder.yml --dir",
     "package:linux": "yarn package:prepare && electron-builder --config electron-builder.yml --linux --x64",
+    "package:mac": "yarn package:prepare && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --mac",
     "release:metadata": "node scripts/release-metadata.mjs generate",
     "release:verify": "node scripts/release-metadata.mjs verify",
     "smoke:electron": "yarn build && xvfb-run -a electron --no-sandbox smoke/electron-smoke.cjs",
