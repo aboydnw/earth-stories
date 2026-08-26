@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import type { ProjectSource } from "@earth-stories/story-schema";
+import {
+  COLORMAP_NAMES,
+  colormapGradient,
+  type ProjectSource,
+} from "@earth-stories/story-schema";
 import {
   CheckboxField,
   CollapsibleSection,
@@ -9,7 +13,7 @@ import {
   TextInput,
 } from "@earth-stories/ui";
 
-const defaults = {
+export const DEFAULT_PRESENTATION = {
   opacity: 0.85,
   color: "#cf3f02",
   strokeColor: "#443f3f",
@@ -18,6 +22,7 @@ const defaults = {
   rasterBand: 1,
   rescale: null,
   colormap: "viridis" as const,
+  colormapReversed: false,
   legendTitle: "",
   legendVisible: true,
   symbolProperty: null,
@@ -33,7 +38,7 @@ export function SourcePresentationFields({
   source: ProjectSource;
   onChange: (next: ProjectSource) => void;
 }) {
-  const value = { ...defaults, ...source.presentation };
+  const value = { ...DEFAULT_PRESENTATION, ...source.presentation };
   const update = (partial: Partial<typeof value>) =>
     onChange({ ...source, presentation: { ...value, ...partial } });
   const [categoryDraft, setCategoryDraft] = useState(() =>
@@ -102,12 +107,34 @@ export function SourcePresentationFields({
                   })
                 }
               >
-                <option value="viridis">Viridis</option>
-                <option value="magma">Magma</option>
-                <option value="terrain">Terrain</option>
-                <option value="grayscale">Grayscale</option>
+                {COLORMAP_NAMES.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
               </SelectInput>
             </FormField>
+          ) : null}
+          {source.kind === "cog" || source.kind === "zarr" ? (
+            <div className="source-colormap-controls">
+              <div
+                className="source-colormap-swatch"
+                aria-hidden="true"
+                style={{
+                  background: colormapGradient(
+                    value.colormap,
+                    value.colormapReversed,
+                  ),
+                }}
+              />
+              <CheckboxField
+                label="Reverse colormap"
+                checked={value.colormapReversed}
+                onChange={(event) =>
+                  update({ colormapReversed: event.target.checked })
+                }
+              />
+            </div>
           ) : null}
           {source.kind === "pmtiles" && source.tileType === "vector" ? (
             <FormField label="Source layer">

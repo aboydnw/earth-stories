@@ -74,7 +74,7 @@ export function ZarrOverlay({
       byDevice: new WeakMap<object, Texture>(),
       textures: new Set<Texture>(),
     }),
-    [asset.presentation.colormap],
+    [asset.presentation.colormap, asset.presentation.colormapReversed],
   );
   useEffect(
     () => () => {
@@ -144,6 +144,7 @@ export function ZarrOverlay({
               lutTexture = createColormapTexture(
                 options.device,
                 asset.presentation.colormap,
+                asset.presentation.colormapReversed,
                 { alphaRamp: true },
               );
               colormapTextures.byDevice.set(

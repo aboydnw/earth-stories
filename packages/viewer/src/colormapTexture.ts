@@ -1,36 +1,15 @@
 import { Colormap } from "@developmentseed/deck.gl-raster/gpu-modules";
 import type { Device, Texture } from "@luma.gl/core";
+import { colormapStops, type ColormapName } from "@earth-stories/story-schema";
 
-const ramps = {
-  viridis: [
-    [0.267, 0.004, 0.329],
-    [0.128, 0.567, 0.551],
-    [0.993, 0.906, 0.144],
-  ],
-  magma: [
-    [0.001, 0, 0.014],
-    [0.716, 0.215, 0.475],
-    [0.987, 0.991, 0.75],
-  ],
-  terrain: [
-    [0.122, 0.467, 0.706],
-    [0.498, 0.788, 0.498],
-    [0.96, 0.96, 0.86],
-  ],
-  grayscale: [
-    [0.08, 0.08, 0.08],
-    [0.5, 0.5, 0.5],
-    [0.96, 0.96, 0.96],
-  ],
-} as const;
-
-export type ColormapName = keyof typeof ramps;
+export type { ColormapName };
 
 export function buildColormapLut(
   name: ColormapName,
+  reversed: boolean,
   options?: { alphaRamp?: boolean },
 ) {
-  const stops = ramps[name];
+  const stops = colormapStops(name, reversed);
   const lut = new Uint8Array(256 * 4);
   for (let index = 0; index < 256; index += 1) {
     const position = index / 255;
@@ -59,12 +38,13 @@ export function buildColormapLut(
 export function createColormapTexture(
   device: Device,
   name: ColormapName,
+  reversed: boolean,
   options?: { filter?: "linear" | "nearest"; alphaRamp?: boolean },
 ) {
   const filter = options?.filter ?? "linear";
   return device.createTexture({
     dimension: "2d-array",
-    data: buildColormapLut(name, options),
+    data: buildColormapLut(name, reversed, options),
     format: "rgba8unorm",
     width: 256,
     height: 1,

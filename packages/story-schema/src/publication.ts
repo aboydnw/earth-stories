@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { COLORMAP_NAMES } from "./colormaps.js";
 import {
   cameraSchema,
+  chartSeriesSchema,
   createDefaultSourceProvenance,
   flyoverKeyframeSchema,
   sourceProvenanceSchema,
@@ -47,7 +49,8 @@ export const publicationAssetSchema = z.object({
     sourceLayer: z.string().nullable(),
     rasterBand: z.number().int().positive(),
     rescale: z.tuple([z.number(), z.number()]).nullable(),
-    colormap: z.enum(["viridis", "magma", "terrain", "grayscale"]),
+    colormap: z.enum(COLORMAP_NAMES),
+    colormapReversed: z.boolean().default(false),
     legendTitle: z.string(),
     legendVisible: z.boolean(),
     symbolProperty: z.string().nullable(),
@@ -133,9 +136,10 @@ export const publicationChapterSchema = z.discriminatedUnion("type", [
   publicationChapterBaseSchema.extend({
     type: z.literal("chart"),
     assetId: z.string().min(1),
+    series: chartSeriesSchema.default({ kind: "table" }),
     chartType: z.enum(["bar", "line"]),
-    xColumn: z.string().min(1),
-    yColumn: z.string().min(1),
+    xColumn: z.string(),
+    yColumn: z.string(),
     yColumns: z.array(z.string().min(1)),
     seriesColumn: z.string().nullable(),
     xLabel: z.string(),

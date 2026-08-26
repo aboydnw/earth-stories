@@ -24,7 +24,8 @@
     "format:check": "prettier --check .",
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build",
-    "test:publishing:no-git": "node scripts/test-publishing-no-git.mjs"
+    "test:publishing:no-git": "node scripts/test-publishing-no-git.mjs",
+    "mcp": "yarn workspace @earth-stories/mcp start"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "^10.5.6",

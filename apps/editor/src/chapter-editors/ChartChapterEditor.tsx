@@ -1,6 +1,8 @@
-import type {
-  ProjectChapter,
-  ProjectSource,
+import {
+  supportsTimeseriesChart,
+  type ChartSeries,
+  type ProjectChapter,
+  type ProjectSource,
 } from "@earth-stories/story-schema";
 import {
   CollapsibleSection,
@@ -30,7 +32,14 @@ export function ChartChapterEditor({
   onEditSource: (id: string) => void;
   onAddData: () => void;
 }) {
-  const tables = sources.filter(({ kind }) => kind === "csv");
+  const kind = chapter.series.kind;
+  const compatible = sources.filter((source) =>
+    kind === "table"
+      ? source.kind === "csv"
+      : kind === "histogram"
+        ? source.kind === "cog"
+        : supportsTimeseriesChart(source),
+  );
   return (
     <div className="chapter-type-editor">
       <ChapterContentSection
@@ -40,7 +49,7 @@ export function ChartChapterEditor({
       <InspectorSection title="Data">
         <ChapterDataSelector
           sourceId={chapter.sourceId}
-          sources={tables}
+          sources={compatible}
           usageCount={sourceUsage[chapter.sourceId] ?? 0}
           onSelect={(sourceId) => onChange({ ...chapter, sourceId })}
           onEditSource={onEditSource}
@@ -52,6 +61,86 @@ export function ChartChapterEditor({
         description="Choose the main visual encoding."
       >
         <div className="chapter-editor-fields">
+          <FormField label="Chart source" hint="Where the numbers come from.">
+            <SelectInput
+              value={kind}
+              onChange={(event) => {
+                const next = event.target.value as ChartSeries["kind"];
+                onChange({
+                  ...chapter,
+                  sourceId: "",
+                  series:
+                    next === "histogram"
+                      ? { kind: "histogram", bins: 20 }
+                      : next === "timeseries"
+                        ? { kind: "timeseries", point: [0, 0] }
+                        : { kind: "table" },
+                });
+              }}
+            >
+              <option value="table">CSV table</option>
+              <option value="histogram">Raster value distribution</option>
+              <option value="timeseries">Value over time at a point</option>
+            </SelectInput>
+          </FormField>
+          {chapter.series.kind === "histogram" ? (
+            <FormField label="Bins" hint="Between 2 and 256.">
+              <NumberInput
+                min={2}
+                max={256}
+                value={chapter.series.bins}
+                onChange={(event) =>
+                  onChange({
+                    ...chapter,
+                    series: {
+                      kind: "histogram",
+                      bins: Number(event.target.value),
+                    },
+                  })
+                }
+              />
+            </FormField>
+          ) : null}
+          {chapter.series.kind === "timeseries" ? (
+            <>
+              <FormField label="Longitude">
+                <NumberInput
+                  value={chapter.series.point[0]}
+                  onChange={(event) =>
+                    onChange({
+                      ...chapter,
+                      series: {
+                        kind: "timeseries",
+                        point: [
+                          Number(event.target.value),
+                          (chapter.series as { point: [number, number] })
+                            .point[1],
+                        ],
+                      },
+                    })
+                  }
+                />
+              </FormField>
+              <FormField label="Latitude">
+                <NumberInput
+                  value={chapter.series.point[1]}
+                  onChange={(event) =>
+                    onChange({
+                      ...chapter,
+                      series: {
+                        kind: "timeseries",
+                        point: [
+                          (chapter.series as { point: [number, number] })
+                            .point[0],
+                          Number(event.target.value),
+                        ],
+                      },
+                    })
+                  }
+                />
+              </FormField>
+            </>
+          ) : null}
           <FormField label="Chart type">
             <SelectInput
               value={chapter.chartType}
@@ -66,39 +155,43 @@ export function ChartChapterEditor({
               <option value="line">Line</option>
             </SelectInput>
           </FormField>
-          <FormField label="X column">
-            <TextInput
-              value={chapter.xColumn}
-              onChange={(event) =>
-                onChange({ ...chapter, xColumn: event.target.value })
-              }
-            />
-          </FormField>
-          <FormField label="Primary Y column">
-            <TextInput
-              value={chapter.yColumn}
-              onChange={(event) =>
-                onChange({ ...chapter, yColumn: event.target.value })
-              }
-            />
-          </FormField>
-          <FormField
-            label="Additional Y columns"
-            hint="Separate column names with commas."
-          >
-            <TextInput
-              value={(chapter.yColumns ?? []).join(", ")}
-              onChange={(event) =>
-                onChange({
-                  ...chapter,
-                  yColumns: event.target.value
-                    .split(",")
-                    .map((value) => value.trim())
-                    .filter(Boolean),
-                })
-              }
-            />
-          </FormField>
+          {kind === "table" ? (
+            <>
+              <FormField label="X column">
+                <TextInput
+                  value={chapter.xColumn}
+                  onChange={(event) =>
+                    onChange({ ...chapter, xColumn: event.target.value })
+                  }
+                />
+              </FormField>
+              <FormField label="Primary Y column">
+                <TextInput
+                  value={chapter.yColumn}
+                  onChange={(event) =>
+                    onChange({ ...chapter, yColumn: event.target.value })
+                  }
+                />
+              </FormField>
+              <FormField
+                label="Additional Y columns"
+                hint="Separate column names with commas."
+              >
+                <TextInput
+                  value={(chapter.yColumns ?? []).join(", ")}
+                  onChange={(event) =>
+                    onChange({
+                      ...chapter,
+                      yColumns: event.target.value
+                        .split(",")
+                        .map((value) => value.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+              </FormField>
+            </>
+          ) : null}
         </div>
       </InspectorSection>
       <CollapsibleSection

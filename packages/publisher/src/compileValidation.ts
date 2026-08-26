@@ -1,7 +1,8 @@
-import type {
-  ProjectChapter,
-  ProjectSource,
-  StoryProject,
+import {
+  supportsTimeseriesChart,
+  type ProjectChapter,
+  type ProjectSource,
+  type StoryProject,
 } from "@earth-stories/story-schema";
 import { validateRemoteUrl } from "./remote-url.js";
 
@@ -64,13 +65,29 @@ export function chapterCompileIssues(
       resourceId: source.id,
       message: `Image chapter "${chapter.title}" requires an image source`,
     });
-  if (chapter.type === "chart" && source.kind !== "csv")
-    issues.push({
-      code: "incompatible-source",
-      chapterId: chapter.id,
-      resourceId: source.id,
-      message: `Chart chapter "${chapter.title}" requires a CSV source`,
-    });
+  if (chapter.type === "chart") {
+    const kind = chapter.series.kind;
+    const compatible =
+      kind === "table"
+        ? source.kind === "csv" &&
+          chapter.xColumn !== "" &&
+          chapter.yColumn !== ""
+        : kind === "histogram"
+          ? source.kind === "cog"
+          : supportsTimeseriesChart(source);
+    if (!compatible)
+      issues.push({
+        code: "incompatible-source",
+        chapterId: chapter.id,
+        resourceId: source.id,
+        message:
+          kind === "table"
+            ? `Chart chapter "${chapter.title}" requires a CSV source with X and Y columns`
+            : kind === "histogram"
+              ? `Histogram chart "${chapter.title}" requires a COG source`
+              : `Timeseries chart "${chapter.title}" requires a Zarr source with a time dimension, timesteps, and a spatial transform`,
+      });
+  }
   if (
     (chapter.type === "map" ||
       chapter.type === "scrolly" ||

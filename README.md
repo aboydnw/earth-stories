@@ -26,18 +26,23 @@ The repository now implements the complete first MVP workflow:
 - connected COG, PMTiles, GeoParquet, XYZ, Zarr, trajectory, and COPC sources;
 - URL inspection for access requirements, PMTiles layers, and Zarr variables;
 - property styling/filtering, raster controls, Zarr slices, COPC styling, and animation controls;
+- fourteen colormaps with an optional reversed ramp, and automatic class colours
+  for categorical rasters;
+- chart chapters from a CSV table, a raster's value distribution, or one point
+  of a time-aware Zarr;
 - per-source included/connected publication policies;
 - publication preflight with blocking errors, portability warnings, and size estimates;
 - latest-release folder and ZIP outputs with a dependency report;
 - self-contained archival HTML, fixed-scrollport iframe/embed outputs, attributed
   PNG chapter images, and MP4/WebM animated map captures;
 - editable example stories and curated public example connections;
+- a local stdio MCP server for agent-driven authoring ([docs/mcp.md](docs/mcp.md));
 - post-build publication verification before the latest release is promoted.
 
 This is still a pilot release rather than a supported end-user product. The
 local storytelling and data-preparation workflow is the parity target; hosted
-accounts, collaboration, managed storage, direct publishing, offline guarantees,
-and AI features remain intentionally outside scope.
+accounts, collaboration, managed storage, and reader-facing AI features remain
+intentionally outside scope.
 
 ## Develop
 

@@ -29,6 +29,7 @@ function presentation(overrides: Partial<Presentation> = {}): Presentation {
     rasterBand: 1,
     rescale: null,
     colormap: "viridis",
+    colormapReversed: false,
     legendTitle: "",
     legendVisible: true,
     symbolProperty: null,
@@ -312,6 +313,7 @@ export const earthquakeStory: StoryProject = {
     {
       id: "earthquake-observation-history",
       type: "chart",
+      series: { kind: "table" as const },
       title: "The history of observation",
       narrative:
         "The uneven rise in recorded events reflects preservation, reporting, population, and modern instrumentation. The archive becomes denser as written and instrumental records improve; it cannot tell us that earthquakes are becoming more frequent.",
@@ -393,6 +395,7 @@ export const earthquakeStory: StoryProject = {
     {
       id: "earthquake-consequence-chart",
       type: "chart",
+      series: { kind: "table" as const },
       title: "Magnitude is not consequence",
       narrative:
         "A magnitude describes an earthquake's physical size, not the vulnerability of the places it reaches. These selected records show how settlement, construction, secondary hazards, and response can separate a very large rupture from a very large human toll. Reported fatalities include downstream effects and retain the uncertainties of disaster records.",
@@ -705,6 +708,7 @@ export const electricGridStory: StoryProject = {
     {
       id: "grid-fuel-chart",
       type: "chart",
+      series: { kind: "table" as const },
       title: "The fuels behind the switch",
       narrative:
         "This included historical snapshot sums summer capacity in a public HIFLD-derived plant service, grouped into broad fuel families. It describes the service's 2018-era records—not today's fleet and not actual electricity generated. The large 'other / unavailable' bar is a reminder that source completeness matters.",
@@ -730,6 +734,7 @@ export const electricGridStory: StoryProject = {
     {
       id: "grid-generating-units",
       type: "chart",
+      series: { kind: "table" as const },
       title: "One plant, many machines",
       narrative:
         "A plant is a facility; a generating unit is an individual machine or generator within it. This summary counts 32,344 non-spatial HIFLD unit records by technology family. Unit count is not capacity: thousands of small solar, petroleum, or gas units can coexist with a much smaller number of very large nuclear or coal machines.",

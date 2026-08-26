@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { COLORMAP_NAMES } from "./colormaps.js";
 
 const httpUrlSchema = z
   .string()
@@ -106,9 +107,8 @@ const sourceBaseSchema = z.object({
       sourceLayer: z.string().nullable().default(null),
       rasterBand: z.number().int().positive().default(1),
       rescale: z.tuple([z.number(), z.number()]).nullable().default(null),
-      colormap: z
-        .enum(["viridis", "magma", "terrain", "grayscale"])
-        .default("viridis"),
+      colormap: z.enum(COLORMAP_NAMES).default("viridis"),
+      colormapReversed: z.boolean().default(false),
       legendTitle: z.string().default(""),
       legendVisible: z.boolean().default(true),
       symbolProperty: z.string().nullable().default(null),
@@ -224,6 +224,20 @@ export const projectDataAssetSchema = z.object({
   preparedSourceId: z.string().min(1).nullable().default(null),
 });
 
+export const chartSeriesSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("table") }),
+  z.object({
+    kind: z.literal("histogram"),
+    bins: z.number().int().min(2).max(256).default(20),
+  }),
+  z.object({
+    kind: z.literal("timeseries"),
+    point: z.tuple([z.number(), z.number()]),
+  }),
+]);
+
+export type ChartSeries = z.infer<typeof chartSeriesSchema>;
+
 const chapterBaseSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
@@ -258,9 +272,10 @@ export const projectChapterSchema = z.discriminatedUnion("type", [
   chapterBaseSchema.extend({
     type: z.literal("chart"),
     sourceId: z.string().min(1),
+    series: chartSeriesSchema.default({ kind: "table" }),
     chartType: z.enum(["bar", "line"]),
-    xColumn: z.string().min(1),
-    yColumn: z.string().min(1),
+    xColumn: z.string().default(""),
+    yColumn: z.string().default(""),
     yColumns: z.array(z.string().min(1)).optional(),
     seriesColumn: z.string().nullable().optional(),
     xLabel: z.string().optional(),
@@ -400,5 +415,33 @@ export type FlyoverKeyframe = z.infer<typeof flyoverKeyframeSchema>;
 export type ProjectSource = z.infer<typeof projectSourceSchema>;
 export type ProjectDataAsset = z.infer<typeof projectDataAssetSchema>;
 export type ProjectChapter = z.infer<typeof projectChapterSchema>;
+
+/**
+ * Whether a source carries what a timeseries chart needs: a time dimension,
+ * the timesteps to read, and the spatial transform that turns a coordinate
+ * into a pixel. A Zarr connection can be added before discovery fills these
+ * in, and a chart built on one would fail at read time.
+ */
+export function supportsTimeseriesChart(source: ProjectSource): boolean {
+  if (
+    source.kind !== "zarr" ||
+    source.timeDimension === null ||
+    source.timesteps.length === 0 ||
+    source.geozarr === null
+  )
+    return false;
+  // A degenerate transform has no inverse, so no coordinate maps to a pixel.
+  const [a, b, , d, e] = source.geozarr.transform;
+  return a * e - b * d !== 0;
+}
+
+/** Sources a chart chapter can read: a CSV table, a raster, or a timed Zarr. */
+export function supportsChart(source: ProjectSource): boolean {
+  return (
+    source.kind === "csv" ||
+    source.kind === "cog" ||
+    supportsTimeseriesChart(source)
+  );
+}
 export type StoryProjectV1 = z.infer<typeof storyProjectV1Schema>;
 export type StoryProject = z.infer<typeof storyProjectV2Schema>;

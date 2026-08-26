@@ -1,3 +1,4 @@
 pixi.lock
 conversion/schema/conversion-v1.schema.json
 conversion/worker/models.py
+apps/viewer/public/runtime

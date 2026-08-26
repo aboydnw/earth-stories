@@ -9,6 +9,7 @@
     { "path": "apps/editor" },
     { "path": "apps/local-service" },
     { "path": "apps/desktop" },
-    { "path": "apps/viewer" }
+    { "path": "apps/viewer" },
+    { "path": "apps/mcp" }
   ]
 }

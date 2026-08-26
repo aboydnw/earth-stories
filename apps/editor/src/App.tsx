@@ -20,7 +20,10 @@ import type {
   ProjectSource,
   StoryProject,
 } from "@earth-stories/story-schema";
-import { createDefaultSourceProvenance } from "@earth-stories/story-schema";
+import {
+  createDefaultSourceProvenance,
+  supportsChart,
+} from "@earth-stories/story-schema";
 import { StoryViewer } from "@earth-stories/viewer";
 import {
   ActionButton,
@@ -66,6 +69,8 @@ import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
 import { usePublicationReadiness } from "./usePublicationReadiness";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 import { detectDesktopBridge } from "./desktop";
+import { categoricalPresentation } from "./categoricalPreparation";
+import { DEFAULT_PRESENTATION } from "./SourcePresentationFields";
 import { DesktopToolsPanel } from "./DesktopToolsPanel";
 import { DesktopDiagnosticsPanel } from "./DesktopDiagnosticsPanel";
 import { ProvisioningDialog } from "./ProvisioningDialog";
@@ -79,6 +84,7 @@ import { pollConversionJob } from "./conversionPolling";
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
 type PendingChapterType = "map" | "scrolly" | "image" | "chart";
+
 interface MultidimChoice {
   variable: string;
   selection: Record<string, number>;
@@ -98,6 +104,7 @@ const presentation = {
   rasterBand: 1,
   rescale: null,
   colormap: "viridis" as const,
+  colormapReversed: false,
   legendTitle: "",
   legendVisible: true,
   symbolProperty: null,
@@ -578,6 +585,7 @@ export function App() {
           ? {
               id,
               type: "chart",
+              series: { kind: "table" as const },
               title,
               narrative: "",
               sourceId: source.id,
@@ -660,12 +668,31 @@ export function App() {
   }
   function addChart() {
     if (!project) return;
-    const source = project.sources.find((item) => item.kind === "csv");
+    const source = project.sources.find(supportsChart);
     if (!source) {
-      showError("Import a CSV before creating a chart chapter.");
+      showError(
+        "Import a CSV, a raster, or a time-aware Zarr before creating a chart chapter.",
+      );
       return;
     }
-    addChapterFromSource(source);
+    if (source.kind === "csv") {
+      addChapterFromSource(source);
+      return;
+    }
+    addChapter({
+      id: crypto.randomUUID(),
+      type: "chart",
+      series:
+        source.kind === "cog"
+          ? { kind: "histogram", bins: 20 }
+          : { kind: "timeseries", point: camera.center },
+      title: source.label,
+      narrative: "",
+      sourceId: source.id,
+      chartType: source.kind === "cog" ? "bar" : "line",
+      xColumn: "",
+      yColumn: "",
+    });
   }
   function addVideo() {
     addChapter({
@@ -833,6 +860,7 @@ export function App() {
         chapter = {
           id: crypto.randomUUID(),
           type: "chart",
+          series: { kind: "table" as const },
           title: file.name.replace(/\.[^.]+$/, ""),
           narrative: "",
           sourceId: id,
@@ -1006,9 +1034,21 @@ export function App() {
       delivery: "included" as const,
       provenance: createDefaultSourceProvenance(),
     };
+    const categorical =
+      intent.capability === "raster"
+        ? categoricalPresentation(result.output)
+        : null;
     const source: ProjectSource =
       intent.capability === "raster" || intent.capability === "multidim"
-        ? { ...common, kind: "cog" }
+        ? {
+            ...common,
+            kind: "cog",
+            ...(categorical
+              ? {
+                  presentation: { ...DEFAULT_PRESENTATION, ...categorical },
+                }
+              : {}),
+          }
         : intent.capability === "pointcloud"
           ? { ...common, kind: "copc", colorMode: "elevation", pointSize: 2 }
           : asset.format === "gpx"
@@ -1016,24 +1056,38 @@ export function App() {
             : { ...common, kind: "geoparquet" };
     const intendedChapter: ProjectChapter | null =
       !intent.targetChapterId &&
-      (intent.pendingChapterType === "map" ||
-        intent.pendingChapterType === "scrolly")
+      intent.pendingChapterType === "chart" &&
+      source.kind === "cog"
         ? {
             id: `${sourceId}-chapter`,
-            type: intent.pendingChapterType,
+            type: "chart",
+            series: { kind: "histogram", bins: 20 },
             title: source.label,
             narrative: "",
             sourceId,
-            overlaySourceIds: [],
-            camera,
-            ...(intent.pendingChapterType === "scrolly"
-              ? {
-                  transition: "fly-to" as const,
-                  overlayPosition: "left" as const,
-                }
-              : {}),
+            chartType: "bar",
+            xColumn: "",
+            yColumn: "",
           }
-        : null;
+        : !intent.targetChapterId &&
+            (intent.pendingChapterType === "map" ||
+              intent.pendingChapterType === "scrolly")
+          ? {
+              id: `${sourceId}-chapter`,
+              type: intent.pendingChapterType,
+              title: source.label,
+              narrative: "",
+              sourceId,
+              overlaySourceIds: [],
+              camera,
+              ...(intent.pendingChapterType === "scrolly"
+                ? {
+                    transition: "fly-to" as const,
+                    overlayPosition: "left" as const,
+                  }
+                : {}),
+            }
+          : null;
     changeProject((current) => ({
       ...current,
       dataAssets: current.dataAssets.map((item) =>
@@ -1781,9 +1835,7 @@ export function App() {
                 canAddImage={project.sources.some(
                   (source) => source.kind === "image",
                 )}
-                canAddChart={project.sources.some(
-                  (source) => source.kind === "csv",
-                )}
+                canAddChart={project.sources.some(supportsChart)}
                 onToggle={() => setAddChapterOpen((open) => !open)}
                 onAddProse={addProse}
                 onAddScrolly={() => addMapChapter("scrolly")}

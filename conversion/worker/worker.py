@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from categorical import detect_categories
 from models import EarthStoriesConversionProtocolV1
 
 PROTOCOL = "earth-stories/conversion/v1"
@@ -255,12 +256,19 @@ def prepare_multidim(
     ]
 
 
-def prepare_raster(path: Path, output: Path) -> list[dict[str, str]]:
+def prepare_raster(
+    path: Path, output: Path
+) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
     run_tool(["rio", "cogeo", "create", str(path), str(output), "--quiet"])
     run_tool(["rio", "cogeo", "validate", str(output)])
-    return [
-        {"name": "rio-cogeo", "version": tool_version(["rio", "cogeo", "--version"])}
-    ]
+    try:
+        categories = detect_categories(output)
+    except Exception:
+        categories = []
+    return (
+        [{"name": "rio-cogeo", "version": tool_version(["rio", "cogeo", "--version"])}],
+        categories,
+    )
 
 
 def prepare_vector(
@@ -445,10 +453,11 @@ def main(raw: dict[str, Any]) -> None:
         else:
             output, tools = inspect_gdal(path)
     elif request.operation.value == "prepare":
+        categories: list[dict[str, Any]] = []
         output_path = Path(str(options["outputPath"]))
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if request.capability.value == "raster":
-            tools = prepare_raster(path, output_path)
+            tools, categories = prepare_raster(path, output_path)
         elif request.capability.value == "vector":
             tools, warnings = prepare_vector(path, output_path, options)
         elif request.capability.value == "pointcloud":
@@ -460,6 +469,8 @@ def main(raw: dict[str, Any]) -> None:
                 f"Prepare is not implemented for {request.capability.value}"
             )
         output = {"path": str(output_path), "sizeBytes": output_path.stat().st_size}
+        if categories:
+            output["categories"] = categories
     else:
         if request.capability.value == "raster":
             run_tool(["rio", "cogeo", "validate", str(path)])

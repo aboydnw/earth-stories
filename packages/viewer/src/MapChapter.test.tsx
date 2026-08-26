@@ -113,6 +113,7 @@ const asset = publicationAsset({
     rasterBand: 1,
     rescale: null,
     colormap: "viridis",
+    colormapReversed: false,
     legendTitle: "",
     legendVisible: false,
     symbolProperty: null,

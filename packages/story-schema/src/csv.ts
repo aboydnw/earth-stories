@@ -1,3 +1,11 @@
+/**
+ * Parse CSV text into rows of cells, honouring quoted fields, escaped quotes,
+ * and line breaks inside quotes.
+ *
+ * The viewer and the publisher both read a story's CSV assets, and a chart
+ * must look the same in the reader and in the archival export, so they share
+ * this one parser.
+ */
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];

@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
-import type {
-  PublicationAsset,
-  PublicationManifest,
-  StoryProject,
+import {
+  parseCsv,
+  type PublicationAsset,
+  type PublicationManifest,
+  type StoryProject,
 } from "@earth-stories/story-schema";
-import { parseCsv } from "./csv.js";
+
 import { containedRealPath } from "./paths.js";
 
 export interface ArchivalOptions {
