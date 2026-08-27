@@ -13,7 +13,7 @@ Classify before consolidating. Repetition alone does not create a system rule.
 
 ## Current inventory
 
-Core: Satoshi/DM Mono, warm semantic surfaces, orange action/focus, status
+Core: Plus Jakarta Sans/DM Mono, warm semantic surfaces, orange action/focus, status
 families, control/panel radii, motion, z-index scale, Phosphor icons, form and
 state components.
 

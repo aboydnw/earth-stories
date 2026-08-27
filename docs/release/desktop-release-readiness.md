@@ -33,11 +33,13 @@ Accepted for the pilot:
   Cleared artwork remains required for public release.
 
 **Redistribution clearance is not deferred.** A pre-release on a public
-repository is public distribution, whoever it was aimed at, and the bundled
-Satoshi font ships inside the artifact. The third-party notices still record
-that review as unresolved, so it must be settled before publishing — see step 4
-of [the pilot release checklist](pilot-release-checklist.md). Distributing the
-pilot privately instead would remove this obligation.
+repository is public distribution, whoever it was aimed at. The font half of
+this is now resolved: Satoshi was replaced with Plus Jakarta Sans under the SIL
+OFL 1.1. The offline DuckDB runtime is not — its spatial extension bundles GDAL
+and transitive native libraries, and its notices still record an outstanding
+SBOM and notice review. That must be settled before publishing publicly, or the
+pilot distributed privately instead. See step 4 of
+[the pilot release checklist](pilot-release-checklist.md).
 
 Author obligations that are **not** deferred: installing the distributed `.dmg`
 personally before publishing, publishing as a pre-release with the unsigned
@@ -65,9 +67,16 @@ warning above the fold, and having the withdrawal procedure written down first.
 - [ ] Create a signed release-manifest key, document key custody, rotation,
       revocation, and recovery, and keep the private key out of the repository.
 - [ ] Generate and review an SBOM for the artifact that is actually shipped.
-- [ ] Clear redistribution for the Satoshi font payload, Pixi/conda packages,
-      native codecs, and any future bundled conversion executable. Update the
-      third-party notices with the result.
+- [x] Clear redistribution for the bundled fonts. Satoshi was replaced with
+      Plus Jakarta Sans (SIL OFL 1.1) alongside DM Mono; both ship from npm
+      packages carrying their license text, and the notices record the result.
+- [ ] Clear redistribution for the offline DuckDB runtime, whose spatial
+      extension bundles GDAL and transitive native libraries. Generate a
+      component SBOM and complete the notice review recorded in
+      `apps/viewer/public/THIRD_PARTY_NOTICES.md`.
+- [ ] Clear redistribution for Pixi/conda packages, native codecs, and any
+      future bundled conversion executable. Update the third-party notices with
+      the result.
 - [ ] Replace the default Electron application icon with cleared product
       artwork in every required platform format.
 

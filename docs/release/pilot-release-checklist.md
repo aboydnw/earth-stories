@@ -59,26 +59,28 @@ Confirm specifically that:
 
 If either is wrong, fix the guide before publishing, not after.
 
-## 4. Clear the font redistribution first
+## 4. Settle what the artifact redistributes
 
-`Satoshi-Variable.woff2` is bundled into the editor and viewer builds, so it
-ships inside the `.dmg`. `apps/desktop/resources/credits/THIRD_PARTY_NOTICES.md`
-records that its redistribution review is unresolved.
+The bundled fonts are clear: Plus Jakarta Sans and DM Mono are both SIL OFL
+1.1, ship from npm packages carrying their license text, and are recorded in
+the third-party notices.
 
-A public GitHub release redistributes that font to anyone who downloads it, so
-this cannot wait for the public release that comes after the pilot — the pilot
-_is_ public distribution. Before publishing:
+What is **not** settled is the offline DuckDB runtime. It is roughly 120 MB of
+the artifact, and its spatial extension bundles GDAL and transitive native
+libraries. `apps/viewer/public/THIRD_PARTY_NOTICES.md` states plainly that a
+component SBOM and notice review are required before public redistribution, and
+warns against reading the extension's own MIT license as clearing everything
+inside it.
 
-- read the Fontshare / Indian Type Foundry licence terms covering the Satoshi
-  Variable file in this repository,
-- confirm they permit embedding in a redistributed desktop application and note
-  any attribution they require,
-- commit the licence text into the repository beside the font, and
-- update the third-party notices to record the outcome instead of "unresolved".
+A public pre-release redistributes that runtime to anyone who downloads it.
+Before publishing publicly, either:
 
-If the terms do not permit it, the options are to replace the font or to
-distribute the pilot privately instead. Do not publish publicly while the
-notices file still says the review is unresolved.
+- complete the SBOM and notice review that file describes, or
+- distribute the pilot privately instead, which keeps the review where it
+  already is — a public-release gate rather than a pilot one.
+
+Do not publish publicly while that notice still records the review as
+outstanding.
 
 ## 5. Publish as a pre-release
 

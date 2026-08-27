@@ -25,6 +25,7 @@
     "@developmentseed/proj": "^0.7.0",
     "@duckdb/duckdb-wasm": "^1.29.0",
     "@earth-stories/story-schema": "workspace:*",
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@fontsource/dm-mono": "^5.3.0",
     "@loaders.gl/core": "^4.3.4",
     "@luma.gl/core": "^9.3.6",

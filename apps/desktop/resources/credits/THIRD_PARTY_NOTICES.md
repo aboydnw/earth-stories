@@ -10,6 +10,13 @@ license and redistribution review remains tracked in
 `docs/adr/0002-desktop-shell.md` and must be completed before producing an
 offline-tools installer.
 
-The Satoshi font redistribution review is unresolved. A public release remains
-blocked until its provenance and redistribution permission are recorded or the
-font is replaced.
+Plus Jakarta Sans and DM Mono are the bundled typefaces. Both are licensed
+under the SIL Open Font License 1.1, which permits redistribution inside an
+application, and both ship from npm packages that carry their license text
+(`@fontsource-variable/plus-jakarta-sans`, `@fontsource/dm-mono`). The font
+redistribution question is resolved.
+
+The bundled offline DuckDB runtime is a separate matter. Its spatial extension
+carries GDAL and transitive native libraries, and
+`apps/viewer/public/THIRD_PARTY_NOTICES.md` records that a component SBOM and
+notice review are still required before public redistribution.

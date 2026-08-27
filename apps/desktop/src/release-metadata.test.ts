@@ -35,7 +35,7 @@ async function fixture() {
   const notices = join(root, "THIRD_PARTY_NOTICES.md");
   await writeFile(
     notices,
-    "# Third-party notices\n\nSatoshi redistribution review: unresolved.\n",
+    "# Third-party notices\n\nBundled runtime notice payload.\n",
   );
   return { artifacts, notices };
 }
@@ -134,7 +134,7 @@ describe("desktop release metadata", () => {
         join(paths.artifacts, manifest.thirdPartyNotices.name),
         "utf8",
       ),
-    ).toContain("Satoshi redistribution review: unresolved.");
+    ).toContain("Bundled runtime notice payload.");
     const firstManifest = await readFile(manifestPath, "utf8");
     const firstChecksums = await readFile(
       join(paths.artifacts, "earth-stories-0.1.0-SHA256SUMS.txt"),
