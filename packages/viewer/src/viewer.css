@@ -904,6 +904,7 @@
   margin: 0;
   padding: clamp(24px, 5vw, 64px);
   align-content: start;
+  grid-template-columns: minmax(0, 1fr);
 }
 .story-chapter--focused.story-chapter--map,
 .story-chapter--focused.story-chapter--scrolly {
@@ -928,6 +929,9 @@
     transparent
   );
   box-shadow: 0 10px 32px rgb(0 0 0 / 15%);
+}
+.story-chapter--focused .story-video {
+  grid-column: 1 / -1;
 }
 .story-chapter--focused .story-map {
   width: 100%;

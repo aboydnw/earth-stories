@@ -1859,33 +1859,27 @@ export function App() {
         canvas={editorCanvas}
         inspector={
           <div className="author-panel" id="top">
-            <header className="inspector-heading">
-              <p>
-                {inspectorMode === "story"
-                  ? "Story settings"
-                  : inspectorMode === "data"
-                    ? "Story data"
-                    : `Chapter ${String(project.chapters.findIndex((chapter) => chapter.id === activeChapter) + 1).padStart(2, "0")}`}
-              </p>
-              <h2>
-                {inspectorMode === "story"
-                  ? "Story details"
-                  : inspectorMode === "data"
-                    ? selectedSourceDetails
+            {inspectorMode === "story" || inspectorMode === "data" ? (
+              <header className="inspector-heading">
+                <p>
+                  {inspectorMode === "story" ? "Story settings" : "Story data"}
+                </p>
+                <h2>
+                  {inspectorMode === "story"
+                    ? "Story details"
+                    : selectedSourceDetails
                       ? "Source settings"
-                      : "Add data"
-                    : selectedChapter?.title || "Untitled chapter"}
-              </h2>
-              <span>
-                {inspectorMode === "story"
-                  ? "Settings shared by the whole publication."
-                  : inspectorMode === "data"
-                    ? selectedSourceDetails
+                      : "Add data"}
+                </h2>
+                <span>
+                  {inspectorMode === "story"
+                    ? "Settings shared by the whole publication."
+                    : selectedSourceDetails
                       ? "Shared settings apply everywhere this source is used."
-                      : "Import a local file or connect a public source."
-                    : `Edit this ${selectedChapter?.type ?? "story"} chapter while watching the preview.`}
-              </span>
-            </header>
+                      : "Import a local file or connect a public source."}
+                </span>
+              </header>
+            ) : null}
             {inspectorMode === "data" && selectedSourceDetails ? (
               <SourceDetailsEditor
                 source={selectedSourceDetails}

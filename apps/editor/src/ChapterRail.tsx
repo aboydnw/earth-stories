@@ -83,7 +83,13 @@ export function ChapterRail({
           const status = readiness[chapter.id];
           const StatusIcon =
             status?.tone === "ready" ? CheckCircle : WarningCircle;
-          const readinessDescriptionId = status?.findings?.length
+          const readinessText = status
+            ? [
+                status.label,
+                ...(status.findings ?? []).map(({ message }) => message),
+              ]
+            : [];
+          const readinessDescriptionId = status
             ? `chapter-readiness-${encodeURIComponent(chapter.id)}`
             : undefined;
           return (
@@ -108,11 +114,9 @@ export function ChapterRail({
                   <small
                     className="chapter-item__readiness"
                     data-tone={status.tone}
-                    title={status.findings
-                      ?.map(({ message }) => message)
-                      .join("\n")}
+                    title={readinessText.join("\n")}
                   >
-                    <StatusIcon size={12} aria-hidden="true" /> {status.label}
+                    <StatusIcon size={14} aria-hidden="true" />
                   </small>
                 ) : null}
               </button>
@@ -121,7 +125,7 @@ export function ChapterRail({
                   className="chapter-item__readiness-detail"
                   id={readinessDescriptionId}
                 >
-                  {status!.findings!.map(({ message }) => message).join(" ")}
+                  {readinessText.join(" ")}
                 </span>
               ) : null}
               {active ? (

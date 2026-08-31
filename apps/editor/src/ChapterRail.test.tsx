@@ -31,7 +31,7 @@ const chapters = [
 ] satisfies ProjectChapter[];
 
 describe("ChapterRail", () => {
-  it("selects a chapter, requests its editor, and exposes readiness in words", async () => {
+  it("selects a chapter, requests its editor, and describes readiness without visible text", async () => {
     const user = userEvent.setup();
     const onSelectChapter = vi.fn();
     const onRequestRegion = vi.fn();
@@ -65,23 +65,25 @@ describe("ChapterRail", () => {
     );
 
     const chapterLink = screen.getByRole("button", {
-      name: /changing shoreline/i,
+      name: /changing shoreline.*map$/i,
     });
-    expect(
-      screen.getByRole("button", {
-        name: /changing shoreline.*map.*choose data$/i,
-      }),
-    ).toBe(chapterLink);
+    const badge = chapterLink.querySelector(".chapter-item__readiness");
+    expect(badge?.getAttribute("data-tone")).toBe("error");
+    expect(badge?.textContent).toBe("");
+    expect(badge?.getAttribute("title")).toBe(
+      "Choose data\nThe selected source is missing.\nChoose an existing source.",
+    );
+
     const descriptionId = chapterLink.getAttribute("aria-describedby");
     expect(descriptionId).toBeTruthy();
-    expect(document.getElementById(descriptionId!)?.textContent).toContain(
-      "The selected source is missing. Choose an existing source.",
+    expect(document.getElementById(descriptionId!)?.textContent).toBe(
+      "Choose data The selected source is missing. Choose an existing source.",
     );
+
     await user.click(chapterLink);
 
     expect(onSelectChapter).toHaveBeenCalledWith("map");
     expect(onRequestRegion).toHaveBeenCalledWith("edit");
-    expect(screen.getByText("Choose data")).toBeTruthy();
   });
 
   it("keeps chapter actions labeled and protects the first and last positions", () => {
