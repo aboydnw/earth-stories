@@ -25,11 +25,17 @@ const fixtureFiles: Record<string, string> = {
   LICENSE: "Fixture license\n",
   "apps/desktop/resources/credits/THIRD_PARTY_NOTICES.md":
     "# Third-party notices\n",
+  "node_modules/@fontsource-variable/plus-jakarta-sans/LICENSE":
+    "SIL Open Font License 1.1 — Plus Jakarta Sans\n",
+  "node_modules/@fontsource/dm-mono/LICENSE":
+    "SIL Open Font License 1.1 — DM Mono\n",
 };
 
 const expectedFiles = [
   "credits/EARTH_STORIES_LICENSE",
   "credits/THIRD_PARTY_NOTICES.md",
+  "credits/PLUS_JAKARTA_SANS_LICENSE",
+  "credits/DM_MONO_LICENSE",
   "editor/index.html",
   "resource-manifest.json",
   "service/service.js",
@@ -88,6 +94,39 @@ describe("packaged desktop resources", () => {
     expect(
       manifest.files.every((entry) => /^[a-f0-9]{64}$/.test(entry.sha256)),
     ).toBe(true);
+  });
+
+  it("ships the open font licenses next to the fonts they cover", async () => {
+    const repository = await createFixture();
+    const output = join(repository, "build", "resources");
+
+    await execFileAsync(process.execPath, [
+      stageScript,
+      "--repository",
+      repository,
+      "--output",
+      output,
+    ]);
+
+    expect(
+      await readFile(join(output, "credits/PLUS_JAKARTA_SANS_LICENSE"), "utf8"),
+    ).toContain("SIL Open Font License");
+    expect(
+      await readFile(join(output, "credits/DM_MONO_LICENSE"), "utf8"),
+    ).toContain("SIL Open Font License");
+
+    const { rm } = await import("node:fs/promises");
+    await rm(join(repository, "node_modules/@fontsource/dm-mono/LICENSE"));
+    const error = await execFileAsync(process.execPath, [
+      stageScript,
+      "--repository",
+      repository,
+      "--output",
+      output,
+    ]).catch((cause: unknown) => cause as { message: string; stderr: string });
+    expect(`${error.message}\n${error.stderr}`).toContain(
+      "Missing required resource: node_modules/@fontsource/dm-mono/LICENSE",
+    );
   });
 
   it("fails before replacing staged resources when a required input is absent", async () => {

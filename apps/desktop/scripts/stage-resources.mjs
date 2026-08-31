@@ -35,6 +35,11 @@ const resources = [
     "apps/desktop/resources/credits/THIRD_PARTY_NOTICES.md",
     "credits/THIRD_PARTY_NOTICES.md",
   ],
+  [
+    "node_modules/@fontsource-variable/plus-jakarta-sans/LICENSE",
+    "credits/PLUS_JAKARTA_SANS_LICENSE",
+  ],
+  ["node_modules/@fontsource/dm-mono/LICENSE", "credits/DM_MONO_LICENSE"],
 ];
 
 function parseArguments(argv) {
