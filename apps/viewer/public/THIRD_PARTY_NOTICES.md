@@ -1,5 +1,9 @@
 # Offline viewer third-party runtime notices
 
+Plus Jakarta Sans and DM Mono are bundled under the SIL Open Font License 1.1.
+Their copyright notices and license texts ship as
+`credits/PLUS_JAKARTA_SANS_LICENSE` and `credits/DM_MONO_LICENSE`.
+
 The offline GeoParquet runtime contains the exact artifacts below. Checksums
 are enforced by `apps/viewer/src/offlineRuntimeAssets.test.ts`.
 

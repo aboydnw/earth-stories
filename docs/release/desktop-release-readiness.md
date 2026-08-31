@@ -69,7 +69,9 @@ warning above the fold, and having the withdrawal procedure written down first.
 - [ ] Generate and review an SBOM for the artifact that is actually shipped.
 - [x] Clear redistribution for the bundled fonts. Satoshi was replaced with
       Plus Jakarta Sans (SIL OFL 1.1) alongside DM Mono; both ship from npm
-      packages carrying their license text, and the notices record the result.
+      packages carrying their license text. The desktop installer and offline
+      viewer build each ship those exact copyright/license payloads, and tests
+      cover both distribution paths.
 - [ ] Clear redistribution for the offline DuckDB runtime, whose spatial
       extension bundles GDAL and transitive native libraries. Generate a
       component SBOM and complete the notice review recorded in
