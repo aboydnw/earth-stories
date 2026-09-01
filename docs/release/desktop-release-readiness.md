@@ -36,8 +36,9 @@ Accepted for the pilot:
 repository is public distribution, whoever it was aimed at. The font half of
 this is now resolved: Satoshi was replaced with Plus Jakarta Sans under the SIL
 OFL 1.1. The offline DuckDB runtime is now inventoried too: see
-[the runtime SBOM](offline-runtime-sbom.md). Every embedded component ships its
-notice, and the previously suspected worst case — libspatialite, which is
+[the runtime SBOM](offline-runtime-sbom.md). Every embedded component requiring
+a text notice ships one; SQLite is documented as public domain without a text
+payload. The previously suspected worst case — libspatialite, which is
 MPL/GPL/LGPL tri-licensed — turned out not to be linked at all. What remains is
 narrow and specific: GEOS 3.13.0 is LGPL-2.1-only and is statically linked into
 the spatial extension. That single question must be settled before publishing
@@ -79,9 +80,10 @@ warning above the fold, and having the withdrawal procedure written down first.
       [`offline-runtime-sbom.md`](offline-runtime-sbom.md) inventories every
       library embedded in the spatial extension from binary strings, the
       upstream build manifest, and the pinned vcpkg baseline.
-- [x] Ship a notice payload for every inventoried runtime component. All
-      fifteen license texts ship in `credits/runtime/`, covered by
-      `apps/viewer/src/runtimeCredits.test.ts`.
+- [x] Ship a notice payload for every inventoried runtime component that
+      requires one. Fifteen license texts ship in `credits/runtime/`, covered
+      by `apps/viewer/src/runtimeCredits.test.ts`; SQLite is public domain and
+      is documented in the SBOM without a text payload.
 - [ ] Resolve the one copyleft component: GEOS 3.13.0 is LGPL-2.1-only and is
       statically linked into the spatial extension. The technical facts counsel
       needs are recorded in the SBOM; the remaining decision is legal.

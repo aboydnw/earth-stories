@@ -19,11 +19,15 @@ it("stages the bundled font licenses with the offline viewer", async () => {
     "node_modules/@fontsource/dm-mono/LICENSE":
       "DM Mono\nSIL OPEN FONT LICENSE Version 1.1\n",
   };
+  const sbom = "# Runtime SBOM\n\nFixture inventory.\n";
   for (const [relativePath, contents] of Object.entries(licenses)) {
     const path = join(repository, relativePath);
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, contents);
   }
+  const sbomPath = join(repository, "docs/release/offline-runtime-sbom.md");
+  await mkdir(dirname(sbomPath), { recursive: true });
+  await writeFile(sbomPath, sbom);
 
   await execFileAsync(process.execPath, [
     script,
@@ -40,5 +44,8 @@ it("stages the bundled font licenses with the offline viewer", async () => {
   );
   expect(await readFile(join(output, "credits/DM_MONO_LICENSE"), "utf8")).toBe(
     licenses["node_modules/@fontsource/dm-mono/LICENSE"],
+  );
+  expect(await readFile(join(output, "offline-runtime-sbom.md"), "utf8")).toBe(
+    sbom,
   );
 });

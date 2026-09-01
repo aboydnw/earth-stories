@@ -19,6 +19,7 @@ const licenses = [
     "credits/PLUS_JAKARTA_SANS_LICENSE",
   ],
   ["node_modules/@fontsource/dm-mono/LICENSE", "credits/DM_MONO_LICENSE"],
+  ["docs/release/offline-runtime-sbom.md", "offline-runtime-sbom.md"],
 ];
 
 for (const [source, destination] of licenses) {

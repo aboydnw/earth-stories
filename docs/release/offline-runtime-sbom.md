@@ -82,9 +82,9 @@ carry no notice obligation for this artifact:
 
 GEOS 3.13.0 is **LGPL-2.1-only** and is statically linked into both
 `spatial.duckdb_extension.wasm` variants. Every other component above is
-permissive (MIT, BSD, Apache-2.0, Zlib, or public domain) and is satisfied by
-shipping the notice payloads listed in the table, which this repository now
-does.
+permissive (MIT, BSD, Apache-2.0, Zlib, or public domain). This repository ships
+the notice payload listed in the table for every component that requires one;
+SQLite is public domain and has no text payload.
 
 Facts relevant to the LGPL analysis, recorded so counsel is not asked to
 rediscover them:
@@ -108,6 +108,8 @@ one.** The inventory it depends on is now complete.
 
 ## Verification
 
-`apps/viewer/src/runtimeCredits.test.ts` asserts that every notice file named in
-this table exists and travels with the runtime, so a component cannot be listed
-here without its payload actually shipping.
+`apps/viewer/src/runtimeCredits.test.ts` compares the fifteen named notice paths
+in this table with the files that travel with the runtime in both directions.
+Components that require a text notice cannot be listed without a payload or
+shipped without an SBOM entry. SQLite is the documented public-domain exception
+and does not have a text payload.

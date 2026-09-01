@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, it } from "vitest";
 
@@ -23,7 +23,7 @@ const required = [
   "LERC_LICENSE",
 ] as const;
 
-it("ships a non-empty notice payload for every inventoried runtime component", async () => {
+it("ships fifteen non-empty runtime notice payloads", async () => {
   for (const name of required) {
     const path = resolve(creditsRoot, name);
     expect((await stat(path)).size, name).toBeGreaterThan(200);
@@ -38,7 +38,11 @@ it("keeps the copyleft component's full license text with the runtime", async ()
 
 it("names every shipped notice file in the runtime SBOM", async () => {
   const inventory = await readFile(sbom, "utf8");
-  for (const name of required) {
-    expect(inventory, name).toContain(`credits/runtime/${name}`);
-  }
+  const shipped = (await readdir(creditsRoot)).sort();
+  const inventoried = Array.from(
+    inventory.matchAll(/`credits\/runtime\/([A-Z0-9_]+)`/g),
+    ([, name]) => name,
+  ).sort();
+
+  expect(shipped).toEqual(inventoried);
 });

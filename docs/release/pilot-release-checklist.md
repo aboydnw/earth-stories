@@ -68,11 +68,18 @@ the third-party notices.
 The offline DuckDB runtime is roughly 120 MB of the artifact, and its spatial
 extension embeds GDAL and a tree of native libraries.
 [The runtime SBOM](offline-runtime-sbom.md) now inventories that tree
-component by component, and every component's notice ships in
-`credits/runtime/`. Confirm those files are present in the built artifact:
+component by component. Every component requiring a text notice ships one in
+`credits/runtime/`; SQLite is public domain and has no text payload. Confirm
+every expected payload is present and non-empty in the built artifact:
 
 ```bash
-ls apps/desktop/build/resources/viewer/credits/runtime
+for notice in \
+  DUCKDB_LICENSE DUCKDB_WASM_LICENSE DUCKDB_SPATIAL_LICENSE GDAL_LICENSE \
+  GEOS_LICENSE PROJ_LICENSE LIBTIFF_LICENSE LIBJPEG_TURBO_LICENSE \
+  NLOHMANN_JSON_LICENSE EXPAT_LICENSE ZLIB_LICENSE LIBDEFLATE_LICENSE \
+  LIBGEOTIFF_LICENSE JSON_C_LICENSE LERC_LICENSE; do
+  test -s "apps/desktop/build/resources/viewer/credits/runtime/$notice" || exit 1
+done
 ```
 
 One question is left, and it is legal rather than technical: **GEOS 3.13.0 is
