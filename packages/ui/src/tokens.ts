@@ -1,6 +1,6 @@
 export const productTokens = {
   fonts: {
-    body: '"Satoshi Variable", "Satoshi", system-ui, sans-serif',
+    body: '"Plus Jakarta Sans Variable", system-ui, sans-serif',
     mono: '"DM Mono", ui-monospace, monospace',
   },
   colors: {

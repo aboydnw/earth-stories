@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --build && vite build"
+    "build": "tsc --build && vite build && node scripts/stage-license-assets.mjs"
   },
   "dependencies": {
     "@earth-stories/story-schema": "workspace:*",

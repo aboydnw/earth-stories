@@ -26,7 +26,7 @@ carries meaning.
 
 ## Typography and local fonts
 
-Satoshi Variable is the product and default reader family; DM Mono is used for
+Plus Jakarta Sans is the product and default reader family; DM Mono is used for
 technical values. Both are bundled into editor and viewer builds. Font loading
 must not require Fontshare or Google Fonts.
 

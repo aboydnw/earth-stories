@@ -819,6 +819,7 @@ __metadata:
   dependencies:
     "@chakra-ui/react": "npm:^3.36.0"
     "@emotion/react": "npm:^11.14.0"
+    "@fontsource-variable/plus-jakarta-sans": "npm:^5.3.0"
     "@fontsource/dm-mono": "npm:^5.3.0"
     "@phosphor-icons/react": "npm:^2.1.10"
     "@types/react": "npm:^19.1.10"
@@ -864,6 +865,7 @@ __metadata:
     "@developmentseed/proj": "npm:^0.7.0"
     "@duckdb/duckdb-wasm": "npm:^1.29.0"
     "@earth-stories/story-schema": "workspace:*"
+    "@fontsource-variable/plus-jakarta-sans": "npm:^5.3.0"
     "@fontsource/dm-mono": "npm:^5.3.0"
     "@loaders.gl/core": "npm:^4.3.4"
     "@luma.gl/core": "npm:^9.3.6"
@@ -1415,6 +1417,13 @@ __metadata:
   version: 0.2.12
   resolution: "@floating-ui/utils@npm:0.2.12"
   checksum: 10c0/bb910b90d56991a62011afaf5f8e0c4b7fb6dab69403f4dd17fbd6eb25560b28d533dff9791f270b4f459852e9006a1077b5d73cbedb5e34d9424afc6a828314
+  languageName: node
+  linkType: hard
+
+"@fontsource-variable/plus-jakarta-sans@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "@fontsource-variable/plus-jakarta-sans@npm:5.3.0"
+  checksum: 10c0/ab1a3e2f50a0d8b0c1e3549188a8b178a6fe56628cf473bf50a9df96d90af5b7678691f53cf6eefa25b4317ba2d3af3d84a13e9d72518e6c40b7bcf84afffa2b
   languageName: node
   linkType: hard
 

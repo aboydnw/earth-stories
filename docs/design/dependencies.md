@@ -2,7 +2,7 @@
 
 ## Must be bundled
 
-- Product and default reader fonts: Satoshi Variable and DM Mono
+- Product and default reader fonts: Plus Jakarta Sans and DM Mono, both SIL OFL 1.1
 - Earth Stories UI, viewer runtime, icons, and publication shell
 - Included project assets and generated archival fallbacks
 

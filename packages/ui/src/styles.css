@@ -1,13 +1,6 @@
+@import "@fontsource-variable/plus-jakarta-sans";
 @import "@fontsource/dm-mono/400.css";
 @import "@fontsource/dm-mono/500.css";
-
-@font-face {
-  font-family: "Satoshi Variable";
-  src: url("./fonts/Satoshi-Variable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 300 900;
-  font-display: swap;
-}
 
 select {
   appearance: none;

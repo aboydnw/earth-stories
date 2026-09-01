@@ -4,6 +4,51 @@ The desktop package is not ready for public release. This checklist separates
 working local packaging mechanics from the ownership, signing, validation, and
 support commitments required by the desktop distribution plan.
 
+## Pilot disposition (0.1.0-pilot.1)
+
+An unsigned macOS pilot for named testers is being distributed ahead of these
+gates. This section records that decision explicitly, as the publication gate
+below requires. **Nothing here satisfies that gate.** It describes a pilot, and
+a public release still needs every applicable checkbox owned and evidenced.
+
+Deferred for the pilot:
+
+- **Signing, notarization, Authenticode, and the signed release manifest.** The
+  artifact is unsigned; testers bypass Gatekeeper by hand and are told exactly
+  why in [the pilot guide](../pilot-macos.md). Blocking for public release.
+- **SBOM, supported-version policy, vulnerability response owner, and the
+  credential renewal calendar.** Not required to hand a build to a named tester
+  who knows what they have. All blocking for public release.
+- **The target-machine matrix**, reduced to the author's own Mac plus named
+  testers reporting their macOS version and chip. Windows and Linux are out of
+  scope for this pilot; their gates are untouched.
+- **CI.** There is no protected release workflow, so the pilot is cut by hand
+  from a clean checkout following
+  [the pilot release checklist](pilot-release-checklist.md).
+
+Accepted for the pilot:
+
+- **The product icon** is a generated placeholder mark, not cleared artwork.
+  It removes the default Electron logo, which is the pilot-relevant part.
+  Cleared artwork remains required for public release.
+
+**Redistribution clearance is not deferred.** A pre-release on a public
+repository is public distribution, whoever it was aimed at. The font half of
+this is now resolved: Satoshi was replaced with Plus Jakarta Sans under the SIL
+OFL 1.1. The offline DuckDB runtime is now inventoried too: see
+[the runtime SBOM](offline-runtime-sbom.md). Every embedded component requiring
+a text notice ships one; SQLite is documented as public domain without a text
+payload. The previously suspected worst case — libspatialite, which is
+MPL/GPL/LGPL tri-licensed — turned out not to be linked at all. What remains is
+narrow and specific: GEOS 3.13.0 is LGPL-2.1-only and is statically linked into
+the spatial extension. That single question must be settled before publishing
+publicly, or the pilot distributed privately instead. See step 4 of
+[the pilot release checklist](pilot-release-checklist.md).
+
+Author obligations that are **not** deferred: installing the distributed `.dmg`
+personally before publishing, publishing as a pre-release with the unsigned
+warning above the fold, and having the withdrawal procedure written down first.
+
 ## Ownership and policy gates
 
 - [ ] Name the release owner.
@@ -26,9 +71,25 @@ support commitments required by the desktop distribution plan.
 - [ ] Create a signed release-manifest key, document key custody, rotation,
       revocation, and recovery, and keep the private key out of the repository.
 - [ ] Generate and review an SBOM for the artifact that is actually shipped.
-- [ ] Clear redistribution for the Satoshi font payload, Pixi/conda packages,
-      native codecs, and any future bundled conversion executable. Update the
-      third-party notices with the result.
+- [x] Clear redistribution for the bundled fonts. Satoshi was replaced with
+      Plus Jakarta Sans (SIL OFL 1.1) alongside DM Mono; both ship from npm
+      packages carrying their license text. The desktop installer and offline
+      viewer build each ship those exact copyright/license payloads, and tests
+      cover both distribution paths.
+- [x] Generate the component SBOM for the offline DuckDB runtime.
+      [`offline-runtime-sbom.md`](offline-runtime-sbom.md) inventories every
+      library embedded in the spatial extension from binary strings, the
+      upstream build manifest, and the pinned vcpkg baseline.
+- [x] Ship a notice payload for every inventoried runtime component that
+      requires one. Fifteen license texts ship in `credits/runtime/`, covered
+      by `apps/viewer/src/runtimeCredits.test.ts`; SQLite is public domain and
+      is documented in the SBOM without a text payload.
+- [ ] Resolve the one copyleft component: GEOS 3.13.0 is LGPL-2.1-only and is
+      statically linked into the spatial extension. The technical facts counsel
+      needs are recorded in the SBOM; the remaining decision is legal.
+- [ ] Clear redistribution for Pixi/conda packages, native codecs, and any
+      future bundled conversion executable. Update the third-party notices with
+      the result.
 - [ ] Replace the default Electron application icon with cleared product
       artwork in every required platform format.
 
