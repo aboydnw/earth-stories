@@ -7,12 +7,30 @@ Their copyright notices and license texts ship as
 The offline GeoParquet runtime contains the exact artifacts below. Checksums
 are enforced by `apps/viewer/src/offlineRuntimeAssets.test.ts`.
 
-| Component                     | Version / platform                                                        | Upstream license evidence                                                                                                                                     | Redistribution status                                                                                                                                                                                                                                            |
-| ----------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DuckDB-Wasm worker and module | npm `@duckdb/duckdb-wasm` 1.32.0; DuckDB v1.4.3; `wasm_eh` and `wasm_mvp` | Package metadata declares MIT; source: <https://github.com/duckdb/duckdb-wasm/tree/v1.32.0>                                                                   | Source license permits redistribution with its copyright/license notice. A release notice payload still needs the version-pinned upstream license text.                                                                                                          |
-| DuckDB spatial extension      | DuckDB v1.4.3; `wasm_eh` and `wasm_mvp`                                   | Signed official artifacts from <https://extensions.duckdb.org/v1.4.3/>; extension source declares MIT: <https://github.com/duckdb/duckdb-spatial/tree/v1.4.3> | **Release gate:** the binary bundles GDAL and transitive native libraries. Generate a component SBOM and complete notice/counsel review before public redistribution. Do not interpret the extension project's MIT license as clearing every bundled dependency. |
-| DuckDB Parquet extension      | DuckDB v1.4.3; `wasm_eh` and `wasm_mvp`                                   | Signed official artifacts from <https://extensions.duckdb.org/v1.4.3/>; DuckDB source is MIT: <https://github.com/duckdb/duckdb/tree/v1.4.3>                  | Source license permits redistribution with its copyright/license notice. Include it in the version-pinned SBOM and notice review before public redistribution.                                                                                                   |
+| Component                     | Version / platform                                                        | Upstream license evidence                                                                                                                                                                     | Redistribution status                                                                                                                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DuckDB-Wasm worker and module | npm `@duckdb/duckdb-wasm` 1.32.0; DuckDB v1.4.3; `wasm_eh` and `wasm_mvp` | MIT: <https://github.com/duckdb/duckdb-wasm/tree/v1.32.0>                                                                                                                                     | Cleared. The version-pinned MIT texts ship as `credits/runtime/DUCKDB_WASM_LICENSE` and `credits/runtime/DUCKDB_LICENSE`.                                                                           |
+| DuckDB Parquet extension      | DuckDB v1.4.3; `wasm_eh` and `wasm_mvp`                                   | Signed official artifacts from <https://extensions.duckdb.org/v1.4.3/>; DuckDB source is MIT: <https://github.com/duckdb/duckdb/tree/v1.4.3>                                                  | Cleared. Covered by `credits/runtime/DUCKDB_LICENSE`.                                                                                                                                               |
+| DuckDB spatial extension      | DuckDB v1.4.3; `wasm_eh` and `wasm_mvp`                                   | Signed official artifacts from <https://extensions.duckdb.org/v1.4.3/>; extension source is MIT on the DuckDB 1.4 release branch: <https://github.com/duckdb/duckdb-spatial/tree/v1.4-andium> | **Release gate:** inventoried in [the runtime SBOM](../../../docs/release/offline-runtime-sbom.md). Every embedded component now ships a notice; the open item is the LGPL-2.1 GEOS analysis below. |
 
-The worker files preserve their bundled JavaScript license comments. This
-inventory records technical provenance; it is not legal advice and does not
-clear the unresolved release gate above.
+Full component inventory — every library embedded in the spatial extension,
+with versions, licenses, and the evidence for each — is in
+[`docs/release/offline-runtime-sbom.md`](../../../docs/release/offline-runtime-sbom.md).
+The notice payload for each of those components ships in `credits/runtime/`.
+
+## Copyleft status
+
+One embedded component is not permissive: **GEOS 3.13.0 is LGPL-2.1-only**, and
+is statically linked into both spatial extension variants. Its complete license
+text ships as `credits/runtime/GEOS_LICENSE`. The binaries are the official,
+unmodified, signed upstream artifacts, and the corresponding source and build
+manifest are cited in the SBOM. Whether that satisfies LGPL-2.1 §6 for this
+distribution method is the one open legal question before public release.
+
+Previously suspected and now ruled out by inspection: libspatialite
+(MPL/GPL/LGPL tri-licensed) is **not** linked — the binary reports
+`OGR was built without libspatialite support`. libcurl and OpenSSL are likewise
+absent from the WASM build.
+
+The worker files preserve their own bundled JavaScript license comments. This
+inventory records technical provenance; it is not legal advice.

@@ -19,7 +19,13 @@ notice and license to travel with the fonts. Each license is therefore staged
 alongside this file as `credits/PLUS_JAKARTA_SANS_LICENSE` and
 `credits/DM_MONO_LICENSE`.
 
-The bundled offline DuckDB runtime is a separate matter. Its spatial extension
-carries GDAL and transitive native libraries, and
-`apps/viewer/public/THIRD_PARTY_NOTICES.md` records that a component SBOM and
-notice review are still required before public redistribution.
+The bundled offline DuckDB runtime carries GDAL and its transitive native
+libraries. Those are now inventoried component by component in
+`docs/release/offline-runtime-sbom.md`, and every component's notice payload
+ships beside the runtime in `viewer/credits/runtime/`.
+
+One embedded component is not permissive: GEOS 3.13.0 is LGPL-2.1-only and is
+statically linked into the spatial extension. Its full license text ships as
+`viewer/credits/runtime/GEOS_LICENSE`. The remaining open item before public
+release is the LGPL-2.1 analysis recorded in that SBOM, not the inventory
+itself.

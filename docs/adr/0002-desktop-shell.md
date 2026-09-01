@@ -575,6 +575,7 @@ architecture, and no later desktop plan may claim the packaging spike passed on
 the strength of the Linux probes alone. The probes provide a reproducible Linux
 baseline and expose cache redirection, service lifecycle, ESM interop,
 packaged-resource, signing, and notice requirements. `desktop-02` remains gated
-on notarized hardened-runtime Pixi execution. Release additionally remains
-blocked on font provenance and the unresolved per-platform redistribution
-review.
+on notarized hardened-runtime Pixi execution. Font provenance is resolved, as
+recorded above. Release additionally remains blocked on the LGPL-2.1 GEOS
+analysis in `docs/release/offline-runtime-sbom.md` and the unresolved
+per-platform Pixi/conda redistribution review.

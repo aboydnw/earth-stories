@@ -35,10 +35,13 @@ Accepted for the pilot:
 **Redistribution clearance is not deferred.** A pre-release on a public
 repository is public distribution, whoever it was aimed at. The font half of
 this is now resolved: Satoshi was replaced with Plus Jakarta Sans under the SIL
-OFL 1.1. The offline DuckDB runtime is not — its spatial extension bundles GDAL
-and transitive native libraries, and its notices still record an outstanding
-SBOM and notice review. That must be settled before publishing publicly, or the
-pilot distributed privately instead. See step 4 of
+OFL 1.1. The offline DuckDB runtime is now inventoried too: see
+[the runtime SBOM](offline-runtime-sbom.md). Every embedded component ships its
+notice, and the previously suspected worst case — libspatialite, which is
+MPL/GPL/LGPL tri-licensed — turned out not to be linked at all. What remains is
+narrow and specific: GEOS 3.13.0 is LGPL-2.1-only and is statically linked into
+the spatial extension. That single question must be settled before publishing
+publicly, or the pilot distributed privately instead. See step 4 of
 [the pilot release checklist](pilot-release-checklist.md).
 
 Author obligations that are **not** deferred: installing the distributed `.dmg`
@@ -72,10 +75,16 @@ warning above the fold, and having the withdrawal procedure written down first.
       packages carrying their license text. The desktop installer and offline
       viewer build each ship those exact copyright/license payloads, and tests
       cover both distribution paths.
-- [ ] Clear redistribution for the offline DuckDB runtime, whose spatial
-      extension bundles GDAL and transitive native libraries. Generate a
-      component SBOM and complete the notice review recorded in
-      `apps/viewer/public/THIRD_PARTY_NOTICES.md`.
+- [x] Generate the component SBOM for the offline DuckDB runtime.
+      [`offline-runtime-sbom.md`](offline-runtime-sbom.md) inventories every
+      library embedded in the spatial extension from binary strings, the
+      upstream build manifest, and the pinned vcpkg baseline.
+- [x] Ship a notice payload for every inventoried runtime component. All
+      fifteen license texts ship in `credits/runtime/`, covered by
+      `apps/viewer/src/runtimeCredits.test.ts`.
+- [ ] Resolve the one copyleft component: GEOS 3.13.0 is LGPL-2.1-only and is
+      statically linked into the spatial extension. The technical facts counsel
+      needs are recorded in the SBOM; the remaining decision is legal.
 - [ ] Clear redistribution for Pixi/conda packages, native codecs, and any
       future bundled conversion executable. Update the third-party notices with
       the result.

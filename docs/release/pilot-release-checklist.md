@@ -65,22 +65,30 @@ The bundled fonts are clear: Plus Jakarta Sans and DM Mono are both SIL OFL
 1.1, ship from npm packages carrying their license text, and are recorded in
 the third-party notices.
 
-What is **not** settled is the offline DuckDB runtime. It is roughly 120 MB of
-the artifact, and its spatial extension bundles GDAL and transitive native
-libraries. `apps/viewer/public/THIRD_PARTY_NOTICES.md` states plainly that a
-component SBOM and notice review are required before public redistribution, and
-warns against reading the extension's own MIT license as clearing everything
-inside it.
+The offline DuckDB runtime is roughly 120 MB of the artifact, and its spatial
+extension embeds GDAL and a tree of native libraries.
+[The runtime SBOM](offline-runtime-sbom.md) now inventories that tree
+component by component, and every component's notice ships in
+`credits/runtime/`. Confirm those files are present in the built artifact:
+
+```bash
+ls apps/desktop/build/resources/viewer/credits/runtime
+```
+
+One question is left, and it is legal rather than technical: **GEOS 3.13.0 is
+LGPL-2.1-only** and is statically linked into the spatial extension. The
+binaries are the official unmodified signed upstream artifacts, and the SBOM
+records the source, build manifest, and toolchain baseline needed to relink.
 
 A public pre-release redistributes that runtime to anyone who downloads it.
 Before publishing publicly, either:
 
-- complete the SBOM and notice review that file describes, or
-- distribute the pilot privately instead, which keeps the review where it
+- get a decision on whether shipping the unmodified upstream binary with the
+  full LGPL-2.1 text and cited corresponding source satisfies §6, or
+- distribute the pilot privately instead, which keeps the question where it
   already is — a public-release gate rather than a pilot one.
 
-Do not publish publicly while that notice still records the review as
-outstanding.
+Do not publish publicly while that question is open.
 
 ## 5. Publish as a pre-release
 
