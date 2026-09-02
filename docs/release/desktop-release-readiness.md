@@ -140,12 +140,14 @@ yarn workspace @earth-stories/desktop smoke:electron
 ```
 
 Build the provisional Linux artifacts, then create and verify their unsigned
-metadata using an explicit version, artifact directory, and notices file:
+metadata using an explicit version, artifact directory, and notices file. The
+version must be the one in `apps/desktop/package.json`, which is what
+electron-builder stamps into the artifact names:
 
 ```bash
 yarn workspace @earth-stories/desktop package:linux
-yarn workspace @earth-stories/desktop release:metadata --artifacts build/artifacts --version 0.1.0 --notices build/resources/credits/THIRD_PARTY_NOTICES.md
-yarn workspace @earth-stories/desktop release:verify --artifacts build/artifacts --version 0.1.0 --notices build/resources/credits/THIRD_PARTY_NOTICES.md
+yarn workspace @earth-stories/desktop release:metadata --artifacts build/artifacts --version 0.1.0-pilot.1 --notices build/resources/credits/THIRD_PARTY_NOTICES.md
+yarn workspace @earth-stories/desktop release:verify --artifacts build/artifacts --version 0.1.0-pilot.1 --notices build/resources/credits/THIRD_PARTY_NOTICES.md
 ```
 
 The Electron smoke check needs a graphical environment; the repository command

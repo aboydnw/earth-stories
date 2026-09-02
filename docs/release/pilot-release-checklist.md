@@ -10,6 +10,12 @@ on Linux, so the development VM cannot cut this release.
 
 ## 1. Build
 
+The release version is the `version` field in `apps/desktop/package.json`.
+electron-builder names every artifact from it, and the metadata commands below
+refuse artifacts that carry any other version. It is `0.1.0-pilot.1` today; for
+the next pilot, bump it in a committed change _before_ building, and use the
+same value everywhere below.
+
 From a clean checkout on the Mac:
 
 ```bash
