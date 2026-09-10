@@ -1,0 +1,729 @@
+{
+  "schema": "earth-stories/project/v2",
+  "id": "roadless-rule",
+  "metadata": {
+    "title": "The Last Roadless Forests",
+    "description": "Forty-five million acres of national forest have stayed roadless for 25 years. A proposed rule would end that. Here is what is at stake, who wants it, and who does not.",
+    "author": "Anthony Boyd",
+    "created": "2026-09-10T00:00:00.000Z",
+    "updated": "2026-09-10T00:00:00.000Z"
+  },
+  "basemap": {
+    "id": "carto-positron",
+    "label": "CARTO Positron",
+    "styleUrl": "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    "attribution": "© OpenStreetMap contributors © CARTO"
+  },
+  "publication": {
+    "profile": "connected",
+    "theme": "editorial",
+    "offlineBasemap": { "mode": "neutral" }
+  },
+  "dataAssets": [],
+  "sources": [
+    {
+      "id": "usgs-imagery",
+      "kind": "xyz",
+      "label": "USGS aerial and satellite imagery",
+      "locator": "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}",
+      "attribution": "USGS The National Map: Orthoimagery",
+      "sizeBytes": null,
+      "delivery": "connected",
+      "provenance": {
+        "publisher": "U.S. Geological Survey",
+        "sourceUrl": "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer",
+        "licenseName": "Public Domain",
+        "licenseUrl": null,
+        "dataUpdatedAt": null,
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "United States (1 m NAIP in the lower 48, 10 m SPOT in Alaska)",
+        "transformations": []
+      },
+      "presentation": {
+        "opacity": 1,
+        "color": "#cf3f02",
+        "strokeColor": "#443f3f",
+        "radius": 5,
+        "sourceLayer": null,
+        "rasterBand": 1,
+        "rescale": null,
+        "colormap": "viridis",
+        "colormapReversed": false,
+        "legendTitle": "Imagery",
+        "legendVisible": false,
+        "symbolProperty": null,
+        "categoryColors": {},
+        "filterProperty": null,
+        "filterValue": null
+      }
+    },
+    {
+      "id": "roadless-national",
+      "kind": "local-geojson",
+      "label": "Inventoried roadless areas (2001 rule), simplified",
+      "path": "assets/roadless-us-simplified.geojson",
+      "attribution": "USDA Forest Service, Inventoried Roadless Areas 2001 Rule",
+      "sizeBytes": 5641316,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service Enterprise Data Warehouse",
+        "sourceUrl": "https://data.fs.usda.gov/geodata/edw/datasets.php",
+        "licenseName": "Public Domain (U.S. Government work)",
+        "licenseUrl": null,
+        "dataUpdatedAt": "2023-10-03",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "United States and Puerto Rico",
+        "transformations": [
+          "Downloaded S_USA.RoadlessArea_2001 shapefile (11,391 polygons, 58.4 million acres)",
+          "Simplified geometry to about 300 m for a national overview and rounded coordinates to three decimals",
+          "Added a status field: areas in Idaho and Colorado are labelled as covered by their state rules, which the proposed rescission leaves in place; all others are labelled as covered by the national rule",
+          "National-rule acres total 44,701,002, matching the 44.7 million acres in the proposed rule"
+        ]
+      },
+      "presentation": {
+        "opacity": 0.85,
+        "color": "#c2410c",
+        "strokeColor": "#7c2d12",
+        "radius": 5,
+        "sourceLayer": null,
+        "rasterBand": 1,
+        "rescale": null,
+        "colormap": "viridis",
+        "colormapReversed": false,
+        "legendTitle": "Roadless areas",
+        "legendVisible": true,
+        "symbolProperty": "status",
+        "categoryColors": {
+          "National rule (proposed rescission)": "#c2410c",
+          "State rule (unaffected)": "#2f6f4e"
+        },
+        "filterProperty": null,
+        "filterValue": null
+      }
+    },
+    {
+      "id": "roadless-detail",
+      "kind": "pmtiles",
+      "label": "Inventoried roadless areas (2001 rule), detailed tiles",
+      "locator": "assets/roadless-areas.pmtiles",
+      "tileType": "vector",
+      "attribution": "USDA Forest Service, Inventoried Roadless Areas 2001 Rule",
+      "sizeBytes": 13115757,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service Enterprise Data Warehouse",
+        "sourceUrl": "https://data.fs.usda.gov/geodata/edw/datasets.php",
+        "licenseName": "Public Domain (U.S. Government work)",
+        "licenseUrl": null,
+        "dataUpdatedAt": "2023-10-03",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "United States and Puerto Rico",
+        "transformations": [
+          "Converted S_USA.RoadlessArea_2001 to vector PMTiles with GDAL at zoom levels 0 to 10",
+          "Kept the forest, state, name, acres, and status fields"
+        ]
+      },
+      "presentation": {
+        "opacity": 0.95,
+        "color": "#fb923c",
+        "strokeColor": "#7c2d12",
+        "radius": 5,
+        "sourceLayer": "roadless",
+        "rasterBand": 1,
+        "rescale": null,
+        "colormap": "viridis",
+        "colormapReversed": false,
+        "legendTitle": "Roadless area boundary",
+        "legendVisible": true,
+        "symbolProperty": null,
+        "categoryColors": {},
+        "filterProperty": null,
+        "filterValue": null
+      }
+    },
+    {
+      "id": "national-forests",
+      "kind": "pmtiles",
+      "label": "National forest boundaries",
+      "locator": "assets/national-forests.pmtiles",
+      "tileType": "vector",
+      "attribution": "USDA Forest Service, Administrative Forest Boundaries",
+      "sizeBytes": 4716326,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service Enterprise Data Warehouse",
+        "sourceUrl": "https://data.fs.usda.gov/geodata/edw/datasets.php",
+        "licenseName": "Public Domain (U.S. Government work)",
+        "licenseUrl": null,
+        "dataUpdatedAt": "2025-07-06",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "United States and Puerto Rico",
+        "transformations": [
+          "Converted S_USA.AdministrativeForest (112 forests) to vector PMTiles with GDAL at zoom levels 0 to 9"
+        ]
+      },
+      "presentation": {
+        "opacity": 0.7,
+        "color": "#3f6212",
+        "strokeColor": "#3f6212",
+        "radius": 5,
+        "sourceLayer": "forests",
+        "rasterBand": 1,
+        "rescale": null,
+        "colormap": "viridis",
+        "colormapReversed": false,
+        "legendTitle": "National forest boundary",
+        "legendVisible": true,
+        "symbolProperty": null,
+        "categoryColors": {},
+        "filterProperty": null,
+        "filterValue": null
+      }
+    },
+    {
+      "id": "roadless-tongass",
+      "kind": "local-geojson",
+      "label": "Tongass National Forest roadless areas",
+      "path": "assets/roadless-tongass.geojson",
+      "attribution": "USDA Forest Service, Inventoried Roadless Areas 2001 Rule",
+      "sizeBytes": 1413396,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service Enterprise Data Warehouse",
+        "sourceUrl": "https://data.fs.usda.gov/geodata/edw/datasets.php",
+        "licenseName": "Public Domain (U.S. Government work)",
+        "licenseUrl": null,
+        "dataUpdatedAt": "2023-10-03",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "Southeast Alaska",
+        "transformations": [
+          "Selected the 684 roadless polygons in the Tongass National Forest (9.34 million acres)",
+          "Simplified geometry to about 50 m and rounded coordinates to four decimals"
+        ]
+      },
+      "presentation": {
+        "opacity": 0.8,
+        "color": "#c2410c",
+        "strokeColor": "#7c2d12",
+        "radius": 5,
+        "sourceLayer": null,
+        "rasterBand": 1,
+        "rescale": null,
+        "colormap": "viridis",
+        "colormapReversed": false,
+        "legendTitle": "Tongass roadless areas",
+        "legendVisible": true,
+        "symbolProperty": null,
+        "categoryColors": {},
+        "filterProperty": null,
+        "filterValue": null
+      }
+    },
+    {
+      "id": "roadless-by-state",
+      "kind": "csv",
+      "label": "Roadless acres by state",
+      "path": "assets/roadless-by-state.csv",
+      "attribution": "USDA Forest Service, summed by Earth Stories",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service Enterprise Data Warehouse",
+        "sourceUrl": "https://data.fs.usda.gov/geodata/edw/datasets.php",
+        "licenseName": "Public Domain (U.S. Government work)",
+        "licenseUrl": null,
+        "dataUpdatedAt": "2023-10-03",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "United States",
+        "transformations": [
+          "Summed the ACRES field of the 2001 roadless area layer by state and kept the twelve largest"
+        ]
+      }
+    },
+    {
+      "id": "southeast-alaska-jobs",
+      "kind": "csv",
+      "label": "Southeast Alaska jobs, visitor industry and timber, 2024",
+      "path": "assets/southeast-alaska-jobs.csv",
+      "attribution": "Southeast Conference, Southeast Alaska by the Numbers 2025",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "Southeast Conference / Rain Coast Data",
+        "sourceUrl": "https://www.seconference.org/wp-content/uploads/2025/09/SE-by-the-numbers-2025.pdf",
+        "licenseName": null,
+        "licenseUrl": null,
+        "dataUpdatedAt": "2025-09-01",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": { "start": "2024-01-01", "end": "2024-12-31" },
+        "spatialCoverage": "Southeast Alaska",
+        "transformations": [
+          "Transcribed annual-average employment and wages for the visitor industry and the timber sector"
+        ]
+      }
+    },
+    {
+      "id": "usda-dollars-at-stake",
+      "kind": "csv",
+      "label": "Annual dollars at stake, USDA and Taxpayers for Common Sense estimates",
+      "path": "assets/usda-dollars-at-stake.csv",
+      "attribution": "USDA proposed rule (91 FR 53827) and Taxpayers for Common Sense",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service; Taxpayers for Common Sense",
+        "sourceUrl": "https://www.govinfo.gov/content/pkg/FR-2026-08-20/pdf/2026-16965.pdf",
+        "licenseName": null,
+        "licenseUrl": null,
+        "dataUpdatedAt": "2026-08-20",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "United States",
+        "transformations": [
+          "Took the high end of USDA's revenue ranges (timber industry $4.6 to $10.6 million, Treasury and Forest Service $5.2 to $11.4 million) and its $6.1 million recreation loss",
+          "Tongass loss is Taxpayers for Common Sense's 1980 to 2019 net loss of $1.73 billion divided by 40 years"
+        ]
+      }
+    },
+    {
+      "id": "opposition-to-repeal",
+      "kind": "csv",
+      "label": "Share opposed to repealing the Roadless Rule",
+      "path": "assets/opposition-to-repeal.csv",
+      "attribution": "Center for Western Priorities comment analysis; Pew / Susquehanna poll; Colorado College Conservation in the West poll",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "Center for Western Priorities; The Pew Charitable Trusts; Colorado College State of the Rockies",
+        "sourceUrl": "https://www.pew.org/-/media/assets/2026/02/national-poll-on-roadless-rule.pdf",
+        "licenseName": null,
+        "licenseUrl": null,
+        "dataUpdatedAt": "2026-02-02",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": { "start": "2025-09-01", "end": "2026-01-18" },
+        "spatialCoverage": "United States",
+        "transformations": [
+          "Comment share is the Center for Western Priorities sample of 2025 notice comments (0.6% in support, margin 1.4 points)",
+          "Pew figures are the share who oppose repeal among 1,200 likely voters polled December 2025",
+          "Colorado College figure is the share who oppose building industrial roads in undeveloped national public lands, 3,419 voters in eight Western states, January 2026"
+        ]
+      }
+    },
+    {
+      "id": "ignition-density",
+      "kind": "csv",
+      "label": "Wildfire ignitions per 1,000 hectares, 1992 to 2024",
+      "path": "assets/ignition-density.csv",
+      "attribution": "Aplet, Hartger and Dietz, Fire Ecology 22:8 (2026)",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "Fire Ecology (Springer)",
+        "sourceUrl": "https://link.springer.com/article/10.1186/s42408-026-00450-2",
+        "licenseName": "CC BY 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+        "dataUpdatedAt": "2026-01-01",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": { "start": "1992-01-01", "end": "2024-12-31" },
+        "spatialCoverage": "National forests in the lower 48 states",
+        "transformations": [
+          "Transcribed ignition densities reported in the paper; the authors are scientists at The Wilderness Society"
+        ]
+      }
+    },
+    {
+      "id": "lumber-ppi",
+      "kind": "csv",
+      "label": "Producer price index, softwood lumber, monthly",
+      "path": "assets/lumber-ppi-monthly.csv",
+      "attribution": "U.S. Bureau of Labor Statistics via FRED (WPU0811)",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "U.S. Bureau of Labor Statistics, retrieved from FRED, Federal Reserve Bank of St. Louis",
+        "sourceUrl": "https://fred.stlouisfed.org/series/WPU0811",
+        "licenseName": null,
+        "licenseUrl": "https://fred.stlouisfed.org/legal/",
+        "dataUpdatedAt": "2026-08-01",
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": 60,
+        "temporalCoverage": { "start": "2015-01-01", "end": "2026-08-01" },
+        "spatialCoverage": "United States",
+        "transformations": [
+          "Kept observations from January 2015 onward and rounded the index to one decimal (1982 = 100)"
+        ]
+      }
+    },
+    {
+      "id": "tongass-verdant-wall",
+      "kind": "image",
+      "label": "Old-growth forest on Prince of Wales Island, Tongass National Forest",
+      "path": "assets/tongass-verdant-wall.jpg",
+      "attribution": "USDA Forest Service Alaska Region, public domain",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service Alaska Region (Flickr)",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Old_Growth_Tongass_NRT_Photo_12_(52502991629).jpg",
+        "licenseName": "CC0 / Public Domain (U.S. Government work)",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "dataUpdatedAt": null,
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "Prince of Wales Island, Alaska",
+        "transformations": ["Resized to 1,800 pixels wide"]
+      }
+    },
+    {
+      "id": "sitka-spruce-candelabra",
+      "kind": "image",
+      "label": "Old-growth Sitka spruce, Admiralty Island",
+      "path": "assets/sitka-spruce-candelabra.jpg",
+      "attribution": "USDA Forest Service Alaska Region, public domain",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service Alaska Region (Flickr)",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Old_Growth_Sitka_Spruce_Candelabra-TongassANM-MCS-005_(52502116212).jpg",
+        "licenseName": "CC0 / Public Domain (U.S. Government work)",
+        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "dataUpdatedAt": null,
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "Admiralty Island, Alaska",
+        "transformations": ["Resized to 1,800 pixels wide"]
+      }
+    },
+    {
+      "id": "maybeso-logging-1957",
+      "kind": "image",
+      "label": "Spar tree above a clearcut, Maybeso Valley, Prince of Wales Island, 1957",
+      "path": "assets/maybeso-logging-1957.jpg",
+      "attribution": "USDA Forest Service historical photo, public domain",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Historical_Forest_Service_Photos_(19570814-FS-Tongass-LJP-485169).png",
+        "licenseName": "Public Domain (U.S. Government work)",
+        "licenseUrl": null,
+        "dataUpdatedAt": null,
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": { "start": "1957-08-14", "end": "1957-08-14" },
+        "spatialCoverage": "Prince of Wales Island, Alaska",
+        "transformations": [
+          "Converted from PNG to JPEG and resized to 1,800 pixels wide"
+        ]
+      }
+    },
+    {
+      "id": "mt-hood-old-growth",
+      "kind": "image",
+      "label": "Old-growth forest, Mt. Hood National Forest",
+      "path": "assets/mt-hood-old-growth.jpg",
+      "attribution": "USDA Forest Service Pacific Northwest Region, public domain",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service Pacific Northwest Region (Flickr)",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Old_Growth_Forest,_Mt_Hood_National_Forest_(23372501591).jpg",
+        "licenseName": "Public Domain (U.S. Government work)",
+        "licenseUrl": null,
+        "dataUpdatedAt": null,
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "Mt. Hood National Forest, Oregon",
+        "transformations": ["Resized to 1,800 pixels wide"]
+      }
+    },
+    {
+      "id": "wind-river-old-growth-tour",
+      "kind": "image",
+      "label": "Public old-growth tour, Wind River Experimental Forest, Gifford Pinchot National Forest",
+      "path": "assets/wind-river-old-growth-tour.jpg",
+      "attribution": "USDA Forest Service Pacific Northwest Region, public domain",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "USDA Forest Service Pacific Northwest Region (Flickr)",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Forest_Service_hosts_Old_Growth_public_tour_at_the_Wind_River_Experimental_Forest_-_53861265212.jpg",
+        "licenseName": "Public Domain (U.S. Government work)",
+        "licenseUrl": null,
+        "dataUpdatedAt": null,
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "Gifford Pinchot National Forest, Washington",
+        "transformations": ["Resized to 1,800 pixels wide"]
+      }
+    },
+    {
+      "id": "mt-adams-dark-divide",
+      "kind": "image",
+      "label": "Mount Adams from the Dark Divide Roadless Area",
+      "path": "assets/mt-adams-dark-divide.jpg",
+      "attribution": "Wikimedia Commons contributor, CC BY-SA 4.0",
+      "sizeBytes": null,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "Wikimedia Commons",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Mt._Adams_from_Dark_Divide.JPG",
+        "licenseName": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "dataUpdatedAt": null,
+        "accessedAt": "2026-09-10",
+        "staleAfterDays": null,
+        "temporalCoverage": null,
+        "spatialCoverage": "Gifford Pinchot National Forest, Washington",
+        "transformations": ["Resized to 1,800 pixels wide"]
+      }
+    }
+  ],
+  "chapters": [
+    {
+      "id": "opening",
+      "type": "prose",
+      "title": "Eleven days",
+      "narrative": "On August 20, 2026, the Forest Service published a proposal to rescind the 2001 Roadless Rule in full. Public comments close on September 21. If the rule is finalized, 44.7 million acres of national forest that have stayed roadless for a quarter century become eligible for new roads and logging.\n\nThis story shows where those forests are, what they do for the people downstream and the towns next door, and what the government's own analysis says the change would be worth. The numbers come from the proposed rule, the Forest Service's data warehouse, federal economic statistics, and peer-reviewed research. The sources are listed at the end."
+    },
+    {
+      "id": "verdant-wall",
+      "type": "image",
+      "title": "What roadless looks like",
+      "narrative": "Prince of Wales Island in the Tongass National Forest. Spruce, hemlock, and cedar that were already old when the United States bought Alaska. Some of these trees have been standing for more than 500 years. Nothing about this stand has been managed, because nothing about it needed to be.",
+      "sourceId": "tongass-verdant-wall",
+      "alt": "A dense old-growth stand of moss-covered spruce and hemlock on Prince of Wales Island, with fallen logs on a green forest floor.",
+      "caption": "Old growth on Prince of Wales Island, Tongass National Forest. USDA Forest Service Alaska Region, public domain."
+    },
+    {
+      "id": "tongass-flyover",
+      "type": "flyover",
+      "title": "Flying the Tongass",
+      "narrative": "The Tongass is the largest national forest in the country and the largest intact temperate rainforest left on Earth. Roughly 9.3 million of its 16.7 million acres are inventoried roadless areas, shown here in orange over USGS imagery. Scroll to move between three of them.",
+      "sourceId": "usgs-imagery",
+      "overlaySourceIds": ["roadless-detail"],
+      "scrollLength": 2.4,
+      "keyframes": [
+        {
+          "center": [-133.6, 56.6],
+          "zoom": 6.2,
+          "bearing": 0,
+          "pitch": 30,
+          "caption": "Southeast Alaska. Every orange outline is a roadless area the proposed rule would open."
+        },
+        {
+          "center": [-132.77, 55.8],
+          "zoom": 9.6,
+          "bearing": -15,
+          "pitch": 55,
+          "caption": "Honker Divide, Prince of Wales Island. A 30-mile canoe route through unlogged spruce and hemlock, on an island where most of the old growth has already been cut."
+        },
+        {
+          "center": [-134.3, 57.9],
+          "zoom": 9.2,
+          "bearing": 20,
+          "pitch": 55,
+          "caption": "Admiralty Island. Roughly 1,500 brown bears live here, and bears outnumber people."
+        },
+        {
+          "center": [-134.2, 58.7],
+          "zoom": 8.4,
+          "bearing": 0,
+          "pitch": 45,
+          "caption": "The Juneau Icefield roadless area. At 1.16 million acres it is the largest single roadless area in the inventory."
+        }
+      ]
+    },
+    {
+      "id": "tongass-video",
+      "type": "video",
+      "title": "The forest, from the people who live in it",
+      "narrative": "The Southeast Alaska Conservation Council, a regional group based in Juneau, on what old growth in the Tongass means for salmon, deer, and the communities that depend on both.",
+      "provider": "youtube",
+      "videoId": "viRrqMW1ca4",
+      "originalUrl": "https://www.youtube.com/watch?v=viRrqMW1ca4"
+    },
+    {
+      "id": "national-map",
+      "type": "map",
+      "title": "Fifty-eight million acres, forty-five of them on the table",
+      "narrative": "The 2001 rule covered 58.5 million acres of inventoried roadless areas in 37 states and Puerto Rico. Idaho and Colorado later wrote their own roadless rules, and the proposal leaves those in place (green). Everything in orange, 44.7 million acres, is covered by the national rule the administration wants to rescind.\n\nMore than nine in ten of those acres are in ten Western states. Alaska alone holds 14.8 million.",
+      "sourceId": "roadless-national",
+      "overlaySourceIds": ["national-forests"],
+      "camera": { "center": [-112, 44], "zoom": 3.3, "bearing": 0, "pitch": 0 }
+    },
+    {
+      "id": "acres-by-state",
+      "type": "chart",
+      "series": { "kind": "table" },
+      "title": "Where the roadless acres are",
+      "narrative": "The twelve states with the most inventoried roadless acres. Idaho and Colorado are shown for scale; their state rules are not part of this proposal. Alaska's total is the Tongass and the Chugach together.",
+      "sourceId": "roadless-by-state",
+      "chartType": "bar",
+      "xColumn": "state",
+      "yColumn": "acres",
+      "xLabel": "State",
+      "yLabel": "Inventoried roadless acres (2001 rule)"
+    },
+    {
+      "id": "what-the-rule-does",
+      "type": "scrolly",
+      "title": "What the rule actually does",
+      "narrative": "The Roadless Rule does not create wilderness and it does not close anything that is open today. It prohibits building new roads and commercial logging inside inventoried roadless areas, with exceptions for fire, safety, and existing rights. Hunting, fishing, grazing, trails, and existing roads continue.\n\nThe rule was written after more than 600 public hearings and 1.6 million comments, the largest public response to a federal rule at the time. It has survived two decades of litigation. The Tongass was exempted in 2020 and restored in 2023, which is why its roadless areas still appear here.",
+      "sourceId": "roadless-tongass",
+      "overlaySourceIds": ["national-forests"],
+      "transition": "fly-to",
+      "overlayPosition": "left",
+      "camera": {
+        "center": [-133.2, 56.4],
+        "zoom": 6,
+        "bearing": 0,
+        "pitch": 20
+      }
+    },
+    {
+      "id": "maybeso-1957",
+      "type": "image",
+      "title": "What the roads were for",
+      "narrative": "Maybeso Valley, Prince of Wales Island, 1957. A single spar tree left standing in a clearcut, rigged to haul logs to the road. Between 1954 and the 1990s, long-term contracts with two pulp mills cut most of the biggest, oldest stands on the island. The roads that made it possible are still there. So are the second-growth thickets that replaced the forest.",
+      "sourceId": "maybeso-logging-1957",
+      "alt": "A black and white photograph of a lone tall spruce used as a spar tree, standing above a clearcut hillside on Prince of Wales Island in 1957.",
+      "caption": "Spar tree above a clearcut, Maybeso Valley, Prince of Wales Island, August 1957. USDA Forest Service, public domain."
+    },
+    {
+      "id": "dark-divide",
+      "type": "scrolly",
+      "title": "Dark Divide, Washington",
+      "narrative": "Roadless areas are not only an Alaska story. The Dark Divide in the Gifford Pinchot National Forest is the largest unprotected roadless area in western Washington, a ridge system between Mount St. Helens and Mount Adams where some trees are more than 500 years old. It is two hours from Portland. The Boundary Trail runs its length.\n\nThe orange outline is the inventoried roadless area. Everything else on this hillside already has roads.",
+      "sourceId": "usgs-imagery",
+      "overlaySourceIds": ["roadless-detail", "national-forests"],
+      "transition": "fly-to",
+      "overlayPosition": "right",
+      "camera": {
+        "center": [-121.79, 46.3],
+        "zoom": 10.4,
+        "bearing": 25,
+        "pitch": 60,
+        "terrain": { "enabled": true, "exaggeration": 1.4 }
+      }
+    },
+    {
+      "id": "mt-adams-view",
+      "type": "image",
+      "title": "The view people drive for",
+      "narrative": "Mount Adams from Juniper Ridge in the Dark Divide. Views like this are the product a lot of southwest Washington now sells: guiding, lodging, restaurants, gear, gas. They depend on the forest staying the way it is.",
+      "sourceId": "mt-adams-dark-divide",
+      "alt": "Mount Adams rising above forested ridges, seen from a trail in the Dark Divide Roadless Area.",
+      "caption": "Mount Adams from the Dark Divide. Wikimedia Commons, CC BY-SA 4.0."
+    },
+    {
+      "id": "recreation-economy",
+      "type": "chart",
+      "series": { "kind": "table" },
+      "title": "Tourism is the economy now",
+      "narrative": "Outdoor recreation was 2.4 percent of U.S. GDP in 2024, $697 billion, and 5.2 million jobs, according to the Bureau of Economic Analysis. National forests alone draw about 159 million visits a year.\n\nIn Southeast Alaska, where the Tongass timber fight has run longest, the visitor industry employed 8,589 people in 2024 and paid $367 million in wages. Timber employed 274. The region set a cruise-passenger record the same year.",
+      "sourceId": "southeast-alaska-jobs",
+      "chartType": "bar",
+      "xColumn": "sector",
+      "yColumn": "jobs_2024",
+      "xLabel": "Sector, Southeast Alaska",
+      "yLabel": "Annual-average jobs, 2024"
+    },
+    {
+      "id": "who-benefits",
+      "type": "chart",
+      "series": { "kind": "table" },
+      "title": "What the government says it is worth",
+      "narrative": "The proposed rule includes USDA's own estimate. Even if every operable roadless acre were logged, which the agency calls unlikely, the timber industry would gain $4.6 to $10.6 million a year and the Treasury $5.2 to $11.4 million. USDA also estimates recreation losses of $6.1 million a year. New roads cost $80,000 to more than $2 million per mile, on top of a $6.9 billion backlog of road maintenance the agency already cannot fund.\n\nFor comparison, the Forest Service lost an average of $44 million a year selling Tongass timber between 1980 and 2019. The beneficiaries are not the public and not the Treasury. They are a handful of regional mills and contractors, and the mining and energy leaseholders the rule notes would gain new flexibility.",
+      "sourceId": "usda-dollars-at-stake",
+      "chartType": "bar",
+      "xColumn": "item",
+      "yColumn": "millions_usd_per_year",
+      "xLabel": "",
+      "yLabel": "Millions of dollars per year"
+    },
+    {
+      "id": "lumber-prices",
+      "type": "chart",
+      "series": { "kind": "table" },
+      "title": "This will not make lumber cheaper",
+      "narrative": "National forests supply about 4 percent of U.S. timber. USDA says rescission might add 5 to 10 percent to that slice, and probably less. That is a rounding error in a market where Canada supplies roughly a quarter of the softwood lumber Americans use.\n\nLumber prices move with housing starts, mill capacity, and trade policy. The 2021 spike was a pandemic housing boom. The 2025 rise followed duties and tariffs on Canadian lumber that now add about 45 percent to the price of imports. The Forest Service has lost a fifth of its workforce since early 2025 and industry analysts say ramping up federal harvest would take years and thousands of workers who do not exist.",
+      "sourceId": "lumber-ppi",
+      "chartType": "line",
+      "xColumn": "month",
+      "yColumn": "lumber_ppi",
+      "xLabel": "Month",
+      "yLabel": "Producer price index, softwood lumber (1982 = 100)"
+    },
+    {
+      "id": "wildfire",
+      "type": "chart",
+      "series": { "kind": "table" },
+      "title": "The wildfire argument",
+      "narrative": "The administration's stated reason is fire: roads let crews reach fuels. But the proposed rule itself concedes that more access raises human-caused ignitions, and its draft environmental statement says ignition frequency rises with road density.\n\nA 2026 study of every national forest in the lower 48 found about four times as many fires start within 50 meters of a road as in roadless areas or wilderness. A separate Oregon State University study found fire rates in roadless areas are no different from roaded national forest land. Roadless forests are not the fire problem.",
+      "sourceId": "ignition-density",
+      "chartType": "bar",
+      "xColumn": "setting",
+      "yColumn": "fires_per_1000_ha",
+      "xLabel": "Setting, national forests in the lower 48, 1992 to 2024",
+      "yLabel": "Wildfire ignitions per 1,000 hectares"
+    },
+    {
+      "id": "who-opposes",
+      "type": "chart",
+      "series": { "kind": "table" },
+      "title": "Who wants this",
+      "narrative": "When the Forest Service asked for comment in 2025, it received letters on behalf of more than 625,000 people and organizations. An independent sample found 99 percent opposed. The proposed rule admits that most of the tribal governments it consulted oppose it. Hunting and fishing groups, county commissions, and 55 members of Congress filed against it.\n\nA December 2025 national poll found 72 percent of likely voters oppose repeal, including 71 percent of Republicans. Support comes from the timber industry association, the homebuilders' lobby, Alaska's senators and governor, and the national association of counties. Those are the constituencies the rule serves.",
+      "sourceId": "opposition-to-repeal",
+      "chartType": "bar",
+      "xColumn": "group",
+      "yColumn": "percent_opposed",
+      "xLabel": "",
+      "yLabel": "Percent opposed to repeal (measures differ; see sources)"
+    },
+    {
+      "id": "downstream",
+      "type": "map",
+      "title": "Twenty-five million people drink from these watersheds",
+      "narrative": "A July 2026 study in PLOS Water traced surface drinking water for about 25 million Americans to watersheds influenced by roadless areas: 9.5 million in California, 3.3 million in Colorado, and towns across the interior West. Roadless areas hold the most intact forest in the national forest system, store a disproportionate share of its carbon, and provide habitat for more than 300 threatened and endangered species, by the Forest Service's own count.\n\nRoads change all of that. They bring sediment into streams, fragment habitat, and open the door to the logging the rule was written to stop.",
+      "sourceId": "roadless-national",
+      "overlaySourceIds": ["national-forests"],
+      "camera": { "center": [-116, 41], "zoom": 4.4, "bearing": 0, "pitch": 30 }
+    },
+    {
+      "id": "mt-hood-close",
+      "type": "image",
+      "title": "Still standing",
+      "narrative": "Old growth in the Mt. Hood National Forest, an hour from Portland. The Roadless Rule has kept places like this the way they are for 25 years without a single new road. It costs nothing to keep. It would cost the public money to undo.",
+      "sourceId": "mt-hood-old-growth",
+      "alt": "Sunlight filtering through moss-draped branches of old-growth Douglas fir and hemlock in the Mt. Hood National Forest.",
+      "caption": "Old growth, Mt. Hood National Forest. USDA Forest Service Pacific Northwest Region, public domain."
+    },
+    {
+      "id": "closing",
+      "type": "prose",
+      "title": "What you can do before September 21",
+      "narrative": "The Forest Service is required to read and respond to public comments on docket FS-2025-0001 at regulations.gov. Comments that name a specific place, a specific use, or a specific concern carry more weight than form letters. Say which forest you visit, what you do there, and why you want it to stay roadless.\n\n**Sources.** Proposed rule, 91 FR 53827 (Aug. 20, 2026). USDA Forest Service Enterprise Data Warehouse, Inventoried Roadless Areas 2001 Rule and Administrative Forest Boundaries. Bureau of Economic Analysis, Outdoor Recreation Economic Statistics 2024. USDA Forest Service, National Visitor Use Monitoring 2022 summary. Southeast Conference, Southeast Alaska by the Numbers 2025. Taxpayers for Common Sense, Cutting Our Losses (2020). Olden et al., PLOS Water (2026). Mildrexler et al., Biological Conservation (2026). Aplet, Hartger and Dietz, Fire Ecology (2026). Kilbride et al., Conservation Science and Practice (2026). Pew Charitable Trusts / Susquehanna Polling national poll (Dec. 2025). Colorado College Conservation in the West poll (2026). Center for Western Priorities comment analysis (Sept. 2025). Resources for the Future, Wibbenmeyer and Wear (2025). Fastmarkets (May 2025). Bureau of Labor Statistics via FRED, series WPU0811. Photographs: USDA Forest Service (public domain) and Wikimedia Commons (CC BY-SA 4.0)."
+    }
+  ]
+}
