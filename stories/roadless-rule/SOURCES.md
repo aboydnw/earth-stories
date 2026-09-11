@@ -1,6 +1,6 @@
 # Fact-check and sources
 
-Checked 2026-09-10. Status of the rulemaking on that date: proposed rule and
+Checked through 2026-09-11. Status of the rulemaking on that date: proposed rule and
 draft EIS published 2026-08-20 (91 FR 53827, RIN 0596-AD66, docket
 FS-2025-0001); comments close 2026-09-21; no final rule; Idaho and Colorado
 state rules explicitly unaffected; Tongass included in the national rescission.
@@ -16,6 +16,19 @@ state rules explicitly unaffected; Tongass included in the national rescission.
 | Tourism and recreation are the bigger economy                                            | Supported                | BEA ORSA 2024: $696.7 B value added, 2.4% of GDP, 5.2 M jobs. NVUM: 158.7 M national forest visits/yr. Southeast Alaska 2024: visitor industry 8,589 jobs vs timber 274 (Southeast Conference).                                                                                                                                                                                                                                                                                                                |
 | It will not noticeably lower lumber prices                                               | Supported by inference   | Federal forests supply ~4% of US timber (RFF 2025). USDA: 5 to 10% more NFS sawtimber at most. Canada ~24% of US consumption; AD/CVD ~35% plus 10% Section 232 tariff since Oct 2025. Fastmarkets: offsetting Canada would need a 450% increase in federal harvest. No named economist has said this about roadless specifically; the story builds it from the numbers.                                                                                                                                        |
 | Roads increase fire ignitions; roadless areas are not the fire problem                   | Supported, with a caveat | Aplet, Hartger and Dietz, _Fire Ecology_ (2026): 7.99 ignitions per 1,000 ha within 50 m of roads vs 1.97 in IRAs (authors are Wilderness Society scientists). Kilbride et al., _Conservation Science and Practice_ (2026): IRA fire rates not significantly different from roaded NFS land. The proposed rule concedes access raises human-caused ignitions. Caveat: Johnston et al. 2021 found IRAs had a larger share of area burned 1984 to 2018 with no severity difference; expect opponents to cite it. |
+
+## Administration claims checked
+
+The Forest Service's August 18 announcement frames rescission as a wildfire and
+local-control measure. The story now answers its central claims directly:
+
+| Administration claim                                                                                                    | What the record supports                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The rule has kept tens of millions of acres "off-limits" to treatments.                                                 | Misleading. The rule prohibits most new roads and commercial logging, but expressly permits prescribed fire and generally small-diameter timber cutting that restores ecosystem structure or reduces uncharacteristic wildfire effects. It also permits roads needed when an imminent fire, flood, or other catastrophe threatens life or property.                                                                |
+| Access is the necessary first step to managing forests.                                                                 | Too broad. New roads can enable some mechanical treatments and fire-control tactics, but they are not required for prescribed fire or every thinning project. The proposal also acknowledges that greater public access can increase human-caused ignitions.                                                                                                                                                       |
+| More than 40% of roadless areas have high or very high wildfire hazard, while only 5% of those acres have been treated. | The announcement provides these figures, but they do not establish that the Roadless Rule caused the hazard or that rescission will reduce it. The proposed rule describes the added management opportunities as "modest and localized." Independent studies find ignition density is much higher near roads and fire occurrence in roadless areas is not significantly different from roaded Forest Service land. |
+| Rescission returns decisions to local forest managers.                                                                  | Local Forest Service officials already manage roadless areas and approve projects within the national rule's exceptions. Rescission removes the nationwide minimum protection; forest plans may retain roadless restrictions, but they may also be amended or revised to allow roads and logging later.                                                                                                            |
+| Rescission does not itself mandate roads or timber cutting.                                                             | Accurate. The story therefore says the affected acres would become _eligible_ for roads and logging, not that all 44.7 million acres would be developed. Site-specific projects would still undergo applicable review.                                                                                                                                                                                             |
 
 ## Numbers used in the narrative, with sources
 
@@ -71,6 +84,8 @@ state rules explicitly unaffected; Tongass included in the national rescission.
 21. Forest Service Roadless Areas rulemaking page and Draft EIS document folder: https://www.fs.usda.gov/managing-land/planning/roadless
 22. NASA Earth Observatory, _Admiralty Island: “Fortress of the Bears”_ (2020): https://science.nasa.gov/earth/earth-observatory/admiralty-island-fortress-of-the-bears-146609/
 23. National Park Service, _Admiralty Island Province_ (updated 2025): https://www.nps.gov/glba/learn/nature/admiralty-island-province.htm
+24. USDA Forest Service, _USDA acts to remove roadless rule restrictions that exacerbate rising wildfire risk_ (2026-08-18): https://www.fs.usda.gov/about-agency/newsroom/releases/usda-acts-remove-roadless-rule-restrictions-exacerbate-rising
+25. Roadless Area Conservation Rule, 66 FR 3244 (2001-01-12), especially §§ 294.12–294.13: https://www.govinfo.gov/content/pkg/FR-2001-01-12/pdf/01-726.pdf
 
 ## Possible follow-up datasets
 

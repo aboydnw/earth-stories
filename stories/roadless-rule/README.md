@@ -20,7 +20,7 @@ this folder into your usual `earth-stories-projects/` directory.
 
 Comments on the proposed rule (docket FS-2025-0001, 91 FR 53827) close on
 2026-09-21. The 18-chapter story is publication-ready. Narrative figures were
-checked on 2026-09-10; see `SOURCES.md` for every claim, its source, and the
+checked through 2026-09-11; see `SOURCES.md` for every claim, its source, and the
 verdict from the fact-check pass.
 
 ## Data in this folder

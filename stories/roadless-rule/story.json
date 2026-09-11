@@ -6,7 +6,7 @@
     "description": "Forty-five million acres of national forest have stayed roadless for 25 years. A proposed rule would end that. Here is what is at stake, who wants it, and who does not.",
     "author": "Anthony Boyd",
     "created": "2026-09-10T00:00:00.000Z",
-    "updated": "2026-09-10T00:00:00.000Z"
+    "updated": "2026-09-11T00:00:00.000Z"
   },
   "basemap": {
     "id": "carto-positron",
@@ -392,27 +392,6 @@
       }
     },
     {
-      "id": "sitka-spruce-candelabra",
-      "kind": "image",
-      "label": "Old-growth Sitka spruce, Admiralty Island",
-      "path": "assets/sitka-spruce-candelabra.jpg",
-      "attribution": "USDA Forest Service Alaska Region, public domain",
-      "sizeBytes": null,
-      "delivery": "included",
-      "provenance": {
-        "publisher": "USDA Forest Service Alaska Region (Flickr)",
-        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Old_Growth_Sitka_Spruce_Candelabra-TongassANM-MCS-005_(52502116212).jpg",
-        "licenseName": "CC0 / Public Domain (U.S. Government work)",
-        "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
-        "dataUpdatedAt": null,
-        "accessedAt": "2026-09-10",
-        "staleAfterDays": null,
-        "temporalCoverage": null,
-        "spatialCoverage": "Admiralty Island, Alaska",
-        "transformations": ["Resized to 1,800 pixels wide"]
-      }
-    },
-    {
       "id": "maybeso-logging-1957",
       "kind": "image",
       "label": "Spar tree above a clearcut, Maybeso Valley, Prince of Wales Island, 1957",
@@ -453,27 +432,6 @@
         "staleAfterDays": null,
         "temporalCoverage": null,
         "spatialCoverage": "Mt. Hood National Forest, Oregon",
-        "transformations": ["Resized to 1,800 pixels wide"]
-      }
-    },
-    {
-      "id": "wind-river-old-growth-tour",
-      "kind": "image",
-      "label": "Public old-growth tour, Wind River Experimental Forest, Gifford Pinchot National Forest",
-      "path": "assets/wind-river-old-growth-tour.jpg",
-      "attribution": "USDA Forest Service Pacific Northwest Region, public domain",
-      "sizeBytes": null,
-      "delivery": "included",
-      "provenance": {
-        "publisher": "USDA Forest Service Pacific Northwest Region (Flickr)",
-        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Forest_Service_hosts_Old_Growth_public_tour_at_the_Wind_River_Experimental_Forest_-_53861265212.jpg",
-        "licenseName": "Public Domain (U.S. Government work)",
-        "licenseUrl": null,
-        "dataUpdatedAt": null,
-        "accessedAt": "2026-09-10",
-        "staleAfterDays": null,
-        "temporalCoverage": null,
-        "spatialCoverage": "Gifford Pinchot National Forest, Washington",
         "transformations": ["Resized to 1,800 pixels wide"]
       }
     },
@@ -589,7 +547,7 @@
       "id": "what-the-rule-does",
       "type": "scrolly",
       "title": "What the rule actually does",
-      "narrative": "The Roadless Rule does not create wilderness and it does not close anything that is open today. It prohibits building new roads and commercial logging inside inventoried roadless areas, with exceptions for fire, safety, and existing rights. Hunting, fishing, grazing, trails, and existing roads continue.\n\nThe rule was written after more than 600 public hearings and 1.6 million comments, the largest public response to a federal rule at the time. It has survived two decades of litigation. The Tongass was exempted in 2020 and restored in 2023, which is why its roadless areas still appear here.",
+      "narrative": "The administration calls the Roadless Rule a \"one-size-fits-all\" barrier that has kept tens of millions of acres off-limits to forest treatments. That is not what the rule says. It prohibits new roads and commercial logging, not active management. It expressly allows generally small-diameter trees to be cut to restore ecosystems and reduce uncharacteristic wildfire effects. Roads may be built when an imminent fire, flood, or other emergency threatens lives or property. Prescribed fire, hunting, fishing, grazing, trails, and use of existing roads continue.\n\nLocal Forest Service officials already manage these lands and make project-level decisions within those exceptions. Rescission would remove the national floor against new roads and commercial logging; forest plans could retain protections, but local officials could later change them. The rule itself was written after more than 600 public hearings and 1.6 million comments, the largest public response to a federal rule at the time. It has survived two decades of litigation. The Tongass was exempted in 2020 and restored in 2023, which is why its roadless areas still appear here.",
       "sourceId": "roadless-tongass",
       "overlaySourceIds": ["national-forests"],
       "transition": "fly-to",
@@ -679,8 +637,8 @@
       "id": "wildfire",
       "type": "chart",
       "series": { "kind": "table" },
-      "title": "The wildfire argument",
-      "narrative": "The administration's stated reason is fire: roads let crews reach fuels. But the proposed rule itself concedes that more access raises human-caused ignitions, and its draft environmental statement says ignition frequency rises with road density.\n\nA 2026 study of every national forest in the lower 48 found about four times as many fires start within 50 meters of a road as in roadless areas or wilderness. A separate Oregon State University study found fire rates in roadless areas are no different from roaded national forest land. Roadless forests are not the fire problem.",
+      "title": "The fire claim, tested",
+      "narrative": "The administration says more than 40 percent of roadless areas have high or very high wildfire hazard and only 5 percent of those high-hazard acres have received fuel treatments since 2014. Those figures describe hazard and treatment history; they do not show that the Roadless Rule caused fires or that rescission would reduce them. The agency's proposal makes a narrower case: the rule limits road-dependent mechanical thinning and some fire-control tactics. But the existing rule already permits prescribed fire, small-diameter thinning to reduce uncharacteristic wildfire effects, and emergency roads where an imminent threat endangers lives or property.\n\nThe government's own analysis says new management opportunities would be \"modest and localized.\" It also concedes that greater access can increase human-caused ignitions. A 2026 study of every national forest in the lower 48 found about four times as many fires start within 50 meters of a road as in roadless areas or wilderness. A separate Oregon State University study found fire rates in roadless areas are no different from roaded national forest land. Roadless forests are not the fire problem.",
       "sourceId": "ignition-density",
       "chartType": "bar",
       "xColumn": "setting",
@@ -723,7 +681,7 @@
       "id": "closing",
       "type": "prose",
       "title": "What you can do before September 21",
-      "narrative": "The Forest Service is required to read and respond to public comments on docket FS-2025-0001 at regulations.gov. Comments that name a specific place, a specific use, or a specific concern carry more weight than form letters. Say which forest you visit, what you do there, and why you want it to stay roadless.\n\n**Sources.** Proposed rule, 91 FR 53827 (Aug. 20, 2026). USDA Forest Service Enterprise Data Warehouse, Inventoried Roadless Areas 2001 Rule and Administrative Forest Boundaries. Bureau of Economic Analysis, Outdoor Recreation Economic Statistics 2024. USDA Forest Service, National Visitor Use Monitoring 2022 summary. Southeast Conference, Southeast Alaska by the Numbers 2025. Taxpayers for Common Sense, Cutting Our Losses (2020). Olden et al., PLOS Water (2026). Mildrexler et al., Biological Conservation (2026). Aplet, Hartger and Dietz, Fire Ecology (2026). Kilbride et al., Conservation Science and Practice (2026). Pew Charitable Trusts / Susquehanna Polling national poll (Dec. 2025). Colorado College Conservation in the West poll (2026). Center for Western Priorities comment analysis (Sept. 2025). Resources for the Future, Wibbenmeyer and Wear (2025). Fastmarkets (May 2025). Bureau of Labor Statistics via FRED, series WPU0811. Photographs: USDA Forest Service (public domain) and Wikimedia Commons (CC BY-SA 4.0)."
+      "narrative": "The Forest Service is required to read and respond to public comments on docket FS-2025-0001 at regulations.gov. Comments that name a specific place, a specific use, or a specific concern carry more weight than form letters. Say which forest you visit, what you do there, and why you want it to stay roadless.\n\n**Sources.** USDA Forest Service rescission announcement (Aug. 18, 2026). Roadless Area Conservation Rule, 66 FR 3244 (2001), especially §§ 294.12–294.13. Proposed rule, 91 FR 53827 (Aug. 20, 2026). USDA Forest Service Enterprise Data Warehouse, Inventoried Roadless Areas 2001 Rule and Administrative Forest Boundaries. Bureau of Economic Analysis, Outdoor Recreation Economic Statistics 2024. USDA Forest Service, National Visitor Use Monitoring 2022 summary. Southeast Conference, Southeast Alaska by the Numbers 2025. Taxpayers for Common Sense, Cutting Our Losses (2020). Olden et al., PLOS Water (2026). Mildrexler et al., Biological Conservation (2026). Aplet, Hartger and Dietz, Fire Ecology (2026). Kilbride et al., Conservation Science and Practice (2026). Pew Charitable Trusts / Susquehanna Polling national poll (Dec. 2025). Colorado College Conservation in the West poll (2026). Center for Western Priorities comment analysis (Sept. 2025). Resources for the Future, Wibbenmeyer and Wear (2025). Fastmarkets (May 2025). Bureau of Labor Statistics via FRED, series WPU0811. Photographs: USDA Forest Service (public domain) and Wikimedia Commons (CC BY-SA 4.0)."
     }
   ]
 }

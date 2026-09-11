@@ -260,6 +260,35 @@ describe("MapChapter", () => {
     ).toBe(false);
   });
 
+  it("combines point geometry and authored data filters", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        type: "FeatureCollection",
+        features: [],
+      }),
+    } as Response);
+
+    render(
+      <MapChapter
+        chapter={chapter}
+        asset={publicationAsset({
+          id: "filtered",
+          kind: "geojson",
+          href: "data/filtered.geojson",
+        })}
+        basemapStyle="local/style.json"
+      />,
+    );
+
+    const points = await screen.findByTestId("layer-filtered-points");
+    expect(JSON.parse(points.getAttribute("data-filter") ?? "null")).toEqual([
+      "all",
+      ["==", ["geometry-type"], "Point"],
+      ["==", ["to-string", ["get", "status"]], "active"],
+    ]);
+  });
+
   it("renders terrain and buildings only from declared chapter dependencies", () => {
     const networkChapter = {
       ...chapter,
