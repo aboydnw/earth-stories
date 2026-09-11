@@ -61,7 +61,7 @@ export function ChartChapter({ chapter, asset }: Props) {
   if (chapter.chartType === "line") {
     return (
       <figure className="story-chart" aria-label={`${chapter.title} chart`}>
-        <svg className="story-chart__line" viewBox="0 0 100 100" role="img">
+        <svg className="story-chart__line" viewBox="0 0 100 28" role="img">
           {series.map((item, seriesIndex) => (
             <polyline
               key={item.name}
@@ -72,7 +72,7 @@ export function ChartChapter({ chapter, asset }: Props) {
                       item.points.length === 1
                         ? 50
                         : (index / (item.points.length - 1)) * 100
-                    },${96 - normalized(point.value) * 88}`,
+                    },${26 - normalized(point.value) * 24}`,
                 )
                 .join(" ")}
               fill="none"
@@ -85,13 +85,14 @@ export function ChartChapter({ chapter, asset }: Props) {
           {points.map((point, index) => {
             const x =
               points.length === 1 ? 50 : (index / (points.length - 1)) * 100;
-            const y = 96 - normalized(point.value) * 88;
+            const y = 26 - normalized(point.value) * 24;
             return (
               <circle
                 key={`${point.label}-${point.value}`}
                 cx={x}
                 cy={y}
-                r="1.5"
+                r="0.55"
+                vectorEffect="non-scaling-stroke"
               >
                 <title>
                   {point.label}: {point.value}

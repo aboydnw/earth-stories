@@ -50,7 +50,12 @@ vi.mock("react-map-gl/maplibre", async () => {
         );
       },
     ),
-    Layer: () => null,
+    Layer: ({ id, filter }: { id?: string; filter?: unknown }) => (
+      <div
+        data-testid={id ? `layer-${id}` : undefined}
+        data-filter={filter ? JSON.stringify(filter) : undefined}
+      />
+    ),
     NavigationControl: () => null,
     Source: ({
       children,
@@ -216,6 +221,72 @@ describe("MapChapter", () => {
         "Mercator is used because this dataset renderer does not support globe view.",
       ),
     ).toBeNull();
+  });
+
+  it("limits point styling to point geometry in mixed GeoJSON", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        type: "FeatureCollection",
+        features: [],
+      }),
+    } as Response);
+
+    render(
+      <MapChapter
+        chapter={chapter}
+        asset={publicationAsset({
+          id: "mixed",
+          kind: "geojson",
+          href: "data/mixed.geojson",
+          presentation: {
+            ...publicationAsset().presentation,
+            filterProperty: null,
+            filterValue: null,
+          },
+        })}
+        basemapStyle="local/style.json"
+      />,
+    );
+
+    const points = await screen.findByTestId("layer-mixed-points");
+    expect(JSON.parse(points.getAttribute("data-filter") ?? "null")).toEqual([
+      "==",
+      ["geometry-type"],
+      "Point",
+    ]);
+    expect(
+      screen.getByTestId("layer-mixed-fill").hasAttribute("data-filter"),
+    ).toBe(false);
+  });
+
+  it("combines point geometry and authored data filters", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        type: "FeatureCollection",
+        features: [],
+      }),
+    } as Response);
+
+    render(
+      <MapChapter
+        chapter={chapter}
+        asset={publicationAsset({
+          id: "filtered",
+          kind: "geojson",
+          href: "data/filtered.geojson",
+        })}
+        basemapStyle="local/style.json"
+      />,
+    );
+
+    const points = await screen.findByTestId("layer-filtered-points");
+    expect(JSON.parse(points.getAttribute("data-filter") ?? "null")).toEqual([
+      "all",
+      ["==", ["geometry-type"], "Point"],
+      ["==", ["to-string", ["get", "status"]], "active"],
+    ]);
   });
 
   it("renders terrain and buildings only from declared chapter dependencies", () => {
