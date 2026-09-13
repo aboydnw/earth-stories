@@ -81,6 +81,8 @@ async function discoverArtifacts(directory, version) {
   const pattern = new RegExp(
     `^earth-stories-${escapeRegularExpression(version)}-(linux|mac|win)-(x64|x86_64|amd64|arm64|aarch64)\\.(AppImage|deb|dmg|zip|exe)$`,
   );
+  const otherVersionPattern =
+    /^earth-stories-([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)-(?:linux|mac|win)-(?:x64|x86_64|amd64|arm64|aarch64)\.(?:AppImage|deb|dmg|zip|exe)$/;
   const artifacts = [];
   for (const entry of (await readdir(directory, { withFileTypes: true })).sort(
     (left, right) => left.name.localeCompare(right.name),
@@ -90,8 +92,14 @@ async function discoverArtifacts(directory, version) {
       throw new Error(`Unexpected entry in artifact directory: ${entry.name}`);
     if (ignored.has(entry.name)) continue;
     const match = pattern.exec(entry.name);
-    if (!match)
+    if (!match) {
+      const other = otherVersionPattern.exec(entry.name);
+      if (other && other[1] !== version)
+        throw new Error(
+          `Artifact ${entry.name} was built as version ${other[1]}, not ${version}. electron-builder names artifacts from the version in apps/desktop/package.json; set it to ${version} and package again.`,
+        );
       throw new Error(`Unexpected file in artifact directory: ${entry.name}`);
+    }
     const path = join(directory, entry.name);
     const metadata = await stat(path);
     if (metadata.size < 1)

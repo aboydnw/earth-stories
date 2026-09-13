@@ -180,6 +180,22 @@ describe("desktop release metadata", () => {
     expect(ambiguous.stderr).toContain("Unexpected file in artifact directory");
   });
 
+  it("explains artifacts packaged under a different version", async () => {
+    const paths = await fixture();
+    const { rm } = await import("node:fs/promises");
+    await rm(join(paths.artifacts, "earth-stories-0.1.0-mac-arm64.dmg"));
+    await writeFile(
+      join(paths.artifacts, "earth-stories-0.2.0-mac-arm64.dmg"),
+      "mac artifact\n",
+    );
+
+    const error = await run("generate", paths).catch(
+      (cause: unknown) => cause as { stderr: string },
+    );
+    expect(error.stderr).toContain("built as version 0.2.0, not 0.1.0");
+    expect(error.stderr).toContain("apps/desktop/package.json");
+  });
+
   it.each(["artifact", "manifest", "checksums"] as const)(
     "detects modified %s bytes",
     async (target) => {
