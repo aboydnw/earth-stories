@@ -33,6 +33,42 @@ const legacyManifest = {
 } as const;
 
 describe("publication manifests", () => {
+  it("accepts a safe GeoLibre continuation and defaults older manifests to none", () => {
+    expect(parsePublicationManifest(legacyManifest).continuations).toEqual([]);
+    const parsed = publicationManifestSchema.parse({
+      ...parsePublicationManifest(legacyManifest),
+      continuations: [
+        {
+          kind: "geolibre",
+          label: "Open in GeoLibre",
+          href: "https://web.geolibre.app/?url=https%3A%2F%2Fexample.com%2Fstory%2Fexplore%2Fstory.geolibre.json",
+          projectHref: "explore/story.geolibre.json",
+        },
+      ],
+    });
+    expect(parsed.continuations).toHaveLength(1);
+  });
+
+  it.each([
+    "http://web.geolibre.app/?url=https://example.com/story.geolibre.json",
+    "https://user:secret@web.geolibre.app/?url=https://example.com/story.geolibre.json",
+    "https://example.com/not-geolibre",
+  ])("rejects an unsafe GeoLibre continuation URL: %s", (href) => {
+    expect(() =>
+      publicationManifestSchema.parse({
+        ...parsePublicationManifest(legacyManifest),
+        continuations: [
+          {
+            kind: "geolibre",
+            label: "Open in GeoLibre",
+            href,
+            projectHref: "explore/story.geolibre.json",
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
   it("normalizes a v1 basemap and dependency into the v2 contract", () => {
     const parsed = parsePublicationManifest(legacyManifest);
 

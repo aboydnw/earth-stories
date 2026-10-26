@@ -981,6 +981,19 @@ nav {
   color: var(--es-fg-muted);
   font-weight: 400;
 }
+.publication-continuation {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--es-border);
+  border-radius: 8px;
+  background: var(--es-surface-subtle);
+  font-size: 12px;
+}
+.publication-continuation span {
+  color: var(--es-fg-muted);
+}
 .share-rehearsal {
   margin-top: 18px;
 }

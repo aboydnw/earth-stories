@@ -672,6 +672,41 @@ export async function verifyPublication(
   }
 
   const candidate = manifest ?? expected;
+  for (const continuation of candidate.continuations) {
+    if (continuation.kind !== "geolibre") continue;
+    const projectPath = await checkedFile(
+      directory,
+      continuation.projectHref,
+      "GeoLibre companion",
+      failures,
+    );
+    if (!projectPath) continue;
+    try {
+      const project = JSON.parse(await readFile(projectPath, "utf8")) as {
+        layers?: Array<{ source?: { url?: unknown } }>;
+        metadata?: { earthStories?: { buildId?: unknown } };
+      };
+      if (project.metadata?.earthStories?.buildId !== candidate.build.id)
+        failures.push("GeoLibre companion build ID does not match");
+      for (const layer of project.layers ?? []) {
+        const value = layer.source?.url;
+        if (typeof value !== "string") {
+          failures.push("GeoLibre companion layer has no public URL");
+          continue;
+        }
+        const url = new URL(value);
+        if (
+          url.protocol !== "https:" ||
+          url.username ||
+          url.password ||
+          ["localhost", "127.0.0.1", "::1"].includes(url.hostname)
+        )
+          failures.push("GeoLibre companion contains an unsafe layer URL");
+      }
+    } catch {
+      failures.push("GeoLibre companion is not valid JSON");
+    }
+  }
   const included = candidate.dependencies.filter(
     (dependency) => dependency.delivery === "included",
   );

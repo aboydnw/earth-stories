@@ -162,6 +162,47 @@ describe("publication hardening", () => {
     expect(html.match(/og:title/g)).toHaveLength(1);
   });
 
+  it("emits a GeoLibre companion only when the publication URL is real", async () => {
+    const { project, viewer } = await setup();
+    const placeheld = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+    });
+    expect(placeheld.manifest.continuations).toEqual([]);
+    await expect(
+      readFile(
+        join(placeheld.directory, "explore", "story.geolibre.json"),
+        "utf8",
+      ),
+    ).rejects.toThrow();
+
+    const deployed = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+      publicationUrl: "https://example.org/field-notes/",
+    });
+    expect(deployed.manifest.continuations).toEqual([
+      expect.objectContaining({
+        kind: "geolibre",
+        projectHref: "explore/story.geolibre.json",
+        href: expect.stringContaining("https://web.geolibre.app/?url="),
+      }),
+    ]);
+    const companion = JSON.parse(
+      await readFile(
+        join(deployed.directory, "explore", "story.geolibre.json"),
+        "utf8",
+      ),
+    );
+    expect(companion.metadata.earthStories).toEqual(
+      expect.objectContaining({
+        buildId: deployed.manifest.build.id,
+        publicationUrl: "https://example.org/field-notes/",
+      }),
+    );
+    expect(JSON.stringify(companion)).not.toContain(project);
+  });
+
   it("blocks a publication with a missing included asset", async () => {
     const { project } = await setup();
     await rm(join(project, "data", "survey-sites.geojson"));

@@ -40,6 +40,7 @@ import {
   verifyPublication,
   type PublicationBrowserVerifier,
 } from "./verify.js";
+import { buildGeoLibreCompanion } from "./geolibre.js";
 
 async function retryFileOperation(operation: () => Promise<void>) {
   for (let attempt = 0; ; attempt += 1) {
@@ -204,9 +205,31 @@ export async function buildPublication({
     outputDirectory,
     viewerDirectory,
   });
-  const manifest = compileProject(project, {
+  let manifest = compileProject(project, {
     dependencyDigests: materialized.dependencyDigests,
   });
+
+  if (publicationUrl) {
+    const geolibre = buildGeoLibreCompanion({ manifest, publicationUrl });
+    if (geolibre.project && geolibre.launchHref) {
+      await mkdir(join(outputDirectory, "explore"), { recursive: true });
+      await writeFile(
+        join(outputDirectory, "explore", "story.geolibre.json"),
+        `${JSON.stringify(geolibre.project, null, 2)}\n`,
+      );
+      manifest = parsePublicationManifest({
+        ...manifest,
+        continuations: [
+          {
+            kind: "geolibre",
+            label: "Open in GeoLibre",
+            href: geolibre.launchHref,
+            projectHref: "explore/story.geolibre.json",
+          },
+        ],
+      });
+    }
+  }
 
   await writeShareKit(
     project,

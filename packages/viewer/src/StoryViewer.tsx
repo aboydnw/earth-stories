@@ -9,6 +9,7 @@ import { StoryMapHydrationBoundary } from "./StoryMapHydrationBoundary.js";
 import { VisualizationProvenance } from "./VisualizationProvenance.js";
 import { PublicationChapterRenderer } from "./PublicationChapterRenderer.js";
 import { publicationRuntimePolicy } from "./publicationRuntime.js";
+import { StoryContinuations } from "./StoryContinuations.js";
 import "./viewer.css";
 
 const ScrollytellingBlock = lazy(async () => ({
@@ -157,6 +158,10 @@ export function StoryViewer({
           );
         })}
       </article>
+
+      {!embed ? (
+        <StoryContinuations continuations={manifest.continuations} />
+      ) : null}
 
       {!embed ? (
         <footer className="story-footer">

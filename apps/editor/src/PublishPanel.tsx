@@ -96,6 +96,43 @@ function bytes(value: number) {
   return `${(value / 1024 ** 2).toFixed(1)} MB`;
 }
 
+const geolibreSourceKinds = new Set([
+  "local-geojson",
+  "pmtiles",
+  "geoparquet",
+  "cog",
+  "xyz",
+]);
+
+export function geolibreContinuationStatus(
+  project: StoryProject,
+  publicationUrl: string,
+) {
+  const usedSourceIds = new Set(
+    project.chapters.flatMap((chapter) => {
+      if (!("sourceId" in chapter)) return [];
+      return [
+        chapter.sourceId,
+        ...("overlaySourceIds" in chapter
+          ? (chapter.overlaySourceIds ?? [])
+          : []),
+      ].filter((sourceId): sourceId is string => Boolean(sourceId));
+    }),
+  );
+  const hasCompatibleLayer = project.sources.some(
+    (source) =>
+      usedSourceIds.has(source.id) && geolibreSourceKinds.has(source.kind),
+  );
+  if (!hasCompatibleLayer) return "unavailable" as const;
+  try {
+    const url = new URL(publicationUrl.trim());
+    if (url.protocol === "https:") return "ready" as const;
+  } catch {
+    // The author may still be typing the final deployment URL.
+  }
+  return "needs-url" as const;
+}
+
 export function PublishPanel({
   open,
   project,
@@ -123,6 +160,7 @@ export function PublishPanel({
   const [busyLabel, setBusyLabel] = useState(
     "Building and validating the latest publication…",
   );
+  const geolibreStatus = geolibreContinuationStatus(project, publicationUrl);
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const onRefreshRef = useRef(onRefreshPreflight);
@@ -726,6 +764,16 @@ export function PublishPanel({
                 link previews use the public address.
               </small>
             </label>
+            <div className="publication-continuation" role="status">
+              <strong>Open in GeoLibre</strong>
+              <span>
+                {geolibreStatus === "ready"
+                  ? "Readers can open compatible published layers in GeoLibre."
+                  : geolibreStatus === "needs-url"
+                    ? "Add the final HTTPS publication URL to enable Open in GeoLibre."
+                    : "This story has no layers that Earth Stories can currently hand off to GeoLibre."}
+              </span>
+            </div>
             <ShareRehearsal
               key={project.id}
               project={project}

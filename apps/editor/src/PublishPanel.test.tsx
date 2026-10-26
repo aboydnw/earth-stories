@@ -334,6 +334,23 @@ describe("PublishPanel", () => {
     );
   });
 
+  it("explains when the published story can continue in GeoLibre", async () => {
+    panel();
+    await userEvent.click(
+      screen.getByText("Verify and share after deployment"),
+    );
+    expect(
+      screen.getByText(/add the final https publication url/i),
+    ).toBeTruthy();
+    await userEvent.type(
+      screen.getByLabelText(/deployed publication url/i),
+      "https://example.org/story/",
+    );
+    expect(
+      screen.getByText(/readers can open compatible published layers/i),
+    ).toBeTruthy();
+  });
+
   it("reports clipboard failures without an unhandled rejection", async () => {
     vi.mocked(captureMapSnapshots).mockResolvedValue({});
     vi.mocked(exportProject).mockResolvedValue({
