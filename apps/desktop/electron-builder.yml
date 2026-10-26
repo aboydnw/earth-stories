@@ -30,11 +30,6 @@ mac:
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # The pilot ships deliberately unsigned and un-notarized: testers bypass
-  # Gatekeeper by hand and are told so. These two lines are what change once a
-  # Developer ID and notarization credentials exist.
-  identity: null
-  notarize: false
 win:
   executableName: earth-stories
   target:

@@ -22,9 +22,9 @@ Deferred for the pilot:
 - **The target-machine matrix**, reduced to the author's own Mac plus named
   testers reporting their macOS version and chip. Windows and Linux are out of
   scope for this pilot; their gates are untouched.
-- **CI.** There is no protected release workflow, so the pilot is cut by hand
-  from a clean checkout following
-  [the pilot release checklist](pilot-release-checklist.md).
+- **Release publication.** The repository can now build platform artifacts in
+  GitHub Actions, but it does not publish them as a release. A release owner
+  must review the artifacts and the target-machine evidence first.
 
 Accepted for the pilot:
 
@@ -120,12 +120,18 @@ that turns those values into a release claim.
 - [ ] Define the supported and unsupported behavior for synchronized folders,
       network shares, removable storage, and offline use.
 
-## Local executable gates
+## Automated and local executable gates
 
-No GitHub Actions workflow was added in this phase, per current project
-direction. CI remains intentionally removed. Until an owned protected release
-workflow exists, run these checks locally from a clean checkout and preserve
-their logs with the internal release candidate:
+`.github/workflows/desktop-artifacts.yml` builds macOS, Windows, and Linux
+artifacts on a version tag or manual dispatch. It runs the test and typecheck
+suites before packaging and retains each platform's output for review. macOS
+and Windows signing use repository secrets when provisioned; secrets are never
+available to pull-request code. The workflow intentionally does not create a
+GitHub release or claim target-machine validation.
+
+Until the remaining ownership and signing gates are complete, also run these
+checks locally from a clean checkout and preserve their logs with the internal
+release candidate:
 
 ```bash
 yarn typecheck

@@ -1,0 +1,53 @@
+name: Desktop artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS
+            runner: macos-15
+            command: package:mac
+          - platform: Windows
+            runner: windows-2025
+            command: package:win
+          - platform: Linux
+            runner: ubuntu-24.04
+            command: package:linux
+    runs-on: ${{ matrix.runner }}
+    env:
+      CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.DESKTOP_APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.DESKTOP_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.DESKTOP_APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+      - run: corepack enable
+      - run: yarn install --immutable
+      - run: yarn typecheck
+      - run: yarn test
+      - run: yarn workspace @earth-stories/desktop ${{ matrix.command }}
+      - name: Verify staged desktop resources
+        run: yarn workspace @earth-stories/desktop verify:resources
+      - uses: actions/upload-artifact@v4
+        with:
+          name: earth-stories-${{ matrix.platform }}-${{ github.ref_name }}
+          path: apps/desktop/build/artifacts/*
+          if-no-files-found: error
+          retention-days: 14
