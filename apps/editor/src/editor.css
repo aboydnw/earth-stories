@@ -988,7 +988,7 @@ nav {
   padding: 12px;
   border: 1px solid var(--es-border);
   border-radius: 8px;
-  background: var(--es-surface-subtle);
+  background: var(--es-bg-subtle);
   font-size: 12px;
 }
 .publication-continuation span {
@@ -3466,16 +3466,20 @@ nav {
   min-height: 100dvh;
   margin: 0 auto;
   padding: clamp(3rem, 10vw, 8rem) 1.5rem;
-  color: var(--es-color-text-primary);
+  color: var(--es-fg);
 }
 
 .authoring-unavailable h1 {
   max-width: 14ch;
   margin-block: 1rem 1.5rem;
-  font: var(--es-type-display-lg);
+  font-family: var(--es-font-body);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1.05;
 }
 
 .authoring-unavailable p:not(.story-kicker) {
   max-width: 42rem;
-  font: var(--es-type-body-lg);
+  font-family: var(--es-font-body);
+  font-size: 1.05rem;
+  line-height: 1.6;
 }
