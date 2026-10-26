@@ -3446,3 +3446,23 @@ nav {
     transition-duration: 0.01ms !important;
   }
 }
+/* Hosted builds must describe the native authoring boundary honestly. */
+.authoring-unavailable {
+  box-sizing: border-box;
+  max-width: 46rem;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: clamp(3rem, 10vw, 8rem) 1.5rem;
+  color: var(--es-color-text-primary);
+}
+
+.authoring-unavailable h1 {
+  max-width: 14ch;
+  margin-block: 1rem 1.5rem;
+  font: var(--es-type-display-lg);
+}
+
+.authoring-unavailable p:not(.story-kicker) {
+  max-width: 42rem;
+  font: var(--es-type-body-lg);
+}
