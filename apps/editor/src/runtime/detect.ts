@@ -24,7 +24,9 @@ const unavailable: RuntimeCapabilities = {
   nativeDialogs: false,
 };
 
-export function detectAuthoringRuntime(target: RuntimeWindow): AuthoringRuntime {
+export function detectAuthoringRuntime(
+  target: RuntimeWindow,
+): AuthoringRuntime {
   if (target.earthStoriesDesktop)
     return {
       kind: "desktop",

@@ -20,4 +20,3 @@ export type AuthoringRuntime =
       capabilities: RuntimeCapabilities;
       desktop: null;
     };
-

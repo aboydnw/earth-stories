@@ -25,13 +25,13 @@ describe("detectAuthoringRuntime", () => {
   it.each(["http://127.0.0.1:5173/", "http://localhost:5173/"])(
     "recognizes the local browser development runtime at %s",
     (href) => {
-      expect(
-        detectAuthoringRuntime({ location: new URL(href) }),
-      ).toMatchObject({
-        kind: "development-loopback",
-        desktop: null,
-        capabilities: { projectWorkspace: true, nativeConversion: true },
-      });
+      expect(detectAuthoringRuntime({ location: new URL(href) })).toMatchObject(
+        {
+          kind: "development-loopback",
+          desktop: null,
+          capabilities: { projectWorkspace: true, nativeConversion: true },
+        },
+      );
     },
   );
 
