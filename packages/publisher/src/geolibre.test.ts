@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { PublicationManifest } from "@earth-stories/story-schema";
-import { buildGeoLibreCompanion } from "./geolibre.js";
+import {
+  buildGeoLibreCompanion,
+  geolibreContinuationStatus,
+} from "./geolibre.js";
 
 function manifest(): PublicationManifest {
   return {
@@ -196,5 +199,29 @@ describe("buildGeoLibreCompanion", () => {
     });
     expect(result.project).toBeNull();
     expect(result.excluded[0]?.reason).toBe("unsupported-format");
+  });
+});
+
+describe("geolibreContinuationStatus", () => {
+  it.each([
+    ["https://stories.example.org/coast/", "ready"],
+    ["stories.example.org/coast", "ready"],
+    ["", "needs-url"],
+    ["http://stories.example.org/coast/", "needs-url"],
+    ["https://localhost:8080/coast/", "needs-url"],
+  ] as const)("reports %s as %s", (publicationUrl, status) => {
+    expect(geolibreContinuationStatus(manifest(), publicationUrl)).toBe(status);
+  });
+
+  it("is unavailable when every layer would be excluded", () => {
+    const value = manifest();
+    value.assets[0] = {
+      ...value.assets[0]!,
+      delivery: "connected",
+      href: "http://data.example.org/shoreline.pmtiles",
+    };
+    expect(
+      geolibreContinuationStatus(value, "https://stories.example.org/coast/"),
+    ).toBe("unavailable");
   });
 });

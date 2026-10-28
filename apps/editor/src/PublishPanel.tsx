@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   CheckCircle,
@@ -12,6 +12,8 @@ import {
 } from "@phosphor-icons/react";
 import type { StoryProject } from "@earth-stories/story-schema";
 import type { AuthoringReadiness } from "@earth-stories/publisher/readiness";
+import { compileProject } from "@earth-stories/publisher/compile";
+import { geolibreContinuationStatus } from "@earth-stories/publisher/geolibre";
 import {
   ActionButton,
   ProgressPresentation,
@@ -96,41 +98,12 @@ function bytes(value: number) {
   return `${(value / 1024 ** 2).toFixed(1)} MB`;
 }
 
-const geolibreSourceKinds = new Set([
-  "local-geojson",
-  "pmtiles",
-  "geoparquet",
-  "cog",
-  "xyz",
-]);
-
-export function geolibreContinuationStatus(
-  project: StoryProject,
-  publicationUrl: string,
-) {
-  const usedSourceIds = new Set(
-    project.chapters.flatMap((chapter) => {
-      if (!("sourceId" in chapter)) return [];
-      return [
-        chapter.sourceId,
-        ...("overlaySourceIds" in chapter
-          ? (chapter.overlaySourceIds ?? [])
-          : []),
-      ].filter((sourceId): sourceId is string => Boolean(sourceId));
-    }),
-  );
-  const hasCompatibleLayer = project.sources.some(
-    (source) =>
-      usedSourceIds.has(source.id) && geolibreSourceKinds.has(source.kind),
-  );
-  if (!hasCompatibleLayer) return "unavailable" as const;
+function compileForContinuations(project: StoryProject) {
   try {
-    const url = new URL(publicationUrl.trim());
-    if (url.protocol === "https:") return "ready" as const;
+    return compileProject(project);
   } catch {
-    // The author may still be typing the final deployment URL.
+    return null;
   }
-  return "needs-url" as const;
 }
 
 export function PublishPanel({
@@ -160,7 +133,13 @@ export function PublishPanel({
   const [busyLabel, setBusyLabel] = useState(
     "Building and validating the latest publication…",
   );
-  const geolibreStatus = geolibreContinuationStatus(project, publicationUrl);
+  const compiledForContinuations = useMemo(
+    () => compileForContinuations(project),
+    [project],
+  );
+  const geolibreStatus = compiledForContinuations
+    ? geolibreContinuationStatus(compiledForContinuations, publicationUrl)
+    : "unavailable";
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const onRefreshRef = useRef(onRefreshPreflight);
@@ -768,7 +747,7 @@ export function PublishPanel({
               <strong>Open in GeoLibre</strong>
               <span>
                 {geolibreStatus === "ready"
-                  ? "Readers can open compatible published layers in GeoLibre."
+                  ? "Readers can open compatible published layers in GeoLibre. Your host must allow cross-origin requests (GitHub Pages does)."
                   : geolibreStatus === "needs-url"
                     ? "Add the final HTTPS publication URL to enable Open in GeoLibre."
                     : "This story has no layers that Earth Stories can currently hand off to GeoLibre."}

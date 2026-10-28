@@ -169,6 +169,7 @@ describe("publication hardening", () => {
       viewerDirectory: viewer,
     });
     expect(placeheld.manifest.continuations).toEqual([]);
+    expect(placeheld.manifest.hostingRequirements).not.toContain("cors");
     await expect(
       readFile(
         join(placeheld.directory, "explore", "story.geolibre.json"),
@@ -188,6 +189,7 @@ describe("publication hardening", () => {
         href: expect.stringContaining("https://web.geolibre.app/?url="),
       }),
     ]);
+    expect(deployed.manifest.hostingRequirements).toContain("cors");
     const companion = JSON.parse(
       await readFile(
         join(deployed.directory, "explore", "story.geolibre.json"),

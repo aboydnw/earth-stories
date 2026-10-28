@@ -219,6 +219,9 @@ export async function buildPublication({
       );
       manifest = parsePublicationManifest({
         ...manifest,
+        hostingRequirements: [
+          ...new Set([...manifest.hostingRequirements, "cors" as const]),
+        ],
         continuations: [
           {
             kind: "geolibre",

@@ -220,3 +220,27 @@ export function buildGeoLibreCompanion(options: {
     excluded,
   };
 }
+
+const PROBE_PUBLICATION_URL = "https://publication.example/";
+
+export type GeoLibreContinuationStatus = "ready" | "needs-url" | "unavailable";
+
+/**
+ * Predicts whether a build with this publication URL will emit an
+ * "Open in GeoLibre" continuation, using the same rules as the build itself.
+ * "needs-url" means the layers qualify but the URL is not yet a usable
+ * public HTTPS address.
+ */
+export function geolibreContinuationStatus(
+  manifest: PublicationManifest,
+  publicationUrl: string,
+): GeoLibreContinuationStatus {
+  if (buildGeoLibreCompanion({ manifest, publicationUrl }).project)
+    return "ready";
+  return buildGeoLibreCompanion({
+    manifest,
+    publicationUrl: PROBE_PUBLICATION_URL,
+  }).project
+    ? "needs-url"
+    : "unavailable";
+}
