@@ -26,6 +26,7 @@
     "smoke:electron": "yarn build && xvfb-run -a electron --no-sandbox smoke/electron-smoke.cjs",
     "test": "vitest run src",
     "verify:resources": "node scripts/verify-resources.mjs"
+    ,"verify:installed": "node scripts/verify-installed-app.mjs"
   },
   "devDependencies": {
     "@earth-stories/local-service": "workspace:*",

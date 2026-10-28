@@ -999,6 +999,23 @@ nav {
 .publication-continuation span {
   color: var(--es-fg-muted);
 }
+.publication-privacy-boundary {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+  background: var(--es-bg-subtle);
+}
+.publication-privacy-boundary h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.publication-privacy-boundary ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--es-fg-muted);
+  font-size: 12px;
+}
 .share-rehearsal {
   margin-top: 18px;
 }

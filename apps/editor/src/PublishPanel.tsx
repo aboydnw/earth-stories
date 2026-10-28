@@ -563,6 +563,29 @@ export function PublishPanel({
                 <span>connected assets</span>
               </div>
             </div>
+            <section
+              className="publication-privacy-boundary"
+              aria-labelledby="publication-privacy-title"
+            >
+              <h3 id="publication-privacy-title">What leaves this computer</h3>
+              <ul>
+                <li>Your working files stay in your local workspace.</li>
+                <li>
+                  {preflight?.includedAssets ?? 0} asset
+                  {(preflight?.includedAssets ?? 0) === 1 ? "" : "s"} will be
+                  copied into this publication.
+                </li>
+                <li>
+                  {preflight?.connectedAssets ?? 0} asset
+                  {(preflight?.connectedAssets ?? 0) === 1 ? "" : "s"} remain
+                  at their public source URLs.
+                </li>
+                <li>
+                  GeoLibre receives only the public URLs in the finished
+                  publication, never your workspace or unpublished files.
+                </li>
+              </ul>
+            </section>
             <div className="publication-connectivity">
               <section aria-labelledby="assembly-inputs-status">
                 <h3 id="assembly-inputs-status">Assembly inputs</h3>
