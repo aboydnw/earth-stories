@@ -28,6 +28,7 @@ import {
 } from "@earth-stories/story-schema";
 import { inventoryBasemapStyleResources } from "./dependencies.js";
 import { SHARE_POST_TEXT_PATH } from "./share.js";
+import { safePublicUrl } from "./geolibre.js";
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 const MIME_TYPES: Record<string, string> = {
@@ -681,30 +682,28 @@ export async function verifyPublication(
       failures,
     );
     if (!projectPath) continue;
+    let project: {
+      layers?: Array<{ source?: { url?: unknown } }>;
+      metadata?: { earthStories?: { buildId?: unknown } };
+    };
     try {
-      const project = JSON.parse(await readFile(projectPath, "utf8")) as {
-        layers?: Array<{ source?: { url?: unknown } }>;
-        metadata?: { earthStories?: { buildId?: unknown } };
-      };
-      if (project.metadata?.earthStories?.buildId !== candidate.build.id)
-        failures.push("GeoLibre companion build ID does not match");
-      for (const layer of project.layers ?? []) {
-        const value = layer.source?.url;
-        if (typeof value !== "string") {
-          failures.push("GeoLibre companion layer has no public URL");
-          continue;
-        }
-        const url = new URL(value);
-        if (
-          url.protocol !== "https:" ||
-          url.username ||
-          url.password ||
-          ["localhost", "127.0.0.1", "::1"].includes(url.hostname)
-        )
-          failures.push("GeoLibre companion contains an unsafe layer URL");
-      }
+      project = JSON.parse(
+        await readFile(projectPath, "utf8"),
+      ) as typeof project;
     } catch {
       failures.push("GeoLibre companion is not valid JSON");
+      continue;
+    }
+    if (project.metadata?.earthStories?.buildId !== candidate.build.id)
+      failures.push("GeoLibre companion build ID does not match");
+    for (const layer of project.layers ?? []) {
+      const value = layer.source?.url;
+      if (typeof value !== "string") {
+        failures.push("GeoLibre companion layer has no public URL");
+        continue;
+      }
+      if (!safePublicUrl(value))
+        failures.push("GeoLibre companion contains an unsafe layer URL");
     }
   }
   const included = candidate.dependencies.filter(

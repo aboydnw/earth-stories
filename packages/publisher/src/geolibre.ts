@@ -2,6 +2,8 @@ import type {
   PublicationAsset,
   PublicationManifest,
 } from "@earth-stories/story-schema";
+import { normalizePublicationUrl } from "./publication-url.js";
+import { isPrivateNetworkHost } from "./remote-url.js";
 
 export type GeoLibreExclusionReason =
   "unsupported-format" | "unused-layer" | "unsafe-url";
@@ -24,35 +26,17 @@ const supportedKinds = new Set<PublicationAsset["kind"]>([
   "xyz",
 ]);
 
-function isPrivateHostname(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
-  if (
-    normalized === "localhost" ||
-    normalized === "127.0.0.1" ||
-    normalized === "::1" ||
-    normalized.endsWith(".localhost")
-  )
-    return true;
-  const match = normalized.match(/^(\d{1,3})\.(\d{1,3})\./u);
-  if (!match) return false;
-  const first = Number(match[1]);
-  const second = Number(match[2]);
-  return (
-    first === 10 ||
-    first === 127 ||
-    (first === 169 && second === 254) ||
-    (first === 172 && second >= 16 && second <= 31) ||
-    (first === 192 && second === 168)
-  );
-}
-
-function safePublicUrl(value: string): URL | null {
+/**
+ * Parses a URL that GeoLibre may fetch from a reader's browser: HTTPS only,
+ * credential-free, and never a private or local network host.
+ */
+export function safePublicUrl(value: string): URL | null {
   try {
     const url = new URL(value);
     return url.protocol === "https:" &&
       !url.username &&
       !url.password &&
-      !isPrivateHostname(url.hostname)
+      !isPrivateNetworkHost(url.hostname)
       ? url
       : null;
   } catch {
@@ -60,10 +44,25 @@ function safePublicUrl(value: string): URL | null {
   }
 }
 
+function publicationBase(value: string): URL | null {
+  try {
+    return safePublicUrl(`${normalizePublicationUrl(value)}/`);
+  } catch {
+    return null;
+  }
+}
+
+function restoreTileTemplate(href: string): string {
+  return href.replace(/%7B([a-z]+)%7D/giu, "{$1}");
+}
+
 function assetUrl(asset: PublicationAsset, publicationUrl: URL): string | null {
-  if (asset.delivery === "included")
-    return new URL(asset.href, publicationUrl).href;
-  return safePublicUrl(asset.href)?.href ?? null;
+  const url =
+    asset.delivery === "included"
+      ? new URL(asset.href, publicationUrl)
+      : safePublicUrl(asset.href);
+  if (!url) return null;
+  return asset.kind === "xyz" ? restoreTileTemplate(url.href) : url.href;
 }
 
 function usedAssetIds(manifest: PublicationManifest): string[] {
@@ -104,7 +103,7 @@ export function buildGeoLibreCompanion(options: {
   manifest: PublicationManifest;
   publicationUrl: string;
 }): GeoLibreCompanionResult {
-  const publicationUrl = safePublicUrl(options.publicationUrl);
+  const publicationUrl = publicationBase(options.publicationUrl);
   if (!publicationUrl)
     return {
       project: null,

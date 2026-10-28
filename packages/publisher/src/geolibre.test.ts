@@ -121,10 +121,59 @@ describe("buildGeoLibreCompanion", () => {
     expect(result.launchHref).toContain("https://web.geolibre.app/?url=");
   });
 
+  it.each(["https://stories.example.org/coast", "stories.example.org/coast/"])(
+    "keeps the publication folder when resolving included files: %s",
+    (publicationUrl) => {
+      const result = buildGeoLibreCompanion({
+        manifest: manifest(),
+        publicationUrl,
+      });
+
+      expect(result.project).toMatchObject({
+        layers: [
+          {
+            source: {
+              url: "https://stories.example.org/coast/assets/shoreline.pmtiles",
+            },
+          },
+        ],
+      });
+      expect(result.launchHref).toContain(
+        encodeURIComponent(
+          "https://stories.example.org/coast/explore/story.geolibre.json",
+        ),
+      );
+    },
+  );
+
+  it("preserves XYZ tile template placeholders", () => {
+    const value = manifest();
+    value.assets[0] = {
+      ...value.assets[0]!,
+      kind: "xyz",
+      delivery: "connected",
+      href: "https://tiles.example.org/{z}/{x}/{y}.png",
+    };
+    const result = buildGeoLibreCompanion({
+      manifest: value,
+      publicationUrl: "https://stories.example.org/coast/",
+    });
+
+    expect(result.project).toMatchObject({
+      layers: [
+        { source: { url: "https://tiles.example.org/{z}/{x}/{y}.png" } },
+      ],
+    });
+  });
+
   it.each([
     "http://127.0.0.1/private.pmtiles",
     "https://user:secret@example.org/private.pmtiles",
     "file:///private.pmtiles",
+    "https://[::1]/private.pmtiles",
+    "https://[fd00::1]/private.pmtiles",
+    "https://100.64.0.1/private.pmtiles",
+    "https://0.0.0.0/private.pmtiles",
   ])("excludes unsafe connected locations: %s", (href) => {
     const value = manifest();
     value.assets[0] = { ...value.assets[0]!, delivery: "connected", href };
