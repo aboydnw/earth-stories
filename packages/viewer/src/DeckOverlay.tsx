@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Layer } from "@deck.gl/core";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import { useControl } from "react-map-gl/maplibre";
+import { useMap } from "react-map-gl/maplibre";
 
 export function DeckOverlay({
   layers,
@@ -12,15 +12,15 @@ export function DeckOverlay({
   onAfterRender?: () => void;
   onError?: (message: string) => void;
 }) {
-  const mapRef = useRef<{ style?: unknown } | null>(null);
+  const maps = useMap();
   const onAfterRenderRef = useRef(onAfterRender);
   onAfterRenderRef.current = onAfterRender;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
   const [mapReady, setMapReady] = useState(false);
-  const overlay = useControl(({ map }) => {
-    mapRef.current = map.getMap();
-    return new MapboxOverlay({
+  const overlay = useMemo(
+    () =>
+      new MapboxOverlay({
       interleaved: false,
       layers,
       onAfterRender: () => onAfterRenderRef.current?.(),
@@ -30,32 +30,46 @@ export function DeckOverlay({
             ? cause.message
             : "The data layer could not be rendered.",
         ),
-    });
-  });
+      }),
+    [],
+  );
   useEffect(() => {
-    const map = mapRef.current;
+    const map = maps.current?.getMap();
     if (!map) return;
     const eventMap = map as {
+      style?: unknown;
       loaded?: () => boolean;
       once?: (event: string, listener: () => void) => void;
       off?: (event: string, listener: () => void) => void;
+      addControl: (control: MapboxOverlay) => void;
+      hasControl: (control: MapboxOverlay) => boolean;
+      removeControl: (control: MapboxOverlay) => void;
     };
-    if (eventMap.loaded?.()) {
+    let attached = false;
+    const ready = () => {
+      if (attached || !eventMap.loaded?.() || !eventMap.style) return;
+      eventMap.addControl(overlay);
+      attached = true;
       setMapReady(true);
-      return;
-    }
-    const ready = () => setMapReady(true);
-    eventMap.once?.("load", ready);
-    return () => eventMap.off?.("load", ready);
-  }, []);
-  const initialRender = useRef(true);
+    };
+    ready();
+    if (!attached) eventMap.once?.("load", ready);
+    return () => {
+      eventMap.off?.("load", ready);
+      if (attached && eventMap.hasControl(overlay))
+        eventMap.removeControl(overlay);
+    };
+  }, [maps, overlay]);
+  const appliedLayers = useRef(layers);
   useEffect(() => {
-    if (initialRender.current) {
-      initialRender.current = false;
+    if (
+      !mapReady ||
+      appliedLayers.current === layers ||
+      overlay.getCanvas() === null
+    )
       return;
-    }
-    if (!mapReady || overlay.getCanvas() === null) return;
     overlay.setProps({ layers });
+    appliedLayers.current = layers;
   }, [overlay, layers, mapReady]);
   return null;
 }
