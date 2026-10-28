@@ -109,7 +109,7 @@ function panel(overrides: Partial<Parameters<typeof PublishPanel>[0]> = {}) {
     project,
     onClose: vi.fn(),
     onBeforeExport: vi.fn().mockResolvedValue(project),
-    onProfileChange: vi.fn().mockResolvedValue(project),
+    onPublicationChange: vi.fn().mockResolvedValue(project),
     preflightState: readyState(),
     onRefreshPreflight: vi.fn(),
     localReadiness,
@@ -332,6 +332,72 @@ describe("PublishPanel", () => {
         publicationUrl: "example.org/story",
       }),
     );
+  });
+
+  it("explains when the published story can continue in GeoLibre", async () => {
+    panel();
+    await userEvent.click(
+      screen.getByText("Verify and share after deployment"),
+    );
+    expect(
+      screen.getByText(/add the final https publication url/i),
+    ).toBeTruthy();
+    await userEvent.type(
+      screen.getByLabelText(/deployed publication url/i),
+      "https://example.org/story/",
+    );
+    expect(
+      screen.getByText(/readers can open compatible published layers/i),
+    ).toBeTruthy();
+  });
+
+  it("distinguishes local files, included copies, connected URLs, and GeoLibre access", async () => {
+    panel();
+    await userEvent.click(screen.getByText("Release settings"));
+
+    expect(
+      screen.getByText(/working files stay in your local workspace/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/1 asset will be copied into this publication/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/2 assets remain at their public source urls/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/geolibre receives only the public urls/i),
+    ).toBeTruthy();
+  });
+
+  it("lets authors turn off the GeoLibre link", async () => {
+    const { props } = panel();
+    await userEvent.click(
+      screen.getByText("Verify and share after deployment"),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /open in geolibre/i }),
+    );
+    expect(props.onPublicationChange).toHaveBeenCalledWith({
+      geolibreContinuation: false,
+    });
+  });
+
+  it("explains that readers will not see a disabled GeoLibre link", async () => {
+    panel({
+      project: {
+        ...project,
+        publication: { ...project.publication, geolibreContinuation: false },
+      },
+    });
+    await userEvent.click(
+      screen.getByText("Verify and share after deployment"),
+    );
+    expect(
+      screen.getByRole<HTMLInputElement>("checkbox", {
+        name: /open in geolibre/i,
+      }).checked,
+    ).toBe(false);
+    expect(screen.getByText(/will not see a geolibre link/i)).toBeTruthy();
   });
 
   it("reports clipboard failures without an unhandled rejection", async () => {

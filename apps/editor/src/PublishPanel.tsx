@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   CheckCircle,
@@ -12,6 +12,8 @@ import {
 } from "@phosphor-icons/react";
 import type { StoryProject } from "@earth-stories/story-schema";
 import type { AuthoringReadiness } from "@earth-stories/publisher/readiness";
+import { compileProject } from "@earth-stories/publisher/compile";
+import { geolibreContinuationStatus } from "@earth-stories/publisher/geolibre";
 import {
   ActionButton,
   ProgressPresentation,
@@ -40,8 +42,8 @@ interface Props {
   project: StoryProject;
   onClose: () => void;
   onBeforeExport: () => Promise<StoryProject | null>;
-  onProfileChange: (
-    profile: StoryProject["publication"]["profile"],
+  onPublicationChange: (
+    changes: Partial<StoryProject["publication"]>,
   ) => Promise<StoryProject | null>;
   preflightState: PublicationReadinessState;
   onRefreshPreflight: () => void;
@@ -96,12 +98,20 @@ function bytes(value: number) {
   return `${(value / 1024 ** 2).toFixed(1)} MB`;
 }
 
+function compileForContinuations(project: StoryProject) {
+  try {
+    return compileProject(project);
+  } catch {
+    return null;
+  }
+}
+
 export function PublishPanel({
   open,
   project,
   onClose,
   onBeforeExport,
-  onProfileChange,
+  onPublicationChange,
   preflightState,
   onRefreshPreflight,
   localReadiness,
@@ -123,6 +133,14 @@ export function PublishPanel({
   const [busyLabel, setBusyLabel] = useState(
     "Building and validating the latest publication…",
   );
+  const compiledForContinuations = useMemo(
+    () => compileForContinuations(project),
+    [project],
+  );
+  const geolibreEnabled = project.publication.geolibreContinuation !== false;
+  const geolibreStatus = compiledForContinuations
+    ? geolibreContinuationStatus(compiledForContinuations, publicationUrl)
+    : "unavailable";
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const onRefreshRef = useRef(onRefreshPreflight);
@@ -545,6 +563,29 @@ export function PublishPanel({
                 <span>connected assets</span>
               </div>
             </div>
+            <section
+              className="publication-privacy-boundary"
+              aria-labelledby="publication-privacy-title"
+            >
+              <h3 id="publication-privacy-title">What leaves this computer</h3>
+              <ul>
+                <li>Your working files stay in your local workspace.</li>
+                <li>
+                  {preflight?.includedAssets ?? 0} asset
+                  {(preflight?.includedAssets ?? 0) === 1 ? "" : "s"} will be
+                  copied into this publication.
+                </li>
+                <li>
+                  {preflight?.connectedAssets ?? 0} asset
+                  {(preflight?.connectedAssets ?? 0) === 1 ? "" : "s"} remain at
+                  their public source URLs.
+                </li>
+                <li>
+                  GeoLibre receives only the public URLs in the finished
+                  publication, never your workspace or unpublished files.
+                </li>
+              </ul>
+            </section>
             <div className="publication-connectivity">
               <section aria-labelledby="assembly-inputs-status">
                 <h3 id="assembly-inputs-status">Assembly inputs</h3>
@@ -604,7 +645,7 @@ export function PublishPanel({
                     onChange={() => {
                       setLoading(true);
                       setError(null);
-                      void onProfileChange(id)
+                      void onPublicationChange({ profile: id })
                         .then(() => undefined)
                         .catch((cause: unknown) =>
                           setError(
@@ -726,6 +767,40 @@ export function PublishPanel({
                 link previews use the public address.
               </small>
             </label>
+            <div className="publication-continuation">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={geolibreEnabled}
+                  disabled={loading || unsaved}
+                  onChange={(event) => {
+                    const geolibreContinuation = event.target.checked;
+                    setLoading(true);
+                    setError(null);
+                    void onPublicationChange({ geolibreContinuation })
+                      .then(() => undefined)
+                      .catch((cause: unknown) =>
+                        setError(
+                          cause instanceof Error
+                            ? cause.message
+                            : "The GeoLibre setting could not be updated.",
+                        ),
+                      )
+                      .finally(() => setLoading(false));
+                  }}
+                />
+                <strong>Offer an “Open in GeoLibre” link</strong>
+              </label>
+              <span role="status">
+                {!geolibreEnabled
+                  ? "Readers will not see a GeoLibre link."
+                  : geolibreStatus === "ready"
+                    ? "Readers can open compatible published layers in GeoLibre. Your host must allow cross-origin requests (GitHub Pages does)."
+                    : geolibreStatus === "needs-url"
+                      ? "Add the final HTTPS publication URL to enable Open in GeoLibre."
+                      : "This story has no layers that Earth Stories can currently hand off to GeoLibre."}
+              </span>
+            </div>
             <ShareRehearsal
               key={project.id}
               project={project}

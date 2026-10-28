@@ -5,6 +5,12 @@ supported public desktop release. The generated artifacts are unsigned and are
 for internal evaluation only. Do not ask pilot authors to bypass operating
 system security warnings.
 
+The first supported pilot target is macOS arm64 and x64. Candidates use the
+[macOS pilot protocol](release/macos-pilot-protocol.md) and its versioned
+evidence schema. Automated packaged-resource evidence supplements, but does not
+replace, real signature, quarantine, installation, upgrade, rollback, and
+uninstall checks.
+
 ## Platform status
 
 | Platform                        | Current status                                                                                                                                                                      |

@@ -20,6 +20,25 @@ const httpUrlSchema = z
     );
   }, "Use an HTTP or HTTPS URL");
 
+const geolibreContinuationSchema = z.object({
+  kind: z.literal("geolibre"),
+  label: z.literal("Open in GeoLibre"),
+  href: z
+    .string()
+    .url()
+    .refine((value) => {
+      const url = new URL(value);
+      return (
+        url.protocol === "https:" &&
+        url.hostname === "web.geolibre.app" &&
+        !url.username &&
+        !url.password &&
+        Boolean(url.searchParams.get("url"))
+      );
+    }, "Use a credential-free GeoLibre HTTPS project URL"),
+  projectHref: z.literal("explore/story.geolibre.json"),
+});
+
 export const publicationAssetSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -267,6 +286,7 @@ const publicationManifestSharedFields = {
     }),
   ),
   hostingRequirements: z.array(z.enum(["static-http", "cors", "byte-ranges"])),
+  continuations: z.array(geolibreContinuationSchema).default([]),
 };
 
 export const publicationManifestV1Schema = z.object({
@@ -445,3 +465,5 @@ export type PublicationConnectivity = z.infer<
 >;
 export type PublicationManifestV1 = z.infer<typeof publicationManifestV1Schema>;
 export type PublicationManifest = z.infer<typeof publicationManifestV2Schema>;
+export type PublicationContinuation =
+  PublicationManifest["continuations"][number];

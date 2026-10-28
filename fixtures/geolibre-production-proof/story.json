@@ -1,0 +1,118 @@
+{
+  "schema": "earth-stories/project/v2",
+  "id": "geolibre-production-proof",
+  "metadata": {
+    "title": "Earth Stories GeoLibre production proof",
+    "description": "A deployed contract fixture for published data exploration.",
+    "author": "Earth Stories contributors",
+    "created": "2026-10-28T00:00:00.000Z",
+    "updated": "2026-10-28T00:00:00.000Z"
+  },
+  "basemap": {
+    "id": "carto-positron",
+    "label": "CARTO Positron",
+    "styleUrl": "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    "attribution": "© OpenStreetMap contributors © CARTO"
+  },
+  "publication": {
+    "profile": "connected",
+    "theme": "cng",
+    "geolibreContinuation": true
+  },
+  "sources": [
+    {
+      "id": "field-sites",
+      "kind": "local-geojson",
+      "label": "Tidal monitoring sites",
+      "path": "data/field-sites.geojson",
+      "attribution": "Earth Stories production proof fixture, CC0-1.0",
+      "sizeBytes": 230,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "Earth Stories contributors",
+        "licenseName": "CC0-1.0",
+        "sourceUrl": "https://github.com/aboydnw/earth-stories",
+        "transformations": ["Hand-authored deterministic test fixture"]
+      },
+      "presentation": {
+        "opacity": 0.9,
+        "color": "#cf3f02",
+        "strokeColor": "#443f3f",
+        "radius": 6,
+        "sourceLayer": null,
+        "rasterBand": 1,
+        "rescale": null,
+        "colormap": "viridis",
+        "legendTitle": "Tidal monitoring sites",
+        "legendVisible": true
+      }
+    },
+    {
+      "id": "reference-tiles",
+      "kind": "xyz",
+      "label": "OpenStreetMap reference tiles",
+      "locator": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "attribution": "© OpenStreetMap contributors",
+      "sizeBytes": 0,
+      "delivery": "connected",
+      "provenance": {
+        "publisher": "OpenStreetMap contributors",
+        "licenseName": "ODbL-1.0",
+        "sourceUrl": "https://www.openstreetmap.org/copyright",
+        "transformations": []
+      },
+      "presentation": {
+        "opacity": 0.35,
+        "color": "#ffffff",
+        "strokeColor": "#ffffff",
+        "radius": 4,
+        "sourceLayer": null,
+        "rasterBand": 1,
+        "rescale": null,
+        "colormap": "viridis",
+        "legendTitle": "Reference tiles",
+        "legendVisible": false
+      }
+    },
+    {
+      "id": "context-image",
+      "kind": "image",
+      "label": "Context diagram",
+      "path": "data/context.svg",
+      "attribution": "Earth Stories contributors, CC0-1.0",
+      "sizeBytes": 390,
+      "delivery": "included",
+      "provenance": {
+        "publisher": "Earth Stories contributors",
+        "licenseName": "CC0-1.0",
+        "sourceUrl": "https://github.com/aboydnw/earth-stories",
+        "transformations": ["Hand-authored deterministic test fixture"]
+      }
+    }
+  ],
+  "chapters": [
+    {
+      "id": "proof-map",
+      "type": "map",
+      "title": "Published layers",
+      "narrative": "The included field site and connected reference tiles are handed to GeoLibre.",
+      "camera": {
+        "center": [-77.026, 38.89],
+        "zoom": 11.2,
+        "bearing": 0,
+        "pitch": 28
+      },
+      "sourceId": "field-sites",
+      "overlaySourceIds": ["reference-tiles"]
+    },
+    {
+      "id": "unsupported-image",
+      "type": "image",
+      "title": "Deliberate exclusion",
+      "narrative": "This image remains in the story but is not a GeoLibre map layer.",
+      "sourceId": "context-image",
+      "alt": "Diagram of a river and monitoring point",
+      "caption": "Used to prove explicit GeoLibre exclusion reporting."
+    }
+  ]
+}

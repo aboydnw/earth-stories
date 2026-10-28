@@ -40,6 +40,10 @@ import {
   verifyPublication,
   type PublicationBrowserVerifier,
 } from "./verify.js";
+import {
+  buildGeoLibreCompanion,
+  type GeoLibreCompanionResult,
+} from "./geolibre.js";
 
 async function retryFileOperation(operation: () => Promise<void>) {
   for (let attempt = 0; ; attempt += 1) {
@@ -109,6 +113,7 @@ function escapeHtml(value: string): string {
 function reportHtml(
   manifest: PublicationManifest,
   materialized: MaterializedPublication,
+  geolibre: GeoLibreCompanionResult | null,
 ): string {
   const included = manifest.assets.filter(
     (asset) => asset.delivery === "included",
@@ -138,7 +143,11 @@ function reportHtml(
     (total, file) => total + file.sizeBytes,
     0,
   );
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Publication report</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:16px/1.55 system-ui;color:#332b27}h1,h2{font-family:Georgia,serif}code{background:#f2ede7;padding:2px 5px}</style><body><h1>Publication report</h1><p><strong>${escapeHtml(manifest.metadata.title)}</strong></p><p>Build <code>${escapeHtml(manifest.build.id)}</code> · Runtime ${escapeHtml(manifest.build.runtimeVersion)} · Profile ${escapeHtml(manifest.publication.profile)}</p><h2>Connectivity</h2><p>Internet needed to assemble: ${materialized.downloadedBytes > 0 ? "yes" : "no"}<br>Internet needed at runtime: ${needsRuntimeInternet ? "yes" : "no"}<br>Downloaded during assembly: ${materialized.downloadedBytes.toLocaleString("en-US")} bytes<br>Included materialized files: ${includedBytes.toLocaleString("en-US")} bytes</p><h2>Hosting requirements</h2><p>${escapeHtml(manifest.hostingRequirements.join(", "))}</p><h2>Included assets</h2>${list(included)}<h2>Connected data assets</h2>${list(connected)}<h2>Authoritative dependencies</h2><ul>${dependencies}</ul>${needsRuntimeInternet ? "<p>Connected dependencies must remain publicly accessible for the story to work.</p>" : "<p>No publication dependency requires internet access at runtime.</p>"}</body></html>`;
+  const geolibreHtml =
+    geolibre?.project && geolibre.launchHref
+      ? `<h2>GeoLibre continuation</h2><p><a href="${escapeHtml(geolibre.launchHref)}">Open in GeoLibre</a></p><p>Hosting requirements: CORS${geolibre.included.some(({ publicUrl }) => /\.(?:pmtiles|tiff?|parquet)(?:$|[?#])/iu.test(publicUrl)) ? ", byte ranges" : ""}.</p><h3>Included layers</h3><ul>${geolibre.included.map(({ label, publicUrl }) => `<li><strong>${escapeHtml(label)}</strong> — ${escapeHtml(publicUrl)}</li>`).join("")}</ul>${geolibre.excluded.length ? `<h3>Excluded layers</h3><ul>${geolibre.excluded.map(({ assetId, reason }) => `<li><code>${escapeHtml(assetId)}</code> — ${escapeHtml(reason)}</li>`).join("")}</ul>` : ""}`
+      : "";
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><title>Publication report</title><style>body{max-width:760px;margin:48px auto;padding:0 24px;font:16px/1.55 system-ui;color:#332b27}h1,h2{font-family:Georgia,serif}code{background:#f2ede7;padding:2px 5px}</style><body><h1>Publication report</h1><p><strong>${escapeHtml(manifest.metadata.title)}</strong></p><p>Build <code>${escapeHtml(manifest.build.id)}</code> · Runtime ${escapeHtml(manifest.build.runtimeVersion)} · Profile ${escapeHtml(manifest.publication.profile)}</p><h2>Connectivity</h2><p>Internet needed to assemble: ${materialized.downloadedBytes > 0 ? "yes" : "no"}<br>Internet needed at runtime: ${needsRuntimeInternet ? "yes" : "no"}<br>Downloaded during assembly: ${materialized.downloadedBytes.toLocaleString("en-US")} bytes<br>Included materialized files: ${includedBytes.toLocaleString("en-US")} bytes</p><h2>Hosting requirements</h2><p>${escapeHtml(manifest.hostingRequirements.join(", "))}</p><h2>Included assets</h2>${list(included)}<h2>Connected data assets</h2>${list(connected)}<h2>Authoritative dependencies</h2><ul>${dependencies}</ul>${needsRuntimeInternet ? "<p>Connected dependencies must remain publicly accessible for the story to work.</p>" : "<p>No publication dependency requires internet access at runtime.</p>"}${geolibreHtml}</body></html>`;
 }
 
 async function writeShareKit(
@@ -204,9 +213,35 @@ export async function buildPublication({
     outputDirectory,
     viewerDirectory,
   });
-  const manifest = compileProject(project, {
+  let manifest = compileProject(project, {
     dependencyDigests: materialized.dependencyDigests,
   });
+  let geolibre: GeoLibreCompanionResult | null = null;
+
+  if (publicationUrl && project.publication.geolibreContinuation !== false) {
+    geolibre = buildGeoLibreCompanion({ manifest, publicationUrl });
+    if (geolibre.project && geolibre.launchHref) {
+      await mkdir(join(outputDirectory, "explore"), { recursive: true });
+      await writeFile(
+        join(outputDirectory, "explore", "story.geolibre.json"),
+        `${JSON.stringify(geolibre.project, null, 2)}\n`,
+      );
+      manifest = parsePublicationManifest({
+        ...manifest,
+        hostingRequirements: [
+          ...new Set([...manifest.hostingRequirements, "cors" as const]),
+        ],
+        continuations: [
+          {
+            kind: "geolibre",
+            label: "Open in GeoLibre",
+            href: geolibre.launchHref,
+            projectHref: "explore/story.geolibre.json",
+          },
+        ],
+      });
+    }
+  }
 
   await writeShareKit(
     project,
@@ -235,7 +270,7 @@ export async function buildPublication({
     );
   await writeFile(
     join(outputDirectory, "publication-report.html"),
-    reportHtml(manifest, materialized),
+    reportHtml(manifest, materialized, geolibre),
   );
   await writeFile(
     join(outputDirectory, "README.txt"),

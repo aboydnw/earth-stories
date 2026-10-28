@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
     loaded: vi.fn(() => true),
     once: vi.fn(),
     off: vi.fn(),
+    addControl: vi.fn(),
+    removeControl: vi.fn(),
+    hasControl: vi.fn(() => true),
   },
 }));
 
@@ -25,16 +28,8 @@ vi.mock("@deck.gl/mapbox", () => ({
 }));
 
 vi.mock("react-map-gl/maplibre", async () => {
-  const React = await import("react");
   return {
-    useControl: (create: (context: unknown) => unknown) =>
-      React.useMemo(
-        () =>
-          create({
-            map: { getMap: () => mocks.nativeMap },
-          }),
-        [],
-      ),
+    useMap: () => ({ current: { getMap: () => mocks.nativeMap } }),
   };
 });
 
@@ -60,8 +55,7 @@ describe("DeckOverlay", () => {
         onAfterRender: expect.any(Function),
       }),
     );
-    expect(mocks.setProps).toHaveBeenCalledWith({ layers: first });
-    mocks.setProps.mockClear();
+    expect(mocks.setProps).not.toHaveBeenCalled();
 
     view.rerender(<DeckOverlay layers={second} />);
     expect(mocks.setProps).toHaveBeenCalledWith({ layers: second });
@@ -78,11 +72,31 @@ describe("DeckOverlay", () => {
     expect(mocks.setProps).not.toHaveBeenCalled();
 
     mocks.nativeMap.style = {};
+    mocks.nativeMap.loaded.mockReturnValue(true);
     const load = mocks.nativeMap.once.mock.calls.find(
       ([event]) => event === "load",
     )?.[1] as (() => void) | undefined;
     act(() => load?.());
 
+    expect(mocks.setProps).toHaveBeenCalledWith({ layers: second });
+  });
+
+  it("waits for a live style when loaded becomes true before projection exists", () => {
+    mocks.nativeMap.style = undefined;
+    mocks.nativeMap.loaded.mockReturnValue(true);
+    const first = [{ id: "first" }] as unknown as Layer[];
+    const second = [{ id: "second" }] as unknown as Layer[];
+    const view = render(<DeckOverlay layers={first} />);
+
+    mocks.setProps.mockClear();
+    view.rerender(<DeckOverlay layers={second} />);
+    expect(mocks.setProps).not.toHaveBeenCalled();
+
+    mocks.nativeMap.style = {};
+    const load = mocks.nativeMap.once.mock.calls.find(
+      ([event]) => event === "load",
+    )?.[1] as (() => void) | undefined;
+    act(() => load?.());
     expect(mocks.setProps).toHaveBeenCalledWith({ layers: second });
   });
 
