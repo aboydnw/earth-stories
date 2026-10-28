@@ -125,9 +125,13 @@ that turns those values into a release claim.
 `.github/workflows/desktop-artifacts.yml` builds macOS, Windows, and Linux
 artifacts on a version tag or manual dispatch. It runs the test and typecheck
 suites before packaging and retains each platform's output for review. macOS
-and Windows signing use repository secrets when provisioned; secrets are never
-available to pull-request code. The workflow intentionally does not create a
-GitHub release or claim target-machine validation.
+and Windows signing use separate repository secrets when provisioned
+(`DESKTOP_MAC_CSC_*` and the Apple notarization secrets for macOS,
+`DESKTOP_WIN_CSC_*` for Windows), and each is exposed only to its own
+packaging step. Secrets are never available to pull-request code. CI packages
+macOS with `package:mac:signed`; the local `package:mac` used for the unsigned
+pilot keeps keychain discovery disabled. The workflow intentionally does not
+create a GitHub release or claim target-machine validation.
 
 Until the remaining ownership and signing gates are complete, also run these
 checks locally from a clean checkout and preserve their logs with the internal
