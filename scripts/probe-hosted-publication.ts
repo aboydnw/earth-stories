@@ -39,7 +39,10 @@ export async function probeHostedPublication(options: {
 
   const manifestResponse = await fetcher(new URL("publication.json", base));
   if (!manifestResponse.ok) {
-    record("manifest", `expected HTTP 200, received ${manifestResponse.status}`);
+    record(
+      "manifest",
+      `expected HTTP 200, received ${manifestResponse.status}`,
+    );
     return {
       version: 1,
       publicationUrl: base.href,
@@ -134,8 +137,7 @@ async function main() {
   for (let index = 2; index < process.argv.length; index += 2)
     values.set(process.argv[index]!, process.argv[index + 1]!);
   const publicationUrl = values.get("--publication-url");
-  if (!publicationUrl)
-    throw new Error("--publication-url is required");
+  if (!publicationUrl) throw new Error("--publication-url is required");
   const evidence = await probeHostedPublication({ publicationUrl });
   const output = values.get("--output");
   if (output) await writeFile(output, `${JSON.stringify(evidence, null, 2)}\n`);

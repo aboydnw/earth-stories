@@ -577,8 +577,8 @@ export function PublishPanel({
                 </li>
                 <li>
                   {preflight?.connectedAssets ?? 0} asset
-                  {(preflight?.connectedAssets ?? 0) === 1 ? "" : "s"} remain
-                  at their public source URLs.
+                  {(preflight?.connectedAssets ?? 0) === 1 ? "" : "s"} remain at
+                  their public source URLs.
                 </li>
                 <li>
                   GeoLibre receives only the public URLs in the finished

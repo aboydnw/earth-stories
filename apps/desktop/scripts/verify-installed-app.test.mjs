@@ -8,7 +8,11 @@ describe("evaluateInstalledApp", () => {
       platform: "darwin",
       architecture: "arm64",
       checkedAt: "2026-10-28T12:00:00.000Z",
-      resources: ["editor/index.html", "viewer/index.html", "credits/THIRD_PARTY_NOTICES.md"],
+      resources: [
+        "editor/index.html",
+        "viewer/index.html",
+        "credits/THIRD_PARTY_NOTICES.md",
+      ],
       publicationText:
         '{"href":"https://example.org/story/assets/sites.geojson"}',
       privatePaths: ["/Users/tester/Documents/private/source.geojson"],

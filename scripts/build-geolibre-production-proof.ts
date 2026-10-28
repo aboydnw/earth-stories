@@ -19,10 +19,7 @@ const repository = resolve(import.meta.dirname, "..");
 const outputDirectory = resolve(output);
 await mkdir(outputDirectory, { recursive: true });
 await buildPublication({
-  projectDirectory: resolve(
-    repository,
-    "fixtures/geolibre-production-proof",
-  ),
+  projectDirectory: resolve(repository, "fixtures/geolibre-production-proof"),
   outputDirectory,
   viewerDirectory: resolve(repository, "dist/viewer"),
   publicationUrl,

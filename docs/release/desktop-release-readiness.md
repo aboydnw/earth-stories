@@ -99,6 +99,11 @@ that turns those values into a release claim.
 
 ## Target-machine validation gates
 
+Use [`macos-pilot-protocol.md`](macos-pilot-protocol.md) and validate the final
+record against `desktop-platform-evidence.schema.json`. Evidence from
+`verify:installed` covers packaged resources and recorded privacy observations;
+it does not prove platform trust or clean-machine behavior.
+
 - [ ] macOS arm64: install from the distributed artifact, verify Developer ID,
       notarization, stapling, quarantine behavior, conversion, restart, upgrade,
       rollback, and uninstall with projects unchanged.

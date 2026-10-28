@@ -103,8 +103,7 @@ describe("buildGeoLibreCompanion", () => {
       {
         assetId: "shoreline",
         label: "Shoreline",
-        publicUrl:
-          "https://stories.example.org/coast/assets/shoreline.pmtiles",
+        publicUrl: "https://stories.example.org/coast/assets/shoreline.pmtiles",
       },
     ]);
     expect(result.project).toMatchObject({

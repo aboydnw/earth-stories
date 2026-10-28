@@ -355,10 +355,18 @@ describe("PublishPanel", () => {
     panel();
     await userEvent.click(screen.getByText("Release settings"));
 
-    expect(screen.getByText(/working files stay in your local workspace/i)).toBeTruthy();
-    expect(screen.getByText(/1 asset will be copied into this publication/i)).toBeTruthy();
-    expect(screen.getByText(/2 assets remain at their public source urls/i)).toBeTruthy();
-    expect(screen.getByText(/geolibre receives only the public urls/i)).toBeTruthy();
+    expect(
+      screen.getByText(/working files stay in your local workspace/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/1 asset will be copied into this publication/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/2 assets remain at their public source urls/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/geolibre receives only the public urls/i),
+    ).toBeTruthy();
   });
 
   it("lets authors turn off the GeoLibre link", async () => {

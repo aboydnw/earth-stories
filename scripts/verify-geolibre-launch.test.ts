@@ -10,8 +10,7 @@ describe("verifyGeoLibreLaunch", () => {
       }),
     ).toEqual({
       status: "passed",
-      companionUrl:
-        "https://example.org/proof/explore/story.geolibre.json",
+      companionUrl: "https://example.org/proof/explore/story.geolibre.json",
     });
   });
 

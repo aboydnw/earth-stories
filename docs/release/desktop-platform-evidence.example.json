@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "artifact": {
+    "version": "0.1.0-rc.1",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "filename": "earth-stories-0.1.0-rc.1-mac-arm64.dmg",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "environment": {
+    "platform": "macOS",
+    "osVersion": "15.7",
+    "architecture": "arm64",
+    "freshMachine": true
+  },
+  "tester": {
+    "name": "Example pilot tester",
+    "testedAt": "2026-10-28T12:00:00.000Z"
+  },
+  "automatedEvidence": [
+    "desktop-pilot-evidence.v1.json",
+    "hosted-publication-evidence.json"
+  ],
+  "manualChecks": [
+    { "id": "signature", "status": "passed", "evidence": ["codesign.txt"] },
+    {
+      "id": "notarization",
+      "status": "passed",
+      "evidence": ["spctl.txt", "stapler.txt"]
+    },
+    {
+      "id": "quarantine",
+      "status": "passed",
+      "evidence": ["first-launch.mov"]
+    },
+    { "id": "install", "status": "passed", "evidence": ["installed-app.png"] },
+    {
+      "id": "first-launch",
+      "status": "passed",
+      "evidence": ["first-launch.mov"]
+    },
+    {
+      "id": "local-authoring",
+      "status": "passed",
+      "evidence": ["local-story.mov"]
+    },
+    {
+      "id": "qgis-export",
+      "status": "passed",
+      "evidence": ["qgis-export.mov"]
+    },
+    {
+      "id": "tool-provisioning",
+      "status": "passed",
+      "evidence": ["tool-disclosure.png"]
+    },
+    { "id": "restart-reopen", "status": "passed", "evidence": ["reopen.mov"] },
+    {
+      "id": "publication",
+      "status": "passed",
+      "evidence": ["published-url.txt"]
+    },
+    { "id": "geolibre", "status": "passed", "evidence": ["geolibre.mov"] },
+    {
+      "id": "offline-boundary",
+      "status": "passed",
+      "evidence": ["offline-notes.md"]
+    },
+    {
+      "id": "accessibility",
+      "status": "passed",
+      "evidence": ["keyboard-check.md"]
+    },
+    { "id": "upgrade", "status": "passed", "evidence": ["upgrade.mov"] },
+    { "id": "rollback", "status": "passed", "evidence": ["rollback.mov"] },
+    { "id": "uninstall", "status": "passed", "evidence": ["uninstall.mov"] }
+  ],
+  "workspaceHashes": {
+    "beforeUpgrade": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "afterUpgrade": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    "afterUninstall": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  }
+}

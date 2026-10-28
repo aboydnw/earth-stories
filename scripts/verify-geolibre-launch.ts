@@ -12,15 +12,13 @@ export function verifyGeoLibreLaunch(options: {
   const expected = new URL("explore/story.geolibre.json", base).href;
   try {
     const launch = new URL(options.href);
-    if (
-      launch.protocol !== "https:" ||
-      launch.hostname !== "web.geolibre.app"
-    )
+    if (launch.protocol !== "https:" || launch.hostname !== "web.geolibre.app")
       return { status: "failed", failure: "GeoLibre launch host is invalid" };
     if (launch.searchParams.get("url") !== expected)
       return {
         status: "failed",
-        failure: "GeoLibre launch does not reference this publication companion",
+        failure:
+          "GeoLibre launch does not reference this publication companion",
       };
     return { status: "passed", companionUrl: expected };
   } catch {

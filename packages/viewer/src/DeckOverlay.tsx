@@ -21,15 +21,15 @@ export function DeckOverlay({
   const overlay = useMemo(
     () =>
       new MapboxOverlay({
-      interleaved: false,
-      layers,
-      onAfterRender: () => onAfterRenderRef.current?.(),
-      onError: (cause: Error) =>
-        onErrorRef.current?.(
-          cause instanceof Error
-            ? cause.message
-            : "The data layer could not be rendered.",
-        ),
+        interleaved: false,
+        layers,
+        onAfterRender: () => onAfterRenderRef.current?.(),
+        onError: (cause: Error) =>
+          onErrorRef.current?.(
+            cause instanceof Error
+              ? cause.message
+              : "The data layer could not be rendered.",
+          ),
       }),
     [],
   );

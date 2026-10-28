@@ -34,8 +34,7 @@ export function evaluateInstalledApp(input) {
       packagedResources: requiredResources.every((resource) =>
         input.resources.includes(resource),
       ),
-      publicationPrivacy:
-        !failures.includes("publication-leaks-private-path"),
+      publicationPrivacy: !failures.includes("publication-leaks-private-path"),
       geoLibreExternalNavigation:
         input.geoLibreExternalOpened === undefined
           ? "not-run"
@@ -52,7 +51,8 @@ async function listFiles(root, directory = root) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...(await listFiles(root, path)));
-    else if (entry.isFile()) files.push(relative(root, path).replaceAll("\\", "/"));
+    else if (entry.isFile())
+      files.push(relative(root, path).replaceAll("\\", "/"));
   }
   return files;
 }
@@ -88,5 +88,8 @@ async function main() {
 }
 
 const scriptPath = fileURLToPath(import.meta.url);
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url)
+if (
+  process.argv[1] &&
+  pathToFileURL(resolve(process.argv[1])).href === import.meta.url
+)
   await main();
