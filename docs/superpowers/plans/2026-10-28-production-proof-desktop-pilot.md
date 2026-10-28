@@ -268,7 +268,7 @@ Run: `yarn vitest run apps/desktop/src/installed-app-verification.test.ts apps/e
 
 Run: `yarn workspace @earth-stories/desktop package:dir`
 
-Run: `yarn workspace @earth-stories/desktop verify:installed --app apps/desktop/build/artifacts/linux-unpacked`
+Run: `yarn workspace @earth-stories/desktop verify:installed --app build/artifacts/linux-unpacked`
 
 Expected: PASS and a versioned evidence file.
 
