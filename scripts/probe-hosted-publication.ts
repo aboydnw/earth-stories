@@ -98,7 +98,12 @@ export async function probeHostedPublication(options: {
 
   for (const layer of companion.layers ?? []) {
     if (!layer.id || !layer.source?.url) continue;
-    const assetUrl = new URL(layer.source.url);
+    const assetUrl = new URL(
+      layer.source.url
+        .replaceAll("{z}", "0")
+        .replaceAll("{x}", "0")
+        .replaceAll("{y}", "0"),
+    );
     const assetResponse = await fetcher(assetUrl, {
       headers: { Origin: "https://web.geolibre.app" },
     });

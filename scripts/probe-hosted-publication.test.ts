@@ -35,9 +35,14 @@ function hostedFetch(options?: { cors?: boolean; range?: boolean }) {
             id: "tiles",
             source: { url: `${base}assets/tiles.pmtiles` },
           },
+          {
+            id: "reference",
+            source: { url: "https://tiles.example.org/{z}/{x}/{y}.png" },
+          },
         ],
       });
     const headers = new Headers();
+    if (url.includes("%7B")) return response("unresolved template");
     if (options?.cors !== false)
       headers.set("access-control-allow-origin", "*");
     if (url.endsWith("tiles.pmtiles") && init?.headers) {
@@ -68,6 +73,7 @@ describe("probeHostedPublication", () => {
         { id: "cors:sites", status: "passed" },
         { id: "cors:tiles", status: "passed" },
         { id: "range:tiles", status: "passed" },
+        { id: "cors:reference", status: "passed" },
       ],
       failures: [],
     });
@@ -85,6 +91,7 @@ describe("probeHostedPublication", () => {
       "cors:sites: missing Access-Control-Allow-Origin",
       "cors:tiles: missing Access-Control-Allow-Origin",
       "range:tiles: expected HTTP 206 with Content-Range",
+      "cors:reference: missing Access-Control-Allow-Origin",
     ]);
     expect(JSON.stringify(evidence)).not.toContain("secret");
   });
