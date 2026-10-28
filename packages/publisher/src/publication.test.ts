@@ -203,6 +203,16 @@ describe("publication hardening", () => {
       }),
     );
     expect(JSON.stringify(companion)).not.toContain(project);
+    const report = await readFile(
+      join(deployed.directory, "publication-report.html"),
+      "utf8",
+    );
+    expect(report).toContain("GeoLibre continuation");
+    expect(report).toContain("River survey sites");
+    expect(report).toContain(
+      "https://example.org/field-notes/assets/survey-sites.geojson",
+    );
+    expect(report).toContain("https://web.geolibre.app/?url=");
   });
 
   it("omits the GeoLibre companion when the author turns it off", async () => {
@@ -219,6 +229,9 @@ describe("publication hardening", () => {
 
     expect(built.manifest.continuations).toEqual([]);
     expect(built.manifest.hostingRequirements).not.toContain("cors");
+    expect(
+      await readFile(join(built.directory, "publication-report.html"), "utf8"),
+    ).not.toContain("GeoLibre continuation");
     await expect(
       readFile(join(built.directory, "explore", "story.geolibre.json"), "utf8"),
     ).rejects.toThrow();

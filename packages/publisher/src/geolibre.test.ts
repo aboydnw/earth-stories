@@ -99,6 +99,14 @@ describe("buildGeoLibreCompanion", () => {
     });
 
     expect(result.includedAssetIds).toEqual(["shoreline"]);
+    expect(result.included).toEqual([
+      {
+        assetId: "shoreline",
+        label: "Shoreline",
+        publicUrl:
+          "https://stories.example.org/coast/assets/shoreline.pmtiles",
+      },
+    ]);
     expect(result.project).toMatchObject({
       version: "0.2.0",
       name: "Coastal change",

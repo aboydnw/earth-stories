@@ -12,6 +12,11 @@ export interface GeoLibreCompanionResult {
   project: Record<string, unknown> | null;
   launchHref: string | null;
   includedAssetIds: string[];
+  included: Array<{
+    assetId: string;
+    label: string;
+    publicUrl: string;
+  }>;
   excluded: Array<{
     assetId: string;
     reason: GeoLibreExclusionReason;
@@ -109,6 +114,7 @@ export function buildGeoLibreCompanion(options: {
       project: null,
       launchHref: null,
       includedAssetIds: [],
+      included: [],
       excluded: options.manifest.assets.map(({ id }) => ({
         assetId: id,
         reason: "unsafe-url" as const,
@@ -119,6 +125,7 @@ export function buildGeoLibreCompanion(options: {
     options.manifest.assets.map((asset) => [asset.id, asset]),
   );
   const includedAssetIds: string[] = [];
+  const included: GeoLibreCompanionResult["included"] = [];
   const excluded: GeoLibreCompanionResult["excluded"] = [];
   const layers: Array<Record<string, unknown>> = [];
   for (const id of usedAssetIds(options.manifest)) {
@@ -134,6 +141,7 @@ export function buildGeoLibreCompanion(options: {
       continue;
     }
     includedAssetIds.push(id);
+    included.push({ assetId: id, label: asset.label, publicUrl: url });
     layers.push({
       id: asset.id,
       name: asset.label,
@@ -169,7 +177,13 @@ export function buildGeoLibreCompanion(options: {
   }
 
   if (!layers.length)
-    return { project: null, launchHref: null, includedAssetIds, excluded };
+    return {
+      project: null,
+      launchHref: null,
+      includedAssetIds,
+      included,
+      excluded,
+    };
 
   const firstMap = options.manifest.chapters.find(
     (chapter) =>
@@ -217,6 +231,7 @@ export function buildGeoLibreCompanion(options: {
     project,
     launchHref: `https://web.geolibre.app/?url=${encodeURIComponent(projectUrl.href)}&layout=viewer`,
     includedAssetIds,
+    included,
     excluded,
   };
 }
