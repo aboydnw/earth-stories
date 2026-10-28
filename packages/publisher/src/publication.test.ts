@@ -205,6 +205,25 @@ describe("publication hardening", () => {
     expect(JSON.stringify(companion)).not.toContain(project);
   });
 
+  it("omits the GeoLibre companion when the author turns it off", async () => {
+    const { project, viewer } = await setup();
+    const story = storyProjectSchema.parse(await readProject(project));
+    story.publication = { ...story.publication, geolibreContinuation: false };
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+
+    const built = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+      publicationUrl: "https://example.org/field-notes/",
+    });
+
+    expect(built.manifest.continuations).toEqual([]);
+    expect(built.manifest.hostingRequirements).not.toContain("cors");
+    await expect(
+      readFile(join(built.directory, "explore", "story.geolibre.json"), "utf8"),
+    ).rejects.toThrow();
+  });
+
   it("blocks a publication with a missing included asset", async () => {
     const { project } = await setup();
     await rm(join(project, "data", "survey-sites.geojson"));

@@ -109,7 +109,7 @@ function panel(overrides: Partial<Parameters<typeof PublishPanel>[0]> = {}) {
     project,
     onClose: vi.fn(),
     onBeforeExport: vi.fn().mockResolvedValue(project),
-    onProfileChange: vi.fn().mockResolvedValue(project),
+    onPublicationChange: vi.fn().mockResolvedValue(project),
     preflightState: readyState(),
     onRefreshPreflight: vi.fn(),
     localReadiness,
@@ -349,6 +349,37 @@ describe("PublishPanel", () => {
     expect(
       screen.getByText(/readers can open compatible published layers/i),
     ).toBeTruthy();
+  });
+
+  it("lets authors turn off the GeoLibre link", async () => {
+    const { props } = panel();
+    await userEvent.click(
+      screen.getByText("Verify and share after deployment"),
+    );
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /open in geolibre/i }),
+    );
+    expect(props.onPublicationChange).toHaveBeenCalledWith({
+      geolibreContinuation: false,
+    });
+  });
+
+  it("explains that readers will not see a disabled GeoLibre link", async () => {
+    panel({
+      project: {
+        ...project,
+        publication: { ...project.publication, geolibreContinuation: false },
+      },
+    });
+    await userEvent.click(
+      screen.getByText("Verify and share after deployment"),
+    );
+    expect(
+      screen.getByRole<HTMLInputElement>("checkbox", {
+        name: /open in geolibre/i,
+      }).checked,
+    ).toBe(false);
+    expect(screen.getByText(/will not see a geolibre link/i)).toBeTruthy();
   });
 
   it("reports clipboard failures without an unhandled rejection", async () => {

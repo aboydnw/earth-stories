@@ -42,8 +42,8 @@ interface Props {
   project: StoryProject;
   onClose: () => void;
   onBeforeExport: () => Promise<StoryProject | null>;
-  onProfileChange: (
-    profile: StoryProject["publication"]["profile"],
+  onPublicationChange: (
+    changes: Partial<StoryProject["publication"]>,
   ) => Promise<StoryProject | null>;
   preflightState: PublicationReadinessState;
   onRefreshPreflight: () => void;
@@ -111,7 +111,7 @@ export function PublishPanel({
   project,
   onClose,
   onBeforeExport,
-  onProfileChange,
+  onPublicationChange,
   preflightState,
   onRefreshPreflight,
   localReadiness,
@@ -137,6 +137,7 @@ export function PublishPanel({
     () => compileForContinuations(project),
     [project],
   );
+  const geolibreEnabled = project.publication.geolibreContinuation !== false;
   const geolibreStatus = compiledForContinuations
     ? geolibreContinuationStatus(compiledForContinuations, publicationUrl)
     : "unavailable";
@@ -621,7 +622,7 @@ export function PublishPanel({
                     onChange={() => {
                       setLoading(true);
                       setError(null);
-                      void onProfileChange(id)
+                      void onPublicationChange({ profile: id })
                         .then(() => undefined)
                         .catch((cause: unknown) =>
                           setError(
@@ -743,14 +744,38 @@ export function PublishPanel({
                 link previews use the public address.
               </small>
             </label>
-            <div className="publication-continuation" role="status">
-              <strong>Open in GeoLibre</strong>
-              <span>
-                {geolibreStatus === "ready"
-                  ? "Readers can open compatible published layers in GeoLibre. Your host must allow cross-origin requests (GitHub Pages does)."
-                  : geolibreStatus === "needs-url"
-                    ? "Add the final HTTPS publication URL to enable Open in GeoLibre."
-                    : "This story has no layers that Earth Stories can currently hand off to GeoLibre."}
+            <div className="publication-continuation">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={geolibreEnabled}
+                  disabled={loading || unsaved}
+                  onChange={(event) => {
+                    const geolibreContinuation = event.target.checked;
+                    setLoading(true);
+                    setError(null);
+                    void onPublicationChange({ geolibreContinuation })
+                      .then(() => undefined)
+                      .catch((cause: unknown) =>
+                        setError(
+                          cause instanceof Error
+                            ? cause.message
+                            : "The GeoLibre setting could not be updated.",
+                        ),
+                      )
+                      .finally(() => setLoading(false));
+                  }}
+                />
+                <strong>Offer an “Open in GeoLibre” link</strong>
+              </label>
+              <span role="status">
+                {!geolibreEnabled
+                  ? "Readers will not see a GeoLibre link."
+                  : geolibreStatus === "ready"
+                    ? "Readers can open compatible published layers in GeoLibre. Your host must allow cross-origin requests (GitHub Pages does)."
+                    : geolibreStatus === "needs-url"
+                      ? "Add the final HTTPS publication URL to enable Open in GeoLibre."
+                      : "This story has no layers that Earth Stories can currently hand off to GeoLibre."}
               </span>
             </div>
             <ShareRehearsal

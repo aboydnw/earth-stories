@@ -347,6 +347,8 @@ export const storyProjectV2Schema = z
         offlineBasemap: z
           .object({ mode: z.literal("neutral") })
           .default({ mode: "neutral" }),
+        /** Offer readers an "Open in GeoLibre" link. Absent means enabled. */
+        geolibreContinuation: z.boolean().optional(),
       })
       .default({
         profile: "connected",

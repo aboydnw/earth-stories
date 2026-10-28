@@ -991,6 +991,11 @@ nav {
   background: var(--es-bg-subtle);
   font-size: 12px;
 }
+.publication-continuation label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 .publication-continuation span {
   color: var(--es-fg-muted);
 }

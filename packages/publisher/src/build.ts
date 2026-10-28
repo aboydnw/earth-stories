@@ -209,7 +209,7 @@ export async function buildPublication({
     dependencyDigests: materialized.dependencyDigests,
   });
 
-  if (publicationUrl) {
+  if (publicationUrl && project.publication.geolibreContinuation !== false) {
     const geolibre = buildGeoLibreCompanion({ manifest, publicationUrl });
     if (geolibre.project && geolibre.launchHref) {
       await mkdir(join(outputDirectory, "explore"), { recursive: true });
