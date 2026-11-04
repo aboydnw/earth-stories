@@ -16,7 +16,8 @@ refuse artifacts that carry any other version. It is `0.1.0-pilot.1` today; for
 the next pilot, bump it in a committed change _before_ building, and use the
 same value everywhere below.
 
-From a clean checkout on the Mac:
+Run the commands in this checklist from the repository root of a clean
+checkout on the Mac:
 
 ```bash
 corepack enable
@@ -33,16 +34,20 @@ keychain and sign with an unrelated identity.
 
 ## 2. Record checksums and notices
 
+Yarn runs each workspace script from `apps/desktop`, so the metadata arguments
+below are relative to that directory. Keep your shell at the repository root
+for the other commands in this checklist.
+
 ```bash
 yarn workspace @earth-stories/desktop release:metadata \
-  --artifacts apps/desktop/build/artifacts \
+  --artifacts build/artifacts \
   --version 0.1.0-pilot.1 \
-  --notices apps/desktop/build/resources/credits/THIRD_PARTY_NOTICES.md
+  --notices build/resources/credits/THIRD_PARTY_NOTICES.md
 
 yarn workspace @earth-stories/desktop release:verify \
-  --artifacts apps/desktop/build/artifacts \
+  --artifacts build/artifacts \
   --version 0.1.0-pilot.1 \
-  --notices apps/desktop/build/resources/credits/THIRD_PARTY_NOTICES.md
+  --notices build/resources/credits/THIRD_PARTY_NOTICES.md
 ```
 
 The generated manifest records `signed: false`, `manifestSigned: false`, and
