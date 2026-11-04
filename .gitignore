@@ -14,3 +14,8 @@ storybook-static/
 .DS_Store
 *.local
 *.tsbuildinfo
+
+# Story projects committed under stories/ exclude rebuildable and local state
+stories/*/publication/
+stories/*/.earth-stories/
+stories/*/.earth-stories-cache/

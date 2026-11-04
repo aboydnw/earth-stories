@@ -191,6 +191,12 @@ function AssetLayer({
   const dataColor = categoryColor(presentation);
   const dataFilter = featureFilter(presentation);
   const filterProps = dataFilter ? { filter: dataFilter as never } : {};
+  const pointFilter = ["==", ["geometry-type"], "Point"];
+  const pointFilterProps = {
+    filter: (dataFilter
+      ? ["all", pointFilter, dataFilter]
+      : pointFilter) as never,
+  };
   const assetUrl = useMemo(() => absoluteAssetUrl(asset.href), [asset.href]);
   useEffect(() => {
     let active = true;
@@ -351,7 +357,7 @@ function AssetLayer({
           <Layer
             id={`${asset.id}-points`}
             type="circle"
-            {...filterProps}
+            {...pointFilterProps}
             paint={{
               "circle-radius": presentation.radius,
               "circle-color": dataColor as never,
@@ -416,7 +422,7 @@ function AssetLayer({
             id={`${asset.id}-${sourceLayer}-point`}
             source-layer={sourceLayer}
             type="circle"
-            {...filterProps}
+            {...pointFilterProps}
             paint={{
               "circle-radius": presentation.radius,
               "circle-color": dataColor as never,
