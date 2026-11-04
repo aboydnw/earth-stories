@@ -54,8 +54,17 @@ jobs:
       - name: Package Linux
         if: matrix.platform == 'Linux'
         run: yarn workspace @earth-stories/desktop ${{ matrix.command }}
-      - name: Verify staged desktop resources
-        run: yarn workspace @earth-stories/desktop verify:resources
+      - name: Verify macOS desktop resources (arm64 and x64)
+        if: matrix.platform == 'macOS'
+        run: |
+          yarn workspace @earth-stories/desktop verify:resources --resources "build/artifacts/mac-arm64/Earth Stories.app/Contents/Resources" --icon build/icon.icns
+          yarn workspace @earth-stories/desktop verify:resources --resources "build/artifacts/mac/Earth Stories.app/Contents/Resources" --icon build/icon.icns
+      - name: Verify Windows desktop resources
+        if: matrix.platform == 'Windows'
+        run: yarn workspace @earth-stories/desktop verify:resources --resources build/artifacts/win-unpacked/resources --target nsis
+      - name: Verify Linux desktop resources
+        if: matrix.platform == 'Linux'
+        run: yarn workspace @earth-stories/desktop verify:resources --resources build/artifacts/linux-unpacked/resources
       - uses: actions/upload-artifact@v4
         with:
           name: earth-stories-${{ matrix.platform }}-${{ github.ref_name }}

@@ -20,12 +20,17 @@ function parseArguments(argv) {
     const value = argv[index + 1];
     if (!key?.startsWith("--") || !value) {
       throw new Error(
-        "Usage: verify-resources.mjs [--resources <directory>] [--manifest <file>] [--icon <file>]",
+        "Usage: verify-resources.mjs [--resources <directory>] [--manifest <file>] [--icon <file>] [--target nsis]",
       );
     }
     values.set(key.slice(2), value);
   }
+  const target = values.get("target");
+  if (target !== undefined && target !== "nsis") {
+    throw new Error(`Unsupported desktop target: ${target}`);
+  }
   return {
+    target,
     resourcesDirectory: resolve(values.get("resources") ?? defaultResources),
     expectedManifestPath: resolve(values.get("manifest") ?? defaultManifest),
     expectedIconPath: values.has("icon") ? resolve(values.get("icon")) : null,
@@ -53,6 +58,7 @@ async function sha256(path) {
 }
 
 async function verify({
+  target,
   resourcesDirectory,
   expectedManifestPath,
   expectedIconPath,
@@ -75,6 +81,9 @@ async function verify({
     ...manifest.files.map((entry) => entry.path),
     "app.asar",
     "resource-manifest.json",
+    // electron-builder's NSIS target copies (and may sign) this helper.
+    // Like app.asar, it is builder output, not a staged runtime resource.
+    ...(target === "nsis" ? ["elevate.exe"] : []),
     ...(expectedIconPath ? ["icon.icns"] : []),
   ].sort();
   const actual = await listResourceFiles(resourcesDirectory);
