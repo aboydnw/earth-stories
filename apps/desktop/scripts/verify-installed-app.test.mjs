@@ -48,4 +48,59 @@ describe("evaluateInstalledApp", () => {
     expect(JSON.stringify(evidence)).not.toContain("secret");
     expect(JSON.stringify(evidence)).not.toContain("/home/tester");
   });
+  it.each([
+    {},
+    { publicationText: "", privatePaths: ["/private/source.geojson"] },
+    { publicationText: "{}", privatePaths: [] },
+    { publicationText: "{}", privatePaths: [""] },
+    { publicationText: "{}", privatePaths: [null] },
+  ])("does not claim privacy passed without usable evidence: %j", (privacy) => {
+    const evidence = evaluateInstalledApp({
+      artifactPath: "/tmp/Earth Stories.app",
+      resources: [
+        "editor/index.html",
+        "viewer/index.html",
+        "credits/THIRD_PARTY_NOTICES.md",
+      ],
+      ...privacy,
+    });
+    expect(evidence.checks.publicationPrivacy).toBe("not-run");
+    expect(evidence.failures).toEqual([]);
+  });
+
+  it.each([
+    String.raw`C:\Users\tester\Documents\source.geojson`,
+    "C:/Users/tester/Documents/source.geojson",
+  ])(
+    "detects a Windows path in serialized publication JSON: %s",
+    (publishedPath) => {
+      const evidence = evaluateInstalledApp({
+        artifactPath: "/tmp/Earth Stories.app",
+        resources: [
+          "editor/index.html",
+          "viewer/index.html",
+          "credits/THIRD_PARTY_NOTICES.md",
+        ],
+        publicationText: JSON.stringify({ source: publishedPath }),
+        privatePaths: [String.raw`C:\Users\tester\Documents\source.geojson`],
+      });
+      expect(evidence.checks.publicationPrivacy).toBe(false);
+      expect(evidence.failures).toEqual(["publication-leaks-private-path"]);
+      expect(JSON.stringify(evidence)).not.toContain("tester");
+    },
+  );
+  it("reports an observed leak even when other privacy evidence is incomplete", () => {
+    const evidence = evaluateInstalledApp({
+      artifactPath: "/tmp/Earth Stories.app",
+      resources: [
+        "editor/index.html",
+        "viewer/index.html",
+        "credits/THIRD_PARTY_NOTICES.md",
+      ],
+      publicationText: '{"source":"/Users/tester/private.geojson"}',
+      privatePaths: ["/Users/tester/private.geojson", "", null],
+    });
+    expect(evidence.checks.publicationPrivacy).toBe(false);
+    expect(evidence.failures).toEqual(["publication-leaks-private-path"]);
+  });
 });

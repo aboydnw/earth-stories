@@ -351,6 +351,29 @@ describe("PublishPanel", () => {
     ).toBeTruthy();
   });
 
+  it("keeps offline compilation pending instead of claiming no compatible layers", async () => {
+    panel({
+      project: {
+        ...project,
+        publication: { ...project.publication, profile: "offline" },
+      },
+    });
+    await userEvent.click(
+      screen.getByText("Verify and share after deployment"),
+    );
+    await userEvent.type(
+      screen.getByLabelText(/deployed publication url/i),
+      "https://example.org/story/",
+    );
+    expect(
+      screen.getByText(
+        /geolibre availability will be checked when the publication is built/i,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(/geolibre requires internet access/i)).toBeTruthy();
+    expect(screen.queryByText(/this story has no layers/i)).toBeNull();
+  });
+
   it("distinguishes local files, included copies, connected URLs, and GeoLibre access", async () => {
     panel();
     await userEvent.click(screen.getByText("Release settings"));

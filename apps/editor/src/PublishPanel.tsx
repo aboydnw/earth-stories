@@ -140,7 +140,7 @@ export function PublishPanel({
   const geolibreEnabled = project.publication.geolibreContinuation !== false;
   const geolibreStatus = compiledForContinuations
     ? geolibreContinuationStatus(compiledForContinuations, publicationUrl)
-    : "unavailable";
+    : "pending-build";
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const onRefreshRef = useRef(onRefreshPreflight);
@@ -796,9 +796,11 @@ export function PublishPanel({
                   ? "Readers will not see a GeoLibre link."
                   : geolibreStatus === "ready"
                     ? "Readers can open compatible published layers in GeoLibre. Your host must allow cross-origin requests (GitHub Pages does)."
-                    : geolibreStatus === "needs-url"
-                      ? "Add the final HTTPS publication URL to enable Open in GeoLibre."
-                      : "This story has no layers that Earth Stories can currently hand off to GeoLibre."}
+                    : geolibreStatus === "pending-build"
+                      ? "GeoLibre availability will be checked when the publication is built. Resolve any publishing issues first. GeoLibre requires internet access."
+                      : geolibreStatus === "needs-url"
+                        ? "Add the final HTTPS publication URL to enable Open in GeoLibre."
+                        : "This story has no layers that Earth Stories can currently hand off to GeoLibre."}
               </span>
             </div>
             <ShareRehearsal

@@ -13,6 +13,15 @@ replace every example value, and retain the named attachments beside it.
    every relative path and file.
 4. Attach the automated packaged-app and hosted-publication evidence files.
 
+For `verify:installed`, supply `--smoke-evidence <local-json-file>` containing
+nonempty `publicationText` from the built publication and a nonempty
+`privatePaths` array of the local source paths being checked. The evaluator
+checks literal and JSON-escaped paths, including Windows separators, and keeps
+those private inputs out of its output. Without usable privacy inputs,
+`checks.publicationPrivacy` is `not-run`, not a passing privacy result.
+Resource-only verification does not replace this observation. Keep the raw smoke
+file local because it contains private paths; attach only the generated report.
+
 ## Platform trust
 
 Run `codesign --verify --deep --strict --verbose=2 <app>` and attach its output.

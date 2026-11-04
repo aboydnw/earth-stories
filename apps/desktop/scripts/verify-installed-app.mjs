@@ -13,12 +13,30 @@ export function evaluateInstalledApp(input) {
   for (const resource of requiredResources)
     if (!input.resources.includes(resource))
       failures.push(`missing-resource:${resource}`);
-  if (
-    input.privatePaths.some(
-      (privatePath) =>
-        privatePath && input.publicationText.includes(privatePath),
-    )
-  )
+  const publicationObserved =
+    typeof input.publicationText === "string" &&
+    input.publicationText.trim().length > 0;
+  const usablePrivatePaths = Array.isArray(input.privatePaths)
+    ? input.privatePaths.filter(
+        (privatePath) =>
+          typeof privatePath === "string" && privatePath.trim().length > 0,
+      )
+    : [];
+  const privacyObserved =
+    publicationObserved &&
+    usablePrivatePaths.length > 0 &&
+    usablePrivatePaths.length === input.privatePaths.length;
+  const publicationLeaksPrivatePath =
+    publicationObserved &&
+    usablePrivatePaths.some((privatePath) => {
+      const variants = [privatePath, privatePath.replaceAll("\\", "/")];
+      return variants.some(
+        (variant) =>
+          input.publicationText.includes(variant) ||
+          input.publicationText.includes(JSON.stringify(variant).slice(1, -1)),
+      );
+    });
+  if (publicationLeaksPrivatePath)
     failures.push("publication-leaks-private-path");
   if (input.geoLibreExternalOpened === false)
     failures.push("geolibre-external-navigation-not-observed");
@@ -34,7 +52,11 @@ export function evaluateInstalledApp(input) {
       packagedResources: requiredResources.every((resource) =>
         input.resources.includes(resource),
       ),
-      publicationPrivacy: !failures.includes("publication-leaks-private-path"),
+      publicationPrivacy: publicationLeaksPrivatePath
+        ? false
+        : privacyObserved
+          ? true
+          : "not-run",
       geoLibreExternalNavigation:
         input.geoLibreExternalOpened === undefined
           ? "not-run"
@@ -76,8 +98,8 @@ async function main() {
     architecture: process.arch,
     checkedAt: new Date().toISOString(),
     resources: await listFiles(resourcesRoot),
-    publicationText: String(smoke.publicationText ?? ""),
-    privatePaths: Array.isArray(smoke.privatePaths) ? smoke.privatePaths : [],
+    publicationText: smoke.publicationText,
+    privatePaths: smoke.privatePaths,
     geoLibreExternalOpened: smoke.geoLibreExternalOpened,
     serviceStopped: smoke.serviceStopped,
   });

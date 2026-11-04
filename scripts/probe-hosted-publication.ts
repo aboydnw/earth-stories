@@ -19,6 +19,15 @@ function publicationBase(value: string) {
   return url;
 }
 
+const geolibreOrigin = "https://web.geolibre.app";
+
+function corsFailure(response: Response): string | undefined {
+  const origin = response.headers.get("access-control-allow-origin");
+  return origin === "*" || origin === geolibreOrigin
+    ? undefined
+    : "missing Access-Control-Allow-Origin";
+}
+
 function needsRange(url: URL) {
   return /\.(?:pmtiles|parquet|tiff?|cog)(?:$)/iu.test(url.pathname);
 }
@@ -71,6 +80,7 @@ export async function probeHostedPublication(options: {
   }
   const companionResponse = await fetcher(
     new URL(continuation.projectHref, base),
+    { headers: { Origin: geolibreOrigin } },
   );
   if (!companionResponse.ok) {
     record(
@@ -96,6 +106,8 @@ export async function probeHostedPublication(options: {
       : "build ID does not match publication",
   );
 
+  record("cors:companion", corsFailure(companionResponse));
+
   for (const layer of companion.layers ?? []) {
     if (!layer.id || !layer.source?.url) continue;
     const assetUrl = new URL(
@@ -105,18 +117,18 @@ export async function probeHostedPublication(options: {
         .replaceAll("{y}", "0"),
     );
     const assetResponse = await fetcher(assetUrl, {
-      headers: { Origin: "https://web.geolibre.app" },
+      headers: { Origin: geolibreOrigin },
     });
-    const cors = assetResponse.headers.get("access-control-allow-origin");
     record(
-      `cors:${layer.id}`,
-      cors === "*" || cors === "https://web.geolibre.app"
+      `asset:${layer.id}`,
+      assetResponse.status === 200
         ? undefined
-        : "missing Access-Control-Allow-Origin",
+        : `expected HTTP 200, received ${assetResponse.status}`,
     );
+    record(`cors:${layer.id}`, corsFailure(assetResponse));
     if (needsRange(assetUrl)) {
       const rangeResponse = await fetcher(assetUrl, {
-        headers: { Range: "bytes=0-31" },
+        headers: { Origin: geolibreOrigin, Range: "bytes=0-31" },
       });
       record(
         `range:${layer.id}`,
@@ -125,6 +137,7 @@ export async function probeHostedPublication(options: {
           ? undefined
           : "expected HTTP 206 with Content-Range",
       );
+      record(`range-cors:${layer.id}`, corsFailure(rangeResponse));
     }
   }
 
