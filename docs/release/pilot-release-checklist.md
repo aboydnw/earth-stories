@@ -25,12 +25,22 @@ yarn install
 yarn typecheck && yarn test && yarn check:independence && yarn check:ui
 yarn build
 yarn workspace @earth-stories/desktop package:mac
-yarn workspace @earth-stories/desktop verify:resources
+yarn workspace @earth-stories/desktop verify:resources \
+  --resources "build/artifacts/mac-arm64/Earth Stories.app/Contents/Resources" \
+  --icon build/icon.icns
+yarn workspace @earth-stories/desktop verify:resources \
+  --resources "build/artifacts/mac/Earth Stories.app/Contents/Resources" \
+  --icon build/icon.icns
 ```
 
 `package:mac` builds arm64 and x64 into `apps/desktop/build/artifacts`. It sets
 `CSC_IDENTITY_AUTO_DISCOVERY=false` so electron-builder does not reach into the
 keychain and sign with an unrelated identity.
+
+The resource checks inspect both unpacked Mac applications, including the
+packaged icon's bytes. Yarn runs workspace scripts from `apps/desktop`, so
+their path arguments are relative to that directory. The verifier's default
+resource location is the Linux unpacked build; use the explicit Mac paths above.
 
 ## 2. Record checksums and notices
 

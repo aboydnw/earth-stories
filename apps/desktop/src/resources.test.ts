@@ -221,4 +221,62 @@ describe("packaged desktop resources", () => {
       "Packaged resource tree does not match manifest",
     );
   });
+
+  it.each(["mac-arm64", "mac"])(
+    "verifies the %s pilot resources and rejects a modified packaged icon",
+    async (outputDirectory) => {
+      const repository = await createFixture();
+      const staged = join(repository, "build/resources");
+      const packaged = join(
+        repository,
+        "build/artifacts",
+        outputDirectory,
+        "Earth Stories.app/Contents/Resources",
+      );
+      const icon = join(repository, "build/icon.icns");
+      await execFileAsync(process.execPath, [
+        stageScript,
+        "--repository",
+        repository,
+        "--output",
+        staged,
+      ]);
+      await cp(staged, packaged, { recursive: true });
+      await writeFile(join(packaged, "app.asar"), "packaged application\n");
+      await writeFile(icon, "expected icon bytes\n");
+      await cp(icon, join(packaged, "icon.icns"));
+      const args = [
+        verifyScript,
+        "--resources",
+        packaged,
+        "--manifest",
+        join(staged, "resource-manifest.json"),
+        "--icon",
+        icon,
+      ];
+
+      await expect(
+        execFileAsync(process.execPath, args),
+      ).resolves.toMatchObject({
+        stderr: "",
+      });
+
+      await writeFile(join(packaged, "icon.icns"), "different icon bytes\n");
+      await expect(execFileAsync(process.execPath, args)).rejects.toMatchObject(
+        {
+          stderr: "Packaged icon does not match expected icon\n",
+        },
+      );
+
+      await cp(icon, join(packaged, "icon.icns"));
+      await writeFile(join(packaged, "unexpected.txt"), "undeclared\n");
+      await expect(execFileAsync(process.execPath, args)).rejects.toMatchObject(
+        {
+          stderr: expect.stringContaining(
+            "Packaged resource tree does not match manifest",
+          ),
+        },
+      );
+    },
+  );
 });
