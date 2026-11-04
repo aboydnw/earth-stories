@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 180" role="img" aria-labelledby="title">
+  <title id="title">Diagram marking the production proof fixture</title>
+  <rect width="320" height="180" fill="#ede8df"/>
+  <path d="M0 120 C80 70 150 160 320 80" fill="none" stroke="#356b6f" stroke-width="16"/>
+  <circle cx="158" cy="104" r="12" fill="#cf3f02"/>
+</svg>

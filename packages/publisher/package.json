@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./compile": "./src/compile.ts",
     "./focused-preview": "./src/focusedPreview.ts",
+    "./geolibre": "./src/geolibre.ts",
     "./readiness": "./src/readiness.ts",
     "./share": "./src/share.ts",
     "./build": "./src/build.ts",

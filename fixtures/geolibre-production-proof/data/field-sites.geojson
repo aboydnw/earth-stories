@@ -1,0 +1,10 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Tidal monitoring site" },
+      "geometry": { "type": "Point", "coordinates": [-77.026, 38.89] }
+    }
+  ]
+}

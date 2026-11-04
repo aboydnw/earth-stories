@@ -19,3 +19,4 @@ storybook-static/
 stories/*/publication/
 stories/*/.earth-stories/
 stories/*/.earth-stories-cache/
+fixtures/*/.earth-stories-cache/

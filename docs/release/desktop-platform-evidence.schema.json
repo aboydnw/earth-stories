@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://earthstories.org/schemas/desktop-platform-evidence.v1.json",
+  "title": "Earth Stories desktop platform evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifact",
+    "environment",
+    "tester",
+    "automatedEvidence",
+    "manualChecks",
+    "workspaceHashes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commit", "filename", "sha256"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1 },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "filename": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "osVersion", "architecture", "freshMachine"],
+      "properties": {
+        "platform": { "const": "macOS" },
+        "osVersion": { "type": "string", "minLength": 1 },
+        "architecture": { "enum": ["arm64", "x64"] },
+        "freshMachine": { "type": "boolean" }
+      }
+    },
+    "tester": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "testedAt"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "testedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "automatedEvidence": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "manualChecks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/check" },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "id": { "const": "install" } },
+            "required": ["id"]
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": { "id": { "const": "uninstall" } },
+            "required": ["id"]
+          }
+        }
+      ]
+    },
+    "workspaceHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["beforeUpgrade", "afterUpgrade", "afterUninstall"],
+      "properties": {
+        "beforeUpgrade": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "afterUpgrade": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "afterUninstall": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "evidence"],
+      "properties": {
+        "id": {
+          "enum": [
+            "signature",
+            "notarization",
+            "quarantine",
+            "install",
+            "first-launch",
+            "local-authoring",
+            "qgis-export",
+            "tool-provisioning",
+            "restart-reopen",
+            "publication",
+            "geolibre",
+            "offline-boundary",
+            "accessibility",
+            "upgrade",
+            "rollback",
+            "uninstall"
+          ]
+        },
+        "status": { "enum": ["passed", "failed", "not-applicable"] },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

@@ -981,6 +981,41 @@ nav {
   color: var(--es-fg-muted);
   font-weight: 400;
 }
+.publication-continuation {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--es-border);
+  border-radius: 8px;
+  background: var(--es-bg-subtle);
+  font-size: 12px;
+}
+.publication-continuation label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.publication-continuation span {
+  color: var(--es-fg-muted);
+}
+.publication-privacy-boundary {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--es-border);
+  border-radius: var(--es-radius-control);
+  background: var(--es-bg-subtle);
+}
+.publication-privacy-boundary h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.publication-privacy-boundary ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--es-fg-muted);
+  font-size: 12px;
+}
 .share-rehearsal {
   margin-top: 18px;
 }
@@ -3445,4 +3480,28 @@ nav {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
+}
+/* Hosted builds must describe the native authoring boundary honestly. */
+.authoring-unavailable {
+  box-sizing: border-box;
+  max-width: 46rem;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: clamp(3rem, 10vw, 8rem) 1.5rem;
+  color: var(--es-fg);
+}
+
+.authoring-unavailable h1 {
+  max-width: 14ch;
+  margin-block: 1rem 1.5rem;
+  font-family: var(--es-font-body);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1.05;
+}
+
+.authoring-unavailable p:not(.story-kicker) {
+  max-width: 42rem;
+  font-family: var(--es-font-body);
+  font-size: 1.05rem;
+  line-height: 1.6;
 }

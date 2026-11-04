@@ -1,0 +1,73 @@
+name: GeoLibre production proof
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-proof:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+      - run: yarn install --immutable
+      - run: yarn workspace @earth-stories/viewer-app build
+      - name: Build production proof
+        run: yarn geolibre-proof:build --publication-url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/production-proof/" --output production-proof
+      - uses: actions/upload-artifact@v4
+        with:
+          name: geolibre-production-proof
+          path: production-proof
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build-proof
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}production-proof/
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: geolibre-production-proof
+          path: production-proof
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  probe:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: deploy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: yarn
+      - run: yarn install --immutable
+      - name: Probe hosted publication
+        run: yarn geolibre-proof:probe --publication-url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/production-proof/" --output hosted-publication-evidence.json
+      - name: Verify GeoLibre launch
+        run: node --import tsx scripts/verify-geolibre-launch.ts --publication-url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/production-proof/" --output geolibre-launch-evidence.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geolibre-hosted-evidence
+          path: "*-evidence.json"

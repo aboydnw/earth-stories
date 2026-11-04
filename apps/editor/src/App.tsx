@@ -2591,10 +2591,10 @@ export function App() {
         onRefreshPreflight={() => void publicationReadiness.load(true)}
         localReadiness={localReadiness!}
         unsaved={saveState !== "saved"}
-        onProfileChange={async (profile) => {
+        onPublicationChange={async (changes) => {
           const next = {
             ...project,
-            publication: { ...project.publication, profile },
+            publication: { ...project.publication, ...changes },
           };
           try {
             setSaveState("saving");

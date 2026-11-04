@@ -162,6 +162,81 @@ describe("publication hardening", () => {
     expect(html.match(/og:title/g)).toHaveLength(1);
   });
 
+  it("emits a GeoLibre companion only when the publication URL is real", async () => {
+    const { project, viewer } = await setup();
+    const placeheld = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+    });
+    expect(placeheld.manifest.continuations).toEqual([]);
+    expect(placeheld.manifest.hostingRequirements).not.toContain("cors");
+    await expect(
+      readFile(
+        join(placeheld.directory, "explore", "story.geolibre.json"),
+        "utf8",
+      ),
+    ).rejects.toThrow();
+
+    const deployed = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+      publicationUrl: "https://example.org/field-notes/",
+    });
+    expect(deployed.manifest.continuations).toEqual([
+      expect.objectContaining({
+        kind: "geolibre",
+        projectHref: "explore/story.geolibre.json",
+        href: expect.stringContaining("https://web.geolibre.app/?url="),
+      }),
+    ]);
+    expect(deployed.manifest.hostingRequirements).toContain("cors");
+    const companion = JSON.parse(
+      await readFile(
+        join(deployed.directory, "explore", "story.geolibre.json"),
+        "utf8",
+      ),
+    );
+    expect(companion.metadata.earthStories).toEqual(
+      expect.objectContaining({
+        buildId: deployed.manifest.build.id,
+        publicationUrl: "https://example.org/field-notes/",
+      }),
+    );
+    expect(JSON.stringify(companion)).not.toContain(project);
+    const report = await readFile(
+      join(deployed.directory, "publication-report.html"),
+      "utf8",
+    );
+    expect(report).toContain("GeoLibre continuation");
+    expect(report).toContain("River survey sites");
+    expect(report).toContain(
+      "https://example.org/field-notes/assets/survey-sites.geojson",
+    );
+    expect(report).toContain("https://web.geolibre.app/?url=");
+  });
+
+  it("omits the GeoLibre companion when the author turns it off", async () => {
+    const { project, viewer } = await setup();
+    const story = storyProjectSchema.parse(await readProject(project));
+    story.publication = { ...story.publication, geolibreContinuation: false };
+    await writeFile(join(project, "story.json"), JSON.stringify(story));
+
+    const built = await buildLatestPublication({
+      projectDirectory: project,
+      viewerDirectory: viewer,
+      publicationUrl: "https://example.org/field-notes/",
+    });
+
+    expect(built.manifest.continuations).toEqual([]);
+    expect(built.manifest.hostingRequirements).not.toContain("cors");
+    expect(
+      await readFile(join(built.directory, "publication-report.html"), "utf8"),
+    ).not.toContain("GeoLibre continuation");
+    await expect(
+      readFile(join(built.directory, "explore", "story.geolibre.json"), "utf8"),
+    ).rejects.toThrow();
+  });
+
   it("blocks a publication with a missing included asset", async () => {
     const { project } = await setup();
     await rm(join(project, "data", "survey-sites.geojson"));

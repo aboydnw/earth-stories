@@ -7,6 +7,7 @@ export * from "./archive.js";
 export * from "./embed.js";
 export * from "./share.js";
 export * from "./preflight.js";
+export * from "./geolibre.js";
 export * from "./verify.js";
 export * from "./discover.js";
 export { isPrivateNetworkHost, validateRemoteUrl } from "./remote-url.js";
