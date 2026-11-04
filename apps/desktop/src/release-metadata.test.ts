@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -57,6 +57,77 @@ async function run(
 }
 
 describe("desktop release metadata", () => {
+  it("runs the pilot checklist metadata commands from the desktop workspace", async () => {
+    const root = await mkdtemp(
+      join(tmpdir(), "earth-stories-pilot-checklist-"),
+    );
+    try {
+      const workspace = join(root, "apps/desktop");
+      const artifacts = join(workspace, "build/artifacts");
+      const credits = join(workspace, "build/resources/credits");
+      await mkdir(artifacts, { recursive: true });
+      await mkdir(credits, { recursive: true });
+      const { version } = JSON.parse(
+        await readFile(resolve(import.meta.dirname, "../package.json"), "utf8"),
+      ) as { version: string };
+      for (const architecture of ["arm64", "x64"]) {
+        for (const extension of ["dmg", "zip"]) {
+          await writeFile(
+            join(
+              artifacts,
+              `earth-stories-${version}-mac-${architecture}.${extension}`,
+            ),
+            "test artifact\n",
+          );
+        }
+      }
+      await writeFile(
+        join(credits, "THIRD_PARTY_NOTICES.md"),
+        "test notices\n",
+      );
+      const checklist = await readFile(
+        resolve(
+          import.meta.dirname,
+          "../../../docs/release/pilot-release-checklist.md",
+        ),
+        "utf8",
+      );
+      const commands = [
+        ...checklist
+          .replace(/\\\r?\n\s*/g, " ")
+          .matchAll(
+            /^yarn workspace @earth-stories\/desktop release:(metadata|verify) (.+)$/gm,
+          ),
+      ];
+      expect(commands.map((command) => command[1])).toEqual([
+        "metadata",
+        "verify",
+      ]);
+      for (const [, command, argumentsText] of commands) {
+        // Yarn workspace scripts run from the selected workspace, not the shell's cwd.
+        await execFileAsync(
+          process.execPath,
+          [
+            script,
+            command === "metadata" ? "generate" : "verify",
+            ...argumentsText!.trim().split(/\s+/),
+          ],
+          { cwd: workspace },
+        );
+      }
+      const manifest = JSON.parse(
+        await readFile(
+          join(artifacts, `earth-stories-${version}-release-manifest.json`),
+          "utf8",
+        ),
+      ) as { version: string; artifacts: unknown[] };
+      expect(manifest.version).toBe(version);
+      expect(manifest.artifacts).toHaveLength(4);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("generates stable unsigned metadata and tracked notices", async () => {
     const paths = await fixture();
 
@@ -178,6 +249,22 @@ describe("desktop release metadata", () => {
       (cause: unknown) => cause as { stderr: string },
     );
     expect(ambiguous.stderr).toContain("Unexpected file in artifact directory");
+  });
+
+  it("explains artifacts packaged under a different version", async () => {
+    const paths = await fixture();
+    const { rm } = await import("node:fs/promises");
+    await rm(join(paths.artifacts, "earth-stories-0.1.0-mac-arm64.dmg"));
+    await writeFile(
+      join(paths.artifacts, "earth-stories-0.2.0-mac-arm64.dmg"),
+      "mac artifact\n",
+    );
+
+    const error = await run("generate", paths).catch(
+      (cause: unknown) => cause as { stderr: string },
+    );
+    expect(error.stderr).toContain("built as version 0.2.0, not 0.1.0");
+    expect(error.stderr).toContain("apps/desktop/package.json");
   });
 
   it.each(["artifact", "manifest", "checksums"] as const)(

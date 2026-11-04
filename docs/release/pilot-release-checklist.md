@@ -10,7 +10,14 @@ on Linux, so the development VM cannot cut this release.
 
 ## 1. Build
 
-From a clean checkout on the Mac:
+The release version is the `version` field in `apps/desktop/package.json`.
+electron-builder names every artifact from it, and the metadata commands below
+refuse artifacts that carry any other version. It is `0.1.0-pilot.1` today; for
+the next pilot, bump it in a committed change _before_ building, and use the
+same value everywhere below.
+
+Run the commands in this checklist from the repository root of a clean
+checkout on the Mac:
 
 ```bash
 corepack enable
@@ -18,25 +25,39 @@ yarn install
 yarn typecheck && yarn test && yarn check:independence && yarn check:ui
 yarn build
 yarn workspace @earth-stories/desktop package:mac
-yarn workspace @earth-stories/desktop verify:resources
+yarn workspace @earth-stories/desktop verify:resources \
+  --resources "build/artifacts/mac-arm64/Earth Stories.app/Contents/Resources" \
+  --icon build/icon.icns
+yarn workspace @earth-stories/desktop verify:resources \
+  --resources "build/artifacts/mac/Earth Stories.app/Contents/Resources" \
+  --icon build/icon.icns
 ```
 
 `package:mac` builds arm64 and x64 into `apps/desktop/build/artifacts`. It sets
 `CSC_IDENTITY_AUTO_DISCOVERY=false` so electron-builder does not reach into the
 keychain and sign with an unrelated identity.
 
+The resource checks inspect both unpacked Mac applications, including the
+packaged icon's bytes. Yarn runs workspace scripts from `apps/desktop`, so
+their path arguments are relative to that directory. The verifier's default
+resource location is the Linux unpacked build; use the explicit Mac paths above.
+
 ## 2. Record checksums and notices
+
+Yarn runs each workspace script from `apps/desktop`, so the metadata arguments
+below are relative to that directory. Keep your shell at the repository root
+for the other commands in this checklist.
 
 ```bash
 yarn workspace @earth-stories/desktop release:metadata \
-  --artifacts apps/desktop/build/artifacts \
+  --artifacts build/artifacts \
   --version 0.1.0-pilot.1 \
-  --notices apps/desktop/build/resources/credits/THIRD_PARTY_NOTICES.md
+  --notices build/resources/credits/THIRD_PARTY_NOTICES.md
 
 yarn workspace @earth-stories/desktop release:verify \
-  --artifacts apps/desktop/build/artifacts \
+  --artifacts build/artifacts \
   --version 0.1.0-pilot.1 \
-  --notices apps/desktop/build/resources/credits/THIRD_PARTY_NOTICES.md
+  --notices build/resources/credits/THIRD_PARTY_NOTICES.md
 ```
 
 The generated manifest records `signed: false`, `manifestSigned: false`, and

@@ -20,7 +20,7 @@ function parseArguments(argv) {
     const value = argv[index + 1];
     if (!key?.startsWith("--") || !value) {
       throw new Error(
-        "Usage: verify-resources.mjs [--resources <directory>] [--manifest <file>]",
+        "Usage: verify-resources.mjs [--resources <directory>] [--manifest <file>] [--icon <file>]",
       );
     }
     values.set(key.slice(2), value);
@@ -28,6 +28,7 @@ function parseArguments(argv) {
   return {
     resourcesDirectory: resolve(values.get("resources") ?? defaultResources),
     expectedManifestPath: resolve(values.get("manifest") ?? defaultManifest),
+    expectedIconPath: values.has("icon") ? resolve(values.get("icon")) : null,
   };
 }
 
@@ -51,7 +52,11 @@ async function sha256(path) {
     .digest("hex");
 }
 
-async function verify({ resourcesDirectory, expectedManifestPath }) {
+async function verify({
+  resourcesDirectory,
+  expectedManifestPath,
+  expectedIconPath,
+}) {
   const manifestPath = join(resourcesDirectory, "resource-manifest.json");
   const [serializedManifest, expectedManifest] = await Promise.all([
     readFile(manifestPath, "utf8"),
@@ -70,12 +75,20 @@ async function verify({ resourcesDirectory, expectedManifestPath }) {
     ...manifest.files.map((entry) => entry.path),
     "app.asar",
     "resource-manifest.json",
+    ...(expectedIconPath ? ["icon.icns"] : []),
   ].sort();
   const actual = await listResourceFiles(resourcesDirectory);
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error(
       `Packaged resource tree does not match manifest\nExpected: ${expected.join(", ")}\nActual: ${actual.join(", ")}`,
     );
+  }
+  if (
+    expectedIconPath &&
+    (await sha256(join(resourcesDirectory, "icon.icns"))) !==
+      (await sha256(expectedIconPath))
+  ) {
+    throw new Error("Packaged icon does not match expected icon");
   }
   for (const entry of manifest.files) {
     if (
