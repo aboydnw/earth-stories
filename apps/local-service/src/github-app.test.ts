@@ -43,7 +43,7 @@ const repository = {
   owner: { login: "maps-org" },
   private: false,
   archived: false,
-  permissions: { push: true },
+  permissions: { push: true, admin: true },
 };
 const installation = {
   id: 7,
@@ -539,4 +539,51 @@ it("excludes all-repository installations and installations missing Pages admini
       String(url).includes("/repositories?"),
     ),
   ).toBe(false);
+});
+
+it("rejects Write-only and unverified custom Pages roles before authorizing a publication", async () => {
+  const fetchImpl = fakeFetch();
+  const original = fetchImpl.getMockImplementation()!;
+  fetchImpl.mockImplementation(async (input, init) =>
+    String(input).includes("/repositories?")
+      ? json({
+          repositories: [
+            {
+              ...repository,
+              permissions: { push: true, admin: false, maintain: false },
+            },
+            {
+              ...repository,
+              id: 43,
+              role_name: "custom-pages-manager",
+              permissions: { push: true },
+            },
+            {
+              ...repository,
+              id: 44,
+              permissions: { push: true, maintain: true },
+            },
+          ],
+        })
+      : original(input, init),
+  );
+  const { connection } = setup({
+    initial: { token: "ghu_stored", login: "mapper" },
+    fetchImpl,
+  });
+  expect((await connection.repositories()).map((repo) => repo.id)).toEqual([
+    44,
+  ]);
+  await expect(connection.authorizeRepository(42)).rejects.toThrow(
+    /no longer available/,
+  );
+  await expect(connection.authorizeRepository(43)).rejects.toThrow(
+    /no longer available/,
+  );
+  expect(await connection.authorizeRepository(44)).toMatchObject({
+    repository: { id: 44 },
+  });
+  expect(
+    fetchImpl.mock.calls.every(([, init]) => init?.method === undefined),
+  ).toBe(true);
 });

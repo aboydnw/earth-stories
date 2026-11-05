@@ -18,8 +18,10 @@ and hosting guidance remain available without a GitHub account.
 3. Choose **Refresh repositories**, then select the publication repository.
    Only writable, public, enabled, non-archived repositories accessible to this
    App through a selected-repositories installation are offered. The signed-in
-   user must also be an administrator, maintainer, or have permission to manage
-   Pages settings. Organizations are supported when the signed-in user and the
+   user must also have explicit administrator or maintainer capability. GitHub
+   also supports custom roles with manage-Pages permission, but this integration
+   cannot verify those grants from its repository API response and does not offer
+   them. This conservative role check happens before building or writing files. Organizations are supported when the signed-in user and the
    App both have access. Organization approval policies can require a separate
    owner approval on GitHub.
 4. Review the public destination and **Publish to the web**. This builds and

@@ -611,7 +611,9 @@ export class GitHubAppConnection {
               repository.archived !== false ||
               repository.disabled === true ||
               !isObject(repository.permissions) ||
-              repository.permissions.push !== true
+              repository.permissions.push !== true ||
+              (repository.permissions.admin !== true &&
+                repository.permissions.maintain !== true)
             )
               continue;
             result.push({

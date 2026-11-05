@@ -225,6 +225,11 @@ export function GitHubConnection({
           ) : null}
           {connected ? (
             <>
+              <p>
+                Custom roles with only “manage Pages” permission cannot yet be
+                verified safely here. Ask a repository administrator or
+                maintainer to publish instead.
+              </p>
               <FormField
                 label="Publication repository"
                 hint="Only public, writable repositories selected for the GitHub App appear here."
@@ -256,7 +261,8 @@ export function GitHubConnection({
                 <p>
                   No repositories are available. On GitHub, choose “Only select
                   repositories” and a dedicated publication repository. Grant
-                  Contents, Pages, and Administration write permissions, then
+                  Contents, Pages, and Administration write permissions, confirm
+                  you are a repository administrator or maintainer, then
                   refresh.
                 </p>
               ) : null}
