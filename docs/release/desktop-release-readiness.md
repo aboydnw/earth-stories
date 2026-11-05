@@ -129,7 +129,13 @@ it does not prove platform trust or clean-machine behavior.
 
 `.github/workflows/desktop-artifacts.yml` builds macOS, Windows, and Linux
 artifacts on a version tag or manual dispatch. It runs the test and typecheck
-suites before packaging and retains each platform's output for review. macOS
+suites before packaging, verifies each platform's unpacked resources against
+the staged manifest, and retains the output for review. macOS verification
+checks both arm64 and x64 application bundles, including the packaged icon;
+Windows and Linux use their own unpacked resource directories. The Windows
+check also requires the NSIS-generated `elevate.exe` helper, without allowing
+arbitrary extra files. These resource checks do not validate executable
+signatures. macOS
 and Windows signing use separate repository secrets when provisioned
 (`DESKTOP_MAC_CSC_*` and the Apple notarization secrets for macOS,
 `DESKTOP_WIN_CSC_*` for Windows), and each is exposed only to its own

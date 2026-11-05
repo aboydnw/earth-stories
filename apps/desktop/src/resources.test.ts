@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -153,74 +153,115 @@ describe("packaged desktop resources", () => {
     );
   });
 
-  it("verifies the actual unpacked package and detects resource drift", async () => {
-    const repository = await createFixture();
-    const staged = join(repository, "build", "resources");
-    const packaged = join(repository, "package", "resources");
-    await execFileAsync(process.execPath, [
-      stageScript,
-      "--repository",
-      repository,
-      "--output",
-      staged,
-    ]);
-    await cp(staged, packaged, { recursive: true });
-    await writeFile(join(packaged, "app.asar"), "packaged application\n");
+  it.each(["linux-unpacked", "win-unpacked"])(
+    "verifies the %s package and detects resource drift",
+    async (outputDirectory) => {
+      const repository = await createFixture();
+      const staged = join(repository, "build", "resources");
+      const packaged = join(
+        repository,
+        "build/artifacts",
+        outputDirectory,
+        "resources",
+      );
+      await execFileAsync(process.execPath, [
+        stageScript,
+        "--repository",
+        repository,
+        "--output",
+        staged,
+      ]);
+      await cp(staged, packaged, { recursive: true });
+      await writeFile(join(packaged, "app.asar"), "packaged application\n");
+      const targetArgs =
+        outputDirectory === "win-unpacked" ? ["--target", "nsis"] : [];
+      if (targetArgs.length)
+        await writeFile(join(packaged, "elevate.exe"), "NSIS helper\n");
 
-    await expect(
-      execFileAsync(process.execPath, [
+      await expect(
+        execFileAsync(process.execPath, [
+          verifyScript,
+          ...targetArgs,
+          "--resources",
+          packaged,
+          "--manifest",
+          join(staged, "resource-manifest.json"),
+        ]),
+      ).resolves.toMatchObject({ stderr: "" });
+
+      if (targetArgs.length) {
+        await rm(join(packaged, "elevate.exe"));
+        await expect(
+          execFileAsync(process.execPath, [
+            verifyScript,
+            ...targetArgs,
+            "--resources",
+            packaged,
+            "--manifest",
+            join(staged, "resource-manifest.json"),
+          ]),
+        ).rejects.toMatchObject({
+          stderr: expect.stringContaining(
+            "Packaged resource tree does not match manifest",
+          ),
+        });
+        await writeFile(join(packaged, "elevate.exe"), "NSIS helper\n");
+      }
+
+      await writeFile(
+        join(packaged, "conversion/worker/worker.py"),
+        "tampered\n",
+      );
+      const error = await execFileAsync(process.execPath, [
         verifyScript,
+        ...targetArgs,
         "--resources",
         packaged,
         "--manifest",
         join(staged, "resource-manifest.json"),
-      ]),
-    ).resolves.toMatchObject({ stderr: "" });
+      ]).catch(
+        (cause: unknown) => cause as { message: string; stderr: string },
+      );
+      expect(`${error.message}\n${error.stderr}`).toContain(
+        "Resource digest mismatch: conversion/worker/worker.py",
+      );
 
-    await writeFile(
-      join(packaged, "conversion/worker/worker.py"),
-      "tampered\n",
-    );
-    const error = await execFileAsync(process.execPath, [
-      verifyScript,
-      "--resources",
-      packaged,
-      "--manifest",
-      join(staged, "resource-manifest.json"),
-    ]).catch((cause: unknown) => cause as { message: string; stderr: string });
-    expect(`${error.message}\n${error.stderr}`).toContain(
-      "Resource digest mismatch: conversion/worker/worker.py",
-    );
+      await cp(staged, packaged, { recursive: true, force: true });
+      await writeFile(
+        join(packaged, "resource-manifest.json"),
+        '{"formatVersion":1,"files":[]}\n',
+      );
+      const manifestError = await execFileAsync(process.execPath, [
+        verifyScript,
+        ...targetArgs,
+        "--resources",
+        packaged,
+        "--manifest",
+        join(staged, "resource-manifest.json"),
+      ]).catch(
+        (cause: unknown) => cause as { message: string; stderr: string },
+      );
+      expect(`${manifestError.message}\n${manifestError.stderr}`).toContain(
+        "Packaged resource manifest does not match staged manifest",
+      );
 
-    await cp(staged, packaged, { recursive: true, force: true });
-    await writeFile(
-      join(packaged, "resource-manifest.json"),
-      '{"formatVersion":1,"files":[]}\n',
-    );
-    const manifestError = await execFileAsync(process.execPath, [
-      verifyScript,
-      "--resources",
-      packaged,
-      "--manifest",
-      join(staged, "resource-manifest.json"),
-    ]).catch((cause: unknown) => cause as { message: string; stderr: string });
-    expect(`${manifestError.message}\n${manifestError.stderr}`).toContain(
-      "Packaged resource manifest does not match staged manifest",
-    );
-
-    await cp(staged, packaged, { recursive: true, force: true });
-    await writeFile(join(packaged, "unexpected.txt"), "undeclared\n");
-    const unexpectedError = await execFileAsync(process.execPath, [
-      verifyScript,
-      "--resources",
-      packaged,
-      "--manifest",
-      join(staged, "resource-manifest.json"),
-    ]).catch((cause: unknown) => cause as { message: string; stderr: string });
-    expect(`${unexpectedError.message}\n${unexpectedError.stderr}`).toContain(
-      "Packaged resource tree does not match manifest",
-    );
-  });
+      await cp(staged, packaged, { recursive: true, force: true });
+      await writeFile(join(packaged, "unexpected.txt"), "undeclared\n");
+      const unexpectedError = await execFileAsync(process.execPath, [
+        verifyScript,
+        ...targetArgs,
+        "--resources",
+        packaged,
+        "--manifest",
+        join(staged, "resource-manifest.json"),
+      ]).catch(
+        (cause: unknown) => cause as { message: string; stderr: string },
+      );
+      expect(`${unexpectedError.message}\n${unexpectedError.stderr}`).toContain(
+        "Packaged resource tree does not match manifest",
+      );
+    },
+  );
 
   it.each(["mac-arm64", "mac"])(
     "verifies the %s pilot resources and rejects a modified packaged icon",
