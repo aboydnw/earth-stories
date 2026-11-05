@@ -396,31 +396,56 @@ export function PublishPanel({
   }
 
   async function downloadStillImages() {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    const operation = ++operationRef.current;
+    const isCurrent = () => operationRef.current === operation;
     setLoading(true);
+    setDownload(null);
+    setDirectory(null);
+    setResultBuildId(null);
+    setVerifiedOffline(false);
+    setCardWarning(null);
+    setSnippet("");
     setError(null);
     setResult(null);
     setLastFormat(null);
     setBusyLabel("Capturing attributed chapter images…");
     try {
       const count = await downloadMapSnapshots(project.metadata.title);
+      if (!isCurrent()) return;
       setResult(
         count
           ? `Downloaded ${count} attributed chapter image${count === 1 ? "" : "s"}`
           : "No ready map chapters could be captured.",
       );
     } catch (cause) {
+      if (!isCurrent()) return;
       setError(
         cause instanceof Error
           ? cause.message
           : "Chapter images could not be captured.",
       );
     } finally {
-      setLoading(false);
+      if (isCurrent()) {
+        runningRef.current = false;
+        setLoading(false);
+      }
     }
   }
 
   async function downloadAnimatedImages() {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    const operation = ++operationRef.current;
+    const isCurrent = () => operationRef.current === operation;
     setLoading(true);
+    setDownload(null);
+    setDirectory(null);
+    setResultBuildId(null);
+    setVerifiedOffline(false);
+    setCardWarning(null);
+    setSnippet("");
     setError(null);
     setResult(null);
     setLastFormat(null);
@@ -431,19 +456,24 @@ export function PublishPanel({
       const { count, format } = await downloadAnimatedMapCaptures(
         project.metadata.title,
       );
+      if (!isCurrent()) return;
       setResult(
         count
           ? `Downloaded ${count} animated ${format.toUpperCase()} chapter capture${count === 1 ? "" : "s"}.`
           : "No ready map chapters could be recorded.",
       );
     } catch (cause) {
+      if (!isCurrent()) return;
       setError(
         cause instanceof Error
           ? cause.message
           : "Animated chapter captures could not be recorded.",
       );
     } finally {
-      setLoading(false);
+      if (isCurrent()) {
+        runningRef.current = false;
+        setLoading(false);
+      }
     }
   }
 

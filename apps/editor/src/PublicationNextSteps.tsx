@@ -15,9 +15,10 @@ export function PublicationNextSteps() {
         </li>
         <li>
           <strong>Choose a host.</strong> Use{" "}
-          <strong>Publish to the web</strong> below for GitHub Pages, or upload
-          your publication ZIP or folder to a static host. Upload the
-          publication, not your editable project folder.
+          <strong>Publish to the web</strong> below for GitHub Pages. For
+          another host, check the upload limits first: this viewer includes
+          large map runtime files. Upload the publication, not your editable
+          project folder.
         </li>
         <li>
           <strong>Check and share.</strong> Open the hosted story and test each
@@ -28,43 +29,85 @@ export function PublicationNextSteps() {
       </ol>
       <details className="publish-disclosure">
         <summary>
-          <span>Upload to another host</span>
-          <small>Netlify or Cloudflare Pages</small>
+          <span>Other hosting options</span>
+          <small>Netlify CLI and upload limits</small>
         </summary>
         <div className="publish-disclosure__body">
           <p>
-            <strong>Netlify Drop:</strong> Open{" "}
+            <strong>
+              Netlify is an advanced option, not a guaranteed fit.
+            </strong>{" "}
+            Netlify Drop can stall on files above 10 MB or projects above 50 MB.
+            This viewer includes 34–39 MB runtime files. Netlify also warns that
+            files above 10 MB are not well-supported by its CDN, so test the
+            hosted story before relying on it.{" "}
             <a
-              href="https://app.netlify.com/drop"
+              href="https://docs.netlify.com/build/configure-builds/troubleshooting-tips/#large-files-or-sites"
               target="_blank"
               rel="noreferrer"
             >
-              Netlify Drop
+              Netlify large-file guidance
+            </a>
+          </p>
+          <p>If you choose Netlify, use its CLI instead of Drop:</p>
+          <ol>
+            <li>
+              Install current Node.js LTS with npm. Extract the ZIP and open a
+              terminal in the publication folder containing index.html.
+            </li>
+            <li>
+              Run <code>npx netlify-cli@latest login</code>. You approve Netlify
+              access in your browser; the CLI saves that sign-in.
+            </li>
+            <li>
+              Run <code>npx netlify-cli@latest deploy --dir . --no-build</code>.
+              Choose or create the correct site and team. This uploads a draft
+              for review without rebuilding your files.
+            </li>
+            <li>
+              Test the draft, including maps. To publish live, run{" "}
+              <code>
+                npx netlify-cli@latest deploy --dir . --prod --no-build
+              </code>
+              . Check site visibility before sharing.
+            </li>
+          </ol>
+          <p>
+            <a
+              href="https://docs.netlify.com/api-and-cli-guides/cli-guides/get-started-with-cli/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Netlify CLI setup
             </a>{" "}
-            and drop the ZIP or publication folder. Sign in to claim and manage
-            the site, then check its visibility before sharing. Unclaimed
-            uploads may be temporarily password-protected.{" "}
+            ·{" "}
             <a
-              href="https://docs.netlify.com/start/quickstarts/netlify-drop-quickstart/"
+              href="https://cli.netlify.com/commands/deploy/"
               target="_blank"
               rel="noreferrer"
             >
-              Netlify instructions
+              Deploy command reference
             </a>
           </p>
           <p>
-            <strong>Cloudflare Pages:</strong> In the signed-in dashboard, open
-            Workers &amp; Pages, create an application, and choose the
-            drag-and-drop upload. Give it a name and upload the ZIP or folder.
-            Dashboard uploads allow up to 1,000 files and 25 MiB per file. A
-            Direct Upload project cannot later switch to Git integration.{" "}
+            <strong>
+              Cloudflare Pages is not suitable for current exports.
+            </strong>{" "}
+            Its 25 MiB per-file limit is smaller than the bundled DuckDB runtime
+            files. Both dashboard and command-line uploads have this limit.{" "}
             <a
               href="https://developers.cloudflare.com/pages/get-started/direct-upload/"
               target="_blank"
               rel="noreferrer"
             >
-              Cloudflare instructions
+              Cloudflare upload limits
             </a>
+          </p>
+          <p>
+            <strong>For GitHub Pages, use Publish to the web below.</strong>{" "}
+            GitHub’s browser file uploader also has a 25 MiB limit. The
+            integrated publishing flow avoids that browser limit; manual uploads
+            need Git or the GitHub API, not dragging the ZIP into a repository.
           </p>
           <p>
             Keep <strong>index.html</strong> at the site root and preserve the
@@ -74,8 +117,8 @@ export function PublicationNextSteps() {
           </p>
           <p>
             The interactive story needs a web server; double-clicking index.html
-            may not load maps. These links only open the provider. You choose
-            what to upload there.
+            may not load maps. These links only open instructions. You choose
+            what to upload and authorize the provider separately.
           </p>
         </div>
       </details>

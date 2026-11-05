@@ -98,7 +98,12 @@ describe("publication hardening", () => {
       join(first.directory, "README.txt"),
       "utf8",
     );
-    expect(instructions).toContain("https://app.netlify.com/drop");
+    expect(instructions).toContain(
+      "Netlify is an advanced option, not a guaranteed fit",
+    );
+    expect(instructions).toContain(
+      "Cloudflare Pages is not suitable for current exports",
+    );
     expect(instructions).toContain(
       "https://developers.cloudflare.com/pages/get-started/direct-upload/",
     );

@@ -103,6 +103,7 @@ app
         "prepareTools",
         "removeTool",
         "showProjectFolder",
+        "showPublicationFolder",
         "showWorkspaceFolder",
         "version",
         "workspacePath",

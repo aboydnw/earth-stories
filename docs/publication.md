@@ -93,14 +93,18 @@ The result includes a short hosting checklist. The same guidance travels in
 1. Review included data, images, source credits, and license notices. Share only
    content you have permission to publish. Upload the publication, not the
    editable project and its backups.
-2. Use the integrated GitHub publishing flow below, or open
-   [Netlify Drop](https://app.netlify.com/drop) or
-   [Cloudflare Pages Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/).
-   Both accept a ZIP or folder. Netlify uploads may need claiming and visibility
-   changes before a public share link works. Cloudflare dashboard upload limits
-   are 1,000 files and 25 MiB per file; Direct Upload projects cannot later switch
-   to Git integration. Provider links open a page; Earth Stories does not send
-   files, create an account, or accept terms on the author's behalf.
+2. Prefer the integrated GitHub publishing flow below. For Netlify, use its CLI
+   rather than Drop if you choose to try it: the viewer includes DuckDB WASM files
+   of roughly 34–39 MB. Netlify's official Drop guide warns that files above
+   10 MB can stall and recommends deploys below 50 MB. Its general guidance also
+   warns that files above 10 MB are not well-supported by the CDN and may fail
+   upload, so CLI upload is an advanced option requiring a real hosting test,
+   not a compatibility guarantee. Cloudflare Pages has a
+   hard 25 MiB per-file limit for both dashboard and CLI, so it is not suitable
+   for current exports. GitHub's browser file uploader also caps files at
+   25 MiB; the integrated flow uses GitHub's API instead. Provider links open
+   instructions; Earth Stories does not send files, create an account, or
+   accept terms on the author's behalf.
 3. Keep `index.html` at the site root and preserve relative asset paths. Check
    provider file limits, HTTP byte-range support for large map files, and CORS
    for connected resources. The interactive publication requires HTTP serving;
@@ -110,12 +114,16 @@ The result includes a short hosting checklist. The same guidance travels in
    **Check published link**. Integrated GitHub publishing already knows its URL.
 
 Every publication includes `.nojekyll` for manual GitHub Pages uploads.
-Manual Pages setup requires extracted files rather than the ZIP itself; the
+Manual Pages setup requires Git or API upload of extracted files rather than
+the ZIP itself or browser drag-and-drop; the
 integrated GitHub flow remains the easiest Pages route.
 
 Provider instructions checked against the official
 [Netlify Drop guide](https://docs.netlify.com/start/quickstarts/netlify-drop-quickstart/)
 and [Cloudflare Direct Upload guide](https://developers.cloudflare.com/pages/get-started/direct-upload/).
+The built README and expanded guidance include Netlify CLI login, draft deploy,
+and explicit production deploy commands using `--no-build`, linked to the
+[current command reference](https://cli.netlify.com/commands/deploy/).
 No hosting-provider account or upload is needed to build locally.
 
 ### Archival HTML

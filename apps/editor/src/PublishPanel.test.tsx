@@ -43,7 +43,11 @@ vi.mock("./PublishToWeb", () => ({
 
 import { exportProject, uploadShareCard } from "./api";
 import { captureShareCard } from "./captureShareCard";
-import { captureMapSnapshots } from "./captureSnapshots";
+import {
+  captureMapSnapshots,
+  downloadMapSnapshots,
+  downloadAnimatedMapCaptures,
+} from "./captureSnapshots";
 import { PublishPanel } from "./PublishPanel";
 import type { PublicationReadinessState } from "./usePublicationReadiness";
 import type { DesktopBridge } from "./desktop";
@@ -519,13 +523,17 @@ describe("publication output recovery", () => {
     ).toBeTruthy();
     // Activating the real download link never calls the build API again.
     expect(exportProject).toHaveBeenCalledOnce();
-    await userEvent.click(screen.getByText("Upload to another host"));
-    expect(
-      screen.getByRole("link", { name: "Netlify Drop" }).getAttribute("href"),
-    ).toBe("https://app.netlify.com/drop");
+    await userEvent.click(screen.getByText("Other hosting options"));
     expect(
       screen
-        .getByRole("link", { name: "Cloudflare instructions" })
+        .getByRole("link", { name: "Netlify CLI setup" })
+        .getAttribute("href"),
+    ).toBe(
+      "https://docs.netlify.com/api-and-cli-guides/cli-guides/get-started-with-cli/",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "Cloudflare upload limits" })
         .getAttribute("href"),
     ).toBe(
       "https://developers.cloudflare.com/pages/get-started/direct-upload/",
@@ -665,6 +673,95 @@ describe("publication output recovery", () => {
     );
     expect(await screen.findByText("retry.zip")).toBeTruthy();
     expect(screen.queryByText("Disk is full")).toBeNull();
+  });
+
+  it.each(["still", "animated"])(
+    "clears ZIP-specific state before %s chapter captures",
+    async (kind) => {
+      vi.mocked(exportProject).mockResolvedValue({
+        blob: new Blob(["zip"]),
+        filename: "old.zip",
+      });
+      vi.mocked(downloadMapSnapshots).mockResolvedValue(1);
+      vi.mocked(downloadAnimatedMapCaptures).mockResolvedValue({
+        count: 1,
+        format: "webm",
+      });
+      panel();
+      await userEvent.click(
+        screen.getByRole("button", { name: /build publication/i }),
+      );
+      await screen.findByRole("link", { name: /download zip again/i });
+      await userEvent.click(screen.getByText("Export chapter media"));
+      await userEvent.click(
+        screen.getByRole("button", {
+          name:
+            kind === "still"
+              ? /download attributed images/i
+              : /record animated maps/i,
+        }),
+      );
+      await screen.findByText(
+        kind === "still"
+          ? /Downloaded 1 attributed chapter image/
+          : /Downloaded 1 animated WEBM chapter capture/,
+      );
+      expect(
+        screen.queryByRole("link", { name: /download.*again/i }),
+      ).toBeNull();
+      expect(screen.queryByText("old.zip")).toBeNull();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:publication");
+    },
+  );
+
+  it("ignores a late chapter-capture result after reopening into a new build", async () => {
+    let captureComplete!: (count: number) => void;
+    let buildComplete!: (
+      result: Awaited<ReturnType<typeof exportProject>>,
+    ) => void;
+    vi.mocked(downloadMapSnapshots).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          captureComplete = resolve;
+        }),
+    );
+    vi.mocked(exportProject).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          buildComplete = resolve;
+        }),
+    );
+    const view = panel();
+    await userEvent.click(screen.getByText("Export chapter media"));
+    await userEvent.click(
+      screen.getByRole("button", { name: /download attributed images/i }),
+    );
+    view.rerender(
+      <EarthStoriesProvider>
+        <PublishPanel {...view.props} open={false} />
+      </EarthStoriesProvider>,
+    );
+    view.rerender(
+      <EarthStoriesProvider>
+        <PublishPanel {...view.props} open />
+      </EarthStoriesProvider>,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    await waitFor(() => expect(exportProject).toHaveBeenCalledOnce());
+    captureComplete(1);
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Building…" })
+          .disabled,
+      ).toBe(true),
+    );
+    expect(
+      screen.queryByText(/Downloaded 1 attributed chapter image/),
+    ).toBeNull();
+    buildComplete({ blob: new Blob(["new"]), filename: "new.zip" });
+    expect(await screen.findByText("new.zip")).toBeTruthy();
   });
 
   it("blocks repeated builds while one is in progress", async () => {

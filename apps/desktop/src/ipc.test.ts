@@ -5,7 +5,14 @@ import {
   type DesktopIpcDependencies,
 } from "./ipc.js";
 import { win32, join } from "node:path";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 
 it("rejects a project path on another Windows drive", () => {
@@ -329,7 +336,7 @@ describe("desktop IPC", () => {
       await value.invoke("desktop:show-publication-folder", "project-one");
       // realpath may canonicalize /var to /private/var on macOS.
       expect(value.showItemInFolder).toHaveBeenCalledWith(
-        expect.stringContaining("/project-one/publication"),
+        await realpath(publication),
       );
       await expect(
         value.invoke("desktop:show-publication-folder", "../outside"),
@@ -361,7 +368,11 @@ describe("desktop IPC", () => {
         value.invoke("desktop:show-publication-folder", "project-one"),
       ).rejects.toThrow("Build a publication");
       await rm(publication);
-      await symlink(workspace, publication, "dir");
+      await symlink(
+        workspace,
+        publication,
+        process.platform === "win32" ? "junction" : "dir",
+      );
       await expect(
         value.invoke("desktop:show-publication-folder", "project-one"),
       ).rejects.toThrow("outside its project");
