@@ -59,7 +59,14 @@ without leaving hidden map runtimes active.
 
 Preflight separates blocking errors, portability/network warnings, and
 information. Build progress uses real stages. A failed build preserves the
-previous publication. Success identifies the local path or downloaded result.
+previous publication. The workshop places progress, errors, and completion
+immediately after the build action, before separate publishing controls. Success
+identifies the local output: a desktop folder with a native reveal action or a
+browser ZIP with a retained download-again link. Focus moves to completion so the
+result is discoverable by keyboard and at enlarged text sizes. A failed folder
+reveal must not erase a successful build or its saved location. Building is
+explicitly local; hosting instructions and provider links never upload files on
+the author's behalf. The resulting folder/ZIP carries the same instructions.
 Keep workflow progress and non-blocking publication warnings in compact,
 on-demand top-bar controls so they do not displace the authoring canvas. Reserve
 persistent full-width guidance for failures that block saving, previewing, or

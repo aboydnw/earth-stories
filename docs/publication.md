@@ -169,22 +169,28 @@ deployed; other private-network addresses cannot be checked and say so.
 
 ## Publish to GitHub Pages
 
-The publication workshop can put a story on GitHub Pages, free hosting the
-author owns. Publishing needs no git binary or GitHub CLI knowledge. Earth
-Stories first reuses a token stored in `~/.earth-stories/credentials.json`, then
-checks the GitHub CLI's existing sign-in, and only then starts GitHub's device
-flow, where the panel shows a code to enter at `github.com/login/device`. A
-token obtained through device flow is stored in that credentials file with mode
-`0600`, deliberately
-outside every project directory, because project directories get exported,
-zipped, and published to a public repository. An existing GitHub CLI token is
-read fresh and is not copied there. Windows does not apply POSIX modes, so there
-the file is protected by the account's own profile permissions rather than by
-`0600`.
+The publication workshop can put a story on GitHub Pages, hosting the author
+owns. Authors connect GitHub first, review the connected account, then separately
+choose **Publish to the web**. Connecting does not build or upload anything.
+Device sign-in uses an expiring code entered on GitHub in the system browser.
+Existing GitHub CLI users may explicitly choose that sign-in instead; the app
+never silently changes accounts after a credential failure.
 
-After the first successful device-flow sign-in, later publishes reuse the
-stored token without showing another sign-in prompt unless the credential is
-missing, invalid, or revoked.
+Configuring Pages through GitHub's OAuth API requires the broad `repo` scope,
+including public and private repository access. The interface explains that
+permission before connecting and offers ZIP hosting as an alternative. A
+maintainer must configure the public OAuth client ID in a distributed build;
+authors should not need to register an app or configure shell variables. See
+[GitHub connection and publishing](github-connection.md) for the connection flow,
+permission trade-offs, storage, and remaining live release checks.
+
+Credentials remain outside project folders, because projects can be copied,
+zipped, and published. Desktop storage uses the existing OS-protected store
+where available. The standalone service uses its private credentials file;
+Windows relies on account-profile permissions rather than POSIX mode `0600`.
+A GitHub CLI credential is read fresh rather than copied into that file.
+Disconnect removes Earth Stories' stored credential, but does not delete a
+website or revoke authorization on GitHub.
 
 The published address is `https://<account>.github.io/<repo>/`. It is known
 before the first upload, so the release is built with that URL already in its
