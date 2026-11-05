@@ -61,8 +61,17 @@ separate future profile.
 
 The workshop presents one recommended action: **Build publication**. It creates
 the deployable folder and, when needed, creates and stores the link preview
-image before the build. ZIP, archival HTML, and embed code remain available
-under **More output options**. Chapter captures and post-deployment link checks
+image before the build. In the desktop app, the completed result shows its
+saved location and **Show publication in Finder** (or **Show publication folder**
+on other systems). In the browser, the primary action builds and requests a ZIP
+download. The result includes a **Download ZIP again** link that reuses the
+completed download without rebuilding. Progress, errors, and the result appear
+immediately below the build action, before the GitHub publishing controls.
+
+Building does not upload anything. Closing the workshop does not cancel a
+server build already underway, but late results cannot trigger a download or
+replace the status of a later session. Reopening starts a fresh workshop view.
+ZIP, archival HTML, and embed code remain available under **More output options**. Chapter captures and post-deployment link checks
 have their own collapsed sections, keeping the normal release path short.
 
 ### Latest folder
@@ -75,6 +84,39 @@ COG, PMTiles, and GeoParquet releases require a host with byte-range support.
 
 A download of the same latest directory, including the interactive viewer,
 assets, manifest, reports, archive, and embed entrypoint.
+
+### What to do after building
+
+The result includes a short hosting checklist. The same guidance travels in
+`README.txt` inside every folder and ZIP:
+
+1. Review included data, images, source credits, and license notices. Share only
+   content you have permission to publish. Upload the publication, not the
+   editable project and its backups.
+2. Use the integrated GitHub publishing flow below, or open
+   [Netlify Drop](https://app.netlify.com/drop) or
+   [Cloudflare Pages Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/).
+   Both accept a ZIP or folder. Netlify uploads may need claiming and visibility
+   changes before a public share link works. Cloudflare dashboard upload limits
+   are 1,000 files and 25 MiB per file; Direct Upload projects cannot later switch
+   to Git integration. Provider links open a page; Earth Stories does not send
+   files, create an account, or accept terms on the author's behalf.
+3. Keep `index.html` at the site root and preserve relative asset paths. Check
+   provider file limits, HTTP byte-range support for large map files, and CORS
+   for connected resources. The interactive publication requires HTTP serving;
+   opening it through `file://` is not a reliable preview.
+4. Test the hosted story, enter its URL under **Verify and share after deployment**,
+   rebuild and replace the hosted files to update share metadata, then run
+   **Check published link**. Integrated GitHub publishing already knows its URL.
+
+Every publication includes `.nojekyll` for manual GitHub Pages uploads.
+Manual Pages setup requires extracted files rather than the ZIP itself; the
+integrated GitHub flow remains the easiest Pages route.
+
+Provider instructions checked against the official
+[Netlify Drop guide](https://docs.netlify.com/start/quickstarts/netlify-drop-quickstart/)
+and [Cloudflare Direct Upload guide](https://developers.cloudflare.com/pages/get-started/direct-upload/).
+No hosting-provider account or upload is needed to build locally.
 
 ### Archival HTML
 

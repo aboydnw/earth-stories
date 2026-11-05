@@ -3505,3 +3505,38 @@ nav {
   font-size: 1.05rem;
   line-height: 1.6;
 }
+
+/* Publication output stays beside the action that created it. */
+.publish-feedback:focus-visible {
+  outline: 2px solid var(--es-action);
+  outline-offset: 4px;
+}
+.publish-output-path {
+  overflow-wrap: anywhere;
+}
+.publish-output-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.publish-download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.publication-next-steps {
+  margin-top: 20px;
+}
+.publication-next-steps ol {
+  padding-left: 20px;
+}
+.publication-next-steps li {
+  margin: 10px 0;
+  color: var(--es-fg-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.publication-next-steps a {
+  text-decoration: underline;
+}

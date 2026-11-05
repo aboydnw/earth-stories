@@ -1,3 +1,4 @@
+import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { PlatformPath } from "node:path";
 import {
@@ -226,6 +227,35 @@ export function registerDesktopIpcHandlers(
       )
         throw new Error("The resolved project is outside the workspace.");
       dependencies.shell.showItemInFolder(projectDirectory);
+    },
+  );
+  dependencies.ipcMain.handle(
+    "desktop:show-publication-folder",
+    async (event, ...args) => {
+      requireAuthorizedSender(event, dependencies);
+      const projectId = requireProjectId(args);
+      const projectDirectory =
+        await dependencies.service.resolveProjectDirectory(projectId);
+      const workspace =
+        typeof dependencies.projectsDirectory === "function"
+          ? dependencies.projectsDirectory()
+          : dependencies.projectsDirectory;
+      if (!isContainedProjectPath(workspace, projectDirectory))
+        throw new Error("The resolved project is outside the workspace.");
+      // The renderer supplies an ID, never a filesystem path. Check real paths
+      // as well so a replaced publication symlink cannot reveal another folder.
+      const [realWorkspace, project, publication] = await Promise.all([
+        realpath(workspace),
+        realpath(projectDirectory),
+        realpath(resolve(projectDirectory, "publication")),
+      ]);
+      if (!isContainedProjectPath(realWorkspace, project))
+        throw new Error("The resolved project is outside the workspace.");
+      if (!isContainedProjectPath(project, publication))
+        throw new Error("The publication is outside its project.");
+      if (!(await stat(publication)).isDirectory())
+        throw new Error("Build a publication before showing its folder.");
+      dependencies.shell.showItemInFolder(publication);
     },
   );
   dependencies.ipcMain.handle(

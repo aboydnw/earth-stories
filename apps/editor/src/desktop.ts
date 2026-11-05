@@ -21,6 +21,8 @@ export interface DesktopBridge {
   workspacePath(): Promise<string>;
   showWorkspaceFolder(): Promise<void>;
   showProjectFolder(projectId: string): Promise<void>;
+  // Optional for compatibility with an older desktop preload.
+  showPublicationFolder?(projectId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   listTools(): Promise<InstalledDesktopTool[]>;
   prepareTools(

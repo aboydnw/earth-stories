@@ -31,6 +31,7 @@ describe("desktop preload bridge", () => {
       "prepareTools",
       "removeTool",
       "showProjectFolder",
+      "showPublicationFolder",
       "showWorkspaceFolder",
       "version",
       "workspacePath",
@@ -67,6 +68,7 @@ describe("desktop preload bridge", () => {
     await expect(bridge.listTools()).resolves.toEqual([]);
     await expect(bridge.prepareTools(["raster"])).resolves.toEqual([]);
     await expect(bridge.removeTool("raster")).resolves.toBeUndefined();
+    await bridge.showPublicationFolder("project-one");
 
     expect(electron.invoke.mock.calls).toEqual([
       ["desktop:choose-workspace"],
@@ -78,6 +80,7 @@ describe("desktop preload bridge", () => {
       ["desktop:list-tools"],
       ["desktop:prepare-tools", ["raster"]],
       ["desktop:remove-tool", "raster"],
+      ["desktop:show-publication-folder", "project-one"],
     ]);
   });
 });

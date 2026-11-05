@@ -11,6 +11,7 @@ export interface DesktopBridge {
   workspacePath(): Promise<string>;
   showWorkspaceFolder(): Promise<void>;
   showProjectFolder(projectId: string): Promise<void>;
+  showPublicationFolder(projectId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   listTools(): Promise<
     Array<{
@@ -42,6 +43,8 @@ const bridge: DesktopBridge = Object.freeze({
     ipcRenderer.invoke("desktop:show-workspace-folder"),
   showProjectFolder: (projectId: string) =>
     ipcRenderer.invoke("desktop:show-project-folder", projectId),
+  showPublicationFolder: (projectId: string) =>
+    ipcRenderer.invoke("desktop:show-publication-folder", projectId),
   openExternal: (url: string) =>
     ipcRenderer.invoke("desktop:open-external", url),
   listTools: () => ipcRenderer.invoke("desktop:list-tools"),
