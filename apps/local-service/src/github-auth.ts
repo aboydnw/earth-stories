@@ -17,7 +17,7 @@ const GH_CLI_TIMEOUT_MS = 15_000;
 const STORED_TOKEN_UNAVAILABLE_MESSAGE =
   "GitHub could not verify the saved sign-in. Check your connection and try again.";
 
-export type TokenSource = "stored" | "gh" | "device";
+export type TokenSource = "stored" | "gh" | "device" | "github-app";
 
 export interface GitHubIdentity {
   token: string;

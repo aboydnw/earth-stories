@@ -48,3 +48,25 @@ describe("publish record", () => {
     expect(await readPublishRecord(directory)).toBeNull();
   });
 });
+
+it("round-trips the stable GitHub repository ID", async () => {
+  const directory = await project();
+  await writePublishRecord(directory, { ...record, repositoryId: 42 });
+  expect(await readPublishRecord(directory)).toEqual({
+    ...record,
+    repositoryId: 42,
+  });
+});
+
+it.each(["42", 0, -1, 1.5, null])(
+  "does not trust malformed repository ID %s",
+  async (repositoryId) => {
+    const directory = await project();
+    await mkdir(join(directory, ".earth-stories"), { recursive: true });
+    await writeFile(
+      join(directory, PUBLISH_RECORD_PATH),
+      JSON.stringify({ ...record, repositoryId }),
+    );
+    expect(await readPublishRecord(directory)).toEqual(record);
+  },
+);

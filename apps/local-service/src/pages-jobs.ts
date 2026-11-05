@@ -1,14 +1,11 @@
+import type { GitHubRepository } from "./github-app.js";
 import type { ProjectStore } from "@earth-stories/project-store";
 import {
   buildLatestPublication,
   preflightPublication,
 } from "@earth-stories/publisher";
 import { checkShareLink } from "./share-health.js";
-import {
-  resolveToken,
-  type DeviceCodePrompt,
-  type GitHubIdentity,
-} from "./github-auth.js";
+import { type DeviceCodePrompt, type GitHubIdentity } from "./github-auth.js";
 import {
   DEFAULT_PAGES_BRANCH,
   enablePages,
@@ -64,7 +61,18 @@ export interface PublishJobSnapshot {
 }
 
 export interface PagesJobsDependencies {
-  resolveToken: typeof resolveToken;
+  resolveToken: typeof import("./github-auth.js").resolveToken;
+  authorizeRepository?: (
+    repositoryId: unknown,
+    signal?: AbortSignal,
+  ) => Promise<{
+    identity: GitHubIdentity;
+    repository: GitHubRepository;
+  }>;
+  assertAuthorizationCurrent?: (
+    identity: GitHubIdentity,
+    repository: GitHubRepository,
+  ) => void;
   preflight: typeof preflightPublication;
   build: typeof buildLatestPublication;
   ensureRepository: typeof ensureRepository;
@@ -80,7 +88,11 @@ export interface PagesJobsDependencies {
 }
 
 const defaults = (): PagesJobsDependencies => ({
-  resolveToken,
+  resolveToken: async () => {
+    throw new Error(
+      "Connect GitHub and choose a repository before publishing.",
+    );
+  },
   preflight: preflightPublication,
   build: buildLatestPublication,
   ensureRepository,
@@ -94,6 +106,7 @@ const defaults = (): PagesJobsDependencies => ({
 });
 
 export interface StartPublishInput {
+  repositoryId?: unknown;
   repo?: unknown;
   mapSnapshots?: unknown;
 }
@@ -190,7 +203,12 @@ export class PagesJobs {
     this.#controllers.set(snapshot.id, controller);
     void this.#run(
       snapshot,
-      { repo: requested, existing, snapshots },
+      {
+        repo: requested,
+        repositoryId: input.repositoryId,
+        existing,
+        snapshots,
+      },
       controller,
     );
     return snapshot;
@@ -231,6 +249,7 @@ export class PagesJobs {
     snapshot: PublishJobSnapshot,
     context: {
       repo: string;
+      repositoryId?: unknown;
       existing: PublishRecord | null;
       snapshots?: Record<string, string>;
     },
@@ -245,17 +264,63 @@ export class PagesJobs {
 
     try {
       this.#note(snapshot, "signing-in", "Signing in to GitHub…");
-      const identity: GitHubIdentity = await this.#deps.resolveToken({
-        signal: controller.signal,
-        onDeviceCode: (prompt) => {
-          snapshot.deviceCode = prompt;
-          this.#note(
-            snapshot,
-            "signing-in",
-            `Enter code ${prompt.userCode} at ${prompt.verificationUri} to continue.`,
+      const authorize = this.#deps.authorizeRepository;
+      if (
+        authorize &&
+        (!Number.isSafeInteger(context.repositoryId) ||
+          Number(context.repositoryId) <= 0)
+      )
+        throw new Error("Choose a GitHub repository before publishing.");
+      const selected = authorize
+        ? await authorize(context.repositoryId, controller.signal)
+        : undefined;
+      const identity: GitHubIdentity =
+        selected?.identity ??
+        (await this.#deps.resolveToken({
+          signal: controller.signal,
+          onDeviceCode: (prompt) => {
+            snapshot.deviceCode = prompt;
+            this.#note(
+              snapshot,
+              "signing-in",
+              `Enter code ${prompt.userCode} at ${prompt.verificationUri} to continue.`,
+            );
+          },
+        }));
+      const owner = selected?.repository.owner ?? identity.login;
+      const repo = selected?.repository.name ?? context.repo;
+      const assertCurrent = async () => {
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
+        if (selected)
+          this.#deps.assertAuthorizationCurrent?.(
+            identity,
+            selected.repository,
           );
-        },
-      });
+      };
+      const revalidate = async () => {
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
+        if (!authorize || !selected) return;
+        const current = await authorize(
+          context.repositoryId,
+          controller.signal,
+        );
+        if (controller.signal.aborted)
+          throw new Error("Publishing was canceled.");
+        if (
+          current.identity.token !== identity.token ||
+          current.identity.login !== identity.login ||
+          current.repository.id !== selected.repository.id ||
+          current.repository.installationId !==
+            selected.repository.installationId ||
+          current.repository.owner !== owner ||
+          current.repository.name !== repo
+        )
+          throw new Error(
+            "The GitHub connection or selected repository changed. Reconnect and publish again.",
+          );
+      };
       if (controller.signal.aborted)
         throw new Error("Publishing was canceled.");
       token = identity.token;
@@ -284,7 +349,7 @@ export class PagesJobs {
         if (estimate.message)
           this.#note(snapshot, "checking", estimate.message, "warning");
 
-        const url = pagesUrl(identity.login, context.repo);
+        const url = pagesUrl(owner, repo);
         snapshot.url = url;
         this.#note(snapshot, "building", `Building the release for ${url}`);
         const built = await this.#deps.build({
@@ -308,31 +373,41 @@ export class PagesJobs {
         this.#note(
           snapshot,
           "preparing-repository",
-          `Preparing github.com/${identity.login}/${context.repo}`,
+          `Preparing github.com/${owner}/${repo}`,
         );
+        await revalidate();
         await this.#deps.ensureRepository({
           token: identity.token,
-          owner: identity.login,
-          repo: context.repo,
+          owner,
+          repo,
           projectId: snapshot.projectId,
+          allowCreate: !selected,
+          signal: controller.signal,
+          beforeWrite: assertCurrent,
           expectExisting:
-            context.existing?.repo === context.repo &&
-            context.existing.owner === identity.login,
+            context.existing?.repo === repo &&
+            context.existing.owner === owner &&
+            context.existing.branch === DEFAULT_PAGES_BRANCH &&
+            (!selected ||
+              context.existing.repositoryId === selected.repository.id),
         });
         if (controller.signal.aborted)
           throw new Error("Publishing was canceled.");
 
-        const branch = context.existing?.branch ?? DEFAULT_PAGES_BRANCH;
+        const branch = DEFAULT_PAGES_BRANCH;
         this.#note(snapshot, "uploading", "Uploading the release…");
         let acceptingUploadProgress = true;
         try {
+          await revalidate();
           await this.#deps.pushRelease({
             directory: built.directory,
             token: identity.token,
-            owner: identity.login,
-            repo: context.repo,
+            owner,
+            repo,
             branch,
             signal: controller.signal,
+            beforeWrite: assertCurrent,
+            beforeRefUpdate: revalidate,
             onProgress: ({ uploaded, skipped }) => {
               if (!acceptingUploadProgress) return;
               const uploadedLabel = uploaded === 1 ? "file" : "files";
@@ -350,11 +425,14 @@ export class PagesJobs {
         }
 
         this.#note(snapshot, "enabling-pages", "Turning on GitHub Pages…");
+        await revalidate();
         await this.#deps.enablePages({
           token: identity.token,
-          owner: identity.login,
-          repo: context.repo,
+          owner,
+          repo,
           branch,
+          signal: controller.signal,
+          beforeWrite: assertCurrent,
         });
         if (controller.signal.aborted)
           throw new Error("Publishing was canceled.");
@@ -392,8 +470,9 @@ export class PagesJobs {
         }
 
         const record: PublishRecord = {
-          owner: identity.login,
-          repo: context.repo,
+          ...(selected ? { repositoryId: selected.repository.id } : {}),
+          owner,
+          repo,
           url,
           branch,
           buildId: built.manifest.build.id,

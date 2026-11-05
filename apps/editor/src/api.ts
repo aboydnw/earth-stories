@@ -351,6 +351,7 @@ export interface PublishJobEvent {
 }
 
 export interface PublishRecord {
+  repositoryId?: number;
   owner: string;
   repo: string;
   url: string;
@@ -381,6 +382,7 @@ export async function startPublish(
   projectId: string,
   options: {
     repo?: string;
+    repositoryId?: number;
     mapSnapshots?: Record<string, string>;
   } = {},
 ): Promise<PublishJob> {
@@ -452,4 +454,40 @@ export async function exportProject(
     snippet?: string;
     buildId?: string;
   };
+}
+
+export interface GitHubConnectionSnapshot {
+  configured: boolean;
+  status: "disconnected" | "connecting" | "connected" | "failed";
+  login: string | null;
+  authorizationUrl: string | null;
+  installationUrl: string | null;
+  error: string | null;
+}
+
+export interface GitHubRepository {
+  id: number;
+  installationId: number;
+  owner: string;
+  name: string;
+  fullName: string;
+}
+
+export function getGitHubConnection(): Promise<GitHubConnectionSnapshot> {
+  return request("/api/github/connection");
+}
+export function connectGitHub(): Promise<GitHubConnectionSnapshot> {
+  return request("/api/github/connection", { method: "POST" });
+}
+export function disconnectGitHub(): Promise<GitHubConnectionSnapshot> {
+  return request("/api/github/connection", { method: "DELETE" });
+}
+export function cancelGitHubConnection(): Promise<GitHubConnectionSnapshot> {
+  return request("/api/github/connection/cancel", { method: "POST" });
+}
+export async function getGitHubRepositories(): Promise<GitHubRepository[]> {
+  const result = await request<{ repositories: GitHubRepository[] }>(
+    "/api/github/repositories",
+  );
+  return result.repositories;
 }

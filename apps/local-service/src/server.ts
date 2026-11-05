@@ -42,6 +42,7 @@ import {
 } from "./static.js";
 import { ConversionJobs } from "./conversion-jobs.js";
 import { PagesJobs } from "./pages-jobs.js";
+import type { GitHubAppConnection } from "./github-app.js";
 import type { ResolvedLocalServiceConfig } from "./config.js";
 
 const contentTypes: Record<string, string> = {
@@ -267,6 +268,7 @@ export function createLocalServer(
   jobs: {
     conversion: ConversionJobs;
     pages: PagesJobs;
+    github?: GitHubAppConnection;
   },
   internal: {
     testOnlyDisableTrustedMutationOrigin?: boolean;
@@ -306,6 +308,39 @@ export function createLocalServer(
       if (request.method === "GET" && url.pathname === "/health") {
         json(response, 200, { status: "ready", projectsDirectory: store.root });
         return;
+      }
+
+      if (url.pathname.startsWith("/api/github/") && jobs.github) {
+        if (url.pathname === "/api/github/connection") {
+          if (request.method === "GET")
+            json(response, 200, await jobs.github.status());
+          else if (request.method === "POST")
+            json(response, 200, await jobs.github.connect());
+          else if (request.method === "DELETE") {
+            if (pagesJobs.activity())
+              throw new Error(
+                "Wait for publishing to finish before disconnecting GitHub.",
+              );
+            json(response, 200, await jobs.github.disconnect());
+          } else json(response, 405, { error: "Method not allowed" });
+          return;
+        }
+        if (
+          url.pathname === "/api/github/connection/cancel" &&
+          request.method === "POST"
+        ) {
+          json(response, 200, await jobs.github.cancel());
+          return;
+        }
+        if (
+          url.pathname === "/api/github/repositories" &&
+          request.method === "GET"
+        ) {
+          json(response, 200, {
+            repositories: await jobs.github.repositories(),
+          });
+          return;
+        }
       }
 
       if (url.pathname === "/api/projects" && request.method === "GET") {
@@ -531,6 +566,7 @@ export function createLocalServer(
               config.limits.maxExportBodyBytes,
             )) as {
               repo?: unknown;
+              repositoryId?: unknown;
               mapSnapshots?: unknown;
             },
           ),

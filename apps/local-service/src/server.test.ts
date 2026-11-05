@@ -485,6 +485,9 @@ describe("createLocalServer", () => {
         expect(response.headers.get("cache-control")).toBe("no-cache");
         await response.arrayBuffer();
       } finally {
+        // Responses are fully consumed above; do not wait for Undici keep-alive
+        // sockets between fixtures on newer Node versions.
+        server.closeAllConnections();
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }
     }

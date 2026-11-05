@@ -178,32 +178,39 @@ deployed; other private-network addresses cannot be checked and say so.
 ## Publish to GitHub Pages
 
 The publication workshop can put a story on GitHub Pages, hosting the author
-owns. Authors connect GitHub first, review the connected account, then separately
-choose **Publish to the web**. Connecting does not build or upload anything.
-Device sign-in uses an expiring code entered on GitHub in the system browser.
-Existing GitHub CLI users may explicitly choose that sign-in instead; the app
-never silently changes accounts after a credential failure.
+owns. Authors explicitly **Connect GitHub**, authorize the GitHub App in their
+browser, install it on **Only select repositories**, then choose a dedicated
+public repository. Connecting does not build or upload anything. A separate
+**Publish to the web** action builds and uploads the compiled publication.
 
-Configuring Pages through GitHub's OAuth API requires the broad `repo` scope,
-including public and private repository access. The interface explains that
-permission before connecting and offers ZIP hosting as an alternative. A
-maintainer must configure the public OAuth client ID in a distributed build;
-authors should not need to register an app or configure shell variables. See
-[GitHub connection and publishing](github-connection.md) for the connection flow,
-permission trade-offs, storage, and remaining live release checks.
+This path uses GitHub App Contents, Pages, and Administration read/write permissions
+on selected repositories rather than the broad OAuth `repo` scope. GitHub requires
+Administration write to configure Pages; this permission is broad, so install only
+on dedicated publication repositories. Earth Stories does not create repositories. Create an empty publication repository on GitHub if needed,
+select it in the App installation, then refresh the repository picker. The server
+revalidates repository access and never silently falls back to another account,
+a GitHub CLI credential, or a different destination.
 
-Credentials remain outside project folders, because projects can be copied,
-zipped, and published. Desktop storage uses the existing OS-protected store
-where available. The standalone service uses its private credentials file;
-Windows relies on account-profile permissions rather than POSIX mode `0600`.
-A GitHub CLI credential is read fresh rather than copied into that file.
-Disconnect removes Earth Stories' stored credential, but does not delete a
-website or revoke authorization on GitHub.
+The App's client secret remains at a separate HTTPS token-exchange broker. The
+local service uses a state-bound PKCE callback and stores only a verified user
+access token outside project folders. Desktop storage uses the existing
+OS-protected store where available. The standalone service uses its private
+credentials file; Windows relies on account-profile permissions rather than
+POSIX mode `0600`. Disconnect removes the local credential but does not delete
+a website or revoke authorization on GitHub. Expired tokens require reconnecting.
+
+A maintainer must register the App, configure and deploy the broker, and embed
+its public configuration in a distributed build. If that has not happened, the
+workshop explains that connection is unavailable and keeps local builds and ZIP
+hosting available. Registration, production deployment, and live OAuth/Pages
+verification remain release gates, not results of the local implementation.
+See [GitHub connection and publishing](github-connection.md) and
+[the broker deployment guide](github-auth-broker.md).
 
 The published address is `https://<account>.github.io/<repo>/`. It is known
 before the first upload, so the release is built with that URL already in its
 share metadata — on this path there is no paste-your-URL-and-export-again
-rebake. Re-publishing reuses the recorded repository, so the address stays
+rebake. Re-publishing reuses the recorded repository ID, so the address stays
 stable and links already shared keep working. The location is recorded in
 `.earth-stories/publish.json` beside the project.
 

@@ -10,6 +10,7 @@
     { "path": "apps/local-service" },
     { "path": "apps/desktop" },
     { "path": "apps/viewer" },
-    { "path": "apps/mcp" }
+    { "path": "apps/mcp" },
+    { "path": "apps/github-auth-broker" }
   ]
 }

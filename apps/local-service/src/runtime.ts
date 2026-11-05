@@ -8,7 +8,7 @@ import {
 import { ConversionJobs } from "./conversion-jobs.js";
 import { ConversionRuntime } from "./conversion-runtime.js";
 import { PagesJobs } from "./pages-jobs.js";
-import { resolveToken } from "./github-auth.js";
+import { GitHubAppConnection, githubAppConfig } from "./github-app.js";
 import { createLocalServer, withProjectPublicationLock } from "./server.js";
 
 export type LocalServiceStartupCode =
@@ -182,26 +182,30 @@ export function beginLocalService(
   const sockets = new Set<Socket>();
   let server: Server | null = null;
   let closePromise: Promise<void> | null = null;
+  let githubConnection: GitHubAppConnection | null = null;
   const close = (): Promise<void> => {
     if (closePromise) return closePromise;
     startup.abort(
       new Error("The local service was closed before it was ready."),
     );
-    closePromise = new Promise<void>((resolveClose, rejectClose) => {
-      for (const socket of sockets) socket.destroy();
-      if (!server?.listening) {
-        resolveClose();
-        return;
-      }
-      server.close((cause) => {
-        if (
-          cause &&
-          (cause as NodeJS.ErrnoException).code !== "ERR_SERVER_NOT_RUNNING"
-        )
-          rejectClose(cause);
-        else resolveClose();
-      });
-    });
+    closePromise = (githubConnection?.close() ?? Promise.resolve()).then(
+      () =>
+        new Promise<void>((resolveClose, rejectClose) => {
+          for (const socket of sockets) socket.destroy();
+          if (!server?.listening) {
+            resolveClose();
+            return;
+          }
+          server.close((cause) => {
+            if (
+              cause &&
+              (cause as NodeJS.ErrnoException).code !== "ERR_SERVER_NOT_RUNNING"
+            )
+              rejectClose(cause);
+            else resolveClose();
+          });
+        }),
+    );
     return closePromise;
   };
 
@@ -232,17 +236,25 @@ export function beginLocalService(
         bootstrap: dependencies.bootstrapPixi,
       }),
     );
+    githubConnection = new GitHubAppConnection(
+      resolved.credentials,
+      resolved.githubApp === undefined ? githubAppConfig() : resolved.githubApp,
+    );
+    const connection = githubConnection;
     const pagesJobs = new PagesJobs(store, {
       viewerDirectory: resolved.viewerDirectory,
       withLock: withProjectPublicationLock,
-      resolveToken: (options) =>
-        resolveToken({ ...options, store: resolved.credentials }),
+      authorizeRepository: (repositoryId, signal) =>
+        connection.authorizeRepository(repositoryId, signal),
+      assertAuthorizationCurrent: (identity, repository) =>
+        connection.assertAuthorizationCurrent(identity, repository),
     });
     await store.initialize();
     if (startup.signal.aborted) throw closedBeforeReady(startup.signal);
     server = createLocalServer(store, resolved, {
       conversion: conversionJobs,
       pages: pagesJobs,
+      github: connection,
     });
     server.on("connection", (socket) => {
       sockets.add(socket);

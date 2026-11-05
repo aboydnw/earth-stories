@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { access, mkdir, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import type { CredentialStore } from "./credentials.js";
+import type { GitHubAppConfig } from "./github-app.js";
 import type { ConversionCapability } from "@earth-stories/story-schema";
 
 export type { CredentialStore, StoredCredentials } from "./credentials.js";
@@ -41,6 +42,7 @@ export interface LocalServiceConfig {
     ) => Promise<() => Promise<void>>;
   };
   credentials: CredentialStore;
+  githubApp?: GitHubAppConfig | null;
   capabilityToken: string | null;
   limits?: Partial<ServiceLimits>;
 }

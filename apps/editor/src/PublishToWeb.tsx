@@ -7,10 +7,8 @@ import {
 import type { StoryProject } from "@earth-stories/story-schema";
 import {
   ActionButton,
-  FormField,
   ProgressPresentation,
   StatusNotice,
-  TextInput,
 } from "@earth-stories/ui";
 import {
   getPublishJob,
@@ -18,7 +16,9 @@ import {
   startPublish,
   type PublishJob,
   type PublishRecord,
+  type GitHubRepository,
 } from "./api";
+import { GitHubConnection } from "./GitHubConnection";
 import { captureMapSnapshots } from "./captureSnapshots";
 import { isMissingJobError } from "./httpErrors";
 
@@ -46,16 +46,23 @@ export function repoNameFromTitle(title: string): string {
 const isSettled = (job: PublishJob | null) =>
   job?.status === "succeeded" || job?.status === "failed";
 
-export function PublishToWeb({
+export function PublishToWeb(props: Props) {
+  return <PublishToWebSession key={props.project.id} {...props} />;
+}
+
+function PublishToWebSession({
   project,
   disabled,
   onBusyChange,
   onPublished,
 }: Props) {
   const [record, setRecord] = useState<PublishRecord | null>(null);
-  const [repo, setRepo] = useState(() =>
-    repoNameFromTitle(project.metadata.title),
-  );
+  const [repository, setRepository] = useState<GitHubRepository | null>(null);
+  const [recordLoaded, setRecordLoaded] = useState(false);
+  const [recordAttempt, setRecordAttempt] = useState(0);
+  const [starting, setStarting] = useState(false);
+  const mounted = useRef(true);
+  const startLock = useRef(false);
   const [job, setJob] = useState<PublishJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -64,17 +71,27 @@ export function PublishToWeb({
 
   useEffect(() => {
     let cancelled = false;
+    mounted.current = true;
     void getPublishRecord(project.id)
       .then((found) => {
-        if (cancelled || !found) return;
+        if (cancelled) return;
         setRecord(found);
-        setRepo(found.repo);
+        setError(null);
+        setRecordLoaded(true);
       })
-      .catch(() => undefined);
+      .catch((cause: unknown) => {
+        if (!cancelled)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load the previous publication. Reopen this panel to retry.",
+          );
+      });
     return () => {
       cancelled = true;
+      mounted.current = false;
     };
-  }, [project.id]);
+  }, [project.id, recordAttempt]);
 
   useEffect(() => {
     if (!job || isSettled(job)) return;
@@ -107,10 +124,11 @@ export function PublishToWeb({
     };
   }, [job, pollAttempt]);
 
-  const running = Boolean(job) && !isSettled(job);
+  const running = starting || (Boolean(job) && !isSettled(job));
 
   useEffect(() => {
     onBusyChange?.(running);
+    return () => onBusyChange?.(false);
   }, [running, onBusyChange]);
 
   useEffect(() => {
@@ -121,19 +139,38 @@ export function PublishToWeb({
   }, [job, onPublished]);
 
   async function publish() {
+    if (
+      startLock.current ||
+      running ||
+      disabled ||
+      !repository ||
+      !recordLoaded
+    )
+      return;
+    startLock.current = true;
+    setStarting(true);
     setError(null);
     setCopied(false);
     setPollAttempt(0);
     publishedRef.current = false;
     try {
       const mapSnapshots = await captureMapSnapshots();
-      setJob(await startPublish(project.id, { repo, mapSnapshots }));
+      if (!mounted.current) return;
+      const next = await startPublish(project.id, {
+        repositoryId: repository.id,
+        mapSnapshots,
+      });
+      if (mounted.current) setJob(next);
     } catch (cause) {
+      if (!mounted.current) return;
       setError(
         cause instanceof Error
           ? cause.message
           : "The story could not be published.",
       );
+    } finally {
+      startLock.current = false;
+      if (mounted.current) setStarting(false);
     }
   }
 
@@ -168,25 +205,27 @@ export function PublishToWeb({
             {record.url} <ArrowSquareOut size={14} />
           </a>
         </div>
-      ) : (
-        <FormField
-          label="Repository name"
-          hint={`Your story will be at https://<your-account>.github.io/${repo || "your-story"}/`}
-        >
-          <TextInput
-            value={repo}
-            disabled={disabled || running}
-            onChange={(event) =>
-              setRepo(event.target.value.replace(/[^A-Za-z0-9._-]/g, "-"))
-            }
-          />
-        </FormField>
-      )}
+      ) : null}
+
+      {recordLoaded ? (
+        <GitHubConnection
+          record={record}
+          disabled={disabled || running}
+          onRepositoryChange={setRepository}
+        />
+      ) : null}
+      <p>
+        Publishing makes the compiled story and its included assets public. It
+        replaces the selected repository’s gh-pages branch contents and
+        configures GitHub Pages to serve that branch. Your editable project is
+        not uploaded.
+      </p>
+      {repository ? <p>Destination: {repository.fullName}</p> : null}
 
       <div className="publish-to-web__actions">
         <ActionButton
           variant="surface"
-          disabled={disabled || running || !repo.trim()}
+          disabled={disabled || running || !repository || !recordLoaded}
           onClick={() => void publish()}
         >
           <GlobeHemisphereWest size={18} />{" "}
@@ -202,20 +241,6 @@ export function PublishToWeb({
           </ActionButton>
         ) : null}
       </div>
-
-      {job?.deviceCode ? (
-        <StatusNotice tone="warning">
-          <strong>{job.deviceCode.userCode}</strong> — open{" "}
-          <a
-            href={job.deviceCode.verificationUri}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {job.deviceCode.verificationUri}
-          </a>{" "}
-          and enter this code to let Earth Stories publish for you.
-        </StatusNotice>
-      ) : null}
 
       {running && latestEvent ? (
         <div className="publish-to-web__progress">
@@ -243,6 +268,17 @@ export function PublishToWeb({
       ) : null}
 
       {error ? <StatusNotice tone="danger">{error}</StatusNotice> : null}
+      {!recordLoaded && error ? (
+        <ActionButton
+          variant="surface"
+          onClick={() => {
+            setError(null);
+            setRecordAttempt((value) => value + 1);
+          }}
+        >
+          Retry publication details
+        </ActionButton>
+      ) : null}
 
       {job && job.events.length > 1 ? (
         <ol className="publish-to-web__log">

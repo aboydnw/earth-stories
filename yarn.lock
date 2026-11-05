@@ -759,6 +759,12 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@earth-stories/github-auth-broker@workspace:apps/github-auth-broker":
+  version: 0.0.0-use.local
+  resolution: "@earth-stories/github-auth-broker@workspace:apps/github-auth-broker"
+  languageName: unknown
+  linkType: soft
+
 "@earth-stories/local-service@workspace:*, @earth-stories/local-service@workspace:apps/local-service":
   version: 0.0.0-use.local
   resolution: "@earth-stories/local-service@workspace:apps/local-service"
