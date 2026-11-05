@@ -383,6 +383,13 @@ export async function startPublish(
   options: {
     repo?: string;
     repositoryId?: number;
+    reviewedRepository?: {
+      login: string;
+      id: number;
+      installationId: number;
+      owner: string;
+      name: string;
+    };
     mapSnapshots?: Record<string, string>;
   } = {},
 ): Promise<PublishJob> {
@@ -490,4 +497,8 @@ export async function getGitHubRepositories(): Promise<GitHubRepository[]> {
     "/api/github/repositories",
   );
   return result.repositories;
+}
+
+export interface ReviewedGitHubRepository extends GitHubRepository {
+  login: string;
 }

@@ -323,6 +323,13 @@ it("sends only the chosen repository ID and snapshots, never browser credentials
   );
   expect(startPublish).toHaveBeenCalledWith(project.id, {
     repositoryId: 42,
+    reviewedRepository: {
+      login: "mapper",
+      id: 42,
+      installationId: 7,
+      owner: "mapper",
+      name: "field-notes",
+    },
     mapSnapshots: {},
   });
 });
@@ -597,4 +604,107 @@ it("keeps installation, labelled repository selection, and refresh keyboard acce
   expect(
     screen.getByText(/Administration write permission is needed/),
   ).toBeTruthy();
+});
+
+it.each([
+  { name: "renamed", fullName: "mapper/renamed" },
+  { owner: "new-owner", fullName: "new-owner/field-notes" },
+  { installationId: 99 },
+])(
+  "requires renewed review after selected repository identity changes: %j",
+  async (change) => {
+    panel();
+    await chooseRepository();
+    vi.mocked(getGitHubRepositories).mockResolvedValue([
+      { ...repository, ...change },
+    ]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh repositories" }),
+    );
+    await screen.findByText(/The selected repository changed/);
+    expect(screen.getByRole("combobox")).toHaveProperty("value", "");
+    expect(
+      screen.getByRole("button", { name: /publish to the web/i }),
+    ).toHaveProperty("disabled", true);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh repositories" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Refresh repositories" }),
+      ).toHaveProperty("disabled", false),
+    );
+    expect(screen.getByRole("combobox")).toHaveProperty("value", "");
+    await userEvent.selectOptions(screen.getByRole("combobox"), "42");
+    expect(screen.queryByText(/The selected repository changed/)).toBeNull();
+    vi.mocked(startPublish).mockResolvedValue(job({ status: "succeeded" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /publish to the web/i }),
+    );
+    expect(startPublish).toHaveBeenCalledWith(project.id, {
+      repositoryId: 42,
+      reviewedRepository: {
+        login: "mapper",
+        id: 42,
+        installationId: change.installationId ?? 7,
+        owner: change.owner ?? "mapper",
+        name: change.name ?? "field-notes",
+      },
+      mapSnapshots: {},
+    });
+  },
+);
+
+it("preserves a reviewed repository only when its full identity is unchanged", async () => {
+  panel();
+  await chooseRepository();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Refresh repositories" }),
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("combobox")).toHaveProperty("value", "42"),
+  );
+  expect(screen.queryByText(/The selected repository changed/)).toBeNull();
+});
+
+it("requires renewed repository review when the connected GitHub account changes", async () => {
+  panel();
+  await chooseRepository();
+  vi.mocked(disconnectGitHub).mockResolvedValue({
+    ...connection,
+    status: "disconnected",
+    login: null,
+  });
+  await userEvent.click(
+    screen.getByRole("button", { name: "Disconnect GitHub" }),
+  );
+  vi.mocked(connectGitHub).mockResolvedValue({
+    ...connection,
+    login: "another-account",
+  });
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Connect GitHub" }),
+  );
+  await screen.findByText(/The selected repository changed/);
+  expect(screen.getByRole("combobox")).toHaveProperty("value", "");
+  expect(
+    screen.getByRole("button", { name: /publish to the web/i }),
+  ).toHaveProperty("disabled", true);
+  await chooseRepository();
+  vi.mocked(startPublish).mockResolvedValue(job({ status: "succeeded" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: /publish to the web/i }),
+  );
+  expect(startPublish).toHaveBeenCalledWith(
+    project.id,
+    expect.objectContaining({
+      reviewedRepository: {
+        login: "another-account",
+        id: 42,
+        installationId: 7,
+        owner: "mapper",
+        name: "field-notes",
+      },
+    }),
+  );
 });

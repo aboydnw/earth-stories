@@ -58,13 +58,28 @@ describe("GitHub App API contract", () => {
       }),
     );
     expect(await getGitHubRepositories()).toEqual([{ id: 42 }]);
-    await startPublish("a story", { repositoryId: 42, mapSnapshots: {} });
+    const reviewedRepository = {
+      login: "mapper",
+      id: 42,
+      installationId: 7,
+      owner: "mapper",
+      name: "field-notes",
+    };
+    await startPublish("a story", {
+      repositoryId: 42,
+      reviewedRepository,
+      mapSnapshots: {},
+    });
     expect(fetchMock).toHaveBeenLastCalledWith(
       "/api/projects/a%20story/publish",
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repositoryId: 42, mapSnapshots: {} }),
+        body: JSON.stringify({
+          repositoryId: 42,
+          reviewedRepository,
+          mapSnapshots: {},
+        }),
       },
     );
   });

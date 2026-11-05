@@ -16,7 +16,7 @@ import {
   startPublish,
   type PublishJob,
   type PublishRecord,
-  type GitHubRepository,
+  type ReviewedGitHubRepository,
 } from "./api";
 import { GitHubConnection } from "./GitHubConnection";
 import { captureMapSnapshots } from "./captureSnapshots";
@@ -57,7 +57,9 @@ function PublishToWebSession({
   onPublished,
 }: Props) {
   const [record, setRecord] = useState<PublishRecord | null>(null);
-  const [repository, setRepository] = useState<GitHubRepository | null>(null);
+  const [repository, setRepository] = useState<ReviewedGitHubRepository | null>(
+    null,
+  );
   const [recordLoaded, setRecordLoaded] = useState(false);
   const [recordAttempt, setRecordAttempt] = useState(0);
   const [starting, setStarting] = useState(false);
@@ -158,6 +160,13 @@ function PublishToWebSession({
       if (!mounted.current) return;
       const next = await startPublish(project.id, {
         repositoryId: repository.id,
+        reviewedRepository: {
+          login: repository.login,
+          id: repository.id,
+          installationId: repository.installationId,
+          owner: repository.owner,
+          name: repository.name,
+        },
         mapSnapshots,
       });
       if (mounted.current) setJob(next);

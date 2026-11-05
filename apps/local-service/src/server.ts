@@ -567,6 +567,7 @@ export function createLocalServer(
             )) as {
               repo?: unknown;
               repositoryId?: unknown;
+              reviewedRepository?: unknown;
               mapSnapshots?: unknown;
             },
           ),

@@ -13,13 +13,14 @@ import {
   getGitHubRepositories,
   type GitHubConnectionSnapshot,
   type GitHubRepository,
+  type ReviewedGitHubRepository,
   type PublishRecord,
 } from "./api";
 
 interface Props {
   record: PublishRecord | null;
   disabled: boolean;
-  onRepositoryChange: (repository: GitHubRepository | null) => void;
+  onRepositoryChange: (repository: ReviewedGitHubRepository | null) => void;
 }
 const message = (cause: unknown) =>
   cause instanceof Error
@@ -46,7 +47,9 @@ export function GitHubConnection({
   const repositoryGeneration = useRef(0);
   const pending = useRef(false);
   const lock = useRef(false);
-  const selectedRef = useRef("");
+  const selectedRef = useRef<ReviewedGitHubRepository | null>(null);
+  const selectionReviewed = useRef(false);
+  const [selectionWarning, setSelectionWarning] = useState<string | null>(null);
 
   function clearSelection() {
     setSelected("");
@@ -59,13 +62,23 @@ export function GitHubConnection({
     setRepositoryError(null);
     clearSelection();
     try {
+      const login = connection?.login;
+      if (!login)
+        throw new Error("Reconnect GitHub to verify the publishing account.");
       const available = await getGitHubRepositories();
       if (!mounted.current || version !== repositoryGeneration.current) return;
       setRepositories(available);
       const previous = selectedRef.current;
       const match = previous
-        ? available.find((item) => String(item.id) === previous)
-        : record?.repositoryId
+        ? available.find(
+            (item) =>
+              login === previous.login &&
+              item.id === previous.id &&
+              item.installationId === previous.installationId &&
+              item.owner === previous.owner &&
+              item.name === previous.name,
+          )
+        : !selectionReviewed.current && record?.repositoryId
           ? available.find(
               (item) =>
                 item.id === record.repositoryId &&
@@ -73,9 +86,17 @@ export function GitHubConnection({
                 item.name === record.repo,
             )
           : null;
-      selectedRef.current = match ? String(match.id) : "";
-      setSelected(selectedRef.current);
-      onRepositoryChange(match ?? null);
+      if (previous && !match) {
+        selectionReviewed.current = true;
+        setSelectionWarning(
+          "The selected repository changed or is no longer available. Review its owner, name, and app access, then explicitly choose a destination again.",
+        );
+      }
+      if (match) selectionReviewed.current = true;
+      const reviewed = match ? { ...match, login } : null;
+      selectedRef.current = reviewed;
+      setSelected(match ? String(match.id) : "");
+      onRepositoryChange(reviewed);
     } catch (cause) {
       if (mounted.current && version === repositoryGeneration.current) {
         setRepositories([]);
@@ -239,12 +260,18 @@ export function GitHubConnection({
                   disabled={disabled || busy || loadingRepositories}
                   onChange={(event) => {
                     const value = event.target.value;
-                    selectedRef.current = value;
-                    setSelected(value);
-                    onRepositoryChange(
+                    const repository =
                       repositories.find((item) => String(item.id) === value) ??
-                        null,
-                    );
+                      null;
+                    const reviewed =
+                      repository && connection.login
+                        ? { ...repository, login: connection.login }
+                        : null;
+                    selectedRef.current = reviewed;
+                    selectionReviewed.current = true;
+                    setSelectionWarning(null);
+                    setSelected(reviewed ? value : "");
+                    onRepositoryChange(reviewed);
                   }}
                 >
                   <option value="">Choose a repository</option>
@@ -255,6 +282,9 @@ export function GitHubConnection({
                   ))}
                 </SelectInput>
               </FormField>
+              {selectionWarning ? (
+                <StatusNotice tone="warning">{selectionWarning}</StatusNotice>
+              ) : null}
               {loadingRepositories ? (
                 <p>Loading repositories…</p>
               ) : !repositories.length && !repositoryError ? (

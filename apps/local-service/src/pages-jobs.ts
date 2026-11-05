@@ -107,8 +107,63 @@ const defaults = (): PagesJobsDependencies => ({
 
 export interface StartPublishInput {
   repositoryId?: unknown;
+  reviewedRepository?: unknown;
   repo?: unknown;
   mapSnapshots?: unknown;
+}
+
+type ReviewedRepository = Pick<
+  GitHubRepository,
+  "id" | "installationId" | "owner" | "name"
+> & { login: string };
+
+function reviewedRepository(
+  value: unknown,
+  repositoryId: unknown,
+): ReviewedRepository {
+  const invalid = () =>
+    new Error(
+      "Review and select the GitHub repository again before publishing.",
+    );
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw invalid();
+  const candidate = value as Record<string, unknown>;
+  if (
+    Object.keys(candidate).length !== 5 ||
+    candidate.id !== repositoryId ||
+    !Number.isSafeInteger(candidate.id) ||
+    Number(candidate.id) <= 0 ||
+    !Number.isSafeInteger(candidate.installationId) ||
+    Number(candidate.installationId) <= 0 ||
+    typeof candidate.login !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(candidate.login) ||
+    typeof candidate.owner !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(candidate.owner) ||
+    typeof candidate.name !== "string" ||
+    !/^[A-Za-z0-9_.-]{1,100}$/.test(candidate.name) ||
+    candidate.name === "." ||
+    candidate.name === ".."
+  )
+    throw invalid();
+  return {
+    id: candidate.id as number,
+    installationId: candidate.installationId as number,
+    owner: candidate.owner,
+    name: candidate.name,
+    login: candidate.login,
+  };
+}
+
+function matchesReviewedRepository(
+  repository: GitHubRepository,
+  reviewed: ReviewedRepository,
+): boolean {
+  return (
+    repository.id === reviewed.id &&
+    repository.installationId === reviewed.installationId &&
+    repository.owner === reviewed.owner &&
+    repository.name === reviewed.name
+  );
 }
 
 /**
@@ -206,6 +261,7 @@ export class PagesJobs {
       {
         repo: requested,
         repositoryId: input.repositoryId,
+        reviewedRepository: input.reviewedRepository,
         existing,
         snapshots,
       },
@@ -250,6 +306,7 @@ export class PagesJobs {
     context: {
       repo: string;
       repositoryId?: unknown;
+      reviewedRepository?: unknown;
       existing: PublishRecord | null;
       snapshots?: Record<string, string>;
     },
@@ -271,9 +328,21 @@ export class PagesJobs {
           Number(context.repositoryId) <= 0)
       )
         throw new Error("Choose a GitHub repository before publishing.");
+      const reviewed = authorize
+        ? reviewedRepository(context.reviewedRepository, context.repositoryId)
+        : undefined;
       const selected = authorize
         ? await authorize(context.repositoryId, controller.signal)
         : undefined;
+      if (
+        selected &&
+        reviewed &&
+        (!matchesReviewedRepository(selected.repository, reviewed) ||
+          selected.identity.login !== reviewed.login)
+      )
+        throw new Error(
+          "The GitHub repository changed since you reviewed it. Review and select the destination again before publishing.",
+        );
       const identity: GitHubIdentity =
         selected?.identity ??
         (await this.#deps.resolveToken({
@@ -311,6 +380,8 @@ export class PagesJobs {
         if (
           current.identity.token !== identity.token ||
           current.identity.login !== identity.login ||
+          (reviewed &&
+            !matchesReviewedRepository(current.repository, reviewed)) ||
           current.repository.id !== selected.repository.id ||
           current.repository.installationId !==
             selected.repository.installationId ||

@@ -364,6 +364,14 @@ describe("selected GitHub App repositories", () => {
     },
   });
 
+  const reviewed = () => ({
+    login: "mapper",
+    id: 42,
+    installationId: 7,
+    owner: "map-org",
+    name: "coast",
+  });
+
   it.each([undefined, null, "42", 0, -1, 1.5])(
     "requires a selected numeric ID (%s) before build",
     async (repositoryId) => {
@@ -381,6 +389,68 @@ describe("selected GitHub App repositories", () => {
     },
   );
 
+  it.each([
+    undefined,
+    null,
+    [],
+    {},
+    "map-org/coast",
+    { ...reviewed(), id: 99 },
+    { ...reviewed(), login: undefined },
+    { ...reviewed(), login: 7 },
+    { ...reviewed(), login: "" },
+    { ...reviewed(), installationId: "7" },
+    { ...reviewed(), installationId: 0 },
+    { ...reviewed(), owner: "map-org/other" },
+    { ...reviewed(), name: "../other" },
+    { ...reviewed(), fullName: "map-org/coast" },
+  ])(
+    "requires a valid reviewed destination (%j)",
+    async (reviewedRepository) => {
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => authorized()),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository,
+      });
+      expect((await settle(jobs, id)).status).toBe("failed");
+      expect(deps.authorizeRepository).not.toHaveBeenCalled();
+      expect(deps.build).not.toHaveBeenCalled();
+      expect(deps.ensureRepository).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["owner", "name", "installationId", "id", "login"])(
+    "refuses a %s change before first authorization",
+    async (field) => {
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => {
+          const value = authorized();
+          if (field === "login") value.identity.login = "another-user";
+          if (field === "owner") value.repository.owner = "new-org";
+          if (field === "name") value.repository.name = "new-name";
+          if (field === "installationId") value.repository.installationId = 8;
+          if (field === "id") value.repository.id = 99;
+          return value;
+        }),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
+      expect((await settle(jobs, id)).error).toMatch(
+        /changed since you reviewed/,
+      );
+      expect(deps.build).not.toHaveBeenCalled();
+      expect(deps.ensureRepository).not.toHaveBeenCalled();
+      expect(deps.pushRelease).not.toHaveBeenCalled();
+      expect(deps.enablePages).not.toHaveBeenCalled();
+    },
+  );
+
   it("uses the authorized organization repository and never a browser name", async () => {
     const deps = dependencies({
       authorizeRepository: vi.fn(async () => authorized()),
@@ -388,6 +458,7 @@ describe("selected GitHub App repositories", () => {
     const jobs = new PagesJobs(store, deps);
     const { id } = await jobs.create("story-1", {
       repositoryId: 42,
+      reviewedRepository: reviewed(),
       repo: "untrusted",
     });
     const result = await settle(jobs, id);
@@ -430,7 +501,10 @@ describe("selected GitHub App repositories", () => {
         }),
       });
       const jobs = new PagesJobs(store, deps);
-      const { id } = await jobs.create("story-1", { repositoryId: 42 });
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
       expect((await settle(jobs, id)).status).toBe("failed");
       expect(deps.build).toHaveBeenCalled();
       expect(deps.ensureRepository).not.toHaveBeenCalled();
@@ -453,7 +527,10 @@ describe("selected GitHub App repositories", () => {
         })),
       });
       const jobs = new PagesJobs(store, deps);
-      const { id } = await jobs.create("story-1", { repositoryId: 42 });
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
       await settle(jobs, id);
       expect(deps.ensureRepository).toHaveBeenCalledWith(
         expect.objectContaining({ expectExisting: false }),
@@ -480,7 +557,10 @@ describe("selected GitHub App repositories", () => {
         })),
       });
       const jobs = new PagesJobs(store, deps);
-      const { id } = await jobs.create("story-1", { repositoryId: 42 });
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
       await settle(jobs, id);
       expect(deps.ensureRepository).toHaveBeenCalledWith(
         expect.objectContaining({ expectExisting: branch === "gh-pages" }),
@@ -507,7 +587,10 @@ describe("selected GitHub App repositories", () => {
         })),
       });
       const jobs = new PagesJobs(store, deps);
-      const { id } = await jobs.create("story-1", { repositoryId: 42 });
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
       const result = await settle(jobs, id);
       expect(deps.ensureRepository).toHaveBeenCalledWith(
         expect.objectContaining({ expectExisting: false }),
@@ -528,7 +611,10 @@ describe("selected GitHub App repositories", () => {
       }),
     });
     const jobs = new PagesJobs(store, deps);
-    const { id } = await jobs.create("story-1", { repositoryId: 42 });
+    const { id } = await jobs.create("story-1", {
+      repositoryId: 42,
+      reviewedRepository: reviewed(),
+    });
     expect((await settle(jobs, id)).status).toBe("succeeded");
     expect(deps.authorizeRepository).toHaveBeenCalledTimes(5);
     expect(assertAuthorizationCurrent).toHaveBeenCalledTimes(100);
@@ -562,7 +648,10 @@ describe("selected GitHub App repositories", () => {
         }),
       });
       const jobs = new PagesJobs(store, deps);
-      const { id } = await jobs.create("story-1", { repositoryId: 42 });
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
       expect((await settle(jobs, id)).status).toBe("failed");
       expect(replacedRef).toBe(false);
       expect(deps.enablePages).not.toHaveBeenCalled();
@@ -581,7 +670,10 @@ describe("selected GitHub App repositories", () => {
       }),
     });
     const jobs = new PagesJobs(store, deps);
-    const { id } = await jobs.create("story-1", { repositoryId: 42 });
+    const { id } = await jobs.create("story-1", {
+      repositoryId: 42,
+      reviewedRepository: reviewed(),
+    });
     expect((await settle(jobs, id)).error).toMatch(/Connection changed/);
     expect(deps.enablePages).not.toHaveBeenCalled();
   });
@@ -598,7 +690,10 @@ describe("selected GitHub App repositories", () => {
       }),
     });
     const jobs = new PagesJobs(store, deps);
-    const { id } = await jobs.create("story-1", { repositoryId: 42 });
+    const { id } = await jobs.create("story-1", {
+      repositoryId: 42,
+      reviewedRepository: reviewed(),
+    });
     jobs.cancelRunning();
     finish();
     await jobs.whenIdle();

@@ -70,7 +70,10 @@ Old broad OAuth and GitHub CLI credentials are not silently reused or deleted.
 
 Repository access is queried through `/user/installations` and the matching
 App's installation repositories, with locally constructed pagination URLs. The
-server derives owner/name from the selected numeric repository ID, checks access
+server derives owner/name from the selected numeric repository ID and requires it
+to match the account, repository ID, installation ID, owner, and name the author
+reviewed. Refreshing a renamed or transferred repository clears the selection
+until the author chooses again. The service checks access
 before publication and each major remote stage, and checks the local connection
 before every write. GitHub enforces token permissions on every API request.
 Responses and error messages exposed to the editor exclude credentials and raw
