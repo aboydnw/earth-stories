@@ -19,7 +19,6 @@ const success = () =>
       access_token: "ghu_test",
       token_type: "bearer",
       expires_in: 28800,
-      refresh_token: "never_return_this",
       secret: "do_not_reflect",
     }),
   );

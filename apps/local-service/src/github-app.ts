@@ -1,12 +1,69 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type Server, type ServerResponse } from "node:http";
-import type { CredentialStore } from "./credentials.js";
+import {
+  parseStoredCredentials,
+  type CredentialStore,
+  type StoredCredentials,
+} from "./credentials.js";
 import type { GitHubIdentity } from "./github-auth.js";
 
 export const GITHUB_CALLBACK_URI = "http://127.0.0.1:4318/github/callback";
 const AUTH_TTL_MS = 10 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const API_ROOT = "https://api.github.com";
+const REFRESH_MARGIN_MS = 60_000;
+type VerifiedIdentity = GitHubIdentity & { accountId?: number };
+
+function tokenMetadata(
+  body: unknown,
+  now: number,
+  requireRefresh = false,
+): {
+  token: string;
+  expiresAt?: number;
+  refreshToken?: string;
+  refreshTokenExpiresAt?: number;
+} {
+  if (
+    !isObject(body) ||
+    typeof body.accessToken !== "string" ||
+    !/^ghu_[A-Za-z0-9_]{1,500}$/.test(body.accessToken)
+  )
+    throw new Error("Invalid token response");
+  const expires = (value: unknown): number => {
+    if (
+      !Number.isSafeInteger(value) ||
+      (value as number) <= 0 ||
+      !Number.isSafeInteger(now + (value as number) * 1000)
+    )
+      throw new Error("Invalid token lifetime");
+    return now + (value as number) * 1000;
+  };
+  const expiresAt =
+    body.expiresIn === undefined ? undefined : expires(body.expiresIn);
+  const hasRefresh =
+    body.refreshToken !== undefined || body.refreshTokenExpiresIn !== undefined;
+  if (requireRefresh && !hasRefresh)
+    throw new Error("Missing rotated credential");
+  if (hasRefresh) {
+    if (
+      typeof body.refreshToken !== "string" ||
+      !/^ghr_[A-Za-z0-9_]{1,500}$/.test(body.refreshToken) ||
+      expiresAt === undefined
+    )
+      throw new Error("Invalid refresh credential");
+    return {
+      token: body.accessToken,
+      expiresAt,
+      refreshToken: body.refreshToken,
+      refreshTokenExpiresAt: expires(body.refreshTokenExpiresIn),
+    };
+  }
+  return {
+    token: body.accessToken,
+    ...(expiresAt === undefined ? {} : { expiresAt }),
+  };
+}
 
 export interface GitHubAppConfig {
   clientId: string;
@@ -162,6 +219,12 @@ export class GitHubAppConnection {
   #pending: PendingConnection | null = null;
   #generation = 0;
   #identity: GitHubIdentity | null = null;
+  #credential: StoredCredentials | null = null;
+  #refreshing: {
+    generation: number;
+    controller: AbortController;
+    promise: Promise<void>;
+  } | null = null;
   #loaded = false;
   #loading: Promise<void> | null = null;
   #writeQueue: Promise<void> = Promise.resolve();
@@ -205,18 +268,36 @@ export class GitHubAppConnection {
       });
       await this.#loading;
     }
+    if (this.#identity && this.#snapshot.status === "connected") {
+      try {
+        await this.#ensureFresh();
+      } catch {
+        /* Status exposes only the safe snapshot. */
+      }
+    }
     return { ...this.#snapshot };
   }
 
   async #load(): Promise<void> {
     const generation = this.#generation;
-    const stored = await this.#store.read();
+    const stored = parseStoredCredentials(await this.#store.read());
     if (generation !== this.#generation) return;
     this.#loaded = true;
     // Do not silently reuse a legacy broad OAuth or CLI credential.
     if (!stored?.token.startsWith("ghu_")) return;
     try {
-      const identity = await this.#verify(stored.token);
+      this.#credential = stored;
+      await this.#ensureFresh();
+      if (generation !== this.#generation) return;
+      const current = this.#credential;
+      if (!current) throw new Error("Missing credential");
+      const identity = await this.#verify(current.token);
+      if (
+        current.accountId !== undefined &&
+        (identity.accountId !== current.accountId ||
+          identity.login !== current.login)
+      )
+        throw new Error("Account changed");
       if (generation !== this.#generation) return;
       this.#identity = identity;
       this.#snapshot = {
@@ -227,6 +308,8 @@ export class GitHubAppConnection {
       };
     } catch {
       if (generation !== this.#generation) return;
+      // Refresh may already have recorded a more specific, sanitized cleanup failure.
+      if (this.#snapshot.status === "failed") return;
       this.#snapshot = {
         ...this.#snapshot,
         status: "failed",
@@ -243,6 +326,10 @@ export class GitHubAppConnection {
       );
     if (this.#pending) return this.status();
     const generation = ++this.#generation;
+    this.#refreshing?.controller.abort();
+    this.#refreshing = null;
+    this.#credential = null;
+    this.#authorizations.clear();
     this.#loaded = true;
     this.#identity = null;
     const state = randomBytes(32).toString("base64url");
@@ -390,29 +477,35 @@ export class GitHubAppConnection {
         throw new Error("exchange failed");
       }
       const body = await boundedJson(response, 16 * 1024);
-      if (
-        !isObject(body) ||
-        typeof body.accessToken !== "string" ||
-        !/^ghu_[A-Za-z0-9_]{1,500}$/.test(body.accessToken)
-      )
-        throw new Error("invalid token");
+      const metadata = tokenMetadata(body, Date.now());
       const identity = await this.#verify(
-        body.accessToken,
+        metadata.token,
         pending.controller.signal,
       );
+      if (metadata.refreshToken && !identity.accountId)
+        throw new Error("Missing account binding");
+      const credential: StoredCredentials = {
+        ...metadata,
+        login: identity.login,
+        ...(metadata.refreshToken
+          ? {
+              accountId: identity.accountId!,
+              appClientId: this.#config!.clientId,
+              brokerOrigin: new URL(this.#config!.brokerUrl).origin,
+            }
+          : {}),
+      };
       await this.#serialize(async () => {
         if (this.#pending !== pending || pending.controller.signal.aborted)
           return;
         // A store can fail after atomically promoting a credential (for example
         // while securing its permissions). Cleanup must include attempted writes.
         this.#savedGeneration = pending.generation;
-        await this.#store.write({
-          token: identity.token,
-          login: identity.login,
-        });
+        await this.#store.write(credential);
         if (this.#pending !== pending || pending.controller.signal.aborted)
           return;
         this.#identity = identity;
+        this.#credential = credential;
         this.#snapshot = {
           ...this.#snapshot,
           status: "connected",
@@ -485,6 +578,10 @@ export class GitHubAppConnection {
   }
   async disconnect(): Promise<GitHubConnectionSnapshot> {
     ++this.#generation;
+    this.#refreshing?.controller.abort();
+    this.#refreshing = null;
+    this.#credential = null;
+    this.#authorizations.clear();
     if (this.#pending) this.#closePending(this.#pending);
     this.#loaded = true;
     this.#identity = null;
@@ -503,6 +600,134 @@ export class GitHubAppConnection {
   }
   async close(): Promise<void> {
     await this.cancel();
+    ++this.#generation;
+    this.#refreshing?.controller.abort();
+    this.#refreshing = null;
+    this.#identity = null;
+    this.#credential = null;
+    this.#authorizations.clear();
+    await this.#writeQueue;
+  }
+
+  async #ensureFresh(): Promise<void> {
+    const credential = this.#credential;
+    if (
+      !credential ||
+      credential.expiresAt === undefined ||
+      credential.expiresAt > Date.now() + REFRESH_MARGIN_MS
+    )
+      return;
+    if (this.#refreshing?.generation === this.#generation)
+      return this.#refreshing.promise;
+    const generation = this.#generation;
+    const controller = new AbortController();
+    const promise = this.#refresh(credential, generation, controller.signal);
+    const operation = { generation, controller, promise };
+    this.#refreshing = operation;
+    try {
+      await promise;
+    } finally {
+      if (this.#refreshing === operation) this.#refreshing = null;
+    }
+  }
+
+  async #refresh(
+    credential: StoredCredentials,
+    generation: number,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const current = () =>
+      generation === this.#generation &&
+      this.#credential === credential &&
+      !signal.aborted;
+    try {
+      if (
+        !this.#config ||
+        !credential.refreshToken ||
+        !credential.refreshTokenExpiresAt ||
+        credential.refreshTokenExpiresAt <= Date.now() ||
+        credential.appClientId !== this.#config.clientId ||
+        credential.brokerOrigin !== new URL(this.#config.brokerUrl).origin ||
+        !credential.accountId
+      )
+        throw new Error("Reconnect required");
+      // A rotation revokes the previous access token. Invalidate outstanding publication grants before sending it.
+      this.#authorizations.clear();
+      const response = await this.#fetch(
+        new URL("/api/github/refresh", this.#config.brokerUrl).href,
+        {
+          method: "POST",
+          redirect: "error",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json",
+          },
+          body: JSON.stringify({ refreshToken: credential.refreshToken }),
+          signal: AbortSignal.any([
+            signal,
+            AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          ]),
+        },
+      );
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error("Refresh failed");
+      }
+      const rotated = tokenMetadata(
+        await boundedJson(response, 16 * 1024),
+        Date.now(),
+        true,
+      );
+      if (
+        rotated.token === credential.token ||
+        rotated.refreshToken === credential.refreshToken
+      )
+        throw new Error("Credentials did not rotate");
+      if (!current()) throw new Error("Connection changed");
+      const identity = await this.#verify(rotated.token, signal);
+      if (
+        identity.accountId !== credential.accountId ||
+        identity.login !== credential.login
+      )
+        throw new Error("Account changed");
+      await this.#serialize(async () => {
+        if (!current()) return;
+        const next = { ...credential, ...rotated };
+        this.#savedGeneration = generation;
+        await this.#store.write(next);
+        if (!current()) return;
+        this.#credential = next;
+        this.#identity = identity;
+      });
+      if (generation !== this.#generation || signal.aborted)
+        throw new Error("Connection changed");
+    } catch {
+      if (current()) {
+        this.#identity = null;
+        this.#credential = null;
+        this.#snapshot = {
+          ...this.#snapshot,
+          status: "failed",
+          login: null,
+          error:
+            "GitHub connection could not be refreshed. Connect GitHub again.",
+        };
+        this.#authorizations.clear();
+        await this.#serialize(async () => {
+          if (generation !== this.#generation) return;
+          await this.#store.clear();
+          this.#savedGeneration = null;
+        }).catch(() => {
+          if (generation === this.#generation) {
+            this.#snapshot.error =
+              "GitHub connection could not be refreshed, and its saved credential could not be removed. Credentials may remain on this device. Disconnect GitHub successfully before reconnecting or restarting Earth Stories.";
+          }
+        });
+      }
+      throw new Error(
+        "GitHub connection could not be refreshed. Connect GitHub again.",
+      );
+    }
   }
 
   async #api(
@@ -541,11 +766,19 @@ export class GitHubAppConnection {
     }
     return boundedJson(response, 4 * 1024 * 1024);
   }
-  async #verify(token: string, signal?: AbortSignal): Promise<GitHubIdentity> {
+  async #verify(
+    token: string,
+    signal?: AbortSignal,
+  ): Promise<VerifiedIdentity> {
     const body = await this.#api("/user", token, signal);
     if (!isObject(body) || !segment(body.login))
       throw new Error("GitHub did not return an account name.");
-    return { token, login: body.login, source: "github-app" };
+    return {
+      token,
+      login: body.login,
+      source: "github-app",
+      ...(safeId(body.id) ? { accountId: body.id } : {}),
+    };
   }
   async #currentIdentity(signal?: AbortSignal): Promise<GitHubIdentity> {
     await this.status();
@@ -556,7 +789,13 @@ export class GitHubAppConnection {
     if (
       generation !== this.#generation ||
       !this.#identity ||
+      Boolean(this.#refreshing) ||
+      (this.#credential?.expiresAt !== undefined &&
+        this.#credential.expiresAt <= Date.now()) ||
       this.#identity.login !== identity.login ||
+      this.#identity.token !== identity.token ||
+      (this.#credential?.accountId !== undefined &&
+        this.#credential.accountId !== identity.accountId) ||
       signal?.aborted
     )
       throw new Error(
@@ -685,6 +924,9 @@ export class GitHubAppConnection {
     const authorization = this.#authorizations.get(repository.id);
     if (
       this.#snapshot.status !== "connected" ||
+      Boolean(this.#refreshing) ||
+      (this.#credential?.expiresAt !== undefined &&
+        this.#credential.expiresAt <= Date.now()) ||
       !this.#identity ||
       this.#identity.token !== identity.token ||
       this.#identity.login !== identity.login ||

@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc --build",
     "start": "node dist/src/standalone.js",
-    "test": "vitest run src/broker.test.ts"
+    "test": "yarn --cwd ../.. vitest run apps/github-auth-broker/src",
+    "check:worker": "yarn --cwd ../.. tsc --project apps/github-auth-broker/tsconfig.worker.json"
   }
 }

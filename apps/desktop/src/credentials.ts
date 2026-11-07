@@ -14,6 +14,73 @@ import type {
   StoredCredentials,
 } from "@earth-stories/local-service";
 
+// Keep this boundary independent of the embedded service's runtime bundle.
+// The same strict metadata contract is validated again by the local service.
+function parseStoredCredentials(value: unknown): StoredCredentials | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const data = value as Record<string, unknown>;
+  if (
+    typeof data.token !== "string" ||
+    !data.token ||
+    typeof data.login !== "string" ||
+    !data.login
+  )
+    return null;
+  for (const field of [
+    "expiresAt",
+    "refreshTokenExpiresAt",
+    "accountId",
+  ] as const) {
+    if (
+      data[field] !== undefined &&
+      (!Number.isSafeInteger(data[field]) || (data[field] as number) <= 0)
+    )
+      return null;
+  }
+  const refreshFields = [
+    "refreshToken",
+    "refreshTokenExpiresAt",
+    "accountId",
+    "appClientId",
+    "brokerOrigin",
+  ];
+  if (refreshFields.some((field) => data[field] !== undefined)) {
+    if (
+      refreshFields.some((field) => data[field] === undefined) ||
+      data.expiresAt === undefined ||
+      typeof data.refreshToken !== "string" ||
+      !/^ghr_[A-Za-z0-9_]{1,500}$/.test(data.refreshToken) ||
+      typeof data.appClientId !== "string" ||
+      !/^[A-Za-z0-9_.-]{1,200}$/.test(data.appClientId) ||
+      typeof data.brokerOrigin !== "string"
+    )
+      return null;
+    try {
+      const url = new URL(data.brokerOrigin);
+      if (url.protocol !== "https:" || url.origin !== data.brokerOrigin)
+        return null;
+    } catch {
+      return null;
+    }
+  }
+  return {
+    token: data.token,
+    login: data.login,
+    ...(data.expiresAt !== undefined
+      ? { expiresAt: data.expiresAt as number }
+      : {}),
+    ...(data.refreshToken !== undefined
+      ? {
+          refreshToken: data.refreshToken as string,
+          refreshTokenExpiresAt: data.refreshTokenExpiresAt as number,
+          accountId: data.accountId as number,
+          appClientId: data.appClientId as string,
+          brokerOrigin: data.brokerOrigin as string,
+        }
+      : {}),
+  };
+}
+
 export interface SafeStorageBoundary {
   isEncryptionAvailable(): boolean;
   encryptString(plaintext: string): Buffer;
@@ -30,11 +97,19 @@ const defaultPromotionOperations: CredentialPromotionOperations = {
   syncPromotedDirectory: syncDirectory,
 };
 
-interface EncryptedCredentialRecord {
+interface LegacyEncryptedCredentialRecord {
   version: 1;
   login: string;
   encryptedToken: string;
 }
+
+interface CompleteEncryptedCredentialRecord {
+  version: 2;
+  encryptedCredentials: string;
+}
+
+type EncryptedCredentialRecord =
+  LegacyEncryptedCredentialRecord | CompleteEncryptedCredentialRecord;
 
 type ParsedRecord =
   | { kind: "encrypted"; value: EncryptedCredentialRecord }
@@ -50,6 +125,17 @@ function parseRecord(serialized: string): ParsedRecord {
   }
   if (!value || typeof value !== "object") return { kind: "malformed" };
   const record = value as Record<string, unknown>;
+  if (record.version === 2) {
+    if (
+      typeof record.encryptedCredentials !== "string" ||
+      !record.encryptedCredentials
+    )
+      return { kind: "malformed" };
+    return {
+      kind: "encrypted",
+      value: { version: 2, encryptedCredentials: record.encryptedCredentials },
+    };
+  }
   if (record.version === 1) {
     if (
       typeof record.login !== "string" ||
@@ -67,16 +153,10 @@ function parseRecord(serialized: string): ParsedRecord {
       },
     };
   }
-  if (
-    typeof record.token === "string" &&
-    record.token &&
-    typeof record.login === "string" &&
-    record.login
-  )
-    return {
-      kind: "plaintext",
-      value: { token: record.token, login: record.login },
-    };
+  if (Object.prototype.hasOwnProperty.call(record, "version"))
+    return { kind: "malformed" };
+  const credentials = parseStoredCredentials(record);
+  if (credentials) return { kind: "plaintext", value: credentials };
   return { kind: "malformed" };
 }
 
@@ -116,13 +196,9 @@ export class PlaintextCredentialStore implements CredentialStore {
 
   async read(): Promise<StoredCredentials | null> {
     try {
-      const parsed = JSON.parse(await readFile(this.path, "utf8")) as {
-        token?: unknown;
-        login?: unknown;
-      };
-      if (typeof parsed.token !== "string" || !parsed.token) return null;
-      if (typeof parsed.login !== "string" || !parsed.login) return null;
-      return { token: parsed.token, login: parsed.login };
+      return parseStoredCredentials(
+        JSON.parse(await readFile(this.path, "utf8")),
+      );
     } catch {
       return null;
     }
@@ -240,7 +316,11 @@ export class SafeStorageCredentialStore implements CredentialStore {
       );
       return null;
     }
-    const encrypted = decodeEncryptedToken(record.encryptedToken);
+    const encrypted = decodeEncryptedToken(
+      record.version === 1
+        ? record.encryptedToken
+        : record.encryptedCredentials,
+    );
     if (!encrypted) {
       this.#diagnose(
         "malformed",
@@ -249,8 +329,12 @@ export class SafeStorageCredentialStore implements CredentialStore {
       return null;
     }
     try {
-      const token = this.#safeStorage.decryptString(encrypted);
-      return token ? { token, login: record.login } : null;
+      const plaintext = this.#safeStorage.decryptString(encrypted);
+      return parseStoredCredentials(
+        record.version === 1
+          ? { token: plaintext, login: record.login }
+          : JSON.parse(plaintext),
+      );
     } catch {
       this.#diagnose(
         "decrypt",
@@ -264,13 +348,14 @@ export class SafeStorageCredentialStore implements CredentialStore {
     value: StoredCredentials,
     recoveryPlaintext?: string,
   ): Promise<void> {
-    const encryptedToken = this.#safeStorage
-      .encryptString(value.token)
+    const credentials = parseStoredCredentials(value);
+    if (!credentials) throw new Error("Invalid stored credentials.");
+    const encryptedCredentials = this.#safeStorage
+      .encryptString(JSON.stringify(credentials))
       .toString("base64");
     const record: EncryptedCredentialRecord = {
-      version: 1,
-      login: value.login,
-      encryptedToken,
+      version: 2,
+      encryptedCredentials,
     };
     const directory = dirname(this.path);
     await mkdir(directory, { recursive: true, mode: 0o700 });

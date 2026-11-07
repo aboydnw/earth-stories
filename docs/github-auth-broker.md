@@ -1,7 +1,8 @@
 # GitHub App exchange broker
 
 This server-only workspace exchanges an authorization code and PKCE verifier
-for a GitHub App user access token. It is deployed separately from Earth Stories.
+for a GitHub App user access token and rotates expiring credentials through a
+separate refresh endpoint. It is deployed separately from Earth Stories.
 The client secret must never be shipped in the desktop application, editor,
 static publication, repository, logs, or browser environment variables.
 
@@ -43,8 +44,10 @@ Repository permissions for branch-and-Pages publication:
 - Metadata: read-only (GitHub's mandatory baseline).
 - No account or organization permissions; no Actions or Workflows write access.
 - Disable webhooks unless a separate, reviewed feature requires them.
-- Enable expiring user authorization tokens. This implementation discards refresh
-  tokens, so expired sessions require reconnection.
+- Enable expiring user authorization tokens. The local service stores the returned
+  refresh credential alongside the access credential, outside author projects and
+  editor responses. GitHub rotates both tokens during refresh; the old pair must
+  not be reused. Revoked or expired refresh credentials require reconnection.
 - Installation must use **Only select repositories**, choosing the publication
   repository. Installing an App does not authorize publishing: the existing
   explicit publication confirmation still applies.
@@ -81,11 +84,50 @@ The local entrypoint binds `127.0.0.1` only. It is not a public HTTP server setu
 Use HTTPS for the remotely configured broker URL; do not forward production codes
 over cleartext HTTP. The HTTP loopback callback is distinct from that broker URL.
 
-## Vercel deployment
+## Cloudflare Workers deployment preparation
+
+`src/worker.ts` is the Workers Web-standard entrypoint. The shared handler uses
+`Request`, `Response`, streams and `TextDecoder`; it needs neither Node globals nor
+`nodejs_compat`. `wrangler.jsonc` contains no credentials or routes. Its
+`workers_dev: false`, `preview_urls: false`, and disabled observability defaults
+avoid publishing an unreviewed public endpoint or enabling request logging.
+This is source preparation, not an already provisioned or deployed Worker.
+
+After separate approval for account access, credential provisioning and deployment,
+an operator should use the official Wrangler CLI, select the intended Cloudflare
+account, choose an HTTPS route/domain, and configure `GITHUB_APP_CLIENT_ID` and
+`GITHUB_APP_CLIENT_SECRET` as Worker secret bindings. Do not put either value into
+committed configuration, shell history, build output, `.dev.vars`, or real-credential test fixtures.
+The desktop build receives only the public client ID, App slug, and exchange URL.
+The local service derives the refresh URL on that same origin at
+`/api/github/refresh`; expose both routes and `/health` to the native service.
+
+Before enabling public traffic, separately configure and verify distributed edge
+rate limiting, global abuse/cost budgets and alerts, and sanitized operational
+metrics. The Worker does not pretend that an in-memory counter is distributed
+protection. A browser Origin check is not client authentication. Confirm account
+plan eligibility and limit behavior with shared networks and multiple edge
+locations. Without those controls, keep the broker private and unconfigured.
+
+Local source checks (no real credentials):
+
+```sh
+yarn tsc --project apps/github-auth-broker/tsconfig.worker.json
+yarn vitest run apps/github-auth-broker/src
+```
+
+These checks validate Web API typing and mocked handler/adapter behavior, not a
+live Cloudflare deployment, edge policy, or GitHub OAuth integration. Run all live
+gates below before enabling a desktop build. Review Cloudflare logging, tracing,
+error capture and request-body retention settings: no tokens, codes, verifiers,
+secrets, or raw upstream errors may be logged.
+
+## Alternative Vercel deployment
 
 Use `apps/github-auth-broker` as the Vercel project Root Directory, with framework
 preset **Other**, no static output directory, and no frontend build command. The
-Node TypeScript functions are `api/github/exchange.ts` and `api/health.ts`.
+Node TypeScript functions are `api/github/exchange.ts`, `api/github/refresh.ts`,
+and `api/health.ts`.
 `vercel.json` rewrites `/health` to the health function and caps function duration
 at 15 seconds. Use a supported Node 22+ runtime. Configure the two environment
 variables as server secrets for the intended deployment environment only. Keep
@@ -109,7 +151,8 @@ Before pointing a desktop build at a hosted URL, verify:
 2. The real native authorization flow completes for the selected repository.
 3. A wrong/missing verifier, replayed code, and incorrect callback are rejected.
 4. Cancellation, state mismatch, expiration, revocation, and reconnect are safe.
-5. Expiring tokens cannot publish after expiry, and tokens never reach editor
+5. Expiring tokens refresh successfully, rotate both credentials, and cannot
+   publish after expiry if refresh fails. Tokens never reach editor
    responses, request logs, analytics, crash reports, or persisted story files.
 6. Enforce a distributed per-client/IP request limit and a global request/cost
    budget at the hosting edge before public access. Verify excess requests are
@@ -138,11 +181,43 @@ responses carry `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`.
 Successful response:
 
 ```json
-{ "accessToken": "ghu_example", "expiresIn": 28800 }
+{
+  "accessToken": "ghu_example",
+  "expiresIn": 28800,
+  "refreshToken": "ghr_example",
+  "refreshTokenExpiresIn": 15897600
+}
 ```
 
-`expiresIn` is omitted if GitHub omits expiration. No refresh token or other
-upstream field is returned. The broker does not persist tokens, codes, verifiers,
+For backward compatibility, an exchange without refresh fields may return only
+the access token and optional expiry. If either refresh field exists, both must
+be valid and the access token must expire. Partial or malformed rotation is
+rejected. Lifetimes are positive integer seconds from GitHub, not hard-coded
+durations. Only the allowlisted credential fields are returned, exclusively to
+the native local service over HTTPS.
+
+`POST /api/github/refresh`, `Content-Type: application/json`, accepts exactly:
+
+```json
+{ "refreshToken": "ghr_current" }
+```
+
+The broker sends the fixed GitHub token endpoint the server-only client ID and
+secret, `grant_type=refresh_token`, and the submitted refresh token. Clients cannot
+choose the upstream, credentials, or callback. A refresh must return a complete
+new access/refresh pair and both expirations. GitHub invalidates the old pair;
+clients must serialize refreshes and persist the replacement safely before use.
+Do not automatically retry a possibly completed refresh with the old credential.
+Lost responses can require reconnecting. See GitHub's
+[refresh-token documentation](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/refreshing-user-access-tokens).
+
+The refresh endpoint has the same input limits, no-CORS behavior, timeout,
+redirect prohibition, safe error messages, and no-store responses as exchange.
+Test real rotation, replay/old-token rejection, revocation, expiry, canceled or
+superseded sessions, storage failures, and account consistency before release.
+Mocked rejection tests do not prove GitHub enforcement.
+
+The broker does not persist tokens, codes, verifiers,
 secrets, sessions, or user identity and intentionally does not log request bodies
 or upstream failures. Hosting operators must likewise disable sensitive body
 logging. Failures return fixed messages, never GitHub response bodies or input.

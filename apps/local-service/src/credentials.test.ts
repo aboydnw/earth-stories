@@ -14,6 +14,51 @@ async function fixture(): Promise<{
 }
 
 describe("FileCredentialStore", () => {
+  it("round-trips the bound refresh pair with expiry metadata", async () => {
+    const { store } = await fixture();
+    const value = {
+      token: "ghu_access",
+      login: "mapper",
+      expiresAt: 1000,
+      refreshToken: "ghr_refresh",
+      refreshTokenExpiresAt: 2000,
+      accountId: 42,
+      appClientId: "Iv1.app",
+      brokerOrigin: "https://broker.example.com",
+    };
+    await store.write(value);
+    expect(await store.read()).toEqual(value);
+  });
+
+  it("rejects partial or malformed refresh metadata rather than dropping its expiry", async () => {
+    const { path, store } = await fixture();
+    await store.write({ token: "ghu_access", login: "mapper" });
+    for (const metadata of [
+      { expiresAt: "tomorrow" },
+      { expiresAt: -1 },
+      { refreshToken: "ghr_refresh" },
+      {
+        expiresAt: 1000,
+        refreshToken: "ghr_refresh",
+        refreshTokenExpiresAt: 2000,
+      },
+      {
+        expiresAt: 1000,
+        refreshToken: "ghr_refresh",
+        refreshTokenExpiresAt: 2000,
+        accountId: 42,
+        appClientId: "Iv1.app",
+        brokerOrigin: "http://unsafe.example.com",
+      },
+    ]) {
+      await writeFile(
+        path,
+        JSON.stringify({ token: "ghu_access", login: "mapper", ...metadata }),
+      );
+      expect(await store.read()).toBeNull();
+    }
+  });
+
   it("round-trips credentials with private directory and file modes", async () => {
     const { path, store } = await fixture();
 

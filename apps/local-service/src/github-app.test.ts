@@ -14,6 +14,335 @@ const config = {
   appSlug: "earth-stories-test",
   brokerUrl: "https://broker.example.com/api/github/exchange",
 };
+
+function rotatingCredential(): StoredCredentials {
+  return {
+    token: "ghu_old",
+    login: "mapper",
+    expiresAt: Date.now() - 1000,
+    refreshToken: "ghr_old",
+    refreshTokenExpiresAt: Date.now() + 86_400_000,
+    accountId: 123,
+    appClientId: config.clientId,
+    brokerOrigin: new URL(config.brokerUrl).origin,
+  };
+}
+function refreshFetch(
+  response: unknown = {
+    accessToken: "ghu_rotated",
+    expiresIn: 28800,
+    refreshToken: "ghr_rotated",
+    refreshTokenExpiresIn: 86400,
+  },
+) {
+  const fallback = fakeFetch();
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    if (String(input).endsWith("/api/github/refresh")) return json(response);
+    if (String(input) === "https://api.github.com/user")
+      return json({ login: "mapper", id: 123 });
+    return fallback(input, init);
+  });
+}
+
+describe("GitHub App secure rotation", () => {
+  it("persists complete exchange metadata only after account verification", async () => {
+    const base = refreshFetch();
+    const fetchImpl = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) =>
+        String(input) === config.brokerUrl
+          ? json({
+              accessToken: "ghu_first",
+              expiresIn: 28800,
+              refreshToken: "ghr_first",
+              refreshTokenExpiresIn: 86400,
+            })
+          : base(input, init),
+    );
+    const { connection, store } = setup({ fetchImpl });
+    const { callback } = await begin(connection);
+    await fetch(callback);
+    await connected(connection);
+    expect(await store.read()).toMatchObject({
+      token: "ghu_first",
+      refreshToken: "ghr_first",
+      accountId: 123,
+      appClientId: config.clientId,
+      brokerOrigin: "https://broker.example.com",
+      expiresAt: expect.any(Number),
+      refreshTokenExpiresAt: expect.any(Number),
+    });
+  });
+
+  it("rejects incomplete exchange refresh metadata", async () => {
+    const fetchImpl = vi.fn(async () =>
+      json({
+        accessToken: "ghu_first",
+        expiresIn: 28800,
+        refreshToken: "ghr_first",
+      }),
+    );
+    const { connection, store } = setup({ fetchImpl });
+    const { callback } = await begin(connection);
+    await fetch(callback);
+    await vi.waitFor(async () =>
+      expect((await connection.status()).status).toBe("failed"),
+    );
+    expect(store.write).not.toHaveBeenCalled();
+  });
+
+  it("refreshes one time for concurrent use and persists a verified rotated pair", async () => {
+    const fetchImpl = refreshFetch();
+    const { connection, store } = setup({
+      initial: rotatingCredential(),
+      fetchImpl,
+    });
+    const statuses = await Promise.all([
+      connection.status(),
+      connection.status(),
+      connection.status(),
+    ]);
+    expect(statuses.every((status) => status.status === "connected")).toBe(
+      true,
+    );
+    const refreshes = fetchImpl.mock.calls.filter(([url]) =>
+      String(url).endsWith("/refresh"),
+    );
+    expect(refreshes).toHaveLength(1);
+    expect(refreshes[0][1]).toMatchObject({
+      method: "POST",
+      redirect: "error",
+      body: JSON.stringify({ refreshToken: "ghr_old" }),
+    });
+    expect(await store.read()).toMatchObject({
+      token: "ghu_rotated",
+      refreshToken: "ghr_rotated",
+      accountId: 123,
+      expiresAt: expect.any(Number),
+      refreshTokenExpiresAt: expect.any(Number),
+    });
+    expect(JSON.stringify(statuses)).not.toMatch(
+      /ghu_|ghr_|refreshToken|expiresAt|accountId/,
+    );
+    await expect(connection.repositories()).resolves.toHaveLength(1);
+  });
+
+  it.each([
+    { accessToken: "ghu_rotated", expiresIn: 28800 },
+    {
+      accessToken: "ghu_rotated",
+      expiresIn: -1,
+      refreshToken: "ghr_new",
+      refreshTokenExpiresIn: 86400,
+    },
+    { accessToken: "ghu_rotated", expiresIn: 28800, refreshToken: "ghr_new" },
+    {
+      accessToken: "ghu_rotated",
+      expiresIn: 28800,
+      refreshToken: "bad",
+      refreshTokenExpiresIn: 86400,
+    },
+    {
+      accessToken: "ghu_old",
+      expiresIn: 28800,
+      refreshToken: "ghr_new",
+      refreshTokenExpiresIn: 86400,
+    },
+    {
+      accessToken: "ghu_new",
+      expiresIn: 28800,
+      refreshToken: "ghr_old",
+      refreshTokenExpiresIn: 86400,
+    },
+  ])(
+    "rejects malformed/non-rotating response without saving it %#",
+    async (body) => {
+      const { connection, store } = setup({
+        initial: rotatingCredential(),
+        fetchImpl: refreshFetch(body),
+      });
+      expect((await connection.status()).status).toBe("failed");
+      expect(store.write).not.toHaveBeenCalled();
+      expect(await store.read()).toBeNull();
+      await expect(connection.repositories()).rejects.toThrow(/Connect GitHub/);
+    },
+  );
+
+  it.each(["expired", "wrong-client", "wrong-host"])(
+    "rejects %s refresh context before transmitting token",
+    async (mode) => {
+      const initial = rotatingCredential();
+      if (mode === "expired") initial.refreshTokenExpiresAt = Date.now() - 1;
+      if (mode === "wrong-client") initial.appClientId = "Iv1.other";
+      if (mode === "wrong-host")
+        initial.brokerOrigin = "https://other.example.com";
+      const fetchImpl = refreshFetch();
+      const { connection, store } = setup({ initial, fetchImpl });
+      expect((await connection.status()).status).toBe("failed");
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(await store.read()).toBeNull();
+    },
+  );
+
+  it("rejects a refreshed credential belonging to another account", async () => {
+    const base = refreshFetch();
+    const fetchImpl = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) =>
+        String(input).endsWith("/user")
+          ? json({ login: "mapper", id: 999 })
+          : base(input, init),
+    );
+    const { connection, store } = setup({
+      initial: rotatingCredential(),
+      fetchImpl,
+    });
+    expect((await connection.status()).status).toBe("failed");
+    expect(store.write).not.toHaveBeenCalled();
+    expect(await store.read()).toBeNull();
+  });
+
+  it("fails closed after network/ambiguous refresh failure without leaking exception data", async () => {
+    const { connection, store } = setup({
+      initial: rotatingCredential(),
+      fetchImpl: vi.fn(async () => {
+        throw new Error("ghr_secret upstream debug");
+      }),
+    });
+    const status = await connection.status();
+    expect(status.status).toBe("failed");
+    expect(JSON.stringify(status)).not.toMatch(/ghr_|debug/);
+    expect(await store.read()).toBeNull();
+  });
+
+  it("does not restore a credential after disconnect during a late refresh", async () => {
+    let release!: (value: Response) => void;
+    const response = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    const fetchImpl = vi.fn(async () => response);
+    const { connection, store } = setup({
+      initial: rotatingCredential(),
+      fetchImpl,
+    });
+    const pending = connection.status();
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    await connection.disconnect();
+    release(
+      json({
+        accessToken: "ghu_late",
+        expiresIn: 28800,
+        refreshToken: "ghr_late",
+        refreshTokenExpiresIn: 86400,
+      }),
+    );
+    await pending;
+    expect((await connection.status()).status).toBe("disconnected");
+    expect(store.write).not.toHaveBeenCalled();
+    expect(await store.read()).toBeNull();
+  });
+
+  it("does not overwrite a newly connected account with a stale refresh", async () => {
+    let release!: (value: Response) => void;
+    const late = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    const base = refreshFetch();
+    const fetchImpl = vi.fn(
+      async (input: string | URL | Request, init?: RequestInit) =>
+        String(input).endsWith("/refresh") ? late : base(input, init),
+    );
+    const { connection, store } = setup({
+      initial: rotatingCredential(),
+      fetchImpl,
+    });
+    const pending = connection.status();
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    const { callback } = await begin(connection);
+    await fetch(callback);
+    await connected(connection);
+    release(
+      json({
+        accessToken: "ghu_late",
+        expiresIn: 28800,
+        refreshToken: "ghr_late",
+        refreshTokenExpiresIn: 86400,
+      }),
+    );
+    await pending;
+    expect(await store.read()).toMatchObject({
+      token: "ghu_new",
+      login: "mapper",
+    });
+    expect((await connection.status()).status).toBe("connected");
+  });
+
+  it("clears a possibly promoted rotation after persistence fails", async () => {
+    const { connection, store } = setup({
+      initial: rotatingCredential(),
+      fetchImpl: refreshFetch(),
+    });
+    store.write.mockRejectedValueOnce(
+      new Error("ghr_private filesystem error"),
+    );
+    expect((await connection.status()).status).toBe("failed");
+    expect(await store.read()).toBeNull();
+    expect(store.clear).toHaveBeenCalled();
+  });
+
+  it("reports retained credentials if promotion succeeds but write and cleanup fail", async () => {
+    const { connection, store } = setup({
+      initial: rotatingCredential(),
+      fetchImpl: refreshFetch(),
+    });
+    const promote = store.write.getMockImplementation()!;
+    store.write.mockImplementationOnce(async (next) => {
+      await promote(next);
+      throw new Error("ghr_private failure after promotion");
+    });
+    store.clear.mockRejectedValueOnce(new Error("ghu_private cleanup failure"));
+    const snapshot = await connection.status();
+    expect(snapshot.status).toBe("failed");
+    expect(snapshot.error).toContain("saved credential could not be removed");
+    expect(snapshot.error).toContain("Credentials may remain on this device");
+    expect(snapshot.error).toContain("Disconnect GitHub successfully");
+    expect(JSON.stringify(snapshot)).not.toMatch(
+      /ghr_|ghu_|after promotion|cleanup failure/,
+    );
+    expect(await store.read()).toMatchObject({
+      token: "ghu_rotated",
+      refreshToken: "ghr_rotated",
+    });
+    await expect(connection.repositories()).rejects.toThrow(/Connect GitHub/);
+    await connection.disconnect();
+    expect(await store.read()).toBeNull();
+    expect((await connection.status()).status).toBe("disconnected");
+  });
+
+  it("invalidates previously authorized publications before starting refresh", async () => {
+    const initial = rotatingCredential();
+    initial.expiresAt = Date.now() + 120_000;
+    const fetchImpl = refreshFetch();
+    const { connection } = setup({ initial, fetchImpl });
+    const authorization = await connection.authorizeRepository(42);
+    connection.assertAuthorizationCurrent(
+      authorization.identity,
+      authorization.repository,
+    );
+    const now = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(initial.expiresAt - 30_000);
+    try {
+      await connection.status();
+    } finally {
+      now.mockRestore();
+    }
+    expect(() =>
+      connection.assertAuthorizationCurrent(
+        authorization.identity,
+        authorization.repository,
+      ),
+    ).toThrow(/connection changed/);
+  });
+});
 const connections: GitHubAppConnection[] = [];
 afterEach(async () => {
   await Promise.all(
@@ -59,7 +388,6 @@ function fakeFetch() {
       return json({
         accessToken: "ghu_new",
         expiresIn: 28800,
-        refreshToken: "never-persist",
       });
     if (url === "https://api.github.com/user") return json({ login: "mapper" });
     if (url.includes("/user/installations?"))
@@ -187,6 +515,7 @@ describe("GitHub App local connection", () => {
     expect(store.write).toHaveBeenCalledExactlyOnceWith({
       token: "ghu_new",
       login: "mapper",
+      expiresAt: expect.any(Number),
     });
     expect(JSON.stringify(await connection.status())).not.toMatch(
       /ghu_|refreshToken|codeVerifier|code_challenge/,

@@ -10,7 +10,12 @@ export interface BrokerConfig {
   clientSecret: string;
 }
 
-export function readConfig(env: NodeJS.ProcessEnv): BrokerConfig | undefined {
+export interface BrokerEnvironment {
+  GITHUB_APP_CLIENT_ID?: string;
+  GITHUB_APP_CLIENT_SECRET?: string;
+}
+
+export function readConfig(env: BrokerEnvironment): BrokerConfig | undefined {
   const clientId = env.GITHUB_APP_CLIENT_ID;
   const clientSecret = env.GITHUB_APP_CLIENT_SECRET;
   if (
@@ -61,7 +66,13 @@ export async function boundedText(
   } finally {
     reader.releaseLock();
   }
-  return Buffer.concat(chunks).toString("utf8");
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 export function createBroker(
@@ -73,7 +84,9 @@ export function createBroker(
     const url = new URL(request.url);
     if (
       url.search ||
-      !["/health", "/api/github/exchange"].includes(url.pathname)
+      !["/health", "/api/github/exchange", "/api/github/refresh"].includes(
+        url.pathname,
+      )
     ) {
       return reply(404, { error: "Not found" });
     }
@@ -114,13 +127,18 @@ export function createBroker(
     if (!body || typeof body !== "object" || Array.isArray(body))
       return reply(400, { error: "Invalid request" });
     const values = body as Record<string, unknown>;
-    if (
+    const refreshing = url.pathname === "/api/github/refresh";
+    const invalidExchange =
       Object.keys(values).length !== 2 ||
       typeof values.code !== "string" ||
       !/^[A-Za-z0-9_.-]{1,512}$/.test(values.code) ||
       typeof values.codeVerifier !== "string" ||
-      !/^[A-Za-z0-9._~-]{43,128}$/.test(values.codeVerifier)
-    )
+      !/^[A-Za-z0-9._~-]{43,128}$/.test(values.codeVerifier);
+    const invalidRefresh =
+      Object.keys(values).length !== 1 ||
+      typeof values.refreshToken !== "string" ||
+      !/^[A-Za-z0-9_]{1,512}$/.test(values.refreshToken);
+    if (refreshing ? invalidRefresh : invalidExchange)
       return reply(400, { error: "Invalid request" });
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -139,9 +157,16 @@ export function createBroker(
             body: new URLSearchParams({
               client_id: config.clientId,
               client_secret: config.clientSecret,
-              code: values.code as string,
-              code_verifier: values.codeVerifier as string,
-              redirect_uri: CALLBACK_URL,
+              ...(refreshing
+                ? {
+                    grant_type: "refresh_token",
+                    refresh_token: values.refreshToken as string,
+                  }
+                : {
+                    code: values.code as string,
+                    code_verifier: values.codeVerifier as string,
+                    redirect_uri: CALLBACK_URL,
+                  }),
             }),
           });
           if (!upstream.ok) {
@@ -154,6 +179,9 @@ export function createBroker(
           if (!data || typeof data !== "object" || Array.isArray(data))
             throw new Error("Invalid upstream");
           const token = data as Record<string, unknown>;
+          const hasRefresh =
+            token.refresh_token !== undefined ||
+            token.refresh_token_expires_in !== undefined;
           if (
             token.error ||
             typeof token.access_token !== "string" ||
@@ -162,6 +190,13 @@ export function createBroker(
             token.token_type.toLowerCase() !== "bearer" ||
             (token.expires_in !== undefined &&
               (!Number.isSafeInteger(token.expires_in) ||
+                (token.expires_in as number) <= 0)) ||
+            ((refreshing || hasRefresh) &&
+              (typeof token.refresh_token !== "string" ||
+                !/^[A-Za-z0-9_]{1,512}$/.test(token.refresh_token) ||
+                !Number.isSafeInteger(token.refresh_token_expires_in) ||
+                (token.refresh_token_expires_in as number) <= 0 ||
+                !Number.isSafeInteger(token.expires_in) ||
                 (token.expires_in as number) <= 0))
           ) {
             throw new Error("Invalid upstream");
@@ -170,6 +205,12 @@ export function createBroker(
             accessToken: token.access_token,
             ...(token.expires_in !== undefined
               ? { expiresIn: token.expires_in }
+              : {}),
+            ...(hasRefresh
+              ? {
+                  refreshToken: token.refresh_token,
+                  refreshTokenExpiresIn: token.refresh_token_expires_in,
+                }
               : {}),
           };
         })(),

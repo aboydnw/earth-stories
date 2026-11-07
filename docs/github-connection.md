@@ -38,7 +38,7 @@ and hosting guidance remain available without a GitHub account.
 
 GitHub Pages output is public. Private repositories are deliberately excluded
 from this pilot path, irrespective of the account's paid-plan capabilities.
-Disconnecting clears Earth Stories' local stored credential. It neither deletes
+Successful disconnect clears Earth Stories' local stored credential. It neither deletes
 the hosted story nor uninstalls/revokes the App on GitHub. The installation link
 opens GitHub's controls for changing selected repositories or removing access.
 
@@ -60,12 +60,36 @@ metadata only. It never receives an access token, refresh token, client secret,
 or PKCE verifier. The callback's URL code and state are not copied into logs or
 projects. The browser callback response disables caching and referrers.
 
-The broker returns only the expiring user access token and its lifetime. Refresh
-tokens are discarded, so expiration requires reconnecting. The local service
-verifies the account before saving the access token. The existing desktop
+The broker returns the expiring user access token and, when provided by GitHub,
+the refresh token and both lifetimes directly to the local service. The editor
+never receives either credential. Refresh requests use the same HTTPS broker
+origin at `/api/github/refresh` and rotate both credentials; old credentials must
+not be retried after a possibly completed rotation. The local service verifies
+the account before accepting a refreshed session. Revoked or expired refresh
+credentials and unrecoverable refresh failures require reconnecting. Older
+stored sessions without a refresh token retain reconnect-on-expiry behavior.
+Refresh begins on status checks or use when access expiry is within 60 seconds;
+one refresh runs at a time for a connection. The stored credential is bound to
+the configured App client ID and broker origin, and the refreshed numeric account
+ID and login must match the connected account. Publication grants are invalidated
+before rotation and access is rechecked. Disconnecting or starting another
+connection aborts pending refresh and prevents late responses from saving a
+credential. Refresh, identity-validation, and credential-storage failures fail
+closed and attempt to remove the local credential, rather than retrying a possibly
+consumed refresh token. If removal fails, an explicit warning says credentials
+may remain on disk. A successful disconnect is required before reconnecting or
+restarting the service; do not use restart to bypass that warning.
+Reconnection is required after successful cleanup.
+The existing desktop
 credential store encrypts it using OS-protected storage where available; the
 standalone service uses its private credential file outside project folders.
-Existing documented plaintext fallback/platform limitations still apply.
+The desktop store writes the complete credential (access token, refresh token,
+expirations, and binding metadata) in its version-2 encrypted record and still
+reads legacy version-1 records. Existing documented plaintext fallback/platform
+limitations still apply: when OS encryption is unavailable, the private mode-0600
+fallback also contains the refresh token. This is not a claim of encryption on
+every platform. Successful disconnect clears the whole saved credential; failed
+cleanup must be resolved as described above.
 Old broad OAuth and GitHub CLI credentials are not silently reused or deleted.
 
 Repository access is queried through `/user/installations` and the matching
@@ -83,7 +107,8 @@ authentication errors.
 
 No App registration, credentials, deployment, installation, or live publication
 is supplied by this code change. See [the broker deployment guide](github-auth-broker.md)
-for server-only variables, permissions, Vercel adapters, and required live gates.
+for server-only variables, permissions, the Cloudflare Workers entrypoint,
+alternative Vercel adapters, and required live gates.
 The App must use Contents, Pages, and Administration read/write, plus Metadata read, with
 no account/organization permissions, webhooks, or App private key for this flow.
 GitHub’s [Pages REST API](https://docs.github.com/en/rest/pages/pages#create-a-github-pages-site)
