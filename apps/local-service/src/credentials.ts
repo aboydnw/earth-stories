@@ -13,6 +13,80 @@ import { randomUUID } from "node:crypto";
 export interface StoredCredentials {
   token: string;
   login: string;
+  expiresAt?: number;
+  refreshToken?: string;
+  refreshTokenExpiresAt?: number;
+  accountId?: number;
+  appClientId?: string;
+  brokerOrigin?: string;
+}
+
+/** Validate persisted metadata without silently dropping malformed rotation state. */
+export function parseStoredCredentials(
+  value: unknown,
+): StoredCredentials | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const data = value as Record<string, unknown>;
+  if (
+    typeof data.token !== "string" ||
+    !data.token ||
+    typeof data.login !== "string" ||
+    !data.login
+  )
+    return null;
+  for (const field of [
+    "expiresAt",
+    "refreshTokenExpiresAt",
+    "accountId",
+  ] as const) {
+    if (
+      data[field] !== undefined &&
+      (!Number.isSafeInteger(data[field]) || (data[field] as number) <= 0)
+    )
+      return null;
+  }
+  const refreshFields = [
+    "refreshToken",
+    "refreshTokenExpiresAt",
+    "accountId",
+    "appClientId",
+    "brokerOrigin",
+  ];
+  if (refreshFields.some((field) => data[field] !== undefined)) {
+    if (
+      refreshFields.some((field) => data[field] === undefined) ||
+      data.expiresAt === undefined ||
+      typeof data.refreshToken !== "string" ||
+      !/^ghr_[A-Za-z0-9_]{1,500}$/.test(data.refreshToken) ||
+      typeof data.appClientId !== "string" ||
+      !/^[A-Za-z0-9_.-]{1,200}$/.test(data.appClientId) ||
+      typeof data.brokerOrigin !== "string"
+    )
+      return null;
+    try {
+      const url = new URL(data.brokerOrigin);
+      if (url.protocol !== "https:" || url.origin !== data.brokerOrigin)
+        return null;
+    } catch {
+      return null;
+    }
+  }
+  return {
+    token: data.token,
+    login: data.login,
+    ...(data.expiresAt !== undefined
+      ? { expiresAt: data.expiresAt as number }
+      : {}),
+    ...(data.refreshToken !== undefined
+      ? {
+          refreshToken: data.refreshToken as string,
+          refreshTokenExpiresAt: data.refreshTokenExpiresAt as number,
+          accountId: data.accountId as number,
+          appClientId: data.appClientId as string,
+          brokerOrigin: data.brokerOrigin as string,
+        }
+      : {}),
+  };
 }
 
 export interface CredentialStore {
@@ -34,13 +108,9 @@ export class FileCredentialStore implements CredentialStore {
 
   async read(): Promise<StoredCredentials | null> {
     try {
-      const parsed = JSON.parse(await readFile(this.path, "utf8")) as {
-        token?: unknown;
-        login?: unknown;
-      };
-      if (typeof parsed.token !== "string" || !parsed.token) return null;
-      if (typeof parsed.login !== "string" || !parsed.login) return null;
-      return { token: parsed.token, login: parsed.login };
+      return parseStoredCredentials(
+        JSON.parse(await readFile(this.path, "utf8")),
+      );
     } catch {
       return null;
     }

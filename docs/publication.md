@@ -61,8 +61,17 @@ separate future profile.
 
 The workshop presents one recommended action: **Build publication**. It creates
 the deployable folder and, when needed, creates and stores the link preview
-image before the build. ZIP, archival HTML, and embed code remain available
-under **More output options**. Chapter captures and post-deployment link checks
+image before the build. In the desktop app, the completed result shows its
+saved location and **Show publication in Finder** (or **Show publication folder**
+on other systems). In the browser, the primary action builds and requests a ZIP
+download. The result includes a **Download ZIP again** link that reuses the
+completed download without rebuilding. Progress, errors, and the result appear
+immediately below the build action, before the GitHub publishing controls.
+
+Building does not upload anything. Closing the workshop does not cancel a
+server build already underway, but late results cannot trigger a download or
+replace the status of a later session. Reopening starts a fresh workshop view.
+ZIP, archival HTML, and embed code remain available under **More output options**. Chapter captures and post-deployment link checks
 have their own collapsed sections, keeping the normal release path short.
 
 ### Latest folder
@@ -75,6 +84,47 @@ COG, PMTiles, and GeoParquet releases require a host with byte-range support.
 
 A download of the same latest directory, including the interactive viewer,
 assets, manifest, reports, archive, and embed entrypoint.
+
+### What to do after building
+
+The result includes a short hosting checklist. The same guidance travels in
+`README.txt` inside every folder and ZIP:
+
+1. Review included data, images, source credits, and license notices. Share only
+   content you have permission to publish. Upload the publication, not the
+   editable project and its backups.
+2. Prefer the integrated GitHub publishing flow below. For Netlify, use its CLI
+   rather than Drop if you choose to try it: the viewer includes DuckDB WASM files
+   of roughly 34–39 MB. Netlify's official Drop guide warns that files above
+   10 MB can stall and recommends deploys below 50 MB. Its general guidance also
+   warns that files above 10 MB are not well-supported by the CDN and may fail
+   upload, so CLI upload is an advanced option requiring a real hosting test,
+   not a compatibility guarantee. Cloudflare Pages has a
+   hard 25 MiB per-file limit for both dashboard and CLI, so it is not suitable
+   for current exports. GitHub's browser file uploader also caps files at
+   25 MiB; the integrated flow uses GitHub's API instead. Provider links open
+   instructions; Earth Stories does not send files, create an account, or
+   accept terms on the author's behalf.
+3. Keep `index.html` at the site root and preserve relative asset paths. Check
+   provider file limits, HTTP byte-range support for large map files, and CORS
+   for connected resources. The interactive publication requires HTTP serving;
+   opening it through `file://` is not a reliable preview.
+4. Test the hosted story, enter its URL under **Verify and share after deployment**,
+   rebuild and replace the hosted files to update share metadata, then run
+   **Check published link**. Integrated GitHub publishing already knows its URL.
+
+Every publication includes `.nojekyll` for manual GitHub Pages uploads.
+Manual Pages setup requires Git or API upload of extracted files rather than
+the ZIP itself or browser drag-and-drop; the
+integrated GitHub flow remains the easiest Pages route.
+
+Provider instructions checked against the official
+[Netlify Drop guide](https://docs.netlify.com/start/quickstarts/netlify-drop-quickstart/)
+and [Cloudflare Direct Upload guide](https://developers.cloudflare.com/pages/get-started/direct-upload/).
+The built README and expanded guidance include Netlify CLI login, draft deploy,
+and explicit production deploy commands using `--no-build`, linked to the
+[current command reference](https://cli.netlify.com/commands/deploy/).
+No hosting-provider account or upload is needed to build locally.
 
 ### Archival HTML
 
@@ -127,27 +177,40 @@ deployed; other private-network addresses cannot be checked and say so.
 
 ## Publish to GitHub Pages
 
-The publication workshop can put a story on GitHub Pages, free hosting the
-author owns. Publishing needs no git binary or GitHub CLI knowledge. Earth
-Stories first reuses a token stored in `~/.earth-stories/credentials.json`, then
-checks the GitHub CLI's existing sign-in, and only then starts GitHub's device
-flow, where the panel shows a code to enter at `github.com/login/device`. A
-token obtained through device flow is stored in that credentials file with mode
-`0600`, deliberately
-outside every project directory, because project directories get exported,
-zipped, and published to a public repository. An existing GitHub CLI token is
-read fresh and is not copied there. Windows does not apply POSIX modes, so there
-the file is protected by the account's own profile permissions rather than by
-`0600`.
+The publication workshop can put a story on GitHub Pages, hosting the author
+owns. Authors explicitly **Connect GitHub**, authorize the GitHub App in their
+browser, install it on **Only select repositories**, then choose a dedicated
+public repository. Connecting does not build or upload anything. A separate
+**Publish to the web** action builds and uploads the compiled publication.
 
-After the first successful device-flow sign-in, later publishes reuse the
-stored token without showing another sign-in prompt unless the credential is
-missing, invalid, or revoked.
+This path uses GitHub App Contents, Pages, and Administration read/write permissions
+on selected repositories rather than the broad OAuth `repo` scope. GitHub requires
+Administration write to configure Pages; this permission is broad, so install only
+on dedicated publication repositories. Earth Stories does not create repositories. Create an empty publication repository on GitHub if needed,
+select it in the App installation, then refresh the repository picker. The server
+revalidates repository access and never silently falls back to another account,
+a GitHub CLI credential, or a different destination.
+
+The App's client secret remains at a separate HTTPS token-exchange broker. The
+local service uses a state-bound PKCE callback and stores only a verified user
+access token outside project folders. Desktop storage uses the existing
+OS-protected store where available. The standalone service uses its private
+credentials file; Windows relies on account-profile permissions rather than
+POSIX mode `0600`. Disconnect removes the local credential but does not delete
+a website or revoke authorization on GitHub. Expired tokens require reconnecting.
+
+A maintainer must register the App, configure and deploy the broker, and embed
+its public configuration in a distributed build. If that has not happened, the
+workshop explains that connection is unavailable and keeps local builds and ZIP
+hosting available. Registration, production deployment, and live OAuth/Pages
+verification remain release gates, not results of the local implementation.
+See [GitHub connection and publishing](github-connection.md) and
+[the broker deployment guide](github-auth-broker.md).
 
 The published address is `https://<account>.github.io/<repo>/`. It is known
 before the first upload, so the release is built with that URL already in its
 share metadata — on this path there is no paste-your-URL-and-export-again
-rebake. Re-publishing reuses the recorded repository, so the address stays
+rebake. Re-publishing reuses the recorded repository ID, so the address stays
 stable and links already shared keep working. The location is recorded in
 `.earth-stories/publish.json` beside the project.
 

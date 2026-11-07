@@ -93,6 +93,22 @@ describe("publication hardening", () => {
     expect(
       await readFile(join(first.directory, "EMBED.txt"), "utf8"),
     ).toContain("{{PUBLICATION_URL}}/embed.html");
+    expect(await readFile(join(first.directory, ".nojekyll"), "utf8")).toBe("");
+    const instructions = await readFile(
+      join(first.directory, "README.txt"),
+      "utf8",
+    );
+    expect(instructions).toContain(
+      "Netlify is an advanced option, not a guaranteed fit",
+    );
+    expect(instructions).toContain(
+      "Cloudflare Pages is not suitable for current exports",
+    );
+    expect(instructions).toContain(
+      "https://developers.cloudflare.com/pages/get-started/direct-upload/",
+    );
+    expect(instructions).toContain("not a live website yet");
+    expect(instructions).toContain("never your editable project folder");
     const archival = await readFile(
       join(first.directory, "archival.html"),
       "utf8",

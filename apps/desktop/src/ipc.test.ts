@@ -4,7 +4,16 @@ import {
   registerDesktopIpcHandlers,
   type DesktopIpcDependencies,
 } from "./ipc.js";
-import { win32 } from "node:path";
+import { win32, join } from "node:path";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 
 it("rejects a project path on another Windows drive", () => {
   expect(
@@ -27,6 +36,7 @@ function harness(
     webContentsSession?: object;
   } = {},
   tools?: DesktopIpcDependencies["tools"],
+  projectsDirectory = "/documents/Earth Stories",
 ) {
   const origin = identity.origin ?? "http://127.0.0.1:45123";
   const expectedSession = identity.expectedSession ?? {
@@ -48,7 +58,7 @@ function harness(
     },
     service: { resolveProjectDirectory: resolveProject },
     shell: { openExternal, showItemInFolder },
-    projectsDirectory: "/documents/Earth Stories",
+    projectsDirectory,
     origin,
     session: expectedSession,
     expectedWebContents: () => webContents,
@@ -89,6 +99,7 @@ describe("desktop IPC", () => {
     ["desktop:workspace-path", []],
     ["desktop:show-workspace-folder", []],
     ["desktop:show-project-folder", ["project-one"]],
+    ["desktop:show-publication-folder", ["project-one"]],
     ["desktop:open-external", ["https://example.com/help"]],
     ["desktop:export-diagnostics", []],
   ] as const;
@@ -99,6 +110,7 @@ describe("desktop IPC", () => {
       "desktop:export-diagnostics",
       "desktop:open-external",
       "desktop:show-project-folder",
+      "desktop:show-publication-folder",
       "desktop:show-workspace-folder",
       "desktop:workspace-path",
     ]);
@@ -314,6 +326,61 @@ describe("desktop IPC", () => {
     expect(value.openExternal).not.toHaveBeenCalled();
   });
 
+  it("reveals only the built publication derived from a project ID", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "publication-reveal-"));
+    try {
+      const project = join(workspace, "project-one");
+      const publication = join(project, "publication");
+      await mkdir(publication, { recursive: true });
+      const value = harness(async () => project, {}, undefined, workspace);
+      await value.invoke("desktop:show-publication-folder", "project-one");
+      // realpath may canonicalize /var to /private/var on macOS.
+      expect(value.showItemInFolder).toHaveBeenCalledWith(
+        await realpath(publication),
+      );
+      await expect(
+        value.invoke("desktop:show-publication-folder", "../outside"),
+      ).rejects.toThrow("project identifier");
+      await expect(
+        value.invoke(
+          "desktop:show-publication-folder",
+          "project-one",
+          publication,
+        ),
+      ).rejects.toThrow("project identifier");
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it("does not reveal a missing, non-directory, or escaped publication", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "publication-reveal-"));
+    try {
+      const project = join(workspace, "project-one");
+      const publication = join(project, "publication");
+      await mkdir(project);
+      const value = harness(async () => project, {}, undefined, workspace);
+      await expect(
+        value.invoke("desktop:show-publication-folder", "project-one"),
+      ).rejects.toThrow();
+      await writeFile(publication, "not a directory");
+      await expect(
+        value.invoke("desktop:show-publication-folder", "project-one"),
+      ).rejects.toThrow("Build a publication");
+      await rm(publication);
+      await symlink(
+        workspace,
+        publication,
+        process.platform === "win32" ? "junction" : "dir",
+      );
+      await expect(
+        value.invoke("desktop:show-publication-folder", "project-one"),
+      ).rejects.toThrow("outside its project");
+      expect(value.showItemInFolder).not.toHaveBeenCalled();
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
+  });
   it("opens a validated HTTPS URL in the system browser", async () => {
     const value = harness();
 

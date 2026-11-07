@@ -36,6 +36,8 @@ import {
 } from "./captureSnapshots";
 import { ShareRehearsal } from "./ShareRehearsal";
 import { PublishToWeb } from "./PublishToWeb";
+import { detectDesktopBridge } from "./desktop";
+import { PublicationNextSteps } from "./PublicationNextSteps";
 
 interface Props {
   open: boolean;
@@ -117,7 +119,16 @@ export function PublishPanel({
   localReadiness,
   unsaved,
 }: Props) {
+  const desktop = detectDesktopBridge();
   const preflight = preflightState.result;
+  const operationRef = useRef(0);
+  const runningRef = useRef(false);
+  const feedbackRef = useRef<HTMLDivElement>(null);
+  const [directory, setDirectory] = useState<string | null>(null);
+  const [download, setDownload] = useState<{
+    href: string;
+    filename: string;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cardWarning, setCardWarning] = useState<string | null>(null);
@@ -148,6 +159,11 @@ export function PublishPanel({
   onRefreshRef.current = onRefreshPreflight;
 
   useEffect(() => {
+    operationRef.current += 1;
+    runningRef.current = false;
+    setLoading(false);
+    setDirectory(null);
+    setDownload(null);
     if (!open) return;
     setError(null);
     setCardWarning(null);
@@ -155,7 +171,22 @@ export function PublishPanel({
     setLastFormat(null);
     setResultBuildId(null);
     setVerifiedOffline(false);
-  }, [open, project.id, project.metadata.updated]);
+    return () => {
+      operationRef.current += 1;
+    };
+  }, [open, project.id]);
+
+  useEffect(() => {
+    return () => {
+      if (download) URL.revokeObjectURL(download.href);
+    };
+  }, [download]);
+
+  useEffect(() => {
+    if (!open || (!loading && !result && !error)) return;
+    feedbackRef.current?.scrollIntoView?.({ block: "nearest" });
+    if (!loading) feedbackRef.current?.focus({ preventScroll: true });
+  }, [open, loading, result, error]);
 
   useEffect(() => {
     setPublicationUrl("");
@@ -249,14 +280,20 @@ export function PublishPanel({
   const persistedCard =
     hasShareCard || cardVersion ? shareCardUrl(project.id, cardVersion) : null;
 
-  async function prepareShareCard(saved: StoryProject) {
+  async function prepareShareCard(
+    saved: StoryProject,
+    isCurrent: () => boolean,
+  ) {
     if (hasShareCard || cardVersion) return;
     setBusyLabel("Creating the link preview image…");
     try {
       const image = await captureShareCard(saved.metadata.title);
+      if (!isCurrent()) return;
       await uploadShareCard(saved.id, image);
+      if (!isCurrent()) return;
       setCardVersion((version) => version + 1);
     } catch (cause) {
+      if (!isCurrent()) return;
       setCardWarning(
         cause instanceof Error
           ? `The release will use no preview image: ${cause.message}`
@@ -265,76 +302,150 @@ export function PublishPanel({
     }
   }
 
+  function requestDownload(artifact: { href: string; filename: string }) {
+    const anchor = document.createElement("a");
+    anchor.href = artifact.href;
+    anchor.download = artifact.filename;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    // Keep the URL alive for the visible retry link; WebKit/Electron may
+    // consume the download after click() returns.
+  }
+
+  async function showPublication() {
+    if (!desktop) return;
+    setError(null);
+    try {
+      if (desktop.showPublicationFolder)
+        await desktop.showPublicationFolder(project.id);
+      else await desktop.showProjectFolder(project.id);
+    } catch (cause) {
+      setError(
+        `The publication was built, but its folder could not be shown. ${cause instanceof Error ? cause.message : "Use the saved location below."}`,
+      );
+    }
+  }
+
   async function run(format: ExportFormat) {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    const operation = ++operationRef.current;
+    const isCurrent = () => operationRef.current === operation;
     setLoading(true);
+    setBusyLabel("Preparing your publication…");
     setError(null);
     setCardWarning(null);
     setResult(null);
+    setDirectory(null);
+    setDownload(null);
     setLastFormat(null);
     setResultBuildId(null);
     setVerifiedOffline(false);
     setSnippet("");
     try {
       const saved = await onBeforeExport();
-      if (!saved) return;
-      await prepareShareCard(saved);
+      if (!isCurrent()) return;
+      if (!saved)
+        throw new Error(
+          "The story could not be saved. Save your changes, then build again.",
+        );
+      await prepareShareCard(saved, isCurrent);
+      if (!isCurrent()) return;
       setBusyLabel("Building and validating the latest publication…");
       const mapSnapshots = await captureMapSnapshots();
+      if (!isCurrent()) return;
       const response = await exportProject(saved.id, format, {
         mapSnapshots,
         publicationUrl: publicationUrl.trim(),
       });
+      if (!isCurrent()) return;
       setLastFormat(format);
       setResultBuildId(response.buildId ?? null);
       setVerifiedOffline(saved.publication.profile === "offline");
       if (response.blob && response.filename) {
-        const href = URL.createObjectURL(response.blob);
-        const anchor = document.createElement("a");
-        anchor.href = href;
-        anchor.download = response.filename;
-        anchor.click();
-        URL.revokeObjectURL(href);
-        setResult(`Downloaded ${response.filename}`);
-      } else if (format === "folder")
-        setResult(`Publication built at ${response.directory}`);
-      else if (format === "embed") {
+        const artifact = {
+          href: URL.createObjectURL(response.blob),
+          filename: response.filename,
+        };
+        setDownload(artifact);
+        setResult(
+          format === "zip"
+            ? "Your publication ZIP is ready."
+            : "Your archival HTML is ready.",
+        );
+        requestDownload(artifact);
+      } else if (format === "folder" && response.directory) {
+        setDirectory(response.directory);
+        setResult("Your publication folder is ready.");
+      } else if (format === "embed") {
         setSnippet(response.snippet ?? "");
         setResult("Embed code is ready.");
-      }
+      } else
+        throw new Error("The build returned no output. Try building again.");
       onRefreshRef.current();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Export failed");
+      if (isCurrent())
+        setError(cause instanceof Error ? cause.message : "Export failed");
     } finally {
-      setLoading(false);
+      if (isCurrent()) {
+        runningRef.current = false;
+        setLoading(false);
+      }
     }
   }
 
   async function downloadStillImages() {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    const operation = ++operationRef.current;
+    const isCurrent = () => operationRef.current === operation;
     setLoading(true);
+    setDownload(null);
+    setDirectory(null);
+    setResultBuildId(null);
+    setVerifiedOffline(false);
+    setCardWarning(null);
+    setSnippet("");
     setError(null);
     setResult(null);
     setLastFormat(null);
     setBusyLabel("Capturing attributed chapter images…");
     try {
       const count = await downloadMapSnapshots(project.metadata.title);
+      if (!isCurrent()) return;
       setResult(
         count
           ? `Downloaded ${count} attributed chapter image${count === 1 ? "" : "s"}`
           : "No ready map chapters could be captured.",
       );
     } catch (cause) {
+      if (!isCurrent()) return;
       setError(
         cause instanceof Error
           ? cause.message
           : "Chapter images could not be captured.",
       );
     } finally {
-      setLoading(false);
+      if (isCurrent()) {
+        runningRef.current = false;
+        setLoading(false);
+      }
     }
   }
 
   async function downloadAnimatedImages() {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    const operation = ++operationRef.current;
+    const isCurrent = () => operationRef.current === operation;
     setLoading(true);
+    setDownload(null);
+    setDirectory(null);
+    setResultBuildId(null);
+    setVerifiedOffline(false);
+    setCardWarning(null);
+    setSnippet("");
     setError(null);
     setResult(null);
     setLastFormat(null);
@@ -345,19 +456,24 @@ export function PublishPanel({
       const { count, format } = await downloadAnimatedMapCaptures(
         project.metadata.title,
       );
+      if (!isCurrent()) return;
       setResult(
         count
           ? `Downloaded ${count} animated ${format.toUpperCase()} chapter capture${count === 1 ? "" : "s"}.`
           : "No ready map chapters could be recorded.",
       );
     } catch (cause) {
+      if (!isCurrent()) return;
       setError(
         cause instanceof Error
           ? cause.message
           : "Animated chapter captures could not be recorded.",
       );
     } finally {
-      setLoading(false);
+      if (isCurrent()) {
+        runningRef.current = false;
+        setLoading(false);
+      }
     }
   }
 
@@ -387,8 +503,8 @@ export function PublishPanel({
             <p>Publish</p>
             <h2 id="publish-title">Build your release</h2>
             <span>
-              Create the deployable folder first. Other outputs stay available
-              when you need them.
+              Build the files for your website first, then choose where to
+              publish them.
             </span>
           </div>
           <ActionButton
@@ -467,20 +583,122 @@ export function PublishPanel({
         <section className="publish-primary" aria-labelledby="primary-output">
           <div>
             <p>Recommended output</p>
-            <h3 id="primary-output">Publication folder</h3>
+            <h3 id="primary-output">
+              {desktop ? "Publication folder" : "Publication ZIP"}
+            </h3>
             <span>
-              The complete interactive story, ready to upload to a static host.
+              {desktop
+                ? "Save the complete interactive story in your project’s publication folder."
+                : "Download the complete interactive story as a ZIP, ready to upload to a static host."}
             </span>
           </div>
           <ActionButton
             className="publish-primary__action button button--primary"
             disabled={!canBuild}
-            onClick={() => void run("folder")}
+            onClick={() => void run(desktop ? "folder" : "zip")}
           >
             <FolderOpen size={20} weight="duotone" />
             {loading ? "Building…" : "Build publication"}
           </ActionButton>
         </section>
+
+        <div
+          ref={feedbackRef}
+          className="publish-feedback"
+          tabIndex={-1}
+          aria-label="Publication build status"
+          aria-busy={loading}
+        >
+          {cardWarning ? (
+            <StatusNotice tone="warning">{cardWarning}</StatusNotice>
+          ) : null}
+          {error ? (
+            <StatusNotice className="publish-result" tone="danger">
+              {error}
+            </StatusNotice>
+          ) : null}
+          {loading ? (
+            <div className="publish-progress">
+              <ProgressPresentation
+                stage="verifying"
+                title={busyLabel}
+                detail="The last successful publication remains available while this operation runs."
+              />
+            </div>
+          ) : null}
+          {result ? (
+            <div className="publish-completion">
+              <StatusNotice className="publish-result" tone="success">
+                <CheckCircle weight="fill" /> {result}
+              </StatusNotice>
+              {directory ? (
+                <p className="publish-output-path">
+                  <strong>Saved on this computer:</strong> {directory}
+                </p>
+              ) : null}
+              {download ? (
+                <p>
+                  Download requested: <strong>{download.filename}</strong>.
+                  Check your downloads, or use the link below if it did not
+                  start.
+                </p>
+              ) : null}
+              {lastFormat ? (
+                <p>
+                  {resultBuildId ? `Build ${resultBuildId}. ` : ""}
+                  {verifiedOffline ? (
+                    <>
+                      <strong>Verified offline</strong>. This export passed its
+                      offline runtime check.
+                    </>
+                  ) : (
+                    "This is a local build, not a live website yet."
+                  )}
+                </p>
+              ) : null}
+              <div className="publish-output-actions">
+                {directory && desktop ? (
+                  <ActionButton
+                    variant="surface"
+                    onClick={() => void showPublication()}
+                  >
+                    <FolderOpen size={18} />{" "}
+                    {desktop.showPublicationFolder
+                      ? desktop.platform === "darwin"
+                        ? "Show publication in Finder"
+                        : "Show publication folder"
+                      : "Show project folder"}
+                  </ActionButton>
+                ) : null}
+                {directory && desktop && !desktop.showPublicationFolder ? (
+                  <p>Open the publication folder inside your project.</p>
+                ) : null}
+                {download ? (
+                  <a
+                    href={download.href}
+                    download={download.filename}
+                    className="publish-download-link"
+                  >
+                    <DownloadSimple size={18} /> Download{" "}
+                    {lastFormat === "zip" ? "ZIP" : "HTML"} again
+                  </a>
+                ) : null}
+                {lastFormat === "folder" ? (
+                  <ActionButton
+                    variant="surface"
+                    disabled={!canBuild}
+                    onClick={() => void run("zip")}
+                  >
+                    <DownloadSimple size={18} /> Build and download ZIP
+                  </ActionButton>
+                ) : null}
+              </div>
+              {lastFormat === "folder" || lastFormat === "zip" ? (
+                <PublicationNextSteps />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
         <PublishToWeb
           project={project}
@@ -488,53 +706,6 @@ export function PublishPanel({
           onBusyChange={setPublishBusy}
           onPublished={onRefreshPreflight}
         />
-
-        {cardWarning ? (
-          <StatusNotice tone="warning">{cardWarning}</StatusNotice>
-        ) : null}
-        {error ? (
-          <StatusNotice className="publish-result" tone="danger">
-            {error}
-          </StatusNotice>
-        ) : null}
-        {loading ? (
-          <div className="publish-progress">
-            <ProgressPresentation
-              stage="verifying"
-              title={busyLabel}
-              detail="The last successful publication remains available while this operation runs."
-            />
-          </div>
-        ) : null}
-        {result ? (
-          <div className="publish-completion">
-            <StatusNotice className="publish-result" tone="success">
-              <CheckCircle weight="fill" /> {result}
-            </StatusNotice>
-            {lastFormat ? (
-              <p>
-                {resultBuildId ? `Build ${resultBuildId}. ` : ""}
-                {verifiedOffline ? (
-                  <>
-                    <strong>Verified offline</strong>. This export passed its
-                    offline runtime check.
-                  </>
-                ) : (
-                  "Deploy the output, then verify it at its public URL."
-                )}
-              </p>
-            ) : null}
-            {lastFormat === "folder" ? (
-              <ActionButton
-                variant="surface"
-                disabled={loading}
-                onClick={() => void run("zip")}
-              >
-                <DownloadSimple size={18} /> Download ZIP
-              </ActionButton>
-            ) : null}
-          </div>
-        ) : null}
 
         <details className="publish-disclosure">
           <summary>

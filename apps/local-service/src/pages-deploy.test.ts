@@ -1520,3 +1520,209 @@ describe("waitForPages", () => {
     ).resolves.toBe(false);
   });
 });
+
+describe("selected existing repository safety", () => {
+  const options = {
+    token: "app-secret",
+    owner: "map-org",
+    repo: "coast",
+    projectId: "story-1",
+    allowCreate: false,
+  };
+
+  it("does not create a missing selected repository", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({}, 404));
+    await expect(ensureRepository({ ...options, fetchImpl })).rejects.toThrow(
+      /no longer available/,
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a nonempty unrelated selected repository", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ owner: { login: "map-org" }, size: 1 }),
+      )
+      .mockResolvedValueOnce(jsonResponse({}, 404));
+    await expect(ensureRepository({ ...options, fetchImpl })).rejects.toThrow(
+      /nothing is overwritten/,
+    );
+    expect(fetchImpl.mock.calls.every(([, init]) => !init.method)).toBe(true);
+  });
+
+  it("initializes an empty selected repository only after checking authorization again", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ owner: { login: "map-org" }, size: 0 }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ message: "Git Repository is empty." }, 409),
+      )
+      .mockResolvedValueOnce(jsonResponse({}, 201));
+    const beforeWrite = vi.fn(async () => undefined);
+    await expect(
+      ensureRepository({ ...options, fetchImpl, beforeWrite }),
+    ).resolves.toEqual({ created: false });
+    expect(beforeWrite).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[2]?.[1].method).toBe("PUT");
+    expect(fetchImpl.mock.calls[2]?.[0]).toContain(
+      "/contents/.earth-stories-seed",
+    );
+  });
+
+  it("does not trust cached zero size when the selected repository has commits", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ owner: { login: "map-org" }, size: 0 }),
+      )
+      .mockResolvedValueOnce(jsonResponse([{ sha: "existing-work" }]))
+      .mockResolvedValueOnce(jsonResponse({}, 404));
+    await expect(ensureRepository({ ...options, fetchImpl })).rejects.toThrow(
+      /nothing is overwritten/,
+    );
+    expect(fetchImpl.mock.calls.every(([, init]) => !init.method)).toBe(true);
+  });
+
+  it("does not initialize after authorization is revoked", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ owner: { login: "map-org" }, size: 0 }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ message: "Git Repository is empty." }, 409),
+      );
+    await expect(
+      ensureRepository({
+        ...options,
+        fetchImpl,
+        beforeWrite: async () => {
+          throw new Error("revoked");
+        },
+      }),
+    ).rejects.toThrow(/revoked/);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops before Git object writes after authorization is revoked", async () => {
+    const directory = await oneFileRelease();
+    try {
+      const github = fakeGitHub();
+      await expect(
+        pushRelease({
+          ...options,
+          directory,
+          fetchImpl: github.fetchImpl,
+          beforeWrite: async () => {
+            throw new Error("revoked");
+          },
+        }),
+      ).rejects.toThrow(/revoked/);
+      expect(github.requests.every(({ method }) => method === "GET")).toBe(
+        true,
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("revalidates every Git object write, including reference fallback", async () => {
+    const directory = await oneFileRelease();
+    try {
+      const github = fakeGitHub();
+      const beforeWrite = vi.fn(async () => undefined);
+      await pushRelease({
+        ...options,
+        directory,
+        fetchImpl: github.fetchImpl,
+        beforeWrite,
+      });
+      expect(beforeWrite).toHaveBeenCalledTimes(
+        github.requests.filter(({ method }) => method !== "GET").length,
+      );
+      expect(beforeWrite).toHaveBeenCalledTimes(5);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the publication branch untouched if access is revoked after blobs upload", async () => {
+    const directory = await oneFileRelease();
+    try {
+      const github = fakeGitHub();
+      let checks = 0;
+      await expect(
+        pushRelease({
+          ...options,
+          directory,
+          fetchImpl: github.fetchImpl,
+          beforeWrite: async () => {
+            if (++checks > 1) throw new Error("revoked");
+          },
+        }),
+      ).rejects.toThrow(/revoked/);
+      expect(
+        github.requests
+          .filter(({ method }) => method !== "GET")
+          .map(({ url }) => url),
+      ).toEqual(["https://api.github.com/repos/map-org/coast/git/blobs"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rechecks remote authorization after upload and never replaces the ref if it fails", async () => {
+    const directory = await oneFileRelease();
+    try {
+      const github = fakeGitHub();
+      const beforeRefUpdate = vi.fn(async () => {
+        expect(
+          github.requests.some(({ url }) => url.endsWith("/git/commits")),
+        ).toBe(true);
+        throw new Error("Repository changed");
+      });
+      await expect(
+        pushRelease({
+          ...options,
+          directory,
+          fetchImpl: github.fetchImpl,
+          beforeRefUpdate,
+        }),
+      ).rejects.toThrow(/Repository changed/);
+      expect(beforeRefUpdate).toHaveBeenCalledTimes(1);
+      expect(
+        github.requests.some(
+          ({ method, url }) => method === "PATCH" || url.endsWith("/git/refs"),
+        ),
+      ).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("stops before enabling Pages after authorization is revoked", async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      enablePages({
+        ...options,
+        fetchImpl,
+        beforeWrite: async () => {
+          throw new Error("revoked");
+        },
+      }),
+    ).rejects.toThrow(/revoked/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("uses root URLs for account and organization Pages repositories", () => {
+    expect(pagesUrl("Map-Org", "map-org.github.io")).toBe(
+      "https://map-org.github.io/",
+    );
+    expect(pagesUrl("mapper", "Mapper.GitHub.io")).toBe(
+      "https://mapper.github.io/",
+    );
+  });
+});

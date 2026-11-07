@@ -21,6 +21,8 @@ function repositorySeedContent(projectId: string): string {
 export interface GitHubRequestOptions {
   token: string;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+  beforeWrite?: () => Promise<void>;
 }
 
 function apiHeaders(token: string): Record<string, string> {
@@ -49,7 +51,10 @@ export function slugRepoName(title: string): string {
 }
 
 export function pagesUrl(owner: string, repo: string): string {
-  return `https://${owner.toLowerCase()}.github.io/${repo}/`;
+  const root = `https://${owner.toLowerCase()}.github.io/`;
+  return repo.toLowerCase() === `${owner.toLowerCase()}.github.io`
+    ? root
+    : `${root}${repo}/`;
 }
 
 async function readError(response: Response): Promise<string> {
@@ -67,6 +72,7 @@ export interface EnsureRepositoryOptions extends GitHubRequestOptions {
   projectId: string;
   description?: string;
   expectExisting?: boolean;
+  allowCreate?: boolean;
 }
 
 function repositorySeedEndpoint(options: EnsureRepositoryOptions): string {
@@ -102,6 +108,7 @@ async function hasValidRepositorySeed(
   try {
     response = await fetchImpl(repositorySeedEndpoint(options), {
       headers: apiHeaders(options.token),
+      signal: options.signal,
     });
   } catch (cause) {
     throw new Error(
@@ -132,7 +139,10 @@ async function initializeEmptyRepository(
   const endpoint = repositorySeedEndpoint(options);
   let response: Response;
   try {
+    await options.beforeWrite?.();
+    options.signal?.throwIfAborted();
     response = await fetchImpl(endpoint, {
+      signal: options.signal,
       method: "PUT",
       headers: apiHeaders(options.token),
       body: JSON.stringify({
@@ -171,7 +181,7 @@ export async function ensureRepository(
   const fetchImpl = options.fetchImpl ?? fetch;
   const existing = await fetchImpl(
     `${API_ROOT}/repos/${options.owner}/${options.repo}`,
-    { headers: apiHeaders(options.token) },
+    { headers: apiHeaders(options.token), signal: options.signal },
   );
 
   if (existing.ok) {
@@ -187,7 +197,26 @@ export async function ensureRepository(
       throw new Error(
         `The repository ${options.owner}/${options.repo} belongs to someone else. Choose another name.`,
       );
-    const empty = body.size === 0;
+    let empty = body.size === 0;
+    // GitHub's size is approximate and can lag behind commits. In selected-repo
+    // mode, only an explicit empty-repository response permits initialization.
+    if (empty && options.allowCreate === false) {
+      const commits = await fetchImpl(
+        `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/commits?per_page=1`,
+        { headers: apiHeaders(options.token), signal: options.signal },
+      );
+      if (commits.status === 409) {
+        empty = /^Git Repository is empty\.?$/i.test(await readError(commits));
+      } else if (commits.ok) {
+        await commits.body?.cancel();
+        empty = false;
+      } else {
+        const detail = safeMessage(await readError(commits), options.token);
+        throw new Error(
+          `GitHub could not verify whether the selected repository is empty (${commits.status}). ${detail}`.trim(),
+        );
+      }
+    }
     if (!options.expectExisting && !empty) {
       const interrupted = await hasValidRepositorySeed(options, fetchImpl);
       if (!interrupted)
@@ -207,7 +236,14 @@ export async function ensureRepository(
   }
   await existing.body?.cancel();
 
+  if (options.allowCreate === false)
+    throw new Error(
+      "The selected GitHub repository is no longer available. Choose an existing repository and try again.",
+    );
+  await options.beforeWrite?.();
+  options.signal?.throwIfAborted();
   const created = await fetchImpl(`${API_ROOT}/user/repos`, {
+    signal: options.signal,
     method: "POST",
     headers: apiHeaders(options.token),
     body: JSON.stringify({
@@ -232,6 +268,8 @@ export async function ensureRepository(
 }
 
 export interface PushReleaseOptions {
+  beforeRefUpdate?: () => Promise<void>;
+  beforeWrite?: () => Promise<void>;
   directory: string;
   token: string;
   owner: string;
@@ -249,6 +287,7 @@ export interface PushReleaseProgress {
 }
 
 interface GitHubObjectRequest {
+  beforeWrite?: () => Promise<void>;
   fetchImpl: typeof fetch;
   token: string;
   url: string;
@@ -317,10 +356,13 @@ async function githubObjectRequest({
   operation,
   init,
   body,
+  beforeWrite,
 }: GitHubObjectRequest): Promise<Response> {
   for (let attempt = 0; ; attempt += 1) {
     let response: Response;
     try {
+      if (init?.method && init.method !== "GET") await beforeWrite?.();
+      init?.signal?.throwIfAborted();
       const requestInit: RequestInit & { duplex?: "half" } = {
         ...init,
         headers: apiHeaders(token),
@@ -403,6 +445,7 @@ async function readExistingBlobs(
   const ref = await githubObjectRequest({
     fetchImpl,
     token: options.token,
+    beforeWrite: options.beforeWrite,
     url: `${root}/ref/heads/${encodePathSegments(branch)}`,
     operation: "Reading the publication branch",
     init: { signal: options.signal },
@@ -422,6 +465,7 @@ async function readExistingBlobs(
   const commit = await githubObjectRequest({
     fetchImpl,
     token: options.token,
+    beforeWrite: options.beforeWrite,
     url: `${root}/commits/${encodeURIComponent(refBody.object.sha)}`,
     operation: "Reading the previous publication commit",
     init: { signal: options.signal },
@@ -439,6 +483,7 @@ async function readExistingBlobs(
   const tree = await githubObjectRequest({
     fetchImpl,
     token: options.token,
+    beforeWrite: options.beforeWrite,
     url: `${root}/trees/${encodeURIComponent(commitBody.tree.sha)}?recursive=1`,
     operation: "Reading the previous publication tree",
     init: { signal: options.signal },
@@ -487,6 +532,7 @@ async function uploadMissingBlobs(
         const response = await githubObjectRequest({
           fetchImpl,
           token: options.token,
+          beforeWrite: options.beforeWrite,
           url: endpoint,
           operation: `Uploading ${file.path}`,
           init: { method: "POST", signal },
@@ -533,6 +579,7 @@ async function createTree(
   const response = await githubObjectRequest({
     fetchImpl: options.fetchImpl ?? fetch,
     token: options.token,
+    beforeWrite: options.beforeWrite,
     url: `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/trees`,
     operation: "Creating the publication tree",
     init: { method: "POST", signal: options.signal },
@@ -565,6 +612,7 @@ async function createCommit(
   const response = await githubObjectRequest({
     fetchImpl: options.fetchImpl ?? fetch,
     token: options.token,
+    beforeWrite: options.beforeWrite,
     url: `${API_ROOT}/repos/${encodeURIComponent(options.owner)}/${encodeURIComponent(options.repo)}/git/commits`,
     operation: "Creating the publication commit",
     init: { method: "POST", signal: options.signal },
@@ -594,6 +642,7 @@ async function forceUpdateRef(
   const updated = await githubObjectRequest({
     fetchImpl,
     token: options.token,
+    beforeWrite: options.beforeWrite,
     url: `${root}/refs/heads/${encodePathSegments(branch)}`,
     operation: "Updating the publication branch",
     init: { method: "PATCH", signal: options.signal },
@@ -615,6 +664,7 @@ async function forceUpdateRef(
   const created = await githubObjectRequest({
     fetchImpl,
     token: options.token,
+    beforeWrite: options.beforeWrite,
     url: `${root}/refs`,
     operation: "Creating the publication branch",
     init: { method: "POST", signal: options.signal },
@@ -648,6 +698,8 @@ export async function pushRelease(
     await uploadMissingBlobs(options, files, existing);
     const tree = await createTree(options, files);
     const commit = await createCommit(options, tree);
+    await options.beforeRefUpdate?.();
+    options.signal?.throwIfAborted();
     await forceUpdateRef(options, branch, commit);
     return { branch };
   } catch (cause) {
@@ -672,7 +724,10 @@ export async function enablePages(options: EnablePagesOptions): Promise<void> {
   const endpoint = `${API_ROOT}/repos/${options.owner}/${options.repo}/pages`;
   const source = { branch, path: "/" };
 
+  await options.beforeWrite?.();
+  options.signal?.throwIfAborted();
   const created = await fetchImpl(endpoint, {
+    signal: options.signal,
     method: "POST",
     headers: apiHeaders(options.token),
     body: JSON.stringify({ source }),
@@ -687,7 +742,10 @@ export async function enablePages(options: EnablePagesOptions): Promise<void> {
     );
   await created.body?.cancel();
 
+  await options.beforeWrite?.();
+  options.signal?.throwIfAborted();
   const updated = await fetchImpl(endpoint, {
+    signal: options.signal,
     method: "PUT",
     headers: apiHeaders(options.token),
     body: JSON.stringify({ source }),

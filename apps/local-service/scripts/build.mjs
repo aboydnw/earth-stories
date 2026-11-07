@@ -8,6 +8,19 @@ await mkdir(resolve(packageDirectory, "dist"), { recursive: true });
 const result = await build({
   entryPoints: [resolve(packageDirectory, "src/standalone.ts")],
   outfile: resolve(packageDirectory, "dist/service.js"),
+  define: {
+    __EARTH_STORIES_GITHUB_APP_CONFIG__: JSON.stringify(
+      process.env.EARTH_STORIES_GITHUB_APP_CLIENT_ID &&
+        process.env.EARTH_STORIES_GITHUB_APP_SLUG &&
+        process.env.EARTH_STORIES_GITHUB_BROKER_URL
+        ? {
+            clientId: process.env.EARTH_STORIES_GITHUB_APP_CLIENT_ID,
+            appSlug: process.env.EARTH_STORIES_GITHUB_APP_SLUG,
+            brokerUrl: process.env.EARTH_STORIES_GITHUB_BROKER_URL,
+          }
+        : null,
+    ),
+  },
   bundle: true,
   platform: "node",
   format: "esm",

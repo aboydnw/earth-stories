@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 export const PUBLISH_RECORD_PATH = ".earth-stories/publish.json";
 
 export interface PublishRecord {
+  repositoryId?: number;
   owner: string;
   repo: string;
   url: string;
@@ -41,6 +42,10 @@ export async function readPublishRecord(
     );
     if (!isRecord(parsed)) return null;
     return {
+      ...(Number.isSafeInteger(parsed.repositoryId) &&
+      Number(parsed.repositoryId) > 0
+        ? { repositoryId: parsed.repositoryId }
+        : {}),
       owner: parsed.owner,
       repo: parsed.repo,
       url: parsed.url,

@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthoringReadiness } from "@earth-stories/publisher/readiness";
 import {
   storyProjectSchema,
@@ -43,13 +43,36 @@ vi.mock("./PublishToWeb", () => ({
 
 import { exportProject, uploadShareCard } from "./api";
 import { captureShareCard } from "./captureShareCard";
-import { captureMapSnapshots } from "./captureSnapshots";
+import {
+  captureMapSnapshots,
+  downloadMapSnapshots,
+  downloadAnimatedMapCaptures,
+} from "./captureSnapshots";
 import { PublishPanel } from "./PublishPanel";
 import type { PublicationReadinessState } from "./usePublicationReadiness";
+import type { DesktopBridge } from "./desktop";
+
+const createObjectURL = vi.fn(() => "blob:publication");
+const revokeObjectURL = vi.fn();
+
+beforeEach(() => {
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: createObjectURL,
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: revokeObjectURL,
+  });
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  vi.mocked(captureMapSnapshots).mockResolvedValue({});
+});
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
+  delete window.earthStoriesDesktop;
 });
 
 const project: StoryProject = storyProjectSchema.parse(
@@ -188,7 +211,8 @@ describe("PublishPanel", () => {
     };
     vi.mocked(captureMapSnapshots).mockResolvedValue({});
     vi.mocked(exportProject).mockResolvedValue({
-      directory: "/tmp/publication",
+      blob: new Blob(["publication"]),
+      filename: "story-build-offline.zip",
       buildId: "build-offline",
     });
     panel({
@@ -268,7 +292,11 @@ describe("PublishPanel", () => {
     });
     vi.mocked(exportProject).mockImplementation(async () => {
       operations.push("export");
-      return { directory: "/tmp/publication", buildId: "build-2" };
+      return {
+        blob: new Blob(["publication"]),
+        filename: "story-build-2.zip",
+        buildId: "build-2",
+      };
     });
     const onBeforeExport = vi.fn().mockImplementation(async () => {
       operations.push("save");
@@ -297,7 +325,7 @@ describe("PublishPanel", () => {
       "capture-maps",
       "export",
     ]);
-    expect(exportProject).toHaveBeenCalledWith(project.id, "folder", {
+    expect(exportProject).toHaveBeenCalledWith(project.id, "zip", {
       mapSnapshots: {},
       publicationUrl: "",
     });
@@ -327,7 +355,7 @@ describe("PublishPanel", () => {
       screen.getByRole("button", { name: /build publication/i }),
     );
     await waitFor(() =>
-      expect(exportProject).toHaveBeenCalledWith(project.id, "folder", {
+      expect(exportProject).toHaveBeenCalledWith(project.id, "zip", {
         mapSnapshots: {},
         publicationUrl: "example.org/story",
       }),
@@ -444,5 +472,317 @@ describe("PublishPanel", () => {
     expect(
       await screen.findByText(/embed code could not be copied/i),
     ).toBeTruthy();
+  });
+});
+
+function desktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
+  return {
+    version: "0.1.0",
+    platform: "darwin",
+    chooseWorkspace: vi.fn(),
+    exportDiagnostics: vi.fn(),
+    workspacePath: vi.fn(),
+    showWorkspaceFolder: vi.fn(),
+    showProjectFolder: vi.fn(),
+    showPublicationFolder: vi.fn().mockResolvedValue(undefined),
+    openExternal: vi.fn(),
+    listTools: vi.fn(),
+    prepareTools: vi.fn(),
+    removeTool: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe("publication output recovery", () => {
+  it("downloads the browser ZIP and keeps a retry link without rebuilding", async () => {
+    vi.mocked(exportProject).mockResolvedValue({
+      blob: new Blob(["zip"]),
+      filename: "story.zip",
+    });
+    const { unmount } = panel();
+    expect(screen.getByText("Publication ZIP")).toBeTruthy();
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    const retry = await screen.findByRole("link", {
+      name: /download zip again/i,
+    });
+    expect(retry.getAttribute("href")).toBe("blob:publication");
+    expect(retry.getAttribute("download")).toBe("story.zip");
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    expect(screen.getByText(/download requested:/i)).toBeTruthy();
+    expect(screen.getByText(/nothing has been uploaded/i)).toBeTruthy();
+    expect(screen.getByText(/not your editable project folder/i)).toBeTruthy();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      "Publication build status",
+    );
+    const feedback = screen.getByLabelText("Publication build status");
+    expect(
+      feedback.compareDocumentPosition(screen.getByTestId("publish-to-web")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Activating the real download link never calls the build API again.
+    expect(exportProject).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByText("Other hosting options"));
+    expect(
+      screen
+        .getByRole("link", { name: "Netlify CLI setup" })
+        .getAttribute("href"),
+    ).toBe(
+      "https://docs.netlify.com/api-and-cli-guides/cli-guides/get-started-with-cli/",
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "Cloudflare upload limits" })
+        .getAttribute("href"),
+    ).toBe(
+      "https://developers.cloudflare.com/pages/get-started/direct-upload/",
+    );
+    unmount();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:publication");
+  });
+
+  it("shows the saved desktop folder and reveals it using only a project ID", async () => {
+    const desktop = desktopBridge();
+    window.earthStoriesDesktop = desktop;
+    vi.mocked(exportProject).mockResolvedValue({
+      directory: "/workspace/story/publication",
+      buildId: "build-1",
+    });
+    panel();
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: /show publication in finder/i,
+      }),
+    );
+    expect(desktop.showPublicationFolder).toHaveBeenCalledWith(project.id);
+    expect(exportProject).toHaveBeenCalledWith(
+      project.id,
+      "folder",
+      expect.anything(),
+    );
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(screen.getByText(/\/workspace\/story\/publication/)).toBeTruthy();
+  });
+
+  it("preserves the build result and location if revealing its folder fails", async () => {
+    window.earthStoriesDesktop = desktopBridge({
+      showPublicationFolder: vi
+        .fn()
+        .mockRejectedValue(new Error("Finder unavailable")),
+    });
+    vi.mocked(exportProject).mockResolvedValue({
+      directory: "/workspace/story/publication",
+    });
+    panel();
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: /show publication in finder/i,
+      }),
+    );
+    expect(
+      await screen.findByText(/folder could not be shown.*Finder unavailable/i),
+    ).toBeTruthy();
+    expect(screen.getByText("Your publication folder is ready.")).toBeTruthy();
+    expect(screen.getByText(/\/workspace\/story\/publication/)).toBeTruthy();
+  });
+
+  it("supports older desktop bridges by revealing the project", async () => {
+    const desktop = desktopBridge({ showPublicationFolder: undefined });
+    window.earthStoriesDesktop = desktop;
+    vi.mocked(exportProject).mockResolvedValue({
+      directory: "/workspace/story/publication",
+    });
+    panel();
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /show project folder/i }),
+    );
+    expect(desktop.showProjectFolder).toHaveBeenCalledWith(project.id);
+    expect(
+      screen.getByText(/open the publication folder inside/i),
+    ).toBeTruthy();
+  });
+
+  it("does not download a late result after closing or overwrite a new session", async () => {
+    let complete!: (result: Awaited<ReturnType<typeof exportProject>>) => void;
+    vi.mocked(exportProject).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const view = panel();
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    await waitFor(() => expect(exportProject).toHaveBeenCalledOnce());
+    view.rerender(
+      <EarthStoriesProvider>
+        <PublishPanel {...view.props} open={false} />
+      </EarthStoriesProvider>,
+    );
+    view.rerender(
+      <EarthStoriesProvider>
+        <PublishPanel {...view.props} open />
+      </EarthStoriesProvider>,
+    );
+    complete({ blob: new Blob(["old"]), filename: "old.zip" });
+    await waitFor(() =>
+      expect(screen.queryByText(/building and validating/i)).toBeNull(),
+    );
+    expect(createObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByText(/old.zip/)).toBeNull();
+    vi.mocked(exportProject).mockResolvedValueOnce({
+      blob: new Blob(["new"]),
+      filename: "new.zip",
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    expect(await screen.findByText("new.zip")).toBeTruthy();
+  });
+
+  it("makes save and build failures visible next to the action and allows a retry", async () => {
+    const save = vi.fn().mockResolvedValueOnce(null).mockResolvedValue(project);
+    vi.mocked(exportProject).mockRejectedValueOnce(new Error("Disk is full"));
+    panel({ onBeforeExport: save });
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    expect(await screen.findByText(/story could not be saved/i)).toBeTruthy();
+    expect(exportProject).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    expect(await screen.findByText("Disk is full")).toBeTruthy();
+    vi.mocked(exportProject).mockResolvedValueOnce({
+      blob: new Blob(["zip"]),
+      filename: "retry.zip",
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    expect(await screen.findByText("retry.zip")).toBeTruthy();
+    expect(screen.queryByText("Disk is full")).toBeNull();
+  });
+
+  it.each(["still", "animated"])(
+    "clears ZIP-specific state before %s chapter captures",
+    async (kind) => {
+      vi.mocked(exportProject).mockResolvedValue({
+        blob: new Blob(["zip"]),
+        filename: "old.zip",
+      });
+      vi.mocked(downloadMapSnapshots).mockResolvedValue(1);
+      vi.mocked(downloadAnimatedMapCaptures).mockResolvedValue({
+        count: 1,
+        format: "webm",
+      });
+      panel();
+      await userEvent.click(
+        screen.getByRole("button", { name: /build publication/i }),
+      );
+      await screen.findByRole("link", { name: /download zip again/i });
+      await userEvent.click(screen.getByText("Export chapter media"));
+      await userEvent.click(
+        screen.getByRole("button", {
+          name:
+            kind === "still"
+              ? /download attributed images/i
+              : /record animated maps/i,
+        }),
+      );
+      await screen.findByText(
+        kind === "still"
+          ? /Downloaded 1 attributed chapter image/
+          : /Downloaded 1 animated WEBM chapter capture/,
+      );
+      expect(
+        screen.queryByRole("link", { name: /download.*again/i }),
+      ).toBeNull();
+      expect(screen.queryByText("old.zip")).toBeNull();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:publication");
+    },
+  );
+
+  it("ignores a late chapter-capture result after reopening into a new build", async () => {
+    let captureComplete!: (count: number) => void;
+    let buildComplete!: (
+      result: Awaited<ReturnType<typeof exportProject>>,
+    ) => void;
+    vi.mocked(downloadMapSnapshots).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          captureComplete = resolve;
+        }),
+    );
+    vi.mocked(exportProject).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          buildComplete = resolve;
+        }),
+    );
+    const view = panel();
+    await userEvent.click(screen.getByText("Export chapter media"));
+    await userEvent.click(
+      screen.getByRole("button", { name: /download attributed images/i }),
+    );
+    view.rerender(
+      <EarthStoriesProvider>
+        <PublishPanel {...view.props} open={false} />
+      </EarthStoriesProvider>,
+    );
+    view.rerender(
+      <EarthStoriesProvider>
+        <PublishPanel {...view.props} open />
+      </EarthStoriesProvider>,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    await waitFor(() => expect(exportProject).toHaveBeenCalledOnce());
+    captureComplete(1);
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>("button", { name: "Building…" })
+          .disabled,
+      ).toBe(true),
+    );
+    expect(
+      screen.queryByText(/Downloaded 1 attributed chapter image/),
+    ).toBeNull();
+    buildComplete({ blob: new Blob(["new"]), filename: "new.zip" });
+    expect(await screen.findByText("new.zip")).toBeTruthy();
+  });
+
+  it("blocks repeated builds while one is in progress", async () => {
+    let complete!: (result: Awaited<ReturnType<typeof exportProject>>) => void;
+    vi.mocked(exportProject).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    panel();
+    await userEvent.dblClick(
+      screen.getByRole("button", { name: /build publication/i }),
+    );
+    await waitFor(() => expect(exportProject).toHaveBeenCalledOnce());
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Building…" })
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByTestId("publish-to-web").dataset.disabled).toBe("true");
+    complete({ blob: new Blob(["zip"]), filename: "once.zip" });
+    expect(await screen.findByText("once.zip")).toBeTruthy();
   });
 });

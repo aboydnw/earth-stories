@@ -351,3 +351,363 @@ describe("PagesJobs", () => {
     );
   });
 });
+
+describe("selected GitHub App repositories", () => {
+  const authorized = () => ({
+    identity: { token: "app-secret", login: "mapper", source: "gh" as const },
+    repository: {
+      id: 42,
+      installationId: 7,
+      owner: "map-org",
+      name: "coast",
+      fullName: "map-org/coast",
+    },
+  });
+
+  const reviewed = () => ({
+    login: "mapper",
+    id: 42,
+    installationId: 7,
+    owner: "map-org",
+    name: "coast",
+  });
+
+  it.each([undefined, null, "42", 0, -1, 1.5])(
+    "requires a selected numeric ID (%s) before build",
+    async (repositoryId) => {
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => authorized()),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", { repositoryId });
+      expect((await settle(jobs, id)).error).toMatch(
+        /Choose a GitHub repository/,
+      );
+      expect(deps.authorizeRepository).not.toHaveBeenCalled();
+      expect(deps.build).not.toHaveBeenCalled();
+      expect(deps.resolveToken).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    undefined,
+    null,
+    [],
+    {},
+    "map-org/coast",
+    { ...reviewed(), id: 99 },
+    { ...reviewed(), login: undefined },
+    { ...reviewed(), login: 7 },
+    { ...reviewed(), login: "" },
+    { ...reviewed(), installationId: "7" },
+    { ...reviewed(), installationId: 0 },
+    { ...reviewed(), owner: "map-org/other" },
+    { ...reviewed(), name: "../other" },
+    { ...reviewed(), fullName: "map-org/coast" },
+  ])(
+    "requires a valid reviewed destination (%j)",
+    async (reviewedRepository) => {
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => authorized()),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository,
+      });
+      expect((await settle(jobs, id)).status).toBe("failed");
+      expect(deps.authorizeRepository).not.toHaveBeenCalled();
+      expect(deps.build).not.toHaveBeenCalled();
+      expect(deps.ensureRepository).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["owner", "name", "installationId", "id", "login"])(
+    "refuses a %s change before first authorization",
+    async (field) => {
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => {
+          const value = authorized();
+          if (field === "login") value.identity.login = "another-user";
+          if (field === "owner") value.repository.owner = "new-org";
+          if (field === "name") value.repository.name = "new-name";
+          if (field === "installationId") value.repository.installationId = 8;
+          if (field === "id") value.repository.id = 99;
+          return value;
+        }),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
+      expect((await settle(jobs, id)).error).toMatch(
+        /changed since you reviewed/,
+      );
+      expect(deps.build).not.toHaveBeenCalled();
+      expect(deps.ensureRepository).not.toHaveBeenCalled();
+      expect(deps.pushRelease).not.toHaveBeenCalled();
+      expect(deps.enablePages).not.toHaveBeenCalled();
+    },
+  );
+
+  it("uses the authorized organization repository and never a browser name", async () => {
+    const deps = dependencies({
+      authorizeRepository: vi.fn(async () => authorized()),
+    });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1", {
+      repositoryId: 42,
+      reviewedRepository: reviewed(),
+      repo: "untrusted",
+    });
+    const result = await settle(jobs, id);
+    expect(result.status).toBe("succeeded");
+    expect(result.url).toBe("https://map-org.github.io/coast/");
+    expect(deps.resolveToken).not.toHaveBeenCalled();
+    expect(deps.build).toHaveBeenCalledWith(
+      expect.objectContaining({ publicationUrl: result.url }),
+    );
+    expect(deps.ensureRepository).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: "map-org",
+        repo: "coast",
+        allowCreate: false,
+        expectExisting: false,
+      }),
+    );
+    expect(deps.authorizeRepository).toHaveBeenCalledWith(
+      42,
+      expect.any(AbortSignal),
+    );
+  });
+
+  it.each(["revoked", "account", "token", "owner", "name", "installation"])(
+    "stops before writes after %s changes",
+    async (change) => {
+      let checks = 0;
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => {
+          const value = authorized();
+          if (++checks === 1) return value;
+          if (change === "revoked")
+            throw new Error("Repository access was revoked.");
+          if (change === "account") value.identity.login = "other";
+          if (change === "token") value.identity.token = "new-secret";
+          if (change === "owner") value.repository.owner = "other-org";
+          if (change === "name") value.repository.name = "other-repo";
+          if (change === "installation") value.repository.installationId = 8;
+          return value;
+        }),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
+      expect((await settle(jobs, id)).status).toBe("failed");
+      expect(deps.build).toHaveBeenCalled();
+      expect(deps.ensureRepository).not.toHaveBeenCalled();
+      expect(deps.pushRelease).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["main", "gh-pages"])(
+    "never trusts a recorded %s branch for a different destination",
+    async (branch) => {
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => authorized()),
+        readPublishRecord: vi.fn(async () => ({
+          owner: "other-org",
+          repo: "coast",
+          branch,
+          url: "https://other-org.github.io/coast/",
+          buildId: "old",
+          publishedAt: "2026-08-01T00:00:00.000Z",
+        })),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
+      await settle(jobs, id);
+      expect(deps.ensureRepository).toHaveBeenCalledWith(
+        expect.objectContaining({ expectExisting: false }),
+      );
+      expect(deps.pushRelease).toHaveBeenCalledWith(
+        expect.objectContaining({ branch: "gh-pages" }),
+      );
+    },
+  );
+
+  it.each(["gh-pages", "main"])(
+    "only recognizes a same-destination record with a safe %s branch",
+    async (branch) => {
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => authorized()),
+        readPublishRecord: vi.fn(async () => ({
+          owner: "map-org",
+          repo: "coast",
+          repositoryId: 42,
+          branch,
+          url: "https://map-org.github.io/coast/",
+          buildId: "old",
+          publishedAt: "2026-08-01T00:00:00.000Z",
+        })),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
+      await settle(jobs, id);
+      expect(deps.ensureRepository).toHaveBeenCalledWith(
+        expect.objectContaining({ expectExisting: branch === "gh-pages" }),
+      );
+      expect(deps.pushRelease).toHaveBeenCalledWith(
+        expect.objectContaining({ branch: "gh-pages" }),
+      );
+    },
+  );
+
+  it.each([undefined, 99])(
+    "does not trust a legacy or replaced repository ID %s",
+    async (repositoryId) => {
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => authorized()),
+        readPublishRecord: vi.fn(async () => ({
+          owner: "map-org",
+          repo: "coast",
+          repositoryId,
+          branch: "gh-pages",
+          url: "https://map-org.github.io/coast/",
+          buildId: "old",
+          publishedAt: "2026-08-01T00:00:00.000Z",
+        })),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
+      const result = await settle(jobs, id);
+      expect(deps.ensureRepository).toHaveBeenCalledWith(
+        expect.objectContaining({ expectExisting: false }),
+      );
+      expect(result.record?.repositoryId).toBe(42);
+    },
+  );
+
+  it("uses full authorization at stage boundaries and cheap checks for individual writes", async () => {
+    const assertAuthorizationCurrent = vi.fn();
+    const deps = dependencies({
+      authorizeRepository: vi.fn(async () => authorized()),
+      assertAuthorizationCurrent,
+      pushRelease: vi.fn(async (options) => {
+        for (let i = 0; i < 100; i++) await options.beforeWrite?.();
+        await options.beforeRefUpdate?.();
+        return { branch: "gh-pages" };
+      }),
+    });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1", {
+      repositoryId: 42,
+      reviewedRepository: reviewed(),
+    });
+    expect((await settle(jobs, id)).status).toBe("succeeded");
+    expect(deps.authorizeRepository).toHaveBeenCalledTimes(5);
+    expect(assertAuthorizationCurrent).toHaveBeenCalledTimes(100);
+    expect(assertAuthorizationCurrent).toHaveBeenCalledWith(
+      authorized().identity,
+      authorized().repository,
+    );
+  });
+
+  it.each(["revoked", "name", "id"])(
+    "revalidates remote %s changes before replacing the publication ref",
+    async (change) => {
+      let checks = 0;
+      let replacedRef = false;
+      const deps = dependencies({
+        authorizeRepository: vi.fn(async () => {
+          const value = authorized();
+          if (++checks === 4) {
+            if (change === "revoked")
+              throw new Error("Repository access revoked");
+            if (change === "name") value.repository.name = "renamed";
+            if (change === "id") value.repository.id = 99;
+          }
+          return value;
+        }),
+        pushRelease: vi.fn(async (options) => {
+          await options.beforeWrite?.();
+          await options.beforeRefUpdate?.();
+          replacedRef = true;
+          return { branch: "gh-pages" };
+        }),
+      });
+      const jobs = new PagesJobs(store, deps);
+      const { id } = await jobs.create("story-1", {
+        repositoryId: 42,
+        reviewedRepository: reviewed(),
+      });
+      expect((await settle(jobs, id)).status).toBe("failed");
+      expect(replacedRef).toBe(false);
+      expect(deps.enablePages).not.toHaveBeenCalled();
+    },
+  );
+
+  it("stops individual writes when the local connection changes", async () => {
+    const deps = dependencies({
+      authorizeRepository: vi.fn(async () => authorized()),
+      assertAuthorizationCurrent: () => {
+        throw new Error("Connection changed");
+      },
+      pushRelease: vi.fn(async (options) => {
+        await options.beforeWrite?.();
+        return { branch: "gh-pages" };
+      }),
+    });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1", {
+      repositoryId: 42,
+      reviewedRepository: reviewed(),
+    });
+    expect((await settle(jobs, id)).error).toMatch(/Connection changed/);
+    expect(deps.enablePages).not.toHaveBeenCalled();
+  });
+
+  it("cancels repository authorization without building or writing", async () => {
+    let finish!: () => void;
+    const deps = dependencies({
+      authorizeRepository: vi.fn(async (_id, signal) => {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        expect(signal?.aborted).toBe(true);
+        return authorized();
+      }),
+    });
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1", {
+      repositoryId: 42,
+      reviewedRepository: reviewed(),
+    });
+    jobs.cancelRunning();
+    finish();
+    await jobs.whenIdle();
+    expect(jobs.get(id)?.status).toBe("failed");
+    expect(deps.build).not.toHaveBeenCalled();
+    expect(deps.ensureRepository).not.toHaveBeenCalled();
+  });
+
+  it("requires explicit connection by default rather than discovering credentials", async () => {
+    const deps = dependencies();
+    delete deps.resolveToken;
+    const jobs = new PagesJobs(store, deps);
+    const { id } = await jobs.create("story-1");
+    expect((await settle(jobs, id)).error).toMatch(/Connect GitHub/);
+    expect(deps.build).not.toHaveBeenCalled();
+  });
+});

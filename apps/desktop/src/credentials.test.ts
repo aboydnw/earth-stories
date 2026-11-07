@@ -30,6 +30,78 @@ async function fixture(storage = safeStorage()) {
 }
 
 describe("SafeStorageCredentialStore", () => {
+  const refreshCredentials = {
+    token: "ghu_access_secret",
+    login: "mapper",
+    expiresAt: 1800000000000,
+    refreshToken: "ghr_rotation_secret",
+    refreshTokenExpiresAt: 1801000000000,
+    accountId: 42,
+    appClientId: "Iv1.public_client_id",
+    brokerOrigin: "https://broker.example",
+  };
+
+  it("encrypts the complete rotating credential and binding metadata", async () => {
+    const { path, store } = await fixture();
+    await store.write(refreshCredentials);
+    await expect(store.read()).resolves.toEqual(refreshCredentials);
+    const persisted = await readFile(path, "utf8");
+    expect(JSON.parse(persisted)).toMatchObject({ version: 2 });
+    expect(persisted).not.toContain(refreshCredentials.token);
+    expect(persisted).not.toContain(refreshCredentials.refreshToken);
+    expect(persisted).not.toContain(refreshCredentials.login);
+    expect(persisted).not.toContain(refreshCredentials.brokerOrigin);
+  });
+
+  it("reads legacy encrypted access-token records without inventing refresh credentials", async () => {
+    const { path, store } = await fixture();
+    await writeFile(
+      path,
+      JSON.stringify({
+        version: 1,
+        login: "mapper",
+        encryptedToken: Buffer.from("sealed:ghu_legacy").toString("base64"),
+      }),
+    );
+    await expect(store.read()).resolves.toEqual({
+      token: "ghu_legacy",
+      login: "mapper",
+    });
+  });
+
+  it("preserves all refresh fields through plaintext migration and fallback", async () => {
+    const { path, store } = await fixture();
+    await writeFile(path, JSON.stringify(refreshCredentials));
+    await expect(store.read()).resolves.toEqual(refreshCredentials);
+    expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({
+      version: 2,
+    });
+    const fallback = await fixture(safeStorage(false));
+    await fallback.store.write(refreshCredentials);
+    await expect(fallback.store.read()).resolves.toEqual(refreshCredentials);
+  });
+
+  it("rejects malformed decrypted refresh metadata without exposing secrets", async () => {
+    const warning = vi
+      .spyOn(console, "warn")
+      .mockImplementation(() => undefined);
+    const { path, store } = await fixture();
+    await writeFile(
+      path,
+      JSON.stringify({
+        version: 2,
+        encryptedCredentials: Buffer.from(
+          `sealed:${JSON.stringify({ ...refreshCredentials, refreshTokenExpiresAt: undefined })}`,
+        ).toString("base64"),
+      }),
+    );
+    await expect(store.read()).resolves.toBeNull();
+    expect(warning.mock.calls.flat().join(" ")).not.toContain(
+      refreshCredentials.refreshToken,
+    );
+    warning.mockRestore();
+  });
+
   it("creates desktop stores bound to Electron safeStorage", async () => {
     const storage = safeStorage();
     const root = await mkdtemp(
@@ -59,9 +131,10 @@ describe("SafeStorageCredentialStore", () => {
     const persisted = await readFile(path, "utf8");
     expect(persisted).not.toContain("github-secret");
     expect(JSON.parse(persisted)).toEqual({
-      version: 1,
-      login: "mapper",
-      encryptedToken: Buffer.from("sealed:github-secret").toString("base64"),
+      version: 2,
+      encryptedCredentials: Buffer.from(
+        'sealed:{"token":"github-secret","login":"mapper"}',
+      ).toString("base64"),
     });
     if (platform() !== "win32") {
       expect((await stat(dirname(path))).mode & 0o777).toBe(0o700);
@@ -81,9 +154,10 @@ describe("SafeStorageCredentialStore", () => {
     const persisted = await readFile(path, "utf8");
     expect(persisted).not.toContain("legacy-secret");
     expect(JSON.parse(persisted)).toEqual({
-      version: 1,
-      login: "mapper",
-      encryptedToken: Buffer.from("sealed:legacy-secret").toString("base64"),
+      version: 2,
+      encryptedCredentials: Buffer.from(
+        'sealed:{"token":"legacy-secret","login":"mapper"}',
+      ).toString("base64"),
     });
   });
 
@@ -211,7 +285,7 @@ describe("SafeStorageCredentialStore", () => {
       .mockImplementation(() => undefined);
     const { path, store } = await fixture(safeStorage(false));
     const futureRecord = `${JSON.stringify({
-      version: 2,
+      version: 3,
       login: "future-mapper",
       encryptedToken: "future-opaque-bytes",
     })}\n`;
