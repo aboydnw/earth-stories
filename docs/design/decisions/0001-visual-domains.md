@@ -24,3 +24,23 @@ all domains. Palette values do not cross them blindly.
 The editor must not recolor authored data to satisfy product-token checks. The
 viewer must not depend on Chakra to render. Exceptions are documented and
 scoped instead of copied into new product UI or mechanically eliminated.
+
+## Illustrated Atlas reader
+
+The optional `atlas` publication theme is a reader-owned exception: ivory paper,
+navy ink, a restrained crimson accent, local serif/system typography, and a
+compass/line motif. It does not change product tokens or recolor authored maps.
+The hurricane example uses it with a clearly labeled generated engraving and
+unchanged recorded track/intensity data. The illustration is not evidence.
+
+Atlas chapters are reader-directed pages with real fragment links, Back/Forward
+support, previous/next controls, a read-all view, and explicit map exploration
+and reset. There is no scroll capture or automatic advancement. Consecutive map
+chapters retain their renderer so authored camera/time transitions can run;
+reduced-motion preferences skip those transitions. Snapshot mode renders every
+chapter. The same reader and theme contract run in preview and publication.
+
+A chart's numeric or unambiguous ISO date/time x domain uses the actual values,
+shared across series; categorical labels retain ordinal positions. Exact values
+remain available in a keyboard-accessible table. In particular, irregular
+landfall fixes must not make time appear evenly spaced by observation count.

@@ -112,7 +112,7 @@ describe("example catalog", () => {
     );
     expect(trajectory).toBeDefined();
     const scrollyChapters = validated.chapters.filter(
-      (chapter) => chapter.type === "scrolly",
+      (chapter) => chapter.type === "map",
     );
     expect(scrollyChapters.length).toBeGreaterThanOrEqual(3);
     const positions = scrollyChapters.map(
@@ -123,6 +123,62 @@ describe("example catalog", () => {
       expect(position).toBeLessThanOrEqual(1);
     }
     expect(new Set(positions).size).toBe(positions.length);
+  });
+
+  it("keeps atlas facts, chapter times, and the unchanged 34-fix record aligned", async () => {
+    const story = storyProjectSchema.parse(findExampleStory("storm-track"));
+    const files = await loadExampleAssetFiles(story.id);
+    const csv = files
+      .find(({ path }) => path.endsWith("katrina-intensity.csv"))!
+      .contents.toString();
+    const rows = csv
+      .trim()
+      .split("\n")
+      .slice(1)
+      .map((row) => row.split(","));
+    const track = JSON.parse(
+      files
+        .find(({ path }) => path.endsWith("katrina-track.json"))!
+        .contents.toString(),
+    ).tracks[0];
+    expect(rows).toHaveLength(34);
+    expect(track.path).toHaveLength(34);
+    expect(track.timestamps).toEqual(
+      rows.map((row) => Date.parse(row[0]!) / 1000),
+    );
+    expect(rows.find((row) => row[0] === "2005-08-28T00:00:00.000Z")?.[1]).toBe(
+      "100",
+    );
+    expect(
+      rows.find((row) => row[0] === "2005-08-28T18:00:00.000Z")?.slice(1, 3),
+    ).toEqual(["150", "902"]);
+    expect(rows.find((row) => row[0] === "2005-08-29T11:10:00.000Z")?.[1]).toBe(
+      "110",
+    );
+    expect(story.publication.theme).toBe("atlas");
+    expect(compileProject(story).publication.theme).toBe("atlas");
+    expect(story.chapters.some((chapter) => chapter.type === "scrolly")).toBe(
+      false,
+    );
+    const times = [
+      "2005-08-23T18:00:00Z",
+      "2005-08-25T22:30:00Z",
+      "2005-08-28T18:00:00Z",
+      "2005-08-29T11:10:00Z",
+    ];
+    story.chapters
+      .filter((chapter) => chapter.type === "map")
+      .forEach((chapter, index) => {
+        expect(
+          track.timestamps[0] +
+            chapter.temporalPosition! *
+              (track.timestamps.at(-1) - track.timestamps[0]),
+        ).toBeCloseTo(Date.parse(times[index]!) / 1000, 5);
+      });
+    expect(
+      story.chapters.find(({ id }) => id === "storm-intensity-chart")
+        ?.narrative,
+    ).toContain("before landfall");
   });
 
   it("uses public supported connection formats", () => {

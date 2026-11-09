@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { TripsLayer } from "@deck.gl/geo-layers";
-import { PathLayer } from "@deck.gl/layers";
+import { PathLayer, ScatterplotLayer } from "@deck.gl/layers";
 import type { PublicationAsset } from "@earth-stories/story-schema";
 import { DeckOverlay } from "./DeckOverlay.js";
 import { geoJsonBounds } from "./geoBounds.js";
@@ -25,6 +25,32 @@ export function normalizeTracks(tracks: Track[]) {
       result.push({ path: track.path.slice(0, length), timestamps });
     return result;
   }, []);
+}
+
+/** Interpolated center, not an additional recorded observation. */
+export function trackPositionAtTime(
+  track: Track,
+  time: number,
+): [number, number] | null {
+  const times = track.timestamps;
+  if (!times?.length || !track.path.length || !Number.isFinite(time))
+    return null;
+  if (time < times[0]! || time > times[times.length - 1]!) return null;
+  if (time === times[0]!) return track.path[0]!;
+  for (let index = 1; index < times.length; index += 1) {
+    if (time > times[index]!) continue;
+    const start = times[index - 1]!;
+    const end = times[index]!;
+    if (end <= start) return track.path[index]!;
+    const fraction = (time - start) / (end - start);
+    const from = track.path[index - 1]!;
+    const to = track.path[index]!;
+    return [
+      from[0] + (to[0] - from[0]) * fraction,
+      from[1] + (to[1] - from[1]) * fraction,
+    ];
+  }
+  return track.path[track.path.length - 1]!;
 }
 
 export function TrajectoryOverlay({
@@ -134,9 +160,11 @@ export function TrajectoryOverlay({
               id: `${asset.id}-trajectory`,
               data: timedTracks,
               getPath: (track) => track.path,
-              getTimestamps: (track) => track.timestamps,
+              getTimestamps: (track) =>
+                track.timestamps.map((time) => time - minimum),
               getColor: color,
-              currentTime: timestampAtPosition(position, minimum, maximum),
+              currentTime:
+                timestampAtPosition(position, minimum, maximum) - minimum,
               trailLength:
                 (asset.trajectory?.trailLength ?? 600) *
                 (Math.abs(maximum) >= 100_000_000_000 ? 1000 : 1),
@@ -145,6 +173,24 @@ export function TrajectoryOverlay({
               capRounded: true,
               jointRounded: true,
               fadeTrail: true,
+            }),
+            new ScatterplotLayer<[number, number]>({
+              id: `${asset.id}-trajectory-center`,
+              data: timedTracks.flatMap((track) => {
+                const point = trackPositionAtTime(
+                  track,
+                  timestampAtPosition(position, minimum, maximum),
+                );
+                return point ? [point] : [];
+              }),
+              getPosition: (point) => point,
+              getFillColor: color,
+              getLineColor: [255, 255, 255],
+              stroked: true,
+              lineWidthMinPixels: 2,
+              radiusUnits: "pixels",
+              getRadius: asset.presentation.radius,
+              opacity: asset.presentation.opacity,
             }),
           ]
         : []),

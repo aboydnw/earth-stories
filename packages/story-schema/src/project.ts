@@ -328,7 +328,7 @@ export const storyProjectV1Schema = z
         profile: z
           .enum(["connected", "portable", "custom"])
           .default("connected"),
-        theme: z.enum(["cng", "editorial"]).default("cng"),
+        theme: z.enum(["cng", "editorial", "atlas"]).default("cng"),
       })
       .default({ profile: "connected", theme: "cng" }),
   })
@@ -343,7 +343,7 @@ export const storyProjectV2Schema = z
         profile: z
           .enum(["connected", "portable", "custom", "offline"])
           .default("connected"),
-        theme: z.enum(["cng", "editorial"]).default("cng"),
+        theme: z.enum(["cng", "editorial", "atlas"]).default("cng"),
         offlineBasemap: z
           .object({ mode: z.literal("neutral") })
           .default({ mode: "neutral" }),

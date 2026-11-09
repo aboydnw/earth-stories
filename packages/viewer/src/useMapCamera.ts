@@ -12,17 +12,22 @@ export function useMapCamera({
   camera,
   transition,
   enabled,
+  navigationKey,
 }: {
   map: MapLibreMap | null;
   camera: Camera;
   transition: "fly-to" | "instant";
   enabled: boolean;
+  navigationKey?: string;
 }) {
   const applied = useRef<string | null>(null);
+  const previousNavigationKey = useRef(navigationKey);
   const programmatic = useRef(false);
 
   useEffect(() => {
     if (!map || !enabled) return;
+    const changedChapter = previousNavigationKey.current !== navigationKey;
+    previousNavigationKey.current = navigationKey;
     const signature = [
       camera.center[0],
       camera.center[1],
@@ -40,7 +45,7 @@ export function useMapCamera({
         map.getPitch(),
       ].join(",");
     }
-    if (applied.current === signature) return;
+    if (applied.current === signature && !changedChapter) return;
     applied.current = signature;
     const command = cameraCommand(camera, transition, prefersReducedMotion());
     map.stop();
@@ -56,6 +61,7 @@ export function useMapCamera({
     enabled,
     map,
     transition,
+    navigationKey,
   ]);
 
   return programmatic;

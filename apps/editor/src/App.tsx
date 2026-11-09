@@ -2457,13 +2457,15 @@ export function App() {
                           ...current,
                           publication: {
                             ...current.publication,
-                            theme: event.target.value as "cng" | "editorial",
+                            theme: event.target
+                              .value as StoryProject["publication"]["theme"],
                           },
                         }))
                       }
                     >
                       <option value="cng">Earth Stories</option>
                       <option value="editorial">Field Journal</option>
+                      <option value="atlas">Illustrated Atlas</option>
                     </select>
                     <small>
                       Changes the visual treatment, not how the story is

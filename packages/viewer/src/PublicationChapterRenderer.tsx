@@ -67,7 +67,7 @@ function ImageFigure({
 }
 
 export type ChapterComposition =
-  "full-story" | "focused-preview" | "authoring-map";
+  "full-story" | "focused-preview" | "authoring-map" | "atlas";
 
 export function usesLegacyAutomaticFit(camera: Camera) {
   return (
@@ -122,7 +122,8 @@ export function PublicationChapterRenderer({
         })
       : [];
   const visualizationAssets = [...(asset ? [asset] : []), ...overlayAssets];
-  const focused = composition !== "full-story";
+  const focused =
+    composition === "focused-preview" || composition === "authoring-map";
   const mapChapter = chapter.type === "map" || chapter.type === "scrolly";
 
   return (
@@ -134,8 +135,13 @@ export function PublicationChapterRenderer({
       {!focused ? (
         <p className="story-folio">{String(index + 1).padStart(2, "0")}</p>
       ) : null}
-      <div className="story-copy">
-        <h2>{chapter.title}</h2>
+      <div
+        className="story-copy"
+        key={composition === "atlas" ? chapter.id : undefined}
+      >
+        <h2 tabIndex={composition === "atlas" ? -1 : undefined}>
+          {chapter.title}
+        </h2>
         <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
       </div>
       {mapChapter && asset ? (
@@ -157,7 +163,7 @@ export function PublicationChapterRenderer({
               basemapStyle={basemapStyle}
               runtimePolicy={runtimePolicy}
               interactive={focused ? interactiveMap : true}
-              followCamera={focused}
+              followCamera={focused || composition === "atlas"}
               autoFit={commitAutoFit || usesLegacyAutomaticFit(chapter.camera)}
               commitAutoFit={commitAutoFit}
               fitRequestToken={fitRequestToken}

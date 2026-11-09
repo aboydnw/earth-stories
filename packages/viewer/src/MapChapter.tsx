@@ -499,6 +499,7 @@ export function MapChapter({
     camera: chapter.camera,
     transition: chapter.transition,
     enabled: interaction.followCamera,
+    navigationKey: chapter.id,
   });
   useEffect(() => {
     setShowBuildingHint(chapter.camera.zoom < 14);
