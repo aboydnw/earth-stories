@@ -33,6 +33,30 @@ const legacyManifest = {
 } as const;
 
 describe("publication manifests", () => {
+  it("keeps decorative atmosphere optional and preserves an authored sea in v1 migration", () => {
+    expect(
+      parsePublicationManifest(legacyManifest).publication.atmosphere,
+    ).toBeUndefined();
+    expect(
+      parsePublicationManifest({
+        ...legacyManifest,
+        publication: {
+          ...legacyManifest.publication,
+          theme: "atlas",
+          atmosphere: "sea",
+        },
+      }).publication.atmosphere,
+    ).toBe("sea");
+    expect(() =>
+      parsePublicationManifest({
+        ...legacyManifest,
+        publication: {
+          ...legacyManifest.publication,
+          atmosphere: "measured-weather",
+        },
+      }),
+    ).toThrow();
+  });
   it("accepts a safe GeoLibre continuation and defaults older manifests to none", () => {
     expect(parsePublicationManifest(legacyManifest).continuations).toEqual([]);
     const parsed = publicationManifestSchema.parse({

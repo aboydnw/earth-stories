@@ -44,3 +44,24 @@ A chart's numeric or unambiguous ISO date/time x domain uses the actual values,
 shared across series; categorical labels retain ordinal positions. Exact values
 remain available in a keyboard-accessible table. In particular, irregular
 landfall fixes must not make time appear evenly spaced by observation count.
+
+### Experiential atlas atmosphere
+
+The optional `publication.atmosphere: "sea"` setting belongs to the reader
+visual domain and defaults to no atmosphere when absent. It is explicitly
+selected in Story settings and compiled into the publication. Other atlas
+stories do not acquire weather imagery automatically.
+
+A generated engraving sits behind independent SVG cloud contours and two
+wave planes. Slow transform-only motion provides depth without moving the
+reading text. These layers are illustrative, do not encode measured weather,
+and never draw on top of the data map or chart. The source credit and visible
+scene label make that distinction.
+
+Atlas chapter changes use one interruptible 1600 ms clock for the camera,
+recorded time, image-to-data reveal, and text opacity. The reader can pause,
+resume, skip the transition, or turn motion off. Map gestures and explicit
+time controls interrupt the authored transition. Background tabs suspend it;
+OS reduced motion settles the scene and disables continuous playback.
+Read-all and snapshot output use a complete static layout. No sound, scroll
+locking, mandatory wait, or atmospheric measurement is introduced.

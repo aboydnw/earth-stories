@@ -66,6 +66,68 @@ const manifest = publicationManifestSchema.parse({
 });
 
 describe("Illustrated Atlas reader", () => {
+  it("keeps sea art opt-in and exposes pause, skip, and motion controls", () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const view = render(<StoryViewer manifest={manifest} />);
+    expect(view.container.querySelector(".atlas-sea")).toBeNull();
+    const seaManifest = {
+      ...manifest,
+      publication: { ...manifest.publication, atmosphere: "sea" as const },
+    };
+    view.rerender(<StoryViewer manifest={seaManifest} />);
+    const sea = view.container.querySelector(".atlas-sea")!;
+    expect(sea.getAttribute("aria-hidden")).toBe("true");
+    expect(sea.getAttribute("data-moving")).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Skip transition" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Pause motion" }));
+    expect(sea.getAttribute("data-moving")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Resume motion" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Enable scene motion" }),
+    );
+    expect(sea.getAttribute("data-moving")).toBe("false");
+    fireEvent.click(
+      screen.getByRole("link", { name: /Next chapter: The coast/ }),
+    );
+    expect(
+      view.container
+        .querySelector(".atlas-stage")
+        ?.getAttribute("data-transitioning"),
+    ).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Read all chapters" }));
+    expect(view.container.querySelector(".atlas-sea")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Pause motion" })).toBeNull();
+    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(3);
+  });
+  it("settles a paused transition and returns focus to its chapter when skipped", () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const view = render(<StoryViewer manifest={manifest} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pause motion" }));
+    fireEvent.click(
+      screen.getByRole("link", { name: /Next chapter: The coast/ }),
+    );
+    expect(
+      view.container
+        .querySelector(".atlas-stage")
+        ?.getAttribute("data-transitioning"),
+    ).toBe("true");
+    const skip = screen.getByRole("button", { name: "Skip transition" });
+    skip.focus();
+    fireEvent.click(skip);
+    expect(
+      view.container
+        .querySelector(".atlas-stage")
+        ?.getAttribute("data-transitioning"),
+    ).toBe("false");
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { level: 2 }),
+    );
+    expect(skip.hasAttribute("disabled")).toBe(true);
+  });
   it("uses real chapter links and moves focus when the reader turns a page", async () => {
     render(<StoryViewer manifest={manifest} />);
     expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(

@@ -17,7 +17,7 @@ const source = compileProject(
       created: "2026-11-09T00:00:00Z",
       updated: "2026-11-09T00:00:00Z",
     },
-    publication: { profile: "connected", theme: "atlas" },
+    publication: { profile: "connected", theme: "atlas", atmosphere: "sea" },
     basemap: {
       id: "base",
       label: "Base",
@@ -129,4 +129,20 @@ export const FocusedChart: Story = {
       <FocusedChapterViewer manifest={args.manifest} chapterId="wind" />
     </div>
   ),
+};
+
+export const PausedOpening: Story = {
+  play: async ({ canvasElement }) => {
+    const pause = Array.from(canvasElement.querySelectorAll("button")).find(
+      (button) => button.textContent === "Pause motion",
+    );
+    pause?.click();
+  },
+};
+export const MotionOff: Story = {
+  play: async ({ canvasElement }) => {
+    canvasElement
+      .querySelector<HTMLButtonElement>('[aria-label="Enable scene motion"]')
+      ?.click();
+  },
 };

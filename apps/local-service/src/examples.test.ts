@@ -156,7 +156,9 @@ describe("example catalog", () => {
       "110",
     );
     expect(story.publication.theme).toBe("atlas");
+    expect(story.publication.atmosphere).toBe("sea");
     expect(compileProject(story).publication.theme).toBe("atlas");
+    expect(compileProject(story).publication.atmosphere).toBe("sea");
     expect(story.chapters.some((chapter) => chapter.type === "scrolly")).toBe(
       false,
     );

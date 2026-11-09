@@ -1,7 +1,18 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PublicationChapter } from "@earth-stories/story-schema";
+import {
+  AtlasMotionContext,
+  type AtlasMotionState,
+} from "./AtlasMotionContext.js";
 import { publicationAsset } from "./testFixtures.js";
 
 vi.mock("react-map-gl/maplibre", async () => {
@@ -27,6 +38,7 @@ vi.mock("react-map-gl/maplibre", async () => {
           terrain?: { source: string };
           onError?: (event: { error: Error }) => void;
           onLoad?: () => void;
+          onIdle?: () => void;
         },
         ref: React.ForwardedRef<unknown>,
       ) => {
@@ -36,12 +48,17 @@ vi.mock("react-map-gl/maplibre", async () => {
         }));
         React.useEffect(() => {
           props.onLoad?.();
+          props.onIdle?.();
+        }, []);
+        React.useEffect(() => {
           if (props.mapStyle === "error://style")
             props.onError?.({ error: new Error("Map fixture failed") });
-        }, [props.mapStyle, props.onError, props.onLoad]);
+        }, [props.mapStyle, props.onError]);
         return (
           <div
             data-testid="map-root"
+            className="maplibregl-canvas"
+            tabIndex={0}
             data-projection={props.projection?.type ?? "mercator"}
             data-terrain={props.terrain?.source ?? "none"}
           >
@@ -56,7 +73,11 @@ vi.mock("react-map-gl/maplibre", async () => {
         data-filter={filter ? JSON.stringify(filter) : undefined}
       />
     ),
-    NavigationControl: () => null,
+    NavigationControl: () => (
+      <div className="maplibregl-ctrl">
+        <button aria-label="Zoom in">+</button>
+      </div>
+    ),
     Source: ({
       children,
       id,
@@ -433,5 +454,79 @@ describe("MapChapter", () => {
     await waitFor(() =>
       expect(onFitAvailabilityChange).toHaveBeenCalledWith(true),
     );
+  });
+
+  it("interrupts atlas camera motion on pointer, wheel, and keyboard map input", () => {
+    const interrupt = vi.fn();
+    const motion: AtlasMotionState = {
+      chapterKey: chapter.id,
+      active: true,
+      progress: 0.5,
+      easedProgress: 0.5,
+      enabled: true,
+      reducedMotion: false,
+      paused: false,
+      suspended: false,
+      transitioning: true,
+      running: true,
+      interrupted: false,
+      pause: vi.fn(),
+      resume: vi.fn(),
+      skip: vi.fn(),
+      setEnabled: vi.fn(),
+      interrupt,
+    };
+    render(
+      <AtlasMotionContext.Provider value={motion}>
+        <MapChapter
+          chapter={chapter}
+          asset={{ ...asset, kind: "xyz" }}
+          basemapStyle="local/style.json"
+          followCamera
+        />
+      </AtlasMotionContext.Provider>,
+    );
+    const canvas = screen.getByTestId("map-root");
+    fireEvent.pointerDown(canvas);
+    fireEvent.wheel(canvas);
+    fireEvent.keyDown(canvas, { key: "ArrowUp" });
+    const zoom = screen.getByRole("button", { name: "Zoom in" });
+    fireEvent.keyDown(zoom, { key: "Enter" });
+    fireEvent.keyDown(zoom, { key: " " });
+    fireEvent.click(zoom);
+    expect(interrupt).toHaveBeenCalledTimes(6);
+    fireEvent.keyDown(canvas, { key: "Tab" });
+    expect(interrupt).toHaveBeenCalledTimes(6);
+  });
+
+  it("keeps the mounted map and ready source visible between consecutive chapters", async () => {
+    const props = {
+      chapter,
+      asset: { ...asset, kind: "xyz" as const },
+      basemapStyle: "local/style.json",
+    };
+    const { container, rerender } = render(<MapChapter {...props} />);
+    await waitFor(() =>
+      expect(
+        container.querySelector(".story-map")?.getAttribute("data-map-ready"),
+      ).toBe("true"),
+    );
+    const canvas = screen.getByTestId("map-root");
+    const source = screen.getByTestId("source-geo");
+    rerender(
+      <MapChapter
+        {...props}
+        chapter={{
+          ...chapter,
+          id: "next",
+          camera: { ...chapter.camera, zoom: 5 },
+        }}
+      />,
+    );
+    expect(screen.getByTestId("map-root")).toBe(canvas);
+    expect(screen.getByTestId("source-geo")).toBe(source);
+    expect(
+      container.querySelector(".story-map")?.getAttribute("data-map-ready"),
+    ).toBe("true");
   });
 });

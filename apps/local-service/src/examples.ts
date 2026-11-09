@@ -881,6 +881,7 @@ const stormTrack: StoryProject = {
   publication: {
     profile: "connected",
     theme: "atlas",
+    atmosphere: "sea",
     offlineBasemap: { mode: "neutral" },
   },
   dataAssets: [],
@@ -963,7 +964,7 @@ const stormTrack: StoryProject = {
         "A line across the sea makes a hurricane look simple. Katrina was not. In August 2005, a tropical depression crossed Florida, grew into a Category 5 hurricane over the Gulf, and reached the northern coast with winds already falling.\n\nFollow **34 recorded fixes** to see where the storm went and how it changed. Then ask what a line, and a wind speed, can leave out.",
       alt: "An imagined navy-ink engraving of waves beneath storm clouds. Decorative artwork, not historical evidence.",
       caption:
-        "An imagined sea · AI-generated illustration, not a historical view of Katrina.",
+        "An imagined sea · Generated engraving and decorative motion, not historical weather or measured conditions.",
     },
     {
       id: "storm-formation",
@@ -1032,7 +1033,7 @@ const stormTrack: StoryProject = {
       type: "prose",
       title: "Beyond the line",
       narrative:
-        "A storm's track is a way into the story, not its conclusion. The center's path, maximum wind, and central pressure describe part of Katrina. They do not describe the full area of damaging winds, the height of the water, or the experience of a neighborhood.\n\nThis atlas uses the **34 bundled HURDAT2 best-track fixes**, from 23 August at 18:00 UTC to 31 August at 06:00 UTC. Coordinates, UTC timestamps, wind in knots, and pressure in millibars are preserved in the included files. The moving line interpolates between fixes; it is not a forecast, a wind footprint, or a surge model.\n\nRead the [National Hurricane Center's Katrina report](https://www.nhc.noaa.gov/data/tcr/AL122005_Katrina.pdf) for the meteorological history and impacts, or explore the [HURDAT2 archive](https://www.nhc.noaa.gov/data/hurdat/). The opening engraving is generated decorative artwork. The maps and chart use the recorded data.",
+        "A storm's track is a way into the story, not its conclusion. The center's path, maximum wind, and central pressure describe part of Katrina. They do not describe the full area of damaging winds, the height of the water, or the experience of a neighborhood.\n\nThis atlas uses the **34 bundled HURDAT2 best-track fixes**, from 23 August at 18:00 UTC to 31 August at 06:00 UTC. Coordinates, UTC timestamps, wind in knots, and pressure in millibars are preserved in the included files. The moving line interpolates between fixes; it is not a forecast, a wind footprint, or a surge model.\n\nRead the [National Hurricane Center's Katrina report](https://www.nhc.noaa.gov/data/tcr/AL122005_Katrina.pdf) for the meteorological history and impacts, or explore the [HURDAT2 archive](https://www.nhc.noaa.gov/data/hurdat/). The engraving and moving sea, clouds, and wave layers are illustrative atmosphere, not a reconstruction of Katrina’s weather. Their motion does not encode wind speed, rainfall, storm size, or surge. The maps and chart use the recorded data.",
     },
   ],
 };
