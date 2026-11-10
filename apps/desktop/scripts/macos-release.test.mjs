@@ -186,9 +186,14 @@ describe("macOS trust evidence invalidation", () => {
     "removes an old report before %s, including invalid inputs",
     async (mode) => {
       const root = await mkdtemp(join(tmpdir(), "earth-macos-evidence-"));
-      const output = join(root, "build/artifacts/macos-trust-evidence.v1.json");
+      const output = join(
+        root,
+        "build/artifacts/evidence/macos-trust-evidence.v1.json",
+      );
       try {
-        await mkdir(join(root, "build/artifacts"), { recursive: true });
+        await mkdir(join(root, "build/artifacts/evidence"), {
+          recursive: true,
+        });
         await writeFile(output, '{"bundles":[{"signature":"passed"}]}');
         const execution = promisify(execFile)(
           process.execPath,

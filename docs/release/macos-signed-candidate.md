@@ -78,7 +78,7 @@ notarization. It then checks **both unpacked application bundles**:
 Any missing input or failed check exits nonzero. Both signed and unsigned
 macOS packaging commands invalidate the previous trust report before starting,
 including when preflight or the build subsequently fails. A successful check writes
-`apps/desktop/build/artifacts/macos-trust-evidence.v1.json`, recording each
+`apps/desktop/build/artifacts/evidence/macos-trust-evidence.v1.json`, recording each
 bundle's CodeDirectory hash and the exact scope. The report remains
 `releaseReady: false`. Re-run the check without packaging with:
 
@@ -120,3 +120,22 @@ Preserve and hash the exact candidate files. On each target architecture:
 The general release metadata command still reports unsigned/not-release-ready
 metadata. The new bundle evidence is separate; it does not create a signed
 release manifest, change the release version, or permit public distribution.
+
+## Checksum inventory
+
+The existing `release:metadata` and `release:verify` commands accept the actual
+builder output directory. Installer/archive blockmaps are included in the
+manifest and checksums only when their matching, same-version artifact exists;
+orphan, empty, unsupported, and malformed sidecars fail closed. Tampering with a
+blockmap fails verification just like tampering with an installer. This does not
+enable automatic updates.
+
+Trust-check reports live under `build/artifacts/evidence/`, separate from the
+release metadata's top-level installer/archive inventory. Keep that evidence
+with the reviewed candidate, but do not mistake it for an authenticated release
+manifest or a checksum of the installer contents.
+
+```bash
+yarn workspace @earth-stories/desktop release:metadata --artifacts build/artifacts --version 0.1.0-pilot.1 --notices build/resources/credits/THIRD_PARTY_NOTICES.md
+yarn workspace @earth-stories/desktop release:verify --artifacts build/artifacts --version 0.1.0-pilot.1 --notices build/resources/credits/THIRD_PARTY_NOTICES.md
+```

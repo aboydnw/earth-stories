@@ -287,3 +287,72 @@ describe("desktop release metadata", () => {
     },
   );
 });
+
+describe("desktop blockmap inventory", () => {
+  it("hashes valid installer/archive blockmaps and detects tampering", async () => {
+    const paths = await fixture();
+    const sidecar = "earth-stories-0.1.0-mac-arm64.dmg.blockmap";
+    try {
+      await writeFile(join(paths.artifacts, sidecar), "blockmap bytes");
+      await run("generate", paths);
+      await run("verify", paths);
+      const manifest = JSON.parse(
+        await readFile(
+          join(paths.artifacts, "earth-stories-0.1.0-release-manifest.json"),
+          "utf8",
+        ),
+      );
+      expect(manifest.releaseReady).toBe(false);
+      expect(
+        manifest.artifacts.find(
+          (artifact: { name: string }) => artifact.name === sidecar,
+        ),
+      ).toMatchObject({
+        platform: "mac",
+        architecture: "arm64",
+        size: 14,
+        signed: false,
+      });
+      const checksums = await readFile(
+        join(paths.artifacts, "earth-stories-0.1.0-SHA256SUMS.txt"),
+        "utf8",
+      );
+      expect(checksums).toContain(`  ${sidecar}\n`);
+      await writeFile(join(paths.artifacts, sidecar), "tampered blockmap");
+      await expect(run("verify", paths)).rejects.toThrow();
+    } finally {
+      await rm(paths.artifacts, { recursive: true, force: true });
+    }
+  });
+  it.each([
+    "earth-stories-0.1.0-mac-x64.zip.blockmap",
+    "earth-stories-0.1.0-linux-amd64.deb.blockmap",
+    "earth-stories-0.1.0-mac-arm64.dmg.blockmap.extra",
+    "earth-stories-0.2.0-mac-arm64.dmg.blockmap",
+  ])(
+    "rejects orphan, unsupported, malformed, and wrong-version sidecars: %s",
+    async (sidecar) => {
+      const paths = await fixture();
+      try {
+        await writeFile(join(paths.artifacts, sidecar), "blockmap bytes");
+        await expect(run("generate", paths)).rejects.toThrow();
+      } finally {
+        await rm(paths.artifacts, { recursive: true, force: true });
+      }
+    },
+  );
+  it("rejects an empty blockmap", async () => {
+    const paths = await fixture();
+    try {
+      await writeFile(
+        join(paths.artifacts, "earth-stories-0.1.0-mac-arm64.dmg.blockmap"),
+        "",
+      );
+      await expect(run("generate", paths)).rejects.toThrow(
+        "Release artifact is empty",
+      );
+    } finally {
+      await rm(paths.artifacts, { recursive: true, force: true });
+    }
+  });
+});

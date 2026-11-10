@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { rm, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -153,7 +153,7 @@ async function main() {
       "Usage: node scripts/macos-release.mjs <preflight|verify|reset>",
     );
   const artifactRoot = resolve("build/artifacts");
-  const output = join(artifactRoot, "macos-trust-evidence.v1.json");
+  const output = join(artifactRoot, "evidence", "macos-trust-evidence.v1.json");
   // Invalidate evidence before any new signed/unsigned attempt or verification,
   // including failed input checks and failures before the verification stage.
   await rm(output, { force: true });
@@ -173,6 +173,7 @@ async function main() {
     artifactRoot,
     teamId: process.env.APPLE_TEAM_ID,
   });
+  await mkdir(dirname(output), { recursive: true });
   await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report)}\n`);
 }

@@ -79,13 +79,17 @@ async function discoverArtifacts(directory, version) {
   const names = releaseNames(version);
   const ignored = new Set([...Object.values(names), "builder-debug.yml"]);
   const pattern = new RegExp(
-    `^earth-stories-${escapeRegularExpression(version)}-(linux|mac|win)-(x64|x86_64|amd64|arm64|aarch64)\\.(AppImage|deb|dmg|zip|exe)$`,
+    `^earth-stories-${escapeRegularExpression(version)}-(linux|mac|win)-(x64|x86_64|amd64|arm64|aarch64)\\.(AppImage|deb|dmg|zip|exe)(\\.blockmap)?$`,
   );
   const otherVersionPattern =
-    /^earth-stories-([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)-(?:linux|mac|win)-(?:x64|x86_64|amd64|arm64|aarch64)\.(?:AppImage|deb|dmg|zip|exe)$/;
+    /^earth-stories-([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)-(?:linux|mac|win)-(?:x64|x86_64|amd64|arm64|aarch64)\.(?:AppImage|deb|dmg|zip|exe)(?:\.blockmap)?$/;
   const artifacts = [];
-  for (const entry of (await readdir(directory, { withFileTypes: true })).sort(
-    (left, right) => left.name.localeCompare(right.name),
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = new Set(
+    entries.filter((entry) => entry.isFile()).map((entry) => entry.name),
+  );
+  for (const entry of entries.sort((left, right) =>
+    left.name.localeCompare(right.name),
   )) {
     if (entry.isDirectory()) continue;
     if (!entry.isFile())
@@ -100,6 +104,16 @@ async function discoverArtifacts(directory, version) {
         );
       throw new Error(`Unexpected file in artifact directory: ${entry.name}`);
     }
+    // Electron-builder emits update blockmaps beside some installers/archives.
+    // Hash them as artifacts too, but never accept an orphan or arbitrary sidecar.
+    if (
+      match[4] &&
+      (!files.has(entry.name.slice(0, -".blockmap".length)) ||
+        match[3] === "deb")
+    )
+      throw new Error(
+        `Blockmap requires a matching supported artifact: ${entry.name}`,
+      );
     const path = join(directory, entry.name);
     const metadata = await stat(path);
     if (metadata.size < 1)
