@@ -2457,19 +2457,45 @@ export function App() {
                           ...current,
                           publication: {
                             ...current.publication,
-                            theme: event.target.value as "cng" | "editorial",
+                            theme: event.target
+                              .value as StoryProject["publication"]["theme"],
                           },
                         }))
                       }
                     >
                       <option value="cng">Earth Stories</option>
                       <option value="editorial">Field Journal</option>
+                      <option value="atlas">Illustrated Atlas</option>
                     </select>
                     <small>
                       Changes the visual treatment, not how the story is
                       published.
                     </small>
                   </label>
+                  {project.publication.theme === "atlas" && (
+                    <label>
+                      Illustrated atmosphere
+                      <select
+                        value={project.publication.atmosphere ?? "none"}
+                        onChange={(event) =>
+                          changeProject((current) => ({
+                            ...current,
+                            publication: {
+                              ...current.publication,
+                              atmosphere: event.target.value as "none" | "sea",
+                            },
+                          }))
+                        }
+                      >
+                        <option value="none">None</option>
+                        <option value="sea">Sea and clouds</option>
+                      </select>
+                      <small>
+                        Decorative scene motion, not measured weather. Readers
+                        can pause it or turn motion off.
+                      </small>
+                    </label>
+                  )}
                 </div>
                 <details className="basemap-settings">
                   <summary>Basemap and credits</summary>

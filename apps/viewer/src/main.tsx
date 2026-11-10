@@ -20,7 +20,9 @@ async function start() {
           const requested = new URLSearchParams(window.location.search).get(
             "theme",
           );
-          return requested === "editorial" || requested === "cng"
+          return requested === "editorial" ||
+            requested === "cng" ||
+            requested === "atlas"
             ? requested
             : undefined;
         })()}

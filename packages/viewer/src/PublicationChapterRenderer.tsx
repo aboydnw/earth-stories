@@ -29,16 +29,18 @@ function ImageFigure({
   alt,
   caption,
   enlargeable,
+  scene = false,
 }: {
   src: string;
   alt: string;
   caption: string;
   enlargeable: boolean;
+  scene?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const image = <img src={src} alt={alt} />;
   return (
-    <figure className="story-image">
+    <figure className={`story-image${scene ? " story-image--scene" : ""}`}>
       {enlargeable ? (
         <button
           type="button"
@@ -47,6 +49,7 @@ function ImageFigure({
           aria-label={`Open ${alt || caption || "image"} full size`}
         >
           {image}
+          {scene && <span>View illustration</span>}
         </button>
       ) : (
         image
@@ -67,7 +70,7 @@ function ImageFigure({
 }
 
 export type ChapterComposition =
-  "full-story" | "focused-preview" | "authoring-map";
+  "full-story" | "focused-preview" | "authoring-map" | "atlas";
 
 export function usesLegacyAutomaticFit(camera: Camera) {
   return (
@@ -94,6 +97,7 @@ export function PublicationChapterRenderer({
   onFitAvailabilityChange,
   onFitCameraChange,
   cameraOverride,
+  illustratedScene = false,
 }: {
   chapter: PublicationChapter;
   index?: number;
@@ -109,6 +113,7 @@ export function PublicationChapterRenderer({
   onFitAvailabilityChange?: (available: boolean) => void;
   onFitCameraChange?: (camera: Camera) => void;
   cameraOverride?: Camera | null;
+  illustratedScene?: boolean;
 }) {
   const asset =
     "assetId" in chapter && chapter.assetId
@@ -122,7 +127,8 @@ export function PublicationChapterRenderer({
         })
       : [];
   const visualizationAssets = [...(asset ? [asset] : []), ...overlayAssets];
-  const focused = composition !== "full-story";
+  const focused =
+    composition === "focused-preview" || composition === "authoring-map";
   const mapChapter = chapter.type === "map" || chapter.type === "scrolly";
 
   return (
@@ -134,8 +140,13 @@ export function PublicationChapterRenderer({
       {!focused ? (
         <p className="story-folio">{String(index + 1).padStart(2, "0")}</p>
       ) : null}
-      <div className="story-copy">
-        <h2>{chapter.title}</h2>
+      <div
+        className="story-copy"
+        key={composition === "atlas" ? chapter.id : undefined}
+      >
+        <h2 tabIndex={composition === "atlas" ? -1 : undefined}>
+          {chapter.title}
+        </h2>
         <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
       </div>
       {mapChapter && asset ? (
@@ -157,7 +168,7 @@ export function PublicationChapterRenderer({
               basemapStyle={basemapStyle}
               runtimePolicy={runtimePolicy}
               interactive={focused ? interactiveMap : true}
-              followCamera={focused}
+              followCamera={focused || composition === "atlas"}
               autoFit={commitAutoFit || usesLegacyAutomaticFit(chapter.camera)}
               commitAutoFit={commitAutoFit}
               fitRequestToken={fitRequestToken}
@@ -243,6 +254,7 @@ export function PublicationChapterRenderer({
           alt={chapter.alt}
           caption={chapter.caption || asset.label}
           enlargeable={!snapshotMode}
+          scene={illustratedScene}
         />
       ) : null}
       {chapter.type === "chart" && asset ? (

@@ -10,6 +10,7 @@ import { VisualizationProvenance } from "./VisualizationProvenance.js";
 import { PublicationChapterRenderer } from "./PublicationChapterRenderer.js";
 import { publicationRuntimePolicy } from "./publicationRuntime.js";
 import { StoryContinuations } from "./StoryContinuations.js";
+import { AtlasStoryViewer } from "./AtlasStoryViewer.js";
 import "./viewer.css";
 
 const ScrollytellingBlock = lazy(async () => ({
@@ -19,7 +20,7 @@ const ScrollytellingBlock = lazy(async () => ({
 export interface StoryViewerProps {
   manifest: PublicationManifest;
   embed?: boolean;
-  theme?: "cng" | "editorial";
+  theme?: PublicationManifest["publication"]["theme"];
   snapshotMode?: boolean;
   onChapterCameraChange?: (chapterId: string, camera: Camera) => void;
 }
@@ -69,6 +70,17 @@ export function StoryViewer({
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, [embed]);
+
+  if ((theme ?? manifest.publication.theme) === "atlas") {
+    return (
+      <AtlasStoryViewer
+        manifest={manifest}
+        embed={embed}
+        snapshotMode={snapshotMode}
+        onChapterCameraChange={onChapterCameraChange}
+      />
+    );
+  }
 
   return (
     <main

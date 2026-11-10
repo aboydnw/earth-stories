@@ -2,6 +2,7 @@ import {
   lazy,
   Suspense,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -22,6 +23,7 @@ import type {
 } from "@earth-stories/story-schema";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { geoJsonBounds } from "./geoBounds.js";
+import { AtlasMotionContext } from "./AtlasMotionContext.js";
 import { useMapCamera } from "./useMapCamera.js";
 import { resolveMapInteraction, runProgrammaticMove } from "./mapCamera.js";
 import { TemporalControls } from "./TemporalControls.js";
@@ -455,6 +457,7 @@ export function MapChapter({
   onFitCameraChange,
   onReady,
 }: MapChapterProps) {
+  const motion = useContext(AtlasMotionContext);
   const [ready, setReady] = useState(false);
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   const [primaryBounds, setPrimaryBounds] = useState<
@@ -499,6 +502,8 @@ export function MapChapter({
     camera: chapter.camera,
     transition: chapter.transition,
     enabled: interaction.followCamera,
+    navigationKey: chapter.id,
+    motion,
   });
   useEffect(() => {
     setShowBuildingHint(chapter.camera.zoom < 14);
@@ -612,6 +617,7 @@ export function MapChapter({
         ? asset.id
         : null,
     chapterId: chapter.id,
+    motion,
     authoredPosition: chapter.temporalPosition,
     stepCount: zarrStepCount || undefined,
     enabled:
@@ -669,6 +675,55 @@ export function MapChapter({
       className="story-map"
       aria-label={`Map for ${chapter.title}`}
       data-map-ready={ready && dataReady ? "true" : "false"}
+      onPointerDownCapture={(event) => {
+        if (
+          motion &&
+          interaction.interactive &&
+          event.target instanceof Element &&
+          event.target.closest(".maplibregl-canvas, .maplibregl-ctrl")
+        ) {
+          motion.interrupt();
+          mapInstance?.stop();
+        }
+      }}
+      onWheelCapture={() => {
+        if (!motion || !interaction.interactive) return;
+        motion.interrupt();
+        mapInstance?.stop();
+      }}
+      onClickCapture={(event) => {
+        if (
+          !motion ||
+          !interaction.interactive ||
+          !(event.target instanceof Element) ||
+          !event.target.closest(".maplibregl-ctrl")
+        )
+          return;
+        motion.interrupt();
+        mapInstance?.stop();
+      }}
+      onKeyDownCapture={(event) => {
+        if (
+          !motion ||
+          !interaction.interactive ||
+          ![
+            "Enter",
+            " ",
+            "ArrowLeft",
+            "ArrowRight",
+            "ArrowUp",
+            "ArrowDown",
+            "+",
+            "-",
+            "=",
+          ].includes(event.key) ||
+          !(event.target instanceof Element) ||
+          !event.target.closest(".maplibregl-canvas, .maplibregl-ctrl")
+        )
+          return;
+        motion.interrupt();
+        mapInstance?.stop();
+      }}
     >
       <Map
         ref={mapRef}
@@ -820,6 +875,7 @@ export function MapChapter({
           position={temporal.position}
           label={temporalLabel}
           playing={temporal.playing}
+          playDisabled={motion ? temporal.playDisabled : false}
           speed={temporal.speed}
           stepCount={zarrStepCount || undefined}
           timesteps={asset?.kind === "zarr" ? asset.zarr?.timesteps : undefined}

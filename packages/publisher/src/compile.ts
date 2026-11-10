@@ -535,6 +535,9 @@ export function compileProject(
     publication: {
       profile: project.publication.profile,
       theme: project.publication.theme,
+      ...(project.publication.atmosphere === undefined
+        ? {}
+        : { atmosphere: project.publication.atmosphere }),
     },
     basemap:
       project.publication.profile === "offline"

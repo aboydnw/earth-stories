@@ -50,4 +50,31 @@ describe("TemporalControls", () => {
       "00:12",
     );
   });
+
+  it("disables Play for reader motion controls without disabling manual scrubbing", () => {
+    const onScrub = vi.fn();
+    const onToggle = vi.fn();
+    const { container } = render(
+      <TemporalControls
+        position={0.2}
+        label="Recorded time"
+        playing={false}
+        playDisabled
+        speed={1}
+        onScrub={onScrub}
+        onStep={vi.fn()}
+        onToggle={onToggle}
+        onSpeed={vi.fn()}
+      />,
+    );
+    const control = within(container);
+    const play = control.getByRole("button", {
+      name: "Play animation",
+    }) as HTMLButtonElement;
+    expect(play.disabled).toBe(true);
+    fireEvent.click(play);
+    expect(onToggle).not.toHaveBeenCalled();
+    fireEvent.change(control.getByRole("slider"), { target: { value: "600" } });
+    expect(onScrub).toHaveBeenCalledWith(0.6);
+  });
 });

@@ -144,3 +144,37 @@ source of truth unless the underlying public dataset changes.
   it never references mutable catalog state.
 - Recheck remote availability during pilot reviews; the publication preflight
   remains authoritative at export time.
+
+## Katrina's illustrated atlas
+
+“Tracking a hurricane” uses the optional **Illustrated Atlas** theme. Seven
+short chapters connect the 34 included best-track positions to their recorded
+wind speeds. Readers can turn pages, jump to a chapter, explore/pause/scrub the
+map, return to its authored view, or read everything as an ordinary document.
+It does not require a long, locked scroll sequence.
+
+The original `katrina-track.json` and `katrina-intensity.csv` are unchanged.
+Chapter time positions are calculated from actual UTC timestamps. The chart
+uses elapsed time, including irregular landfall fixes. The narrative separates
+the 150-knot peak on 28 August from the 110-knot Buras landfall on 29 August,
+and makes clear that weakening began offshore. Wind categories and the center
+track are not a surge model or a measure of neighborhood impacts.
+
+The included `storm-sea.png` is generated decorative artwork, not a historical
+photograph, satellite image, or observation. Its caption, alt text and provenance
+say so. The live basemap and state boundaries still require a connection in the
+example's connected profile. Existing editable copies of the old example are
+not silently overwritten; the new template applies to newly created copies.
+
+The Katrina template opts into the atlas's **Sea and clouds** atmosphere. The
+opening engraving becomes a wide scene with independent cloud and foreground
+wave motion. Between chapters, a shared 1.6-second transition controls the
+map camera, track time, and scene reveal. **Pause motion**, **Skip transition**,
+and **Motion on/off** controls remain available above the scene. Exploring
+the map or using its time controls takes over from the authored transition.
+
+The motion is decorative, not a reconstruction of cloud patterns, storm size,
+winds, rain, or surge. The actual track and chart still use the unchanged 34
+fixes. Reduced motion and Read all chapters provide static routes. Existing
+editable projects remain untouched; create a new template copy or explicitly
+choose Illustrated Atlas → Sea and clouds in Story settings.

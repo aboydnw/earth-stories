@@ -6,6 +6,7 @@ export function TemporalControls({
   position,
   label,
   playing,
+  playDisabled = false,
   speed,
   stepCount,
   timesteps,
@@ -17,6 +18,7 @@ export function TemporalControls({
   position: number;
   label: string;
   playing: boolean;
+  playDisabled?: boolean;
   speed: number;
   stepCount?: number;
   timesteps?: NonNullable<PublicationAsset["zarr"]>["timesteps"];
@@ -96,6 +98,7 @@ export function TemporalControls({
             className="story-map__time-play"
             aria-label={playing ? "Pause animation" : "Play animation"}
             onClick={onToggle}
+            disabled={playDisabled}
           >
             <span aria-hidden="true">{playing ? "Ⅱ" : "▶"}</span>
           </button>

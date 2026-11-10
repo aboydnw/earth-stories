@@ -4,7 +4,7 @@ import type {
   PublicationChapter,
 } from "@earth-stories/story-schema";
 import { loadChartSeries } from "./chartData.js";
-import type { ChartSeriesData } from "./chartSeries.js";
+import { chartXDomain, type ChartSeriesData } from "./chartSeries.js";
 
 interface Props {
   chapter: Extract<PublicationChapter, { type: "chart" }>;
@@ -35,6 +35,10 @@ export function ChartChapter({ chapter, asset }: Props) {
     return () => controller.abort();
   }, [asset, chapter]);
   const points = series[0]?.points ?? [];
+  const seriesColor = (index: number) =>
+    index === 0
+      ? asset.presentation.color
+      : SERIES_COLORS[index % SERIES_COLORS.length];
   const scaleValue = (value: number) =>
     chapter.yScale === "log" && value > 0 ? Math.log10(value) : value;
   const scaledValues = series.flatMap((item) =>
@@ -59,49 +63,160 @@ export function ChartChapter({ chapter, asset }: Props) {
           }`;
   if (error) return <p className="story-media-error">{error}</p>;
   if (chapter.chartType === "line") {
+    const domain = chartXDomain(series);
+    const x = (label: string) => 56 + domain.position(label) * 568;
+    const y = (value: number) => 220 - normalized(value) * 184;
+    const xLabel = chapter.xLabel || chapter.xColumn;
+    const yLabel =
+      chapter.yLabel ||
+      series.map((item) => item.name).join(", ") ||
+      chapter.yColumn;
     return (
       <figure className="story-chart" aria-label={`${chapter.title} chart`}>
-        <svg className="story-chart__line" viewBox="0 0 100 28" role="img">
-          {series.map((item, seriesIndex) => (
-            <polyline
-              key={item.name}
-              points={item.points
-                .map(
-                  (point, index) =>
-                    `${
-                      item.points.length === 1
-                        ? 50
-                        : (index / (item.points.length - 1)) * 100
-                    },${26 - normalized(point.value) * 24}`,
-                )
-                .join(" ")}
-              fill="none"
-              vectorEffect="non-scaling-stroke"
-              style={{
-                stroke: SERIES_COLORS[seriesIndex % SERIES_COLORS.length],
-              }}
-            />
-          ))}
-          {points.map((point, index) => {
-            const x =
-              points.length === 1 ? 50 : (index / (points.length - 1)) * 100;
-            const y = 26 - normalized(point.value) * 24;
+        <p className="story-chart__axis-label">
+          {yLabel}
+          {chapter.yScale === "log" ? " · logarithmic scale" : ""}
+        </p>
+        <svg
+          className="story-chart__line"
+          viewBox="0 0 640 280"
+          role="img"
+          aria-label={`${chapter.title}: ${yLabel} by ${xLabel}. Exact values are available in the data table below.`}
+        >
+          <title>{chapter.title}</title>
+          {[0, 0.5, 1].map((fraction) => {
+            const scaled = minimum + fraction * scaledRange;
+            const value = chapter.yScale === "log" ? 10 ** scaled : scaled;
+            const tickY = 220 - fraction * 184;
             return (
-              <circle
-                key={`${point.label}-${point.value}`}
-                cx={x}
-                cy={y}
-                r="0.55"
-                vectorEffect="non-scaling-stroke"
-              >
-                <title>
-                  {point.label}: {point.value}
-                </title>
-              </circle>
+              <g key={fraction}>
+                <line
+                  x1="56"
+                  x2="624"
+                  y1={tickY}
+                  y2={tickY}
+                  stroke="currentColor"
+                  strokeOpacity="0.15"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <text
+                  x="46"
+                  y={tickY + 4}
+                  textAnchor="end"
+                  fill="currentColor"
+                  fontSize="12"
+                >
+                  {Number(value.toPrecision(3)).toLocaleString("en-US")}
+                </text>
+              </g>
             );
           })}
+          {series.map((item, seriesIndex) => {
+            const color = seriesColor(seriesIndex);
+            const ordered = [...item.points].sort(
+              (a, b) => domain.position(a.label) - domain.position(b.label),
+            );
+            return (
+              <g key={item.name}>
+                <polyline
+                  points={ordered
+                    .map((point) => `${x(point.label)},${y(point.value)}`)
+                    .join(" ")}
+                  fill="none"
+                  vectorEffect="non-scaling-stroke"
+                  style={{ stroke: color }}
+                />
+                {ordered.map((point, index) => (
+                  <circle
+                    key={`${point.label}-${index}`}
+                    cx={x(point.label)}
+                    cy={y(point.value)}
+                    r="2.7"
+                    vectorEffect="non-scaling-stroke"
+                    style={{ stroke: color }}
+                  >
+                    <title>
+                      {item.name} · {point.label}: {point.value}
+                    </title>
+                  </circle>
+                ))}
+              </g>
+            );
+          })}
+          {domain.ticks.map((tick, index) => (
+            <text
+              key={`${tick.label}-${index}`}
+              x={56 + tick.position * 568}
+              y="244"
+              textAnchor={
+                tick.position === 0
+                  ? "start"
+                  : tick.position === 1
+                    ? "end"
+                    : "middle"
+              }
+              fill="currentColor"
+              fontSize="12"
+            >
+              {tick.label}
+            </text>
+          ))}
+          <text
+            x="340"
+            y="272"
+            textAnchor="middle"
+            fill="currentColor"
+            fontSize="12"
+          >
+            {xLabel}
+            {domain.kind === "time" && !/\bUTC\b/i.test(xLabel) ? " · UTC" : ""}
+          </text>
         </svg>
+        {series.length > 1 && (
+          <ul className="story-chart__legend">
+            {series.map((item, index) => (
+              <li key={item.name}>
+                <span aria-hidden="true" style={{ color: seriesColor(index) }}>
+                  ●{" "}
+                </span>
+                {item.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        {!series.some((item) => item.points.length) && (
+          <p role="status">No chart samples available.</p>
+        )}
         <figcaption>{caption}</figcaption>
+        <details className="story-chart__data">
+          <summary>View chart data</summary>
+          <div
+            className="story-chart__table-scroll"
+            style={{ overflowX: "auto" }}
+          >
+            <table>
+              <caption>{chapter.title} · exact sample values</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Series</th>
+                  <th scope="col">{xLabel}</th>
+                  <th scope="col">{yLabel}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {series.flatMap((item) =>
+                  item.points.map((point, index) => (
+                    <tr key={`${item.name}-${index}`}>
+                      <th scope="row">{item.name}</th>
+                      <td>{point.label}</td>
+                      <td>{point.value}</td>
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+          </div>
+        </details>
       </figure>
     );
   }

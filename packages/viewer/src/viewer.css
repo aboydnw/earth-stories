@@ -969,3 +969,51 @@
   text-decoration: underline;
   text-underline-offset: 0.2em;
 }
+
+/* Chart axes and exact-value alternative share the reader's theme. */
+.story-chart__line {
+  aspect-ratio: 16 / 7;
+}
+.story-chart__axis-label {
+  fill: var(--story-muted);
+  font-family: "Plus Jakarta Sans Variable", sans-serif;
+}
+.story-chart__legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.story-chart__data {
+  margin-top: 18px;
+  font:
+    12px/1.6 "Plus Jakarta Sans Variable",
+    sans-serif;
+}
+.story-chart__data summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 12px 0;
+}
+.story-chart__table-scroll {
+  overflow-x: auto;
+  max-height: 380px;
+}
+.story-chart__data table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.story-chart__data :is(td, th) {
+  padding: 8px;
+  border-bottom: 1px solid var(--story-border);
+  white-space: nowrap;
+}
+.story-chart__data th {
+  position: sticky;
+  top: 0;
+  background: var(--story-paper);
+}

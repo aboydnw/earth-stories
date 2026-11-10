@@ -294,7 +294,8 @@ export const publicationManifestV1Schema = z.object({
   ...publicationManifestSharedFields,
   publication: z.object({
     profile: z.enum(["connected", "portable", "custom"]),
-    theme: z.enum(["cng", "editorial"]),
+    theme: z.enum(["cng", "editorial", "atlas"]),
+    atmosphere: z.enum(["none", "sea"]).optional(),
   }),
   basemap: z.object({
     id: z.string().min(1),
@@ -310,7 +311,8 @@ export const publicationManifestV2Schema = z
     ...publicationManifestSharedFields,
     publication: z.object({
       profile: z.enum(["connected", "portable", "custom", "offline"]),
-      theme: z.enum(["cng", "editorial"]),
+      theme: z.enum(["cng", "editorial", "atlas"]),
+      atmosphere: z.enum(["none", "sea"]).optional(),
     }),
     basemap: publicationBasemapSchema,
     connectivity: publicationConnectivitySchema,

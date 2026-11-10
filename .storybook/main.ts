@@ -10,7 +10,10 @@ const config: StorybookConfig = {
   framework: { name: "@storybook/react-vite", options: {} },
   docs: { defaultName: "Documentation" },
   viteFinal: async (viteConfig) =>
-    mergeConfig(viteConfig, { worker: { format: "es" } }),
+    mergeConfig(viteConfig, {
+      esbuild: { jsx: "automatic" },
+      worker: { format: "es" },
+    }),
 };
 
 export default config;

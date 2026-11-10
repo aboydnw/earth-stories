@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AtlasMotionState } from "./AtlasMotionContext.js";
 import {
   clampTemporalPosition,
   timestepIndex,
@@ -13,12 +14,14 @@ export function useTemporalPlayback({
   authoredPosition,
   stepCount,
   enabled,
+  motion = null,
 }: {
   assetId: string | null;
   chapterId: string;
   authoredPosition?: number;
   stepCount?: number;
   enabled: boolean;
+  motion?: AtlasMotionState | null;
 }) {
   const [position, setPositionState] = useState(() =>
     clampTemporalPosition(authoredPosition ?? 0),
@@ -28,8 +31,65 @@ export function useTemporalPlayback({
   const previousAsset = useRef(assetId);
   const currentPosition = useRef(position);
   currentPosition.current = position;
+  const atlas = motion !== null;
+  const playbackAllowed =
+    enabled &&
+    (!motion ||
+      (motion.enabled &&
+        !motion.paused &&
+        !motion.reducedMotion &&
+        !motion.suspended));
+  const authoredMove = useRef({
+    assetId,
+    chapterId,
+    authoredPosition,
+    start: position,
+    target: position,
+    animate: false,
+  });
 
   useEffect(() => {
+    if (!atlas) return;
+    const previous = authoredMove.current;
+    if (
+      previous.assetId === assetId &&
+      previous.chapterId === chapterId &&
+      previous.authoredPosition === authoredPosition
+    )
+      return;
+    const changedAsset = previous.assetId !== assetId;
+    const target = clampTemporalPosition(
+      authoredPosition ?? (changedAsset ? 0 : currentPosition.current),
+    );
+    authoredMove.current = {
+      assetId,
+      chapterId,
+      authoredPosition,
+      start: currentPosition.current,
+      target,
+      animate: !changedAsset && authoredPosition !== undefined,
+    };
+    setPlaying(false);
+    if (changedAsset) setPositionState(target);
+  }, [atlas, assetId, chapterId, authoredPosition]);
+
+  useEffect(() => {
+    if (!motion || motion.interrupted) return;
+    const move = authoredMove.current;
+    if (!move.animate) return;
+    setPositionState(
+      move.start + (move.target - move.start) * motion.easedProgress,
+    );
+  }, [
+    assetId,
+    chapterId,
+    authoredPosition,
+    motion?.easedProgress,
+    motion?.interrupted,
+  ]);
+
+  useEffect(() => {
+    if (atlas) return;
     const changedAsset = previousAsset.current !== assetId;
     previousAsset.current = assetId;
     if (!changedAsset && authoredPosition === undefined) return;
@@ -53,14 +113,14 @@ export function useTemporalPlayback({
     };
     frame = requestAnimationFrame(transition);
     return () => cancelAnimationFrame(frame);
-  }, [assetId, authoredPosition, chapterId]);
+  }, [atlas, assetId, authoredPosition, chapterId]);
 
   useEffect(() => {
-    if (!enabled) setPlaying(false);
-  }, [enabled]);
+    if (!playbackAllowed) setPlaying(false);
+  }, [playbackAllowed]);
 
   useEffect(() => {
-    if (!playing || !enabled) return;
+    if (!playing || !playbackAllowed) return;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (reducedMotion.matches) {
       setPlaying(false);
@@ -104,12 +164,17 @@ export function useTemporalPlayback({
       document.removeEventListener("visibilitychange", pauseForVisibility);
       reducedMotion.removeEventListener("change", pauseForReducedMotion);
     };
-  }, [enabled, playing, speed, stepCount]);
+  }, [playbackAllowed, playing, speed, stepCount]);
 
-  const scrub = useCallback((next: number) => {
-    setPositionState(clampTemporalPosition(next));
-    setPlaying(false);
-  }, []);
+  const interrupt = motion?.interrupt;
+  const scrub = useCallback(
+    (next: number) => {
+      interrupt?.();
+      setPositionState(clampTemporalPosition(next));
+      setPlaying(false);
+    },
+    [interrupt],
+  );
   const step = useCallback(
     (offset: number) => {
       if (!stepCount || stepCount < 2) return;
@@ -125,10 +190,15 @@ export function useTemporalPlayback({
   return {
     position,
     playing,
+    playDisabled: !playbackAllowed,
     speed,
     scrub,
     step,
     setSpeed,
-    toggle: () => setPlaying((value) => !value),
+    toggle: () => {
+      if (motion && !playbackAllowed) return;
+      interrupt?.();
+      setPlaying((value) => !value);
+    },
   };
 }
