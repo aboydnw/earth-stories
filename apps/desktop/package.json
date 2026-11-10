@@ -18,15 +18,18 @@
     "package:prepare": "yarn workspace @earth-stories/local-service build && yarn workspace @earth-stories/viewer-app build && yarn workspace @earth-stories/editor build && yarn run build && node scripts/stage-resources.mjs",
     "package:dir": "yarn package:prepare && electron-builder --config electron-builder.yml --dir",
     "package:linux": "yarn package:prepare && electron-builder --config electron-builder.yml --linux --x64",
-    "package:mac": "yarn package:prepare && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --mac",
-    "package:mac:signed": "yarn package:prepare && electron-builder --config electron-builder.yml --mac",
+    "package:mac": "node scripts/macos-release.mjs reset && yarn package:prepare && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --config electron-builder.yml --mac",
+    "package:mac:signed": "yarn release:mac:preflight && yarn package:prepare && electron-builder --config electron-builder.yml --mac -c.forceCodeSigning=true && yarn release:mac:verify",
     "package:win": "yarn package:prepare && electron-builder --config electron-builder.yml --win --x64",
     "release:metadata": "node scripts/release-metadata.mjs generate",
     "release:verify": "node scripts/release-metadata.mjs verify",
     "smoke:electron": "yarn build && xvfb-run -a electron --no-sandbox smoke/electron-smoke.cjs",
     "test": "vitest run src",
     "verify:resources": "node scripts/verify-resources.mjs",
-    "verify:installed": "node scripts/verify-installed-app.mjs"
+    "verify:installed": "node scripts/verify-installed-app.mjs",
+    "release:mac:preflight": "node scripts/macos-release.mjs preflight",
+    "release:mac:verify": "node scripts/macos-release.mjs verify",
+    "smoke:electron:mac": "yarn build && electron smoke/electron-smoke.cjs"
   },
   "devDependencies": {
     "@earth-stories/local-service": "workspace:*",
