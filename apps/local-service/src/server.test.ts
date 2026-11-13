@@ -498,7 +498,8 @@ describe("createLocalServer", () => {
       editorFiles: { "race.txt": "inside bytes" },
     });
     const outside = join(root, "outside.txt");
-    const target = join(editorDirectory!, "race.txt");
+    // Match the service's canonical path (macOS aliases /var to /private/var).
+    const target = await realpath(join(editorDirectory!, "race.txt"));
     await writeFile(outside, "outside bytes");
     const { createLocalServer } = await import("./server.js");
     const server = createLocalServer(store, config, jobs, {
@@ -524,7 +525,7 @@ describe("createLocalServer", () => {
       editorFiles: { "race-before.txt": "inside bytes" },
     });
     const outside = join(root, "outside-before.txt");
-    const target = join(editorDirectory!, "race-before.txt");
+    const target = await realpath(join(editorDirectory!, "race-before.txt"));
     await writeFile(outside, "outside bytes");
     const { createLocalServer } = await import("./server.js");
     const server = createLocalServer(store, config, jobs, {

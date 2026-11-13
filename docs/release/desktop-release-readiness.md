@@ -140,8 +140,14 @@ and Windows signing use separate repository secrets when provisioned
 (`DESKTOP_MAC_CSC_*` and the Apple notarization secrets for macOS,
 `DESKTOP_WIN_CSC_*` for Windows), and each is exposed only to its own
 packaging step. Secrets are never available to pull-request code. CI packages
-macOS with `package:mac:signed`; the local `package:mac` used for the unsigned
-pilot keeps keychain discovery disabled. The workflow intentionally does not
+macOS with `package:mac:signed`. That command fails before building when its
+configured signing inputs are absent, forces code signing, and verifies both
+unpacked applications for the expected Developer ID/team, hardened runtime,
+architecture, Gatekeeper assessment, and a stapled ticket. Its scoped report
+still records `releaseReady: false`; installer/archive and target-machine checks
+remain separate. See [the signed candidate procedure](macos-signed-candidate.md).
+The local `package:mac` used for unsigned engineering builds keeps keychain
+discovery disabled. The workflow intentionally does not
 create a GitHub release or claim target-machine validation.
 
 Until the remaining ownership and signing gates are complete, also run these
