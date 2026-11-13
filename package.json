@@ -28,7 +28,9 @@
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build",
     "test:publishing:no-git": "node scripts/test-publishing-no-git.mjs",
-    "mcp": "yarn workspace @earth-stories/mcp start"
+    "mcp": "yarn workspace @earth-stories/mcp start",
+    "review:build": "node --import tsx scripts/build-private-review.ts",
+    "review:build:pages": "node --import tsx scripts/build-private-review.ts --pages"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "^10.5.6",
