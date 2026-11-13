@@ -36,6 +36,8 @@ jobs:
 
             Review this pull request. The PR branch is checked out in the working directory.
             Use `gh pr view` and `gh pr diff` to understand the change and its intent.
+            Read AGENTS.md (and CLAUDE.md, if present) first: they define this project's
+            conventions, and violations of them are review findings.
 
             Focus on, in order:
             - Correctness bugs and regressions
