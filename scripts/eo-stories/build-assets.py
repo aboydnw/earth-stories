@@ -83,3 +83,15 @@ with tempfile.TemporaryDirectory() as tmp:
     ax.legend(facecolor='#102b36',labelcolor='#e2e9e7',edgecolor='none',loc='upper left')
     fig.text(.125,.045,'114 available monthly fronts, January 2015 – December 2024. Six missing months have no invented outline.\nPyles et al. (2026), Zenodo v4 · CC BY 4.0 · Model-derived, monthly averaged Sentinel-1 segmentations.',fontsize=10,color='#b7c7c9')
     fig.subplots_adjust(bottom=.19); fig.savefig(ROOT/'example-edge-of-ice'/'kronebreen-fronts.png',dpi=130,facecolor=fig.get_facecolor()); plt.close(fig)
+
+# Bind the inspected front coverage to the exact derived files in this edition.
+folder = ROOT / 'example-edge-of-ice'
+front_months = sorted(f"{f['properties']['year']:04d}-{f['properties']['month']:02d}" for f in features)
+assert len(set(front_months)) == len(front_months)
+evidence = {
+    'record': 'https://zenodo.org/records/22129588',
+    'rgiId': 'RGI60-07.01464',
+    'frontMonths': front_months,
+    'sha256': {name: hashlib.sha256((folder / name).read_bytes()).hexdigest() for name in ['kronebreen-fronts.png', 'kronebreen-record.png', 'kronebreen-monthly.csv']},
+}
+(folder / 'kronebreen-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')

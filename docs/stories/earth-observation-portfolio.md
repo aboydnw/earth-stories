@@ -107,3 +107,23 @@ selected dates, active layers. “Explore this view” should preserve that stat
 “Return to story” should restore the chapter. These apps are proposals, not
 functional links. No new MCP work, public deployment, credentials, or paid
 services are introduced by this change.
+
+## Provenance and evidence validation
+
+The two original conceptual diagrams are repository-created work under the
+[MIT license](../../LICENSE), not derivatives of the dataset rasters. Their
+source provenance points at this repository; external data records remain
+separate narrative citations. Scientific figures and CSV retain CC BY 4.0
+attribution. Template author metadata is intentionally blank so the person
+editing/publishing a copy can choose their attribution.
+
+`kronebreen-evidence.json` is generated from the checksummed GeoPackage and
+records its exact available months and SHA-256 hashes of both scientific PNGs
+and the CSV. Tests compare this coverage with every CSV geometry flag and the
+headline counts, verify file digests, decode PNG scanline payloads and check
+chunk CRCs. Caption caveats are asserted explicitly.
+
+The source record explicitly describes a multi-temporal segmentation model
+applied to Sentinel-1 SAR and monthly-averaged fronts. Thus the caption's
+“model-derived monthly average fronts” is source-supported; it is not a claim
+that these are directly observed daily calving events.

@@ -16,7 +16,7 @@ function story(id: string, title: string, description: string): StoryProject {
     metadata: {
       title,
       description,
-      author: "Anthony Boyd",
+      author: null,
       created,
       updated: created,
     },
@@ -56,13 +56,15 @@ function image(
       : "Earth Stories original editorial diagram; not observations",
     provenance: {
       ...createDefaultSourceProvenance(),
-      sourceUrl,
+      sourceUrl: scientific
+        ? sourceUrl
+        : "https://github.com/aboydnw/earth-stories",
       accessedAt: "2026-11-16",
       publisher: scientific ? "Pyles et al." : "Earth Stories",
-      licenseName: scientific ? "CC BY 4.0" : "Repository license",
+      licenseName: scientific ? "CC BY 4.0" : "MIT",
       licenseUrl: scientific
         ? "https://creativecommons.org/licenses/by/4.0/"
-        : null,
+        : "https://github.com/aboydnw/earth-stories/blob/main/LICENSE",
       transformations: scientific
         ? [
             "Select RGI60-07.01464 (Kronebreen) from v4 NetCDF",
@@ -150,7 +152,7 @@ edgeOfIce.chapters = [
     caption:
       "Model-derived monthly average fronts from Sentinel-1 radar, not daily observations or a reconstruction of individual calving events.",
     narrative:
-      "One line shows a boundary. Let the other months gather around it, and the boundary becomes a record. These are the 114 available monthly fronts for Kronebreen in the source GeoPackage. The six absent months stay absent.\n\nThe lines mark the ice front, not a coastline or the glacier's complete outline. Their coordinate grid makes this a comparison of position, not a photographic view. A selectable two-date map remains future work.",
+      "One line shows a boundary. Let the other months gather around it, and the boundary becomes a record. These are the 114 available monthly fronts for Kronebreen in the source GeoPackage. The 6 absent months stay absent.\n\nThe lines mark the ice front, not a coastline or the glacier's complete outline. Their coordinate grid makes this a comparison of position, not a photographic view. A selectable two-date map remains future work.",
   },
   {
     id: "edge-record",
