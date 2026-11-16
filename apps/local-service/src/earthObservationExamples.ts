@@ -152,7 +152,7 @@ edgeOfIce.chapters = [
     caption:
       "Model-derived monthly average fronts from Sentinel-1 radar, not daily observations or a reconstruction of individual calving events.",
     narrative:
-      "One line shows a boundary. Let the other months gather around it, and the boundary becomes a record. These are the 114 available monthly fronts for Kronebreen in the source GeoPackage. The 6 absent months stay absent.\n\nThe lines mark the ice front, not a coastline or the glacier's complete outline. Their coordinate grid makes this a comparison of position, not a photographic view. A selectable two-date map remains future work.",
+      "One line shows a boundary. Let the other months gather around it, and the boundary becomes a record. These are the 114 available monthly fronts for Kronebreen in the source GeoPackage. The 6 absent months stay absent.\n\nThe lines mark the ice front, not a coastline or the glacier's complete outline. Their coordinate grid makes this a comparison of position, not a photographic view. A selectable two-date map remains future work.\n\n### Reading the figure\n\n- **Gold:** January 2015 front. **White:** December 2024 front. The other lines are available monthly fronts, not a continuous animation.\n- **Horizontal axis:** easting in kilometres, UTM zone 33N. **Vertical axis:** northing in kilometres.\n- Missing months have no line. Open the figure, then choose **Open original image** to inspect its labels at full resolution.",
   },
   {
     id: "edge-record",
@@ -163,7 +163,7 @@ edgeOfIce.chapters = [
     caption:
       "Rates are expressed in gigatonnes per year, sampled at monthly intervals. They are not monthly totals. The study's sign convention is retained: negative values indicate mass loss. Source-reported uncertainties are not relabeled as confidence intervals.",
     narrative:
-      "One outline shows a place; another gives it a memory. The researchers also estimated the rate of ice loss at the front. Each point here belongs to a monthly interval, and each vertical bar preserves the uncertainty supplied with it.\n\nThe amber points deserve a second look. Their frontal area change bridges gaps in the geometry record. An estimated change is not a newly observed edge.",
+      "One outline shows a place; another gives it a memory. The researchers also estimated the rate of ice loss at the front. Each point here belongs to a monthly interval, and each vertical bar preserves the uncertainty supplied with it.\n\nThe amber points deserve a second look. Their frontal area change bridges gaps in the geometry record. An estimated change is not a newly observed edge.\n\n### Reading the chart\n\n- **Horizontal axis:** monthly intervals from February 2015 to December 2024. **Vertical axis:** frontal ablation rate in gigatonnes per year, not monthly totals. Negative values indicate mass loss.\n- **Teal circles:** intervals without interpolated area change. **Amber diamonds:** area change estimated across a geometry gap.\n- **Vertical bars:** source-reported uncertainty, not confidence intervals. No line joins the points.\n- **Coverage strip:** teal ticks mean geometry is available; amber ticks mean geometry is missing. Geometry availability and interpolation are separate flags.\n\nOpen the figure, then choose **Open original image** for the full-resolution plot. The editable project also includes the source-value CSV; this page does not yet provide an interactive data table.",
   },
   {
     id: "edge-boundary",

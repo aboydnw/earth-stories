@@ -34,7 +34,12 @@ export function ImageLightbox({
     >
       <figure>
         <img src={src} alt={alt} />
-        {caption ? <figcaption>{caption}</figcaption> : null}
+        <figcaption>
+          {caption ? <p>{caption}</p> : null}
+          <a href={src} target="_blank" rel="noopener noreferrer">
+            Open original image (new tab)
+          </a>
+        </figcaption>
       </figure>
       <button
         type="button"

@@ -35,6 +35,12 @@ describe("ImageLightbox", () => {
     expect(showModal).toHaveBeenCalled();
     expect(screen.getByRole("img", { name: "A field" })).toBeTruthy();
     expect(screen.getByText("Spring")).toBeTruthy();
+    const original = screen.getByRole("link", {
+      name: "Open original image (new tab)",
+    });
+    expect(original.getAttribute("href")).toBe("/a.png");
+    expect(original.getAttribute("target")).toBe("_blank");
+    expect(original.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
   it("closes from the close button", () => {

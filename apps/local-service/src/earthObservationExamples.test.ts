@@ -149,6 +149,31 @@ describe("Earth observation stories", () => {
         .join(" "),
     ).toContain("not monthly totals");
   });
+  it("provides textual keys without requiring readers to decode raster labels", () => {
+    const fronts = edgeOfIce.chapters.find(
+      (c) => c.id === "edge-outlines",
+    )!.narrative;
+    const record = edgeOfIce.chapters.find(
+      (c) => c.id === "edge-record",
+    )!.narrative;
+    for (const label of [
+      "**Gold:** January 2015",
+      "**White:** December 2024",
+      "easting in kilometres",
+      "northing in kilometres",
+    ])
+      expect(fronts).toContain(label);
+    for (const label of [
+      "**Teal circles:**",
+      "**Amber diamonds:**",
+      "**Vertical bars:**",
+      "**Coverage strip:**",
+      "not confidence intervals",
+      "separate flags",
+    ])
+      expect(record).toContain(label);
+    expect(record).toContain("does not yet provide an interactive data table");
+  });
   it("does not present editorial prototypes as connected observations", () => {
     for (const story of [beyondTreeCover, aPlaceRewritten]) {
       expect(story.metadata.title).toContain("editorial prototype");

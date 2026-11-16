@@ -127,3 +127,12 @@ The source record explicitly describes a multi-temporal segmentation model
 applied to Sentinel-1 SAR and monthly-averaged fronts. Thus the caption's
 “model-derived monthly average fronts” is source-supported; it is not a claim
 that these are directly observed daily calving events.
+
+## Figure readability
+
+The Kronebreen chapters repeat the axes, units, shapes and coverage key as
+normal text lists, so readers do not need to decipher a scaled raster legend.
+The shared image dialog also links to the original image in a new tab for
+browser zoom or saving. This is not an interactive data table or explorer.
+Actual phone/desktop browser QA remains outstanding: the local preview was
+unreachable from the available browser, whose URL policy then rejected access.
