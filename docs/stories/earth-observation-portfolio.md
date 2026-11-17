@@ -136,3 +136,43 @@ The shared image dialog also links to the original image in a new tab for
 browser zoom or saving. This is not an interactive data table or explorer.
 Actual phone/desktop browser QA remains outstanding: the local preview was
 unreachable from the available browser, whose URL policy then rejected access.
+
+## Bounded ForTy v1 acquisition verified (2026-11-17)
+
+The [Source Cooperative mirror](https://source.coop/epoch/forest-typology-2020/README.md)
+provides individual unchanged COGs, so the large Figshare ZIPs are no longer an
+acquisition blocker. Its `v1/items.parquet` index was downloaded and queried for
+116.21°E, 33.31°S, the **producer documentation's example map center** in
+southwestern Australia. This is a reproducible technical candidate, not an
+independently validated local history or a representative global sample.
+
+The matching tile is
+[`raster_50H_20_16_7.tif`](https://data.source.coop/epoch/forest-typology-2020/v1/50H/raster_50H_20_16_7.tif),
+3,034,593 bytes. SHA-256:
+`30b04d220bc9a96c2b481ce5e50d785a96626a5cb6e8503477b5bc4d87d7218e`.
+A 1,024-byte range request returned HTTP 206 and `Access-Control-Allow-Origin: *`.
+This verifies HTTP range/CORS behavior, not a browser renderer.
+
+The full tile decoded successfully: five uint8 bands, 2,864 × 4,512 pixels,
+EPSG:32750, 10-metre resolution, NoData 255, positive Y scale (rows run south to
+north). All 12,922,368 pixels were valid; stored scores ranged from 0 to 249 and
+five-band sums from 0 to 249. Rendering must honor the signed transform, not
+silently treat the raw array as north-up. Reproduce with Python, NumPy and Rasterio:
+
+```sh
+python scripts/eo-stories/test_probe_forty.py
+python scripts/eo-stories/probe-forty.py /path/to/raster_50H_20_16_7.tif
+```
+
+The probe pins source bytes, preserves valid zero, masks any NoData band, widens
+before summing, rejects invalid scores/sums, and calculates the sixth class
+before argmax. It does not modify stories, publish data, or substitute the
+seven-band **v2 beta** series. The mirror and producer identify v1 as CC BY 4.0;
+retain Neumann et al.'s dataset and paper attribution and distinguish mirror
+hosting from authorship.
+
+**Still outstanding:** choose a bounded scene within this or another documented
+landscape, check it against independent local evidence and dated imagery, then
+produce a properly attributed map and competing-score view. Beyond Tree Cover
+remains an editorial prototype until those steps are complete. A tile's model
+labels alone do not establish forest management history, health or legal status.
