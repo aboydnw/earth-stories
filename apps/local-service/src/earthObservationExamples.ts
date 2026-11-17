@@ -1,5 +1,6 @@
 import {
   createDefaultSourceProvenance,
+  projectSourceSchema,
   type StoryProject,
   type ProjectSource,
 } from "@earth-stories/story-schema";
@@ -80,9 +81,61 @@ function image(
 export const edgeOfIce = story(
   "edge-of-ice",
   "Edge of Ice",
-  "A data-backed reading of Kronebreen's monthly record. Front-map exploration is still in development.",
+  "Explore a decade of glacier fronts, and the gaps between them.",
 );
+edgeOfIce.publication = {
+  ...edgeOfIce.publication,
+  theme: "atlas",
+  atmosphere: "ice",
+};
+function iceFrontSource(
+  id: string,
+  label: string,
+  month: string | null = null,
+): ProjectSource {
+  return projectSourceSchema.parse({
+    id,
+    label,
+    kind: "local-geojson",
+    path: "assets/kronebreen-fronts.geojson",
+    delivery: "included",
+    attribution: "Pyles et al. (2026), Zenodo v4, CC BY 4.0",
+    presentation: {
+      opacity: month ? 1 : 0.55,
+      color: "#227c8a",
+      strokeColor: "#227c8a",
+      symbolProperty: "dateRole",
+      categoryColors: {
+        first: "#ab6415",
+        latest: "#7542a6",
+        record: "#227c8a",
+      },
+      legendTitle: label,
+      legendVisible: false,
+      filterProperty: month ? "month" : null,
+      filterValue: month,
+    },
+    provenance: {
+      ...createDefaultSourceProvenance(),
+      sourceUrl: iceRecord,
+      publisher: "Pyles et al.",
+      accessedAt: "2026-11-17",
+      licenseName: "CC BY 4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      spatialCoverage: "Kronebreen, Svalbard; RGI60-07.01464",
+      temporalCoverage: { start: "2015-01-01", end: "2024-12-31" },
+      transformations: [
+        "Select available Kronebreen fronts from v4 sval_monthly_termini",
+        "Reproject EPSG:32633 to WGS84 longitude/latitude (EPSG:4326); retain all vertices",
+        "Label actual source months; no missing-front interpolation or geometry morphing",
+      ],
+    },
+  });
+}
 edgeOfIce.sources = [
+  iceFrontSource("ice-front-map", "Available monthly fronts"),
+  iceFrontSource("ice-front-first", "January 2015", "2015-01"),
+  iceFrontSource("ice-front-last", "December 2024", "2024-12"),
   {
     ...image(
       "ice-fronts",
@@ -139,20 +192,52 @@ edgeOfIce.chapters = [
   {
     id: "edge-opening",
     type: "prose",
-    title: "The boundary between glacier and sea",
+    title: "Where the ice meets the fjord",
     narrative:
-      "From a distance, a glacier can seem as permanent as the mountains around it. Follow its edge, where ice meets water, and you are following a boundary that moves.\n\nThis story begins at **Kronebreen in Svalbard**. Its monthly record gives us a way to ask what happens at that boundary, without pretending that one line tells the whole story.\n\n**Data edition:** the chart below uses the researchers' v4 observations and estimates. The monthly-front figure is static; a selectable map is not yet included. Use the chapter navigation to move at your own pace.",
+      "Mountains frame the water. Between them, Kronebreen flows toward the sea. At its edge, the outline will not hold still.\n\nThis is a journey through ten years of that boundary in Svalbard. Move between chapters at your own pace, or choose Read all. The ice-and-fjord artwork sets the scene; the maps and charts carry the measurements.",
+  },
+  {
+    id: "edge-place",
+    type: "map",
+    title: "Find the fjord",
+    sourceId: "ice-front-map",
+    camera: {
+      center: [15, 78.5],
+      zoom: 4.4,
+      bearing: 0,
+      pitch: 0,
+    },
+    narrative:
+      "Far north of mainland Norway lies Svalbard. On its western coast, Kronebreen opens into Kongsfjorden. The small cluster of lines marks the glacier front, not the whole glacier.\n\nExplore the map to orient yourself, then continue to move closer. The basemap is modern geographic context, not imagery from the dates of the fronts.",
   },
   {
     id: "edge-outlines",
-    type: "image",
+    type: "map",
     title: "An edge with a memory",
-    sourceId: "ice-fronts",
-    alt: "114 available monthly glacier front outlines for Kronebreen, January 2015 through December 2024, plotted in UTM coordinates. January 2015 is gold and December 2024 is white. Missing months have no outline.",
-    caption:
-      "Model-derived monthly average fronts from Sentinel-1 radar, not daily observations or a reconstruction of individual calving events.",
+    sourceId: "ice-front-map",
+    camera: {
+      center: [12.6, 78.87],
+      zoom: 9.8,
+      bearing: 0,
+      pitch: 0,
+    },
     narrative:
-      "One line shows a boundary. Let the other months gather around it, and the boundary becomes a record. These are the 114 available monthly fronts for Kronebreen in the source GeoPackage. The 6 absent months stay absent.\n\nThe lines mark the ice front, not a coastline or the glacier's complete outline. Their coordinate grid makes this a comparison of position, not a photographic view. A selectable two-date map remains future work.\n\n### Reading the figure\n\n- **Gold:** January 2015 front. **White:** December 2024 front. The other lines are available monthly fronts, not a continuous animation.\n- **Horizontal axis:** easting in kilometres, UTM zone 33N. **Vertical axis:** northing in kilometres.\n- Missing months have no line. Open the figure, then choose **Open original image** to inspect its labels at full resolution.",
+      "One line marks a boundary. A decade of lines makes a record. Here are the **114 available monthly fronts**, from January 2015 through December 2024, in their geographic positions.\n\nTeal lines show intervening months; ochre marks the first month and purple the last. These are model-derived monthly average fronts from Sentinel-1 radar, not daily observations. Six months have no front. We leave those gaps empty rather than inventing a path between them.",
+  },
+  {
+    id: "edge-compare",
+    type: "map",
+    title: "Two moments, the same fjord",
+    sourceId: "ice-front-first",
+    overlaySourceIds: ["ice-front-last"],
+    camera: {
+      center: [12.6, 78.87],
+      zoom: 9.8,
+      bearing: 0,
+      pitch: 0,
+    },
+    narrative:
+      "**Ochre: January 2015. Purple: December 2024.** Pan and zoom to compare the boundaries against the same geography. These are the endpoints of the available record, not a smooth retreat animation.\n\nThe space between the lines is not a measure of total ice loss. Ice also flows toward the front. To ask how much was lost, we need another kind of evidence.",
   },
   {
     id: "edge-record",
@@ -183,7 +268,7 @@ edgeOfIce.chapters = [
     id: "edge-explore",
     type: "prose",
     title: "Follow your own question",
-    narrative: `Return to a month that caught your eye. Was its geometry available? Was its change estimated across a gap?\n\nThe planned **Svalbard Front Explorer** will keep those questions beside the map: two-date comparison, a coverage strip, and a separate uncertainty panel. It is not a live feature in this edition.\n\nRead the [dataset and downloadable files](${iceRecord}) or the [published study](https://essd.copernicus.org/articles/18/7319/2026/). Pyles and colleagues' v4 dataset is licensed CC BY 4.0. This edition selects one glacier; it makes no claim that its behavior represents all of Svalbard.`,
+    narrative: `Return to a month that caught your eye. Was its geometry available? Was its change estimated across a gap?\n\nThis edition offers geographic exploration and a fixed January 2015–December 2024 comparison. Selecting arbitrary months remains future work for the **Svalbard Front Explorer**. The chart keeps coverage and uncertainty visible; it does not fill missing fronts.\n\nRead the [dataset and downloadable files](${iceRecord}) or the [published study](https://essd.copernicus.org/articles/18/7319/2026/). Pyles and colleagues' v4 dataset is licensed CC BY 4.0. This edition selects one glacier; it makes no claim that its behavior represents all of Svalbard.`,
   },
 ];
 

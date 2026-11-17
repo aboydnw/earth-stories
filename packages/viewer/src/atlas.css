@@ -876,3 +876,93 @@
     background: var(--story-paper);
   }
 }
+
+/* Ice is a separate illustration, never a replacement for scientific figures. */
+.story-publication--atlas.atlas--ice {
+  --story-ink: #203f4c;
+  --story-muted: #48626b;
+  --story-paper: #f1f5f2;
+  --story-canvas: #e7eeea;
+  --story-border: #a9bebd;
+  --story-accent: #286978;
+  --story-accent-text: #215b69;
+}
+.atlas-ice-scene {
+  margin: 0;
+}
+.atlas-ice {
+  position: relative;
+  height: clamp(180px, 23cqi, 300px);
+  overflow: hidden;
+  pointer-events: none;
+  background: #d7e5e6;
+}
+.atlas-ice-scene[data-opening="true"] .atlas-ice {
+  height: clamp(260px, 34cqi, 450px);
+}
+.atlas-ice svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.atlas-ice__sky {
+  fill: #d7e5e6;
+}
+.atlas-ice__sky-lines {
+  stroke: #8baab4;
+  opacity: 0.6;
+  transform: translateX(calc(var(--ice-view) * -30px));
+}
+.atlas-ice__far {
+  transform: translateY(calc((1 - var(--ice-arrival)) * 10px));
+}
+.atlas-ice__near {
+  transform: translateY(calc((1 - var(--ice-arrival)) * 28px));
+}
+.atlas-ice__water {
+  animation: atlas-ice-water 10s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+.atlas-ice[data-moving="true"] .atlas-ice__water {
+  animation-play-state: running;
+}
+.atlas-ice__latitude {
+  position: absolute;
+  left: 24px;
+  top: 20px;
+  color: #203f4c;
+  font:
+    10px/1.5 "Plus Jakarta Sans Variable",
+    sans-serif;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.atlas-ice-scene > figcaption {
+  margin: 0;
+  padding: 10px 0;
+  color: var(--story-muted);
+  font:
+    11px/1.5 "Plus Jakarta Sans Variable",
+    sans-serif;
+  border-bottom: 1px solid var(--story-border);
+}
+@keyframes atlas-ice-water {
+  from {
+    transform: translateX(-5px);
+    opacity: 0.5;
+  }
+  to {
+    transform: translateX(5px);
+    opacity: 0.85;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .atlas-ice__water {
+    animation: none;
+  }
+}
+@media print {
+  .atlas-ice__water {
+    animation: none;
+  }
+}

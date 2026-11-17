@@ -146,3 +146,35 @@ export const MotionOff: Story = {
       ?.click();
   },
 };
+
+// Use prose-only chapters here so this fixture never labels hurricane evidence
+// as glacier data. Evidence-bearing ice chapters live in the local-service example.
+export const IceFjord: Story = {
+  args: {
+    manifest: {
+      ...manifest,
+      metadata: {
+        ...manifest.metadata,
+        title: "At the edge of ice",
+        description: "An illustrated fjord with reader-controlled chapters.",
+      },
+      publication: { ...manifest.publication, atmosphere: "ice" },
+      chapters: [
+        {
+          id: "arrival",
+          type: "prose",
+          title: "Arrive at the fjord",
+          narrative:
+            "The illustration sets the scene. Measurements belong in the evidence, not in this imagined landscape.",
+        },
+        {
+          id: "observations",
+          type: "prose",
+          title: "Read what was observed",
+          narrative:
+            "Jump between chapters, pause the atmosphere, or read everything at once. The reader chooses the pace.",
+        },
+      ],
+    },
+  },
+};

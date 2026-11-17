@@ -2,7 +2,7 @@
 
 These three examples are editable stories in the normal Earth Stories catalog,
 using the shared viewer and publication compiler. This is **not** a completed
-portfolio deployment or three shipped exploration apps. Nothing is deployed.
+portfolio deployment or three shipped exploration apps. This document describes the editable source examples; publishing a revision remains a separate step.
 
 ## What is real today
 
@@ -11,7 +11,7 @@ portfolio deployment or three shipped exploration apps. Nothing is deployed.
   figures show the 114 available monthly front geometries and 119 monthly
   ablation intervals. The CSV retains rate, uncertainty, missing-geometry and
   interpolated-area-change flags. All are derived from downloaded source files,
-  not invented demonstration values. No interactive front map exists yet.
+  not invented demonstration values. The Atlas edition adds a real geographic front map and a fixed January 2015 / December 2024 comparison, with pan and zoom. Arbitrary month selection remains future work.
 - **Beyond Tree Cover** is an explicitly labeled editorial prototype with an
   original conceptual class key. It does not contain ForTy imagery, regional
   classification, class probabilities, or a working explorer.
@@ -23,8 +23,7 @@ The prototypes deliberately do not show made-up places, data, or functioning
 controls. The title, opening chapter and image captions repeat their status.
 The original diagrams have equal-sized panels for legibility; panel area is not
 measured area. Stories are short, chapter-addressable, and avoid mandatory
-scroll-animation sequences. Interactive, connected transitions remain future
-work, rather than a new one-off viewer implementation.
+scroll-animation sequences. Edge of Ice uses the reusable Atlas ice-and-fjord atmosphere with chapter transitions, pause, reduced motion and Read all. Its illustrative viewpoint changes do not animate measured glacier change. Scientific figures stay visible, separate from the artwork.
 
 ## Rebuild the ice evidence and conceptual diagrams
 
@@ -45,7 +44,7 @@ The script validates upstream MD5 checksums (integrity checks, not signatures):
 Only the small derived assets are bundled. No 257-MB GeoPackage is shipped.
 The front layer is `sval_monthly_termini`, `rgiid = RGI60-07.01464`, native
 EPSG:32633. No coordinate resampling, smoothing, or missing geometry synthesis
-is performed. Native metres are divided by 1,000 for figure axes. The monthly
+is performed. Native metres are divided by 1,000 for figure axes. The bundled GeoJSON reprojects the original vertices to EPSG:4326 longitude/latitude for maps, retains all available months, and uses date filters for the two endpoint layers. The modern CARTO/OSM basemap is context, not contemporaneous satellite imagery. The monthly
 fronts are model-derived average segmentations, not individual calving events.
 
 The NetCDF rates begin February 2015, while the geometry series begins January 2015. Rates retain `Gt yr-1` units, **not Gt per month**. `is_gap` and

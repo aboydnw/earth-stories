@@ -120,6 +120,28 @@
   "sha256": {
     "kronebreen-fronts.png": "02dfdf86a93bc8fbe280b43a28e44e9590dbaeb7a32718925f6b3fe59fea9553",
     "kronebreen-record.png": "7c5295e4ae3ecdd52830e26d4477b654837ff42209cc6ad979562259b07085e5",
-    "kronebreen-monthly.csv": "fd7e2ba4f2a2cdc33f2d35468915a01d4178d4d094be58820b02715930080b1b"
+    "kronebreen-monthly.csv": "fd7e2ba4f2a2cdc33f2d35468915a01d4178d4d094be58820b02715930080b1b",
+    "kronebreen-fronts.geojson": "399fd39d3ea093d12b30f9600b0e11475a0a20e79c8faba8adb4d96ccc7b9907"
+  },
+  "frontGeometry": {
+    "source": "https://zenodo.org/records/22129588",
+    "file": "svalbard_frontal_ablation.gpkg",
+    "md5": "830e473af026b99bd9daaf3efbf8be69",
+    "layer": "sval_monthly_termini",
+    "sourceCrs": "EPSG:32633",
+    "outputCrs": "EPSG:4326",
+    "coordinateOrder": "longitude, latitude",
+    "coordinatePrecisionDecimalPlaces": 7,
+    "transformation": "pyproj 3.8.0, always_xy=True",
+    "simplification": false,
+    "interpolation": false,
+    "missingMonths": [
+      "2015-03",
+      "2015-04",
+      "2015-05",
+      "2015-06",
+      "2015-07",
+      "2015-12"
+    ]
   }
 }

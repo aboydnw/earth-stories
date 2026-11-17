@@ -244,7 +244,7 @@ describe("MapChapter", () => {
     ).toBeNull();
   });
 
-  it("limits point styling to point geometry in mixed GeoJSON", async () => {
+  it("limits point and polygon styling to their actual geometry in mixed GeoJSON", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -277,11 +277,17 @@ describe("MapChapter", () => {
       "Point",
     ]);
     expect(
-      screen.getByTestId("layer-mixed-fill").hasAttribute("data-filter"),
+      JSON.parse(
+        screen.getByTestId("layer-mixed-fill").getAttribute("data-filter") ??
+          "null",
+      ),
+    ).toEqual(["==", ["geometry-type"], "Polygon"]);
+    expect(
+      screen.getByTestId("layer-mixed-line").hasAttribute("data-filter"),
     ).toBe(false);
   });
 
-  it("combines point geometry and authored data filters", async () => {
+  it("combines geometry and authored filters without losing the line data filter", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -303,6 +309,23 @@ describe("MapChapter", () => {
     );
 
     const points = await screen.findByTestId("layer-filtered-points");
+    expect(
+      JSON.parse(
+        screen.getByTestId("layer-filtered-fill").getAttribute("data-filter") ??
+          "null",
+      ),
+    ).toEqual([
+      "all",
+      ["==", ["geometry-type"], "Polygon"],
+      ["==", ["to-string", ["get", "status"]], "active"],
+    ]);
+    expect(
+      JSON.parse(
+        screen.getByTestId("layer-filtered-line").getAttribute("data-filter") ??
+          "null",
+      ),
+    ).toEqual(["==", ["to-string", ["get", "status"]], "active"]);
+
     expect(JSON.parse(points.getAttribute("data-filter") ?? "null")).toEqual([
       "all",
       ["==", ["geometry-type"], "Point"],

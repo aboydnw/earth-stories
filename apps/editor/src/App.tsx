@@ -2482,17 +2482,19 @@ export function App() {
                             ...current,
                             publication: {
                               ...current.publication,
-                              atmosphere: event.target.value as "none" | "sea",
+                              atmosphere: event.target.value as
+                                "none" | "sea" | "ice",
                             },
                           }))
                         }
                       >
                         <option value="none">None</option>
                         <option value="sea">Sea and clouds</option>
+                        <option value="ice">Ice and fjord</option>
                       </select>
                       <small>
-                        Decorative scene motion, not measured weather. Readers
-                        can pause it or turn motion off.
+                        Decorative scene motion, not measured conditions.
+                        Readers can pause it or turn motion off.
                       </small>
                     </label>
                   )}
