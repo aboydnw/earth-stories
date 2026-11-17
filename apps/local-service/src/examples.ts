@@ -4,6 +4,8 @@ import {
 } from "@earth-stories/story-schema";
 import { earthquakeStory, electricGridStory } from "./hifldExamples.js";
 
+import { earthObservationStories } from "./earthObservationExamples.js";
+
 const created = "2026-08-05T00:00:00.000Z";
 const basemap = {
   id: "carto-positron",
@@ -1047,6 +1049,7 @@ const exampleStories = [
   stormTrack,
   earthquakeStory,
   electricGridStory,
+  ...earthObservationStories,
 ];
 
 export function exampleCatalog(): {

@@ -413,6 +413,10 @@
   font-size: 13px;
   text-align: center;
 }
+.story-lightbox figcaption a {
+  color: inherit;
+  text-decoration: underline;
+}
 .story-lightbox__close {
   position: fixed;
   top: 16px;

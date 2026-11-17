@@ -15,6 +15,14 @@ const ASSETS_ROOT = join(
  * image and csv sources can only ever be included, never connected.
  */
 const EXAMPLE_ASSET_FILES: Record<string, string[]> = {
+  "example-edge-of-ice": [
+    "kronebreen-evidence.json",
+    "kronebreen-fronts.png",
+    "kronebreen-record.png",
+    "kronebreen-monthly.csv",
+  ],
+  "example-beyond-tree-cover": ["concept.png"],
+  "example-a-place-rewritten": ["concept.png"],
   "example-boundaries": [
     "everest-relief.png",
     "everest-elevation.csv",

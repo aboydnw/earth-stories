@@ -178,3 +178,13 @@ winds, rain, or surge. The actual track and chart still use the unchanged 34
 fixes. Reduced motion and Read all chapters provide static routes. Existing
 editable projects remain untouched; create a new template copy or explicitly
 choose Illustrated Atlas → Sea and clouds in Story settings.
+
+## Earth observation portfolio editions
+
+The catalog also includes **Edge of Ice**, with real Kronebreen monthly front
+and ablation figures, and two clearly labeled editorial prototypes:
+**Beyond Tree Cover** and **A Place, Rewritten**. All use small bundled visuals
+and the existing shared reader. The latter two have no connected scientific
+data layers yet. See [data provenance, regeneration and remaining gates](stories/earth-observation-portfolio.md)
+before treating any of them as a complete interactive exploration or publishing
+an interpretation of a particular landscape.
