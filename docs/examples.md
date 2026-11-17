@@ -182,7 +182,7 @@ choose Illustrated Atlas → Sea and clouds in Story settings.
 ## Earth observation portfolio editions
 
 The catalog also includes **Edge of Ice**, with real Kronebreen monthly front
-and ablation figures, and two clearly labeled editorial prototypes:
+and ablation figures, an interactive front map, and an Illustrated Atlas ice/fjord atmosphere. The catalog also includes two clearly labeled editorial prototypes:
 **Beyond Tree Cover** and **A Place, Rewritten**. All use small bundled visuals
 and the existing shared reader. The latter two have no connected scientific
 data layers yet. See [data provenance, regeneration and remaining gates](stories/earth-observation-portfolio.md)

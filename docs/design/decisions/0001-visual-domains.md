@@ -65,3 +65,16 @@ time controls interrupt the authored transition. Background tabs suspend it;
 OS reduced motion settles the scene and disables continuous playback.
 Read-all and snapshot output use a complete static layout. No sound, scroll
 locking, mandatory wait, or atmospheric measurement is introduced.
+
+### Ice atmosphere: context without counterfeit evidence
+
+The Atlas reader also accepts explicit `atmosphere: "ice"`. Original schematic
+fjord artwork occupies its own scenic band above chapter content. It must never
+replace a chart, hide an image, or be mistaken for a mapped glacier front. Its
+visible caption makes that distinction explicit. Mountains and etched water
+provide depth; chapter arrival changes framing, not glacier geometry. Real
+front observations remain the responsibility of geographic data chapters.
+
+The band shares Atlas pause, motion-off, skip, reduced-motion and background-tab
+controls. Read-all and snapshots show one static illustration. There is no
+scroll capture, automatic progression, or interpolation of observed ice fronts.

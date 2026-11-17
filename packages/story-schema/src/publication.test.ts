@@ -33,6 +33,21 @@ const legacyManifest = {
 } as const;
 
 describe("publication manifests", () => {
+  it("preserves an authored ice atmosphere through legacy migration", () => {
+    const parsed = parsePublicationManifest({
+      ...legacyManifest,
+      publication: {
+        ...legacyManifest.publication,
+        theme: "atlas",
+        atmosphere: "ice",
+      },
+    });
+    expect(parsed.publication.atmosphere).toBe("ice");
+    expect(publicationManifestSchema.parse(parsed).publication.atmosphere).toBe(
+      "ice",
+    );
+  });
+
   it("keeps decorative atmosphere optional and preserves an authored sea in v1 migration", () => {
     expect(
       parsePublicationManifest(legacyManifest).publication.atmosphere,

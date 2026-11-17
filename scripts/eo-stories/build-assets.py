@@ -95,3 +95,10 @@ evidence = {
     'sha256': {name: hashlib.sha256((folder / name).read_bytes()).hexdigest() for name in ['kronebreen-fronts.png', 'kronebreen-record.png', 'kronebreen-monthly.csv']},
 }
 (folder / 'kronebreen-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+
+# Bundle geographic linework too: GeoJSON is EPSG:4326, not the native UTM
+# coordinates used for the static scientific figure above. Requires the pinned
+# shapely/pyproj dependencies documented in build-fronts.py.
+import runpy
+front_exporter = runpy.run_path(str(Path(__file__).with_name("build-fronts.py")))
+front_exporter["export_fronts"](geopackage)

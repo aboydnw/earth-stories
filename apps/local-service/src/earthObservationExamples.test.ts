@@ -77,7 +77,11 @@ describe("Earth observation stories", () => {
       for (const source of story.sources) {
         expect(source.delivery).toBe("included");
         expect(source.provenance.sourceUrl).toMatch(/^https:/);
-        if (source.kind === "image" || source.kind === "csv") {
+        if (
+          source.kind === "image" ||
+          source.kind === "csv" ||
+          source.kind === "local-geojson"
+        ) {
           expect(
             files.find((f) => f.path === source.path)?.contents.byteLength,
           ).toBeGreaterThan(100);
@@ -129,11 +133,9 @@ describe("Earth observation stories", () => {
     expect(months.size).toBe(data.length + 1 - missing);
     const outlines = edgeOfIce.chapters.find((c) => c.id === "edge-outlines")!;
     expect(outlines.narrative).toContain(
-      `the ${months.size} available monthly fronts`,
+      `**${months.size} available monthly fronts**`,
     );
-    expect(outlines.narrative).toContain(
-      `The ${missing} absent months stay absent`,
-    );
+    expect(outlines.narrative).toContain("Six months have no front");
     expect(
       edgeOfIce.chapters.find((c) => c.id === "edge-gaps")!.narrative,
     ).toContain(`${data.length} monthly intervals`);
@@ -156,13 +158,23 @@ describe("Earth observation stories", () => {
     const record = edgeOfIce.chapters.find(
       (c) => c.id === "edge-record",
     )!.narrative;
-    for (const label of [
-      "**Gold:** January 2015",
-      "**White:** December 2024",
-      "easting in kilometres",
-      "northing in kilometres",
-    ])
-      expect(fronts).toContain(label);
+    expect(fronts).toContain("Teal lines");
+    const comparison = edgeOfIce.chapters.find((c) => c.id === "edge-compare")!;
+    expect(comparison.narrative).toContain(
+      "**Ochre: January 2015. Purple: December 2024.**",
+    );
+    expect(comparison.type).toBe("map");
+    const manifest = compileProject(storyProjectSchema.parse(edgeOfIce));
+    expect(manifest.publication.theme).toBe("atlas");
+    expect(manifest.publication.atmosphere).toBe("ice");
+    for (const [id, date] of [
+      ["ice-front-first", "2015-01"],
+      ["ice-front-last", "2024-12"],
+    ]) {
+      const source = edgeOfIce.sources.find((s) => s.id === id)!;
+      expect(source.presentation?.filterProperty).toBe("month");
+      expect(source.presentation?.filterValue).toBe(date);
+    }
     for (const label of [
       "**Teal circles:**",
       "**Amber diamonds:**",

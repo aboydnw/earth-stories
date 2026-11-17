@@ -14,6 +14,7 @@ import {
 import { PublicationChapterRenderer } from "./PublicationChapterRenderer.js";
 import { publicationRuntimePolicy } from "./publicationRuntime.js";
 import { StoryContinuations } from "./StoryContinuations.js";
+import { AtlasIce } from "./AtlasIce.js";
 import { AtlasSea } from "./AtlasSea.js";
 import { AtlasMotionContext } from "./AtlasMotionContext.js";
 import { useAtlasMotion } from "./useAtlasMotion.js";
@@ -84,6 +85,7 @@ export function AtlasStoryViewer({
     active: !allVisible,
   });
   const sea = manifest.publication.atmosphere === "sea";
+  const ice = manifest.publication.atmosphere === "ice";
   const firstImage = chapters.find((item) => item.type === "image");
   const imageChapter = chapter?.type === "image" ? chapter : firstImage;
   const artwork =
@@ -124,8 +126,11 @@ export function AtlasStoryViewer({
       allVisible ||
       (bounds && (bounds.top < 0 || bounds.bottom > window.innerHeight))
     )
-      section?.scrollIntoView({ block: "start", behavior: "instant" });
-  }, [activeIndex, chapter, allVisible]);
+      (ice && !allVisible ? stage.current : section)?.scrollIntoView({
+        block: "start",
+        behavior: "instant",
+      });
+  }, [activeIndex, chapter, allVisible, ice]);
 
   useEffect(() => {
     const list = navigation.current?.querySelector("ol");
@@ -166,14 +171,17 @@ export function AtlasStoryViewer({
         allVisible ||
         (bounds && (bounds.top < 0 || bounds.bottom > window.innerHeight))
       )
-        section?.scrollIntoView({ block: "start", behavior: "instant" });
+        (ice && !allVisible ? stage.current : section)?.scrollIntoView({
+          block: "start",
+          behavior: "instant",
+        });
     }
   };
 
   return (
     <AtlasMotionContext.Provider value={motion}>
       <main
-        className={`story-publication story-publication--atlas${sea ? " atlas--sea" : ""}${embed ? " story-publication--embed" : ""}${allVisible ? " atlas--read-all" : ""}`}
+        className={`story-publication story-publication--atlas${sea ? " atlas--sea" : ice ? " atlas--ice" : ""}${embed ? " story-publication--embed" : ""}${allVisible ? " atlas--read-all" : ""}`}
         data-motion={atmosphericMotion ? "running" : "still"}
       >
         <header className="atlas-masthead">
@@ -248,7 +256,9 @@ export function AtlasStoryViewer({
               <span>
                 {sea
                   ? "Illustrated atmosphere, not measured weather"
-                  : "Explore or move straight to the next chapter"}
+                  : ice
+                    ? "Illustrated fjord, not a map or measured ice change"
+                    : "Explore or move straight to the next chapter"}
               </span>
             </p>
             <div>
@@ -292,6 +302,15 @@ export function AtlasStoryViewer({
           data-transitioning={motion.transitioning}
           style={{ "--atlas-scene-progress": sceneProgress } as CSSProperties}
         >
+          {ice && (
+            <AtlasIce
+              chapterIndex={allVisible ? 0 : activeIndex}
+              chapterCount={manifest.chapters.length}
+              progress={allVisible ? 1 : sceneProgress}
+              moving={!allVisible && atmosphericMotion}
+              opening={!allVisible && activeIndex === 0}
+            />
+          )}
           {sea && !allVisible && (
             <AtlasSea
               artworkHref={artwork}
@@ -332,7 +351,7 @@ export function AtlasStoryViewer({
           <div className="atlas-reader-tools">
             <p>
               {chapter.type === "map" || chapter.type === "scrolly"
-                ? "Pan, zoom, or scrub time. The next chapter brings you back to the story."
+                ? "Pan or zoom to explore. The next chapter brings you back to the story."
                 : "Follow the chapters, or choose your own place in the story."}
             </p>
             {!allVisible &&

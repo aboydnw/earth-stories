@@ -18,6 +18,7 @@ const EXAMPLE_ASSET_FILES: Record<string, string[]> = {
   "example-edge-of-ice": [
     "kronebreen-evidence.json",
     "kronebreen-fronts.png",
+    "kronebreen-fronts.geojson",
     "kronebreen-record.png",
     "kronebreen-monthly.csv",
   ],

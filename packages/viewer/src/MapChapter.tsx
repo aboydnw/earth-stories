@@ -193,6 +193,14 @@ function AssetLayer({
   const dataColor = categoryColor(presentation);
   const dataFilter = featureFilter(presentation);
   const filterProps = dataFilter ? { filter: dataFilter as never } : {};
+  // MapLibre can implicitly close linework in a fill layer. Restrict fills to
+  // actual polygons so observed front lines never become invented ice areas.
+  const polygonFilter = ["==", ["geometry-type"], "Polygon"];
+  const polygonFilterProps = {
+    filter: (dataFilter
+      ? ["all", polygonFilter, dataFilter]
+      : polygonFilter) as never,
+  };
   const pointFilter = ["==", ["geometry-type"], "Point"];
   const pointFilterProps = {
     filter: (dataFilter
@@ -340,7 +348,7 @@ function AssetLayer({
           <Layer
             id={`${asset.id}-fill`}
             type="fill"
-            {...filterProps}
+            {...polygonFilterProps}
             paint={{
               "fill-color": dataColor as never,
               "fill-opacity": presentation.opacity * 0.45,

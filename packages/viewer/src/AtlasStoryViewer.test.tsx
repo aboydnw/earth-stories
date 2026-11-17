@@ -66,6 +66,39 @@ const manifest = publicationManifestSchema.parse({
 });
 
 describe("Illustrated Atlas reader", () => {
+  it("keeps ice art separate, supports pause and settles read-all without hiding evidence", () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const iceManifest = {
+      ...manifest,
+      publication: { ...manifest.publication, atmosphere: "ice" as const },
+    };
+    const view = render(<StoryViewer manifest={iceManifest} />);
+    const ice = view.container.querySelector(".atlas-ice")!;
+    expect(ice.getAttribute("aria-hidden")).toBe("true");
+    expect(view.container.querySelector(".atlas-sea")).toBeNull();
+    expect(view.container.querySelector(".atlas-stage--immersive")).toBeNull();
+    expect(
+      screen.getByText(/Not a map or measured ice change; use/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pause motion" }));
+    expect(ice.getAttribute("data-moving")).toBe("false");
+    fireEvent.click(
+      screen.getByRole("link", { name: /Next chapter: The coast/ }),
+    );
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(
+      "The coast",
+    );
+    expect(
+      view.container
+        .querySelector(".atlas-ice-scene")
+        ?.getAttribute("data-opening"),
+    ).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Read all chapters" }));
+    expect(ice.getAttribute("data-moving")).toBe("false");
+    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: "Pause motion" })).toBeNull();
+  });
+
   it("keeps sea art opt-in and exposes pause, skip, and motion controls", () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
     const view = render(<StoryViewer manifest={manifest} />);
