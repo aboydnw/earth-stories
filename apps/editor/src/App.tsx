@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ArrowDown,
   BookOpen,
@@ -81,6 +89,10 @@ import {
 import { captureKeyframe } from "./flyoverPath";
 import { pollConversionJob } from "./conversionPolling";
 
+const StoryStudio = lazy(async () => ({
+  default: (await import("./StoryStudio")).StoryStudio,
+}));
+
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
 type PendingChapterType = "map" | "scrolly" | "image" | "chart";
@@ -120,6 +132,8 @@ function latestConversionTerminal(job: ConversionJobSnapshot) {
 }
 export function App() {
   const [desktop] = useState(detectDesktopBridge);
+  const [studioProject, setStudioProject] = useState<string | null>(null);
+  const studioEntry = useRef<HTMLButtonElement>(null);
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(
     () =>
       desktop !== null &&
@@ -1660,50 +1674,76 @@ export function App() {
       </div>
     );
 
-  const editorCanvas = (
-    <ChapterCanvas
-      mode={canvasMode}
-      onModeChange={setCanvasMode}
-      selectedChapter={selectedChapter ?? null}
-      focusedManifest={focusedPublicationResult.manifest}
-      fullManifest={publication}
-      focusedError={focusedPublicationResult.error}
-      savedCamera={savedChapterCamera}
-      snapshotMode={publishOpen}
-      previewCamera={flyoverPreviewCamera}
-      commitInitialFit={Boolean(
-        selectedChapter &&
-        (selectedChapter.type === "map" ||
-          selectedChapter.type === "scrolly") &&
-        initialFitScopes.has(
-          `${selectedChapter.id}:${selectedChapter.sourceId}`,
-        ),
-      )}
-      onLiveCameraChange={(chapterId, nextCamera) => {
-        if (chapterId === selectedChapter?.id)
-          setCurrentCanvasCamera(nextCamera);
-      }}
-      onCameraCommit={(nextCamera) => {
-        if (!selectedChapter || !("camera" in selectedChapter)) return;
-        if (
-          selectedChapter.type === "map" ||
-          selectedChapter.type === "scrolly"
-        )
-          consumeInitialFit(selectedChapter.id, selectedChapter.sourceId);
-        changeProject((current) => ({
-          ...current,
-          chapters: current.chapters.map((chapter) =>
-            chapter.id === selectedChapter.id && "camera" in chapter
-              ? {
-                  ...chapter,
-                  camera: { ...chapter.camera, ...nextCamera },
-                }
-              : chapter,
-          ),
-        }));
-      }}
-    />
-  );
+  const studioAvailable =
+    selectedChapter?.id === "edge-compare" &&
+    project.sources.some((source) => source.id === "ice-front-first") &&
+    project.sources.some((source) => source.id === "ice-front-last");
+  const editorCanvas =
+    studioAvailable && studioProject === project.id ? (
+      <Suspense fallback={<p role="status">Preparing Story Studio…</p>}>
+        <StoryStudio
+          onClose={() => {
+            setStudioProject(null);
+            requestAnimationFrame(() => studioEntry.current?.focus());
+          }}
+        />
+      </Suspense>
+    ) : (
+      <>
+        {studioAvailable && (
+          <button
+            type="button"
+            className="secondary-button"
+            ref={studioEntry}
+            onClick={() => setStudioProject(project.id)}
+          >
+            Open Story Studio
+          </button>
+        )}
+        <ChapterCanvas
+          mode={canvasMode}
+          onModeChange={setCanvasMode}
+          selectedChapter={selectedChapter ?? null}
+          focusedManifest={focusedPublicationResult.manifest}
+          fullManifest={publication}
+          focusedError={focusedPublicationResult.error}
+          savedCamera={savedChapterCamera}
+          snapshotMode={publishOpen}
+          previewCamera={flyoverPreviewCamera}
+          commitInitialFit={Boolean(
+            selectedChapter &&
+            (selectedChapter.type === "map" ||
+              selectedChapter.type === "scrolly") &&
+            initialFitScopes.has(
+              `${selectedChapter.id}:${selectedChapter.sourceId}`,
+            ),
+          )}
+          onLiveCameraChange={(chapterId, nextCamera) => {
+            if (chapterId === selectedChapter?.id)
+              setCurrentCanvasCamera(nextCamera);
+          }}
+          onCameraCommit={(nextCamera) => {
+            if (!selectedChapter || !("camera" in selectedChapter)) return;
+            if (
+              selectedChapter.type === "map" ||
+              selectedChapter.type === "scrolly"
+            )
+              consumeInitialFit(selectedChapter.id, selectedChapter.sourceId);
+            changeProject((current) => ({
+              ...current,
+              chapters: current.chapters.map((chapter) =>
+                chapter.id === selectedChapter.id && "camera" in chapter
+                  ? {
+                      ...chapter,
+                      camera: { ...chapter.camera, ...nextCamera },
+                    }
+                  : chapter,
+              ),
+            }));
+          }}
+        />
+      </>
+    );
 
   return (
     <div
@@ -1819,6 +1859,7 @@ export function App() {
               setEditorRegion("edit");
             }}
             onSelectChapter={(chapterId) => {
+              if (chapterId !== selectedChapter?.id) setStudioProject(null);
               setActiveChapter(chapterId);
               setInspectorMode("chapter");
             }}
