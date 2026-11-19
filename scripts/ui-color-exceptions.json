@@ -152,5 +152,83 @@
     "context": "color: \"red\"",
     "domain": "authored-data",
     "reason": "Malformed worker color the mapper must reject."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#173d48",
+    "context": "fill=\"#173d48\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#42676c",
+    "context": "fill=\"#42676c\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#72998e",
+    "context": "fill=\"#72998e\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#8da99d",
+    "context": "fill=\"#8da99d\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#d7ad75",
+    "context": "fill=\"#d7ad75\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#e1bfff",
+    "context": "fill=\"#e1bfff\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#e5f0ef",
+    "context": "fill=\"#e5f0ef\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#ffd18c",
+    "context": "fill=\"#ffd18c\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#abccc0",
+    "context": "stroke=\"#abccc0\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#c6dbc9",
+    "context": "stroke=\"#c6dbc9\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#c8e4de",
+    "context": "stroke=\"#c8e4de\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#e1bfff",
+    "context": "stroke=\"#e1bfff\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
+  },
+  {
+    "file": "apps/editor/src/StoryStudio.tsx",
+    "value": "#ffd18c",
+    "context": "stroke=\"#ffd18c\"",
+    "reason": "Story Studio's isolated illustrative fjord and source-line legend, not editor interface chrome."
   }
 ]
