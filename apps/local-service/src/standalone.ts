@@ -20,7 +20,9 @@ export function resolveStandaloneConfig(
     paths.repositoryDirectory ?? defaultRepositoryDirectory();
   const cwd = paths.cwd ?? process.cwd();
   const configuredPort = environment.EARTH_STORIES_PORT?.trim();
+  const callbackPort = environment.EARTH_STORIES_CHATGPT_CALLBACK_PORT?.trim();
   return {
+    chatgptCallbackPort: callbackPort ? Number(callbackPort) : undefined,
     host: "127.0.0.1",
     port: Number(configuredPort || 4317),
     projectsDirectory: resolve(

@@ -273,7 +273,10 @@ export function beginLocalService(
         },
         clear: async () => {},
       },
-      { lockPath: resolved.chatgptLockPath },
+      {
+        lockPath: resolved.chatgptLockPath,
+        callbackPort: resolved.chatgptCallbackPort,
+      },
     );
     await chatgpt.initialize();
     generationJobs = new GenerationJobs(

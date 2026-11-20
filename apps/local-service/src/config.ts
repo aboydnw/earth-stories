@@ -44,6 +44,7 @@ export interface LocalServiceConfig {
   credentials: CredentialStore;
   chatgptCredentials?: CredentialStore;
   chatgptLockPath?: string;
+  chatgptCallbackPort?: number;
   githubApp?: GitHubAppConfig | null;
   capabilityToken: string | null;
   limits?: Partial<ServiceLimits>;
@@ -77,6 +78,15 @@ export async function resolveLocalServiceConfig(
   if (!Number.isInteger(config.port) || config.port < 0 || config.port > 65_535)
     throw new Error(
       "The local service port must be an integer from 0 to 65535.",
+    );
+  if (
+    config.chatgptCallbackPort !== undefined &&
+    (!Number.isInteger(config.chatgptCallbackPort) ||
+      config.chatgptCallbackPort < 1 ||
+      config.chatgptCallbackPort > 65_535)
+  )
+    throw new Error(
+      "The ChatGPT callback port must be an integer from 1 to 65535.",
     );
   if (
     config.capabilityToken !== null &&

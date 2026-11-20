@@ -73,6 +73,7 @@ export class ChatGPTConnection {
       fetcher?: typeof fetch;
       keys?: JSONWebKeySet;
       lockPath?: string;
+      callbackPort?: number;
     } = {},
   ) {
     this.fetcher = options.fetcher ?? fetch;
@@ -307,9 +308,18 @@ export class ChatGPTConnection {
         });
       });
       await new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
-        server.listen(0, "127.0.0.1", () => {
-          server.off("error", reject);
+        const onError = (cause: NodeJS.ErrnoException) => {
+          reject(
+            this.options.callbackPort && cause.code === "EADDRINUSE"
+              ? new Error(
+                  `ChatGPT sign-in port ${this.options.callbackPort} is already in use. Close the competing listener or choose another EARTH_STORIES_CHATGPT_CALLBACK_PORT and forward that same port.`,
+                )
+              : cause,
+          );
+        };
+        server.once("error", onError);
+        server.listen(this.options.callbackPort ?? 0, "127.0.0.1", () => {
+          server.off("error", onError);
           resolve();
         });
       });

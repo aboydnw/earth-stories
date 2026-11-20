@@ -203,6 +203,30 @@ loopback callback opens only during sign-in. Account registrations survive local
 sign-out for reconnection, while tokens are cleared and revocation is attempted.
 Only one service may own a stored ChatGPT session at a time.
 
+For a browser connected to a remote development server, the ChatGPT sign-in
+listener also needs an SSH forward. Set a fixed callback port when starting the
+service on the server:
+
+```bash
+EARTH_STORIES_CHATGPT_CALLBACK_PORT=4319 yarn dev
+```
+
+On your computer, keep this tunnel running alongside your existing editor tunnel
+(replace the SSH destination with your own):
+
+```bash
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:4319:127.0.0.1:4319 anthony@dev-server
+```
+
+Then choose **Continue with ChatGPT** again. Both sides must use the same callback
+port because the browser returns to that address after authorization. Keep any
+existing service-port or project-directory settings in your launch command. If
+4319 is occupied, choose another unused port on both machines and update both
+commands. The listener stays bound to loopback; do not expose it publicly.
+Without this setting, local development and the desktop app keep automatically
+choosing an available port. Old sign-in links expire; start a fresh attempt
+rather than reopening the earlier link.
+
 The brief and selected reference contents are sent to OpenAI. Supported references
 are UTF-8 TXT/Markdown, PDFs with extractable text, and PNG/JPEG/WebP images. Public
 HTTPS links must point directly to those formats. Scanned PDFs require a text
