@@ -1,0 +1,32 @@
+/* Development-only dock: reserve space instead of covering authoring controls. */
+body:has(#earth-stories-dev-feedback) {
+  padding-bottom: 64px;
+}
+body:has(#earth-stories-dev-feedback) .editor-shell {
+  height: calc(100dvh - 64px);
+}
+#earth-stories-dev-feedback {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: var(--es-z-toast);
+  min-height: 64px;
+  padding: 8px 16px;
+  background: var(--es-bg-raised);
+  border-top: 1px solid var(--es-border);
+}
+#earth-stories-dev-feedback > [role="status"] {
+  position: static !important;
+  transform: none !important;
+  padding: 4px 12px !important;
+  box-shadow: none !important;
+  max-width: 100% !important;
+  justify-content: center;
+}
+#earth-stories-dev-feedback:has(> [role="status"]) .feedback-recorder {
+  display: none;
+}
+@media (max-width: 600px) {
+  #earth-stories-dev-feedback > [role="status"] > div {
+    display: none;
+  }
+}

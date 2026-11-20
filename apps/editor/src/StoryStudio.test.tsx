@@ -1,11 +1,21 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { EarthStoriesProvider } from "@earth-stories/ui";
+import {
+  cleanup,
+  fireEvent,
+  render as renderUI,
+  screen,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import originalFrontsRaw from "../../local-service/src/example-assets/example-edge-of-ice/kronebreen-fronts.geojson?raw";
 import studioFrontsRaw from "./storyStudioFronts.json?raw";
 import { StoryStudio } from "./StoryStudio";
 import { studioFrame, studioTreatments } from "./storyStudioMotion";
+
+const render = (ui: ReactElement) =>
+  renderUI(ui, { wrapper: EarthStoriesProvider });
 
 afterEach(() => {
   cleanup();
@@ -86,4 +96,16 @@ it("matches the original sourced endpoint features exactly", () => {
       ["2015-01", "2024-12"].includes(properties.month),
     ),
   );
+});
+
+it("explains the static baseline and disables ineffective motion controls", () => {
+  render(<StoryStudio onClose={() => {}} />);
+  expect(
+    (
+      screen.getByRole("slider", {
+        name: "Rehearsal position",
+      }) as HTMLInputElement
+    ).disabled,
+  ).toBe(true);
+  expect(screen.getByText(/choose an animated treatment/i)).toBeTruthy();
 });

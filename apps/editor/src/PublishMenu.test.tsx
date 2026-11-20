@@ -61,7 +61,7 @@ describe("PublishMenu", () => {
     expect(
       screen.getByRole("button", { name: "Publish, 1 issue" }),
     ).toBeTruthy();
-    const preview = screen.getByRole("menuitem", { name: /See as a reader/ });
+    const preview = screen.getByRole("menuitem", { name: /View as reader/ });
     expect(preview.getAttribute("disabled")).toBeNull();
     await userEvent.click(preview);
     expect(props.onPreview).toHaveBeenCalledOnce();

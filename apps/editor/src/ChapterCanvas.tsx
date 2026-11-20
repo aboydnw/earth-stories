@@ -7,21 +7,15 @@ import type {
 import { LEGACY_DEFAULT_CAMERA } from "@earth-stories/story-schema";
 import {
   FocusedChapterViewer,
-  StoryViewer,
   usesLegacyAutomaticFit,
 } from "@earth-stories/viewer";
 import { useChapterCameraDraft } from "./useChapterCameraDraft";
 
-export type CanvasMode = "chapter" | "story";
-
 const fallbackCamera: Camera = LEGACY_DEFAULT_CAMERA;
 
 export function ChapterCanvas({
-  mode,
-  onModeChange,
   selectedChapter,
   focusedManifest,
-  fullManifest,
   focusedError,
   savedCamera,
   onCameraCommit,
@@ -30,11 +24,8 @@ export function ChapterCanvas({
   commitInitialFit = false,
   snapshotMode = false,
 }: {
-  mode: CanvasMode;
-  onModeChange: (mode: CanvasMode) => void;
   selectedChapter: ProjectChapter | null;
   focusedManifest: PublicationManifest | null;
-  fullManifest: PublicationManifest | null;
   focusedError?: string | null;
   savedCamera: Camera | null;
   onCameraCommit: (camera: Camera) => void;
@@ -73,40 +64,11 @@ export function ChapterCanvas({
   return (
     <section className="chapter-canvas" aria-label="Chapter canvas">
       <header className="chapter-canvas__header">
-        <div className="chapter-canvas__modes" aria-label="Canvas mode">
-          <button
-            type="button"
-            aria-pressed={mode === "chapter"}
-            onClick={() => onModeChange("chapter")}
-          >
-            Edit chapter
-          </button>
-          <button
-            type="button"
-            aria-pressed={mode === "story"}
-            onClick={() => onModeChange("story")}
-          >
-            Preview story
-          </button>
-        </div>
-        <span>
-          {mode === "story"
-            ? "Complete reader preview"
-            : selectedChapter?.title || "No chapter selected"}
-        </span>
+        <span>{selectedChapter?.title || "No chapter selected"}</span>
       </header>
 
       <div className="chapter-canvas__viewport">
-        {mode === "story" ? (
-          fullManifest ? (
-            <StoryViewer manifest={fullManifest} snapshotMode={snapshotMode} />
-          ) : (
-            <div className="chapter-canvas__state" role="status">
-              Complete the remaining story requirements to preview the full
-              story.
-            </div>
-          )
-        ) : focusedManifest && selectedChapter ? (
+        {focusedManifest && selectedChapter ? (
           <FocusedChapterViewer
             key={selectedChapter.id}
             manifest={focusedManifest}
@@ -135,7 +97,7 @@ export function ChapterCanvas({
         )}
       </div>
 
-      {mode === "chapter" && mapBound ? (
+      {mapBound ? (
         <div
           className="chapter-canvas__map-tools"
           aria-label="Map view actions"

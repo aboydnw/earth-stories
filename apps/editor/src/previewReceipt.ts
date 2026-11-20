@@ -3,7 +3,7 @@ const memory = new Map<string, string>();
 
 function storage(): Storage | null {
   try {
-    return typeof window !== "undefined" ? window.sessionStorage : null;
+    return typeof window !== "undefined" ? window.localStorage : null;
   } catch {
     return null;
   }
@@ -11,7 +11,13 @@ function storage(): Storage | null {
 
 export function readPreviewReceipt(projectId: string): string | null {
   const key = `${prefix}${projectId}`;
-  const raw = storage()?.getItem(key) ?? memory.get(key) ?? null;
+  let raw: string | null;
+  try {
+    const available = storage();
+    raw = available ? available.getItem(key) : (memory.get(key) ?? null);
+  } catch {
+    raw = memory.get(key) ?? null;
+  }
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as {
@@ -21,7 +27,7 @@ export function readPreviewReceipt(projectId: string): string | null {
     if (value.projectId === projectId && typeof value.revision === "string")
       return value.revision;
   } catch {
-    // Corrupt session values are discarded below.
+    // Corrupt stored values are discarded below.
   }
   try {
     storage()?.removeItem(key);
@@ -42,7 +48,7 @@ export function recordPreviewReceipt(
   try {
     storage()?.setItem(key, value);
   } catch {
-    // The in-memory copy remains available when session storage is blocked.
+    // The in-memory copy remains available when local storage is blocked.
   }
 }
 

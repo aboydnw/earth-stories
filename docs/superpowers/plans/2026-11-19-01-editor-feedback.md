@@ -158,3 +158,22 @@ Replace unstyled prototype buttons with established UI contracts. Label the entr
 - [ ] Push the focused branch and open a PR; attach it to this chat. Check CI and review feedback, fix sound findings, and leave the PR unmerged.
 
 No publication/runtime contract changes are intended in this stage. Reproduce short-recording navigation using the separate reader tab; the editing tab must retain its selected chapter and controls.
+
+## Execution evidence
+
+Implemented in `codex/ai-story-creation` (stage-one PR). The focused canvas no
+longer switches to a full story; reader preview reserves a new tab, saves, and
+opens the saved draft. Cross-tab receipts use local storage. Late save responses
+preserve edits made while saving. Static experiment controls explain their state.
+Prose padding, narrow header overflow, workspace density, and the recorder dock
+were corrected.
+
+Validation: 146 test files / 1,271 tests passed; typecheck, UI and independence
+checks passed; editor/viewer, fixture publication, and Storybook builds passed.
+Chrome verified 1440×900, 1280×800, 1024×768 and 390×844 layouts with no horizontal
+viewport overflow. Reader preview opened a second tab while the editor route
+remained unchanged. Dedicated 200% browser zoom and live microphone recording
+were not exercised. Repository-wide formatting flags pre-existing files:
+`kronebreen-fronts.geojson` and `2026-10-28-production-proof-desktop-pilot.md`;
+changed source files pass formatting. Initial restricted test execution could
+not bind loopback ports; the permitted full run passed.

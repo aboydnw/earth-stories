@@ -9,7 +9,7 @@ import {
 
 describe("preview receipts", () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
     for (const projectId of ["one", "two", "bad", "blocked"])
       clearPreviewReceipt(projectId);
   });
@@ -24,13 +24,25 @@ describe("preview receipts", () => {
     expect(readPreviewReceipt("one")).toBeNull();
   });
 
+  it("shares receipts through local storage and tolerates blocked reads", () => {
+    recordPreviewReceipt("one", "rev-1");
+    expect(localStorage.getItem("earth-stories:preview-receipt:one")).toContain(
+      "rev-1",
+    );
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(readPreviewReceipt("one")).toBe("rev-1");
+    vi.restoreAllMocks();
+  });
+
   it("discards corrupt values", () => {
-    sessionStorage.setItem("earth-stories:preview-receipt:bad", "not json");
+    localStorage.setItem("earth-stories:preview-receipt:bad", "not json");
     expect(readPreviewReceipt("bad")).toBeNull();
   });
 
   it("falls back safely when corrupt storage cannot be removed", () => {
-    sessionStorage.setItem("earth-stories:preview-receipt:blocked", "not json");
+    localStorage.setItem("earth-stories:preview-receipt:blocked", "not json");
     vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
       throw new Error("blocked");
     });
