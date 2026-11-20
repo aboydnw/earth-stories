@@ -180,6 +180,9 @@ export function deriveAuthoringReadiness(
         resolution: "Choose a geospatial source for this overlay.",
       });
     else if (
+      (issue.code === "incompatible-source" &&
+        project.chapters.find((chapter) => chapter.id === issue.chapterId)
+          ?.type === "illustrated") ||
       !["missing-source", "missing-overlay", "incompatible-source"].includes(
         issue.code,
       )

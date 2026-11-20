@@ -70,6 +70,7 @@ export function ChapterCanvas({
       <div className="chapter-canvas__viewport">
         {focusedManifest && selectedChapter ? (
           <FocusedChapterViewer
+            snapshotMode={snapshotMode}
             key={selectedChapter.id}
             manifest={focusedManifest}
             chapterId={selectedChapter.id}

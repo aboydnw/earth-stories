@@ -37,14 +37,15 @@ export function IllustratedChapter({
   const uid = useId().replace(/:/g, "");
   const [progress, setProgress] = useState(scene.staticProgress);
   const [scrub, setScrub] = useState(scene.staticProgress);
+  const [failedImages,setFailedImages]=useState<Set<string>>(()=>new Set());
   const [reduced, setReduced] = useState(
     () =>
       typeof matchMedia === "function" &&
-      matchMedia("(prefers-reduced-motion: reduce)").matches,
+      matchMedia("(prefers-reduced-motion: reduce), print").matches,
   );
   useEffect(() => {
     if (typeof matchMedia !== "function") return;
-    const media = matchMedia("(prefers-reduced-motion: reduce)");
+    const media = matchMedia("(prefers-reduced-motion: reduce), print");
     const update = () => setReduced(media.matches);
     update();
     media.addEventListener("change", update);
@@ -105,7 +106,7 @@ export function IllustratedChapter({
       : (previewProgress ?? (focused ? scrub : progress)),
   );
   const missing = scene.layers.filter(
-    (l) => l.kind === "image" && !assets.get(l.assetId),
+    (l) => l.kind === "image" && (!assets.get(l.assetId) || failedImages.has(assets.get(l.assetId)!.href)),
   );
   return (
     <figure className="story-illustration" data-scene-id={chapter.id}>
@@ -148,6 +149,7 @@ export function IllustratedChapter({
                   {layer.kind === "image" && assets.get(layer.assetId) ? (
                     <image
                       href={assets.get(layer.assetId)!.href}
+                      onError={()=>setFailedImages(current=>new Set(current).add(assets.get(layer.assetId)!.href))}
                       width={w}
                       height={h}
                       preserveAspectRatio="xMidYMid meet"
@@ -159,7 +161,7 @@ export function IllustratedChapter({
                     <text
                       x={0}
                       y={layer.fontSize * scene.width}
-                      fontSize={layer.fontSize * scene.width}
+                      style={{ fontSize: layer.fontSize * scene.width }}
                       fill={paletteColor(layer.colorRole)}
                     >
                       {layer.text}

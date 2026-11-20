@@ -37,3 +37,21 @@
     position: relative;
   }
 }
+@media print {
+  .story-illustration__track {
+    min-height: 0 !important;
+  }
+  .story-illustration__canvas {
+    position: relative;
+    max-height: none;
+  }
+  .story-illustration__scrubber {
+    display: none;
+  }
+}
+/* Reader chapters use a folio/copy grid; artwork spans both columns. */
+.story-chapter > .story-illustration {
+  grid-column: 1 / -1;
+  min-width: 0;
+  width: 100%;
+}
