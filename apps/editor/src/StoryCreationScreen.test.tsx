@@ -10,6 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { EarthStoriesProvider } from "@earth-stories/ui";
 import { StoryCreationScreen } from "./StoryCreationScreen";
 import * as api from "./api";
+vi.mock("@earth-stories/viewer", () => ({ StoryViewer: () => null }));
 vi.mock("./api", () => ({
   chatGPTStatus: vi.fn().mockResolvedValue({
     configured: false,
@@ -25,6 +26,7 @@ vi.mock("./api", () => ({
   cancelChatGPT: vi.fn(),
   disconnectChatGPT: vi.fn(),
   getGeneration: vi.fn(),
+  getGenerationBrief: vi.fn(),
   acceptGeneration: vi.fn(),
   startGeneration: vi.fn(),
   cancelGeneration: vi.fn(),
@@ -132,4 +134,87 @@ it("submits long reference URLs with a bounded display name", async () => {
   expect(brief.references[0]).toMatchObject({ url });
   const { storyBriefSchema } = await import("@earth-stories/story-schema");
   expect(storyBriefSchema.safeParse(brief).success).toBe(true);
+});
+
+it("restores a failed brief and its references, then submits edits as a new job", async () => {
+  const original = {
+    title: "Birds",
+    audience: "Everyone",
+    takeaway: "Notice eggs",
+    narrative: "Original context",
+    visualDirection: "Soft colors",
+    requestedOutputs: ["prose"],
+    references: [
+      {
+        kind: "url",
+        name: "Website",
+        classification: "background",
+        url: "https://example.org/",
+      },
+      {
+        kind: "upload",
+        name: "notes.txt",
+        classification: "facts",
+        mediaType: "text/plain",
+        data: "aGVsbG8=",
+      },
+    ],
+  };
+  vi.mocked(api.getGeneration).mockResolvedValue({
+    id: "failed-job",
+    stage: "failed",
+    brief: { ...original, references: [] },
+    error: "Unsupported reference",
+    candidate: null,
+    usage: [],
+  } as never);
+  vi.mocked(api.getGenerationBrief).mockResolvedValue(original as never);
+  vi.mocked(api.chatGPTStatus).mockResolvedValue({
+    configured: true,
+    pending: false,
+    activeAccount: "account",
+    accounts: [
+      { id: "account", label: "Author", connected: true, planEnabled: true },
+    ],
+    error: null,
+  } as never);
+  vi.mocked(api.startGeneration)
+    .mockClear()
+    .mockResolvedValue({ id: "corrected-job" } as never);
+  const navigate = vi.fn();
+  render(
+    <EarthStoriesProvider>
+      <StoryCreationScreen
+        jobId="failed-job"
+        preview={false}
+        onNavigate={navigate}
+        onCreated={async () => {}}
+        onBack={() => {}}
+      />
+    </EarthStoriesProvider>,
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Edit brief and references" }),
+  );
+  const title = await screen.findByLabelText(/Working title/);
+  expect((title as HTMLInputElement).value).toBe("Birds");
+  expect(
+    (screen.getByLabelText(/Visual direction/) as HTMLTextAreaElement).value,
+  ).toBe("Soft colors");
+  expect(screen.getByText("notes.txt")).toBeTruthy();
+  fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]!);
+  fireEvent.change(title, { target: { value: "Bird eggs" } });
+  const submit = screen.getByRole("button", { name: "Generate story" });
+  await waitFor(() =>
+    expect((submit as HTMLButtonElement).disabled).toBe(false),
+  );
+  fireEvent.click(submit);
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("corrected-job"));
+  expect(api.startGeneration).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      title: "Bird eggs",
+      narrative: "Original context",
+      references: [original.references[1]],
+    }),
+  );
 });

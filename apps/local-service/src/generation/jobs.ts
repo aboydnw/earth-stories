@@ -159,6 +159,20 @@ export class GenerationJobs {
       JSON.parse(await readFile(await this.contained(id, "job.json"), "utf8")),
     );
   }
+  async getBrief(id: string): Promise<StoryBrief> {
+    return this.lock(id, async () => {
+      const job = await this.get(id);
+      if (job.stage !== "failed" && job.stage !== "cancelled")
+        throw new Error("Cancel generation before editing its brief.");
+      const references =
+        job.referenceStorage === "separate"
+          ? JSON.parse(
+              await readFile(await this.contained(id, "inputs.json"), "utf8"),
+            )
+          : job.brief.references;
+      return storyBriefSchema.parse({ ...job.brief, references });
+    });
+  }
   private async change(
     id: string,
     change: (job: GenerationJob) => void,

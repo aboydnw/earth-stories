@@ -89,6 +89,8 @@ export async function generationRoute(
       action = match[2];
     if (!action && req.method === "GET")
       json(res, 200, publicJob(await jobs.get(id)));
+    else if (action === "brief" && req.method === "GET")
+      json(res, 200, await jobs.getBrief(id));
     else if (!action && req.method === "DELETE") {
       await jobs.discard(id);
       json(res, 200, { discarded: true });
