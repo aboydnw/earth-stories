@@ -2,7 +2,6 @@ import type { GenerationProvider } from "@earth-stories/story-schema";
 import { GenerationJobs } from "./generation/jobs.js";
 import { ChatGPTProvider } from "./generation/chatgpt-provider.js";
 import { ChatGPTConnection } from "./chatgpt/connection.js";
-import { acquireChatGPTLease } from "./chatgpt/lease.js";
 import { type Server } from "node:http";
 import type { Socket } from "node:net";
 import { ProjectStore } from "@earth-stories/project-store";
@@ -189,7 +188,6 @@ export function beginLocalService(
   let server: Server | null = null;
   let generationJobs: GenerationJobs | null = null;
   let chatgpt: ChatGPTConnection | null = null;
-  let releaseChatGPT: (() => Promise<void>) | null = null;
   let closePromise: Promise<void> | null = null;
   let githubConnection: GitHubAppConnection | null = null;
   const close = (): Promise<void> => {
@@ -200,10 +198,7 @@ export function beginLocalService(
     );
     closePromise = Promise.all([
       githubConnection?.close(),
-      chatgpt?.close().then(async () => {
-        await releaseChatGPT?.();
-        releaseChatGPT = null;
-      }),
+      chatgpt?.close(),
       generationJobs?.whenIdle(),
     ]).then(
       () =>
@@ -267,8 +262,6 @@ export function beginLocalService(
         connection.assertAuthorizationCurrent(identity, repository),
     });
     await store.initialize();
-    if (resolved.chatgptLockPath)
-      releaseChatGPT = await acquireChatGPTLease(resolved.chatgptLockPath);
     // Embedders must supply a dedicated store; never reuse GitHub credentials.
     chatgpt = new ChatGPTConnection(
       resolved.chatgptCredentials ?? {
@@ -280,6 +273,7 @@ export function beginLocalService(
         },
         clear: async () => {},
       },
+      { lockPath: resolved.chatgptLockPath },
     );
     await chatgpt.initialize();
     generationJobs = new GenerationJobs(
@@ -330,8 +324,6 @@ export function beginLocalService(
       drain: async (options) => {
         generationJobs?.close();
         await chatgpt?.close();
-        await releaseChatGPT?.();
-        releaseChatGPT = null;
         await generationJobs?.whenIdle();
         return drainJobRegistries(conversionJobs, pagesJobs, options);
       },
@@ -340,8 +332,6 @@ export function beginLocalService(
     };
   })().catch(async (cause) => {
     await chatgpt?.close().catch(() => {});
-    await releaseChatGPT?.();
-    releaseChatGPT = null;
     await close().catch(() => {});
     throw cause;
   });

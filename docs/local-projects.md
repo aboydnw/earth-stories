@@ -102,6 +102,14 @@ live under `~/.earth-stories/chatgpt.json`, and desktop uses a dedicated
 `credentials.json.chatgpt` record in its application-data directory. The protected
 record contains account/client mappings, a stable host ID, and rotating tokens;
 none are exposed in editor API responses or copied into a project. A service lease
-prevents concurrent processes refreshing the same token. Sign-out cancels active
+prevents concurrent processes refreshing the same token. The lease uses an
+exclusive loopback listener at a port derived from the credential-store identifier;
+it serves no protocol or credentials and the operating system releases it when
+the process exits. Old PID/recovery files are ignored. If the port is already in
+use, only ChatGPT is unavailable; project editing and publishing still work.
+After closing the competing service, Continue with ChatGPT retries the connection.
+Transient refresh failures preserve credentials. Rotated tokens awaiting identity
+verification are stored privately and cannot be used until verification succeeds.
+Sign-out cancels active
 generation, attempts session revocation, clears local tokens, and preserves the
 account registration for later reconnection. The UI reports unconfirmed revocation.

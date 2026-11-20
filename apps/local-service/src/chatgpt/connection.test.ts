@@ -1,10 +1,12 @@
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { afterEach, expect, it, vi } from "vitest";
+import * as identity from "./identity.js";
 import { ChatGPTConnection } from "./connection.js";
 import type { StoredCredentials } from "../credentials.js";
 const connections: ChatGPTConnection[] = [];
 afterEach(async () => {
   await Promise.all(connections.splice(0).map((c) => c.close()));
+  vi.restoreAllMocks();
 });
 async function setup(
   overrides: Record<string, unknown> = {},
@@ -82,6 +84,7 @@ async function setup(
   };
   return {
     connection,
+    keys,
     store,
     fetcher,
     start,
@@ -144,11 +147,14 @@ it("serializes rotating-token refreshes and saves the replacement before returni
   const data = JSON.parse(saved.token);
   data.accounts[0].tokens.expiresAt = 0;
   await s.store.write({ ...saved, token: JSON.stringify(data) });
-  await s.connection.initialize();
-  const results = await Promise.all([
-    s.connection.access(),
-    s.connection.access(),
-  ]);
+  await s.connection.close();
+  const reopened = new ChatGPTConnection(s.store, {
+    fetcher: s.fetcher,
+    keys: s.keys,
+  });
+  connections.push(reopened);
+  await reopened.initialize();
+  const results = await Promise.all([reopened.access(), reopened.access()]);
   expect(results.map((r) => r.token)).toEqual([
     "secret-access-1",
     "secret-access-1",
@@ -207,4 +213,102 @@ it("handles denied consent and closes a cancelled callback listener", async () =
   await s.connection.cancel();
   await expect(s.complete(auth)).rejects.toThrow();
   expect(s.connection.status().pending).toBe(false);
+});
+
+it.each(["network", "server"])(
+  "preserves refresh credentials after a temporary %s failure",
+  async (kind) => {
+    const s = await setup({}, { expires_in: 1 });
+    await s.complete(await s.start());
+    const original = s.getRecord()!.token;
+    if (kind === "network")
+      s.fetcher.mockRejectedValueOnce(new Error("offline"));
+    else
+      s.fetcher.mockResolvedValueOnce(
+        Response.json({ error: "temporarily_unavailable" }, { status: 503 }),
+      );
+    await expect(s.connection.access()).rejects.toThrow();
+    expect(s.getRecord()!.token).toBe(original);
+    expect((await s.connection.access()).token).toBe("secret-access-1");
+  },
+);
+it("clears credentials only after a definitive invalid grant", async () => {
+  const s = await setup({}, { expires_in: 1 });
+  await s.complete(await s.start());
+  s.fetcher.mockResolvedValueOnce(
+    Response.json({ error: "invalid_grant" }, { status: 400 }),
+  );
+  await expect(s.connection.access()).rejects.toThrow(/reconnect/i);
+  expect(JSON.parse(s.getRecord()!.token).accounts[0].tokens).toBeNull();
+});
+
+it("persists quarantined rotation across a JWKS outage and restart without refreshing twice", async () => {
+  const options = { expires_in: 1 };
+  const s = await setup({}, options);
+  await s.complete(await s.start());
+  options.expires_in = 3600;
+  const verify = vi
+    .spyOn(identity, "verifyIdentity")
+    .mockRejectedValueOnce(new TypeError("JWKS network unavailable"));
+  await expect(s.connection.access()).rejects.toThrow(/saved/);
+  const account = JSON.parse(s.getRecord()!.token).accounts[0];
+  expect(account.tokens.refresh).toBe("secret-refresh-0");
+  expect(account.pendingRefresh.response.refresh_token).toBe(
+    "secret-refresh-1",
+  );
+  expect(JSON.stringify(s.connection.status())).not.toContain("secret-");
+  verify.mockRestore();
+  await s.connection.close();
+  const reopened = new ChatGPTConnection(s.store, {
+    fetcher: s.fetcher,
+    keys: s.keys,
+  });
+  connections.push(reopened);
+  await reopened.initialize();
+  expect((await reopened.access()).token).toBe("secret-access-1");
+  expect(
+    s.fetcher.mock.calls.filter(([, init]) =>
+      String(init?.body).includes("grant_type=refresh_token"),
+    ),
+  ).toHaveLength(1);
+  expect(
+    JSON.parse(s.getRecord()!.token).accounts[0].pendingRefresh,
+  ).toBeUndefined();
+});
+it("rejects a changed subject during refresh and clears the rejected grant", async () => {
+  const claims: Record<string, unknown> = {};
+  const s = await setup(claims, { expires_in: 1 });
+  await s.complete(await s.start());
+  claims.sub = "other-author";
+  await expect(s.connection.access()).rejects.toThrow(/reconnect/);
+  expect(JSON.parse(s.getRecord()!.token).accounts[0].tokens).toBeNull();
+});
+
+it("refreshes an expired quarantined access token after verification recovers", async () => {
+  const options = { expires_in: 1 };
+  const s = await setup({}, options);
+  await s.complete(await s.start());
+  const verify = vi
+    .spyOn(identity, "verifyIdentity")
+    .mockRejectedValueOnce(new TypeError("JWKS unavailable"));
+  await expect(s.connection.access()).rejects.toThrow(/saved/);
+  verify.mockRestore();
+  await s.connection.close();
+  const saved = s.getRecord()!;
+  const data = JSON.parse(saved.token);
+  data.accounts[0].pendingRefresh.receivedAt = Date.now() - 120000;
+  await s.store.write({ ...saved, token: JSON.stringify(data) });
+  options.expires_in = 3600;
+  const reopened = new ChatGPTConnection(s.store, {
+    fetcher: s.fetcher,
+    keys: s.keys,
+  });
+  connections.push(reopened);
+  await reopened.initialize();
+  expect((await reopened.access()).token).toBe("secret-access-2");
+  expect(
+    s.fetcher.mock.calls.filter(([, init]) =>
+      String(init?.body).includes("grant_type=refresh_token"),
+    ),
+  ).toHaveLength(2);
 });

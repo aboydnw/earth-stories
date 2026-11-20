@@ -24,7 +24,7 @@ JavaScript, CSS, SVG, or measured geographic data.
 
 ## Verification
 
-- Full suite: 166 files, 1,354 tests passed, including callback replay, account
+- Full suite: 167 files, 1,367 tests passed, including callback replay, account
   mismatch, signature/nonce/audience/expiry, token rotation, startup failure cleanup,
   UTF-8 stream boundaries, cancellation, and legacy-candidate coverage.
 - Type checking, UI contracts, and independence checks passed.
@@ -49,3 +49,24 @@ JavaScript, CSS, SVG, or measured geographic data.
 The implementation follows the documented [local sign-in integration](https://developers.openai.com/siwc/token-sharing-open-source/sign-in),
 [models and inference contract](https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference),
 and [preview limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
+
+## Review follow-up
+
+Replaced PID/recovery files with a kernel-owned exclusive loopback listener. Its
+identity uses the canonical credential directory, so symlink aliases share the
+same lease. Process crashes release ownership automatically; old lock files are
+ignored. A port conflict disables only ChatGPT, and sign-in retries acquisition
+without restarting the app. Invalid credential storage also remains local to the
+ChatGPT feature rather than preventing project access.
+
+Refresh failures now distinguish definitive grant/identity rejection from
+transient network and verification errors. Rotated credentials are persisted in
+a private pending record before identity verification and are never used for
+inference until verified. Verification can resume after restart without rotating
+twice; an already-expired recovered token is refreshed before use. Sign-out also
+revokes pending rotated credentials. Added actual-server route tests for connection
+operations, models, capability/origin checks, malformed input, and method errors.
+
+The full suite, typecheck, local-service build, UI/independence checks, and
+changed-file formatting passed after these fixes. Live account and packaged
+desktop limitations above remain unchanged.

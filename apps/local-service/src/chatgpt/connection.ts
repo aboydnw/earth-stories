@@ -1,7 +1,9 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { z } from "zod";
-import type { JSONWebKeySet } from "jose";
+import { errors as joseErrors, type JSONWebKeySet } from "jose";
+import { acquireChatGPTLease } from "./lease.js";
+class RejectedGrant extends Error {}
 import type { CredentialStore } from "../credentials.js";
 import type { ChatGPTStatus } from "@earth-stories/story-schema";
 import { verifyIdentity, issuer } from "./identity.js";
@@ -19,6 +21,9 @@ const accountSchema = z.object({
   clientId: z.string().min(1),
   subject: z.string().min(1),
   label: z.string(),
+  pendingRefresh: z
+    .object({ response: tokenSchema, receivedAt: z.number() })
+    .optional(),
   tokens: z
     .object({
       access: z.string(),
@@ -59,12 +64,15 @@ export class ChatGPTConnection {
   private queue: Promise<unknown> = Promise.resolve();
   private error: string | null = null;
   private closed = false;
+  private initialized = false;
+  private releaseLease: (() => Promise<void>) | null = null;
   private readonly fetcher: typeof fetch;
   constructor(
     private readonly store: CredentialStore,
     private readonly options: {
       fetcher?: typeof fetch;
       keys?: JSONWebKeySet;
+      lockPath?: string;
     } = {},
   ) {
     this.fetcher = options.fetcher ?? fetch;
@@ -75,15 +83,39 @@ export class ChatGPTConnection {
     return next;
   }
   async initialize() {
-    const saved = await this.store.read();
-    if (saved) {
+    return this.serial(async () => {
       try {
-        this.data = stateSchema.parse(JSON.parse(saved.token));
-      } catch {
-        throw new Error(
-          "Saved ChatGPT connection is unreadable. Restore or remove its dedicated credential file.",
-        );
+        await this.ensureInitialized();
+      } catch (cause) {
+        this.error =
+          cause instanceof Error
+            ? cause.message
+            : "ChatGPT connection is unavailable.";
       }
+    });
+  }
+  private async ensureInitialized() {
+    if (this.closed) throw new Error("The local service is stopping.");
+    if (this.initialized) return;
+    try {
+      if (this.options.lockPath)
+        this.releaseLease = await acquireChatGPTLease(this.options.lockPath);
+      const saved = await this.store.read();
+      if (saved) {
+        try {
+          this.data = stateSchema.parse(JSON.parse(saved.token));
+        } catch {
+          throw new Error(
+            "Saved ChatGPT connection is unreadable. Restore or remove its dedicated credential file.",
+          );
+        }
+      }
+      this.initialized = true;
+      this.error = null;
+    } catch (cause) {
+      await this.releaseLease?.();
+      this.releaseLease = null;
+      throw cause;
     }
   }
   private save() {
@@ -125,7 +157,7 @@ export class ChatGPTConnection {
   }
   async start(clientId?: string): Promise<{ url: string }> {
     return this.serial(async () => {
-      if (this.closed) throw new Error("The local service is stopping.");
+      await this.ensureInitialized();
       this.stopPending();
       this.error = null;
       const account = clientId
@@ -347,8 +379,17 @@ export class ChatGPTConnection {
       throw new Error("ChatGPT could not be reached. Please try again.");
     }
     if (!response.ok) {
-      await response.body?.cancel();
-      throw new Error("ChatGPT sign-in needs to be renewed. Please reconnect.");
+      let code: unknown;
+      try {
+        code = JSON.parse(await boundedText(response, 65536)).error;
+      } catch {
+        /* Never expose response bodies. */
+      }
+      if (code === "invalid_grant" || response.status === 401)
+        throw new RejectedGrant(
+          "ChatGPT sign-in needs to be renewed. Please reconnect.",
+        );
+      throw new Error("ChatGPT could not renew the connection. Please retry.");
     }
     const text = await boundedText(response, 256 * 1024);
     try {
@@ -368,7 +409,7 @@ export class ChatGPTConnection {
   }
   async access(): Promise<{ token: string; accountId: string }> {
     return this.serial(async () => {
-      if (this.closed) throw new Error("Please sign in with ChatGPT.");
+      await this.ensureInitialized();
       const account = this.data.accounts.find(
         (a) => a.clientId === this.data.active,
       );
@@ -377,14 +418,27 @@ export class ChatGPTConnection {
         throw new Error(
           "ChatGPT plan use is not enabled. Reconnect to grant permission.",
         );
-      if (account.tokens.expiresAt < Date.now() + 60000) {
+      for (
+        let attempt = 0;
+        attempt < 2 &&
+        (account.pendingRefresh ||
+          account.tokens.expiresAt <= Date.now() + (attempt === 0 ? 60000 : 0));
+        attempt++
+      ) {
         try {
-          const tokens = await this.exchange({
-            grant_type: "refresh_token",
-            client_id: account.clientId,
-            refresh_token: account.tokens.refresh,
-            resource,
-          });
+          if (!account.pendingRefresh) {
+            const response = await this.exchange({
+              grant_type: "refresh_token",
+              client_id: account.clientId,
+              refresh_token: account.tokens.refresh,
+              resource,
+            });
+            account.pendingRefresh = { response, receivedAt: Date.now() };
+          }
+          // Save rotated credentials before fetching verification keys. They remain
+          // quarantined: never use them for inference before verifying identity.
+          await this.save();
+          const tokens = account.pendingRefresh.response;
           const identity = await verifyIdentity(
             tokens.id_token,
             account.clientId,
@@ -392,13 +446,38 @@ export class ChatGPTConnection {
             this.options.keys,
           );
           if (identity.sub !== account.subject)
-            throw new Error("Account changed.");
-          account.tokens = this.credentials(tokens);
-          await this.save();
-        } catch {
-          account.tokens = null;
-          await this.save();
-          this.error = "ChatGPT sign-in needs to be renewed. Please reconnect.";
+            throw new RejectedGrant("Account changed.");
+          const previous = account.tokens;
+          const pending = account.pendingRefresh;
+          account.tokens = {
+            ...this.credentials(tokens),
+            expiresAt: pending.receivedAt + tokens.expires_in * 1000,
+          };
+          delete account.pendingRefresh;
+          try {
+            await this.save();
+          } catch (cause) {
+            account.tokens = previous;
+            account.pendingRefresh = pending;
+            throw cause;
+          }
+          this.error = null;
+        } catch (cause) {
+          const rejected =
+            cause instanceof RejectedGrant ||
+            cause instanceof joseErrors.JWTClaimValidationFailed ||
+            cause instanceof joseErrors.JWTExpired ||
+            cause instanceof joseErrors.JWSSignatureVerificationFailed ||
+            cause instanceof joseErrors.JWSInvalid ||
+            cause instanceof joseErrors.JWTInvalid;
+          if (rejected) {
+            account.tokens = null;
+            delete account.pendingRefresh;
+            await this.save();
+          }
+          this.error = rejected
+            ? "ChatGPT sign-in needs to be renewed. Please reconnect."
+            : "ChatGPT could not renew the connection temporarily. Your sign-in is saved; please retry.";
           throw new Error(this.error);
         }
       }
@@ -406,11 +485,16 @@ export class ChatGPTConnection {
         throw new Error(
           "ChatGPT plan use is not enabled. Reconnect to grant permission.",
         );
+      if (account.tokens.expiresAt <= Date.now())
+        throw new Error(
+          "ChatGPT renewal took too long. Please retry; your sign-in is retained.",
+        );
       return { token: account.tokens.access, accountId: account.clientId };
     });
   }
   async signOut() {
     return this.serial(async () => {
+      await this.ensureInitialized();
       this.stopPending();
       const account = this.data.accounts.find(
         (a) => a.clientId === this.data.active,
@@ -435,7 +519,9 @@ export class ChatGPTConnection {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: new URLSearchParams({
-              token: account.tokens.refresh,
+              token:
+                account.pendingRefresh?.response.refresh_token ??
+                account.tokens.refresh,
               token_type_hint: "refresh_token",
               client_id: account.clientId,
             }).toString(),
@@ -449,6 +535,7 @@ export class ChatGPTConnection {
             "Signed out locally. Remote disconnection was not confirmed; disconnect Earth Stories in ChatGPT settings.";
         }
         account.tokens = null;
+        delete account.pendingRefresh;
       }
       this.data.active = null;
       await this.save();
@@ -458,6 +545,8 @@ export class ChatGPTConnection {
     this.closed = true;
     this.stopPending();
     await this.queue.catch(() => {});
+    await this.releaseLease?.();
+    this.releaseLease = null;
   }
 }
 export async function boundedText(

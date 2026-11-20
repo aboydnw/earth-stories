@@ -1,61 +1,50 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rm, lstat } from "node:fs/promises";
-import { dirname } from "node:path";
-/** A process-wide lease prevents separate services racing rotating refresh tokens. */
+import { createHash } from "node:crypto";
+import { createServer } from "node:net";
+import { resolve, dirname, basename, join } from "node:path";
+import { mkdir, realpath } from "node:fs/promises";
+
+/** A kernel-owned loopback listener releases on exit, including SIGKILL/reboot.
+ * No protocol or credentials are served. A port collision disables only ChatGPT;
+ * never fall back to another port, which could allow concurrent token owners.
+ * The legacy lock path is now only a stable session identifier; files are ignored.
+ */
+export async function chatGPTLeasePort(path: string): Promise<number> {
+  const parent = dirname(resolve(path));
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  const canonical = join(await realpath(parent), basename(path));
+  return (
+    20000 +
+    (createHash("sha256")
+      .update(
+        process.platform === "win32" ? canonical.toLowerCase() : canonical,
+      )
+      .digest()
+      .readUInt32BE(0) %
+      40000)
+  );
+}
 export async function acquireChatGPTLease(
   path: string,
 ): Promise<() => Promise<void>> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const owner = { pid: process.pid, id: randomUUID() };
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const file = await open(path, "wx", 0o600);
-      try {
-        await file.writeFile(JSON.stringify(owner));
-        await file.sync();
-      } finally {
-        await file.close();
-      }
-      return async () => {
-        try {
-          const saved = JSON.parse(await readFile(path, "utf8"));
-          if (saved.id === owner.id) await rm(path);
-        } catch {
-          /* Another process must never lose its lease. */
-        }
-      };
-    } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code !== "EEXIST") throw cause;
-      let recovery;
-      try {
-        // Serialize stale-owner recovery, including the ownership recheck.
-        recovery = await open(`${path}.recovery`, "wx", 0o600);
-        const stat = await lstat(path);
-        if (!stat.isFile() || stat.isSymbolicLink()) throw new Error();
-        const saved = JSON.parse(await readFile(path, "utf8"));
-        if (!Number.isSafeInteger(saved.pid) || saved.pid <= 0)
-          throw new Error();
-        try {
-          process.kill(saved.pid, 0);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === "ESRCH") {
-            await rm(path);
-            continue;
-          }
-          throw error;
-        }
-      } catch {
-        /* Fail closed for unknown ownership. */
-      } finally {
-        if (recovery) {
-          await recovery.close();
-          await rm(`${path}.recovery`, { force: true });
-        }
-      }
-      throw new Error(
-        "Another Earth Stories service owns ChatGPT sign-in. Close it before starting this service.",
-      );
-    }
+  const port = await chatGPTLeasePort(path);
+  const server = createServer((socket) => socket.destroy());
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen({ host: "127.0.0.1", port, exclusive: true }, () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+  } catch {
+    throw new Error(
+      "ChatGPT connection is unavailable or owned by another Earth Stories service. Close the other service and try signing in again. Project editing and publishing remain available.",
+    );
   }
-  throw new Error("ChatGPT sign-in could not acquire its local session lock.");
+  server.unref();
+  let closing: Promise<void> | undefined;
+  return () =>
+    (closing ??= new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    ));
 }
