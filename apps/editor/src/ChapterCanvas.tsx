@@ -22,7 +22,6 @@ export function ChapterCanvas({
   onLiveCameraChange,
   previewCamera,
   commitInitialFit = false,
-  snapshotMode = false,
 }: {
   selectedChapter: ProjectChapter | null;
   focusedManifest: PublicationManifest | null;
@@ -32,7 +31,6 @@ export function ChapterCanvas({
   onLiveCameraChange?: (chapterId: string, camera: Camera) => void;
   previewCamera?: Camera | null;
   commitInitialFit?: boolean;
-  snapshotMode?: boolean;
 }) {
   const chapterCamera =
     selectedChapter && "camera" in selectedChapter

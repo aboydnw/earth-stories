@@ -127,3 +127,75 @@ it("updates review readiness when another reader tab records the saved revision"
   await waitFor(() => expect(screen.queryByText("Review again")).toBeNull());
   expect(screen.getByText("Checks required")).toBeTruthy();
 });
+
+it("waits for a pending save before preview saves newer edits", async () => {
+  let finish!: (value: StoryProject) => void;
+  api.saveProject.mockImplementationOnce(
+    () =>
+      new Promise<StoryProject>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const replace = vi.fn();
+  vi.spyOn(window, "open").mockReturnValue({
+    opener: window,
+    location: { replace },
+    close: vi.fn(),
+  } as unknown as Window);
+  await openEditor();
+  fireEvent.click(screen.getByRole("button", { name: /Story settings/i }));
+  const title = await screen.findByLabelText("Story title");
+  fireEvent.change(title, { target: { value: "First save" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+  await waitFor(() => expect(api.saveProject).toHaveBeenCalledTimes(1));
+  fireEvent.change(title, { target: { value: "Latest preview title" } });
+  fireEvent.click(screen.getByRole("button", { name: "View as reader" }));
+  await act(async () => {});
+  expect(api.saveProject).toHaveBeenCalledTimes(1);
+  const saved = await store.save(project.id, api.saveProject.mock.calls[0]![0]);
+  await act(async () => finish(saved));
+  await waitFor(() => expect(replace).toHaveBeenCalled());
+  expect(api.saveProject).toHaveBeenCalledTimes(2);
+  expect((await store.read(project.id)).metadata.title).toBe(
+    "Latest preview title",
+  );
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("preserves the specific save failure and closes the reserved preview tab", async () => {
+  api.saveProject.mockRejectedValueOnce(new Error("Disk is full"));
+  const close = vi.fn();
+  vi.spyOn(window, "open").mockReturnValue({
+    opener: window,
+    location: { replace: vi.fn() },
+    close,
+  } as unknown as Window);
+  await openEditor();
+  fireEvent.click(screen.getByRole("button", { name: /Story settings/i }));
+  fireEvent.change(await screen.findByLabelText("Story title"), {
+    target: { value: "Unsaved title" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "View as reader" }));
+  await waitFor(() => expect(screen.getByText("Disk is full")).toBeTruthy());
+  expect(close).toHaveBeenCalledOnce();
+});
+
+it("shows the full story in the publishing workshop instead of the editable chapter canvas", async () => {
+  project.chapters.push({
+    id: "ending",
+    type: "prose",
+    title: "River ending",
+    narrative: "The second chapter.",
+  });
+  await openEditor();
+  expect(screen.queryByRole("heading", { name: "River ending" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /^Publish/ }));
+  fireEvent.click(
+    await screen.findByRole("menuitem", { name: /Publish publicly/ }),
+  );
+  expect(
+    await screen.findByRole("heading", { name: "River ending" }),
+  ).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "Chapter canvas" })).toBeNull();
+  expect(api.saveProject).not.toHaveBeenCalled();
+});
