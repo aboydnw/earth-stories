@@ -69,7 +69,7 @@ export async function enhancementContext(
     warnings: string[] = [];
   let bytesUsed = 0,
     images = 0,
-    textCharacters = 0;
+    textBytes = 0;
   for (const source of project.sources) {
     signal.throwIfAborted();
     const path =
@@ -94,13 +94,15 @@ export async function enhancementContext(
         source.kind === "csv" ||
         source.kind === "local-geojson" ||
         source.kind === "trajectory";
-      const limit = image ? 8 * 1024 * 1024 : 200000;
+      const limit = image
+        ? 8 * 1024 * 1024
+        : Math.min(20000, 200000 - textBytes);
       if (
         (!image && !text) ||
-        (text && textCharacters >= 200000) ||
+        (text && textBytes >= 200000) ||
         (image && images >= 8) ||
-        info.size > limit ||
-        bytesUsed + info.size > 32 * 1024 * 1024
+        (image && info.size > limit) ||
+        bytesUsed + Math.min(info.size, limit) > 32 * 1024 * 1024
       ) {
         warnings.push(
           `${source.label}: metadata included; file contents were not inspected (format or context size limit).`,
@@ -110,7 +112,7 @@ export async function enhancementContext(
       const file = await open(target, "r");
       let data: Buffer;
       try {
-        const buffer = Buffer.alloc(limit + 1);
+        const buffer = Buffer.alloc(limit + (image ? 1 : 0));
         const { bytesRead } = await file.read(buffer, 0, buffer.length, 0);
         if (bytesRead > limit) throw new Error("Too large");
         data = buffer.subarray(0, bytesRead);
@@ -144,16 +146,18 @@ export async function enhancementContext(
         images++;
       } else {
         // Bounded raw extracts retain values and field names without inventing statistics.
-        textCharacters += Math.min(data.length, 20000);
+        textBytes += data.length;
         references.push({
           id: `story-source-${source.id}`,
           name: source.label,
           classification: "facts",
-          text: data.toString("utf8").slice(0, 20000),
+          text: new TextDecoder().decode(data, {
+            stream: info.size > data.length,
+          }),
         });
-        if (data.length > 20000)
+        if (info.size > data.length)
           warnings.push(
-            `${source.label}: only the first 20,000 characters were inspected.`,
+            `${source.label}: only the first ${data.length.toLocaleString("en-US")} bytes were inspected.`,
           );
       }
     } catch {

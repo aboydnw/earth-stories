@@ -4,6 +4,7 @@ import {
   readFile,
   readdir,
   utimes,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -315,9 +316,20 @@ it("applies enhancement atomically, preserves backups, refuses stale stories, an
   const saved = await store.applyEnhancement(source.id, candidate, source);
   expect(saved.chapters).toEqual(candidate.chapters);
   expect(saved.metadata.updated).not.toBe(source.metadata.updated);
-  expect(await store.applyEnhancement(source.id, candidate, source)).toEqual(
-    saved,
+  const backupPath = join(
+    store.projectPath(source.id),
+    ".earth-stories/backups",
   );
+  const backups = await readdir(backupPath);
+  const storyPath = join(store.projectPath(source.id), "story.json");
+  await utimes(storyPath, new Date(0), new Date(0));
+  expect(
+    await store.applyEnhancement(source.id, candidate, source, async () => {
+      throw new Error("Asset changed after successful apply");
+    }),
+  ).toEqual(saved);
+  expect(await readdir(backupPath)).toEqual(backups);
+  expect((await stat(storyPath)).mtimeMs).toBe(0);
   const userEdit = await store.save(source.id, {
     ...saved,
     metadata: { ...saved.metadata, title: "Changed by author" },

@@ -270,9 +270,9 @@ refinement is outside this feature.
 
 Context includes the saved project structure, up to eight supported local images
 (up to 8 MiB each), bounded CSV/GeoJSON/trajectory extracts, and available map
-captures (at most twelve images total). Data extracts are limited to 20,000
-characters per file and 200,000 in total; the serialized story project is limited to
-500,000 characters. External source contents, unsupported/oversized files, raw
+captures (at most twelve images total). Data extracts are limited to the first
+20,000 UTF-8 bytes per file and 200,000 bytes in total; the serialized story project
+is limited to 500,000 characters. External source contents, unsupported/oversized files, raw
 unused library assets, and video/audio are not silently claimed as inspected.
 Coverage limits appear in the candidate and are supplied to the AI. Existing
 connected sources remain connected in the preview and publication.

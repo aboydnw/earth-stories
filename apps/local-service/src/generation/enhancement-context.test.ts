@@ -12,7 +12,10 @@ it("includes normalized images and data extracts, but never reads a source escap
     let project = await store.create({ title: "Context" });
     const png = await createCanvas(4, 4).encode("png");
     await writeFile(store.assetPath(project.id, "photo.png"), png);
-    await writeFile(store.assetPath(project.id, "table.csv"), "x,y\n1,2");
+    await writeFile(
+      store.assetPath(project.id, "table.csv"),
+      "€".repeat(100001),
+    );
     await writeFile(join(root, "outside.txt"), "DO NOT READ OUTSIDE PROJECT");
     await symlink(
       join(root, "outside.txt"),
@@ -55,7 +58,8 @@ it("includes normalized images and data extracts, but never reads a source escap
     ).toMatch(/^data:image\/png;base64,/);
     expect(
       context.references.find((r) => r.id === "story-source-table")!.text,
-    ).toBe("x,y\n1,2");
+    ).toBe("€".repeat(6666));
+    expect(context.warnings.join(" ")).toContain("first 20,000 bytes");
     expect(JSON.stringify(context)).not.toContain(
       "DO NOT READ OUTSIDE PROJECT",
     );
