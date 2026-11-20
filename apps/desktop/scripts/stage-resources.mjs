@@ -19,6 +19,7 @@ const defaultRepository = resolve(scriptDirectory, "../../..");
 
 const resources = [
   ["apps/local-service/dist/service.js", "service/service.js"],
+  ["apps/local-service/dist/node_modules", "service/node_modules"],
   [
     "apps/local-service/dist/service.js.LICENSE.txt",
     "service/service.js.LICENSE.txt",

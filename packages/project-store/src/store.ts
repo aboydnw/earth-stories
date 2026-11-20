@@ -1,7 +1,13 @@
+import {
+  importCandidateDirectory,
+  serializeCandidate,
+  type CandidateImport,
+} from "./importCandidate.js";
 import { randomUUID } from "node:crypto";
 import { setTimeout as wait } from "node:timers/promises";
 import {
   copyFile,
+  lstat,
   mkdir,
   open,
   readFile,
@@ -124,7 +130,7 @@ export class ProjectStore {
 
     await Promise.all(
       entries.map(async (entry) => {
-        if (!entry.isDirectory()) return;
+        if (!entry.isDirectory() || entry.name.startsWith(".")) return;
         try {
           const project = await this.read(entry.name);
           projects.push({
@@ -204,6 +210,27 @@ export class ProjectStore {
     await mkdir(this.directory(id), { recursive: false });
     await this.writeAtomic(id, project, false);
     return project;
+  }
+
+  async importCandidate(input: CandidateImport): Promise<StoryProject> {
+    assertSafeId(input.destinationId);
+    await this.initialize();
+    return serializeCandidate(
+      `${this.root}/${input.destinationId}`,
+      async () => {
+        const lockPath = join(
+          this.root,
+          `.candidate-${input.destinationId}.lock`,
+        );
+        const lock = await this.acquireWriteLock(lockPath, true);
+        try {
+          return await importCandidateDirectory(this.root, input);
+        } finally {
+          await lock.close();
+          await unlink(lockPath).catch(() => undefined);
+        }
+      },
+    );
   }
 
   async createFromTemplate(
@@ -470,7 +497,10 @@ export class ProjectStore {
     }
   }
 
-  private async acquireWriteLock(lockPath: string) {
+  private async acquireWriteLock(
+    lockPath: string,
+    recoverDeadOwner = false,
+  ): Promise<import("node:fs/promises").FileHandle> {
     try {
       const lock = await open(lockPath, "wx");
       await lock.writeFile(
@@ -486,6 +516,30 @@ export class ProjectStore {
         cause.code === "EEXIST"
       ))
         throw cause;
+      if (recoverDeadOwner) {
+        const info = await lstat(lockPath);
+        if (!info.isFile() || info.isSymbolicLink())
+          throw new Error("Invalid candidate import lock.");
+        let dead = false;
+        try {
+          const owner = JSON.parse(await readFile(lockPath, "utf8"));
+          if (Number.isInteger(owner.pid) && owner.pid > 0) {
+            try {
+              process.kill(owner.pid, 0);
+            } catch (error) {
+              dead = (error as NodeJS.ErrnoException).code === "ESRCH";
+            }
+          }
+        } catch {
+          /* A partial lock is not safe to reclaim immediately. */
+        }
+        if (!dead)
+          throw new Error(
+            "This candidate is already being imported. Wait and retry.",
+          );
+        await unlink(lockPath);
+        return this.acquireWriteLock(lockPath, true);
+      }
       const info = await stat(lockPath).catch(() => null);
       if (!info || Date.now() - info.mtimeMs <= STALE_LOCK_MS) {
         throw new Error(

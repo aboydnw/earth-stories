@@ -11,6 +11,8 @@ const stageScript = join(packageDirectory, "scripts/stage-resources.mjs");
 const verifyScript = join(packageDirectory, "scripts/verify-resources.mjs");
 
 const fixtureFiles: Record<string, string> = {
+  "apps/local-service/dist/node_modules/@napi-rs/canvas/package.json":
+    '{"name":"@napi-rs/canvas"}\n',
   "apps/local-service/dist/service.js": "export const service = true;\n",
   "apps/local-service/dist/service.js.LICENSE.txt":
     "Bundled service licenses\n",
@@ -32,6 +34,7 @@ const fixtureFiles: Record<string, string> = {
 };
 
 const expectedFiles = [
+  "service/node_modules/@napi-rs/canvas/package.json",
   "credits/EARTH_STORIES_LICENSE",
   "credits/THIRD_PARTY_NOTICES.md",
   "credits/PLUS_JAKARTA_SANS_LICENSE",

@@ -161,3 +161,10 @@ Until then, back up projects before uninstalling.
 A supported release still needs a platform-appropriate, explicit way to clear
 retained credentials and caches. Project preservation must be verified by
 comparing the workspace before and after upgrade and uninstall.
+
+The story-generation pilot adds package-relative PDF worker files and native
+raster decoding libraries to the service's staged `node_modules`. The resource
+manifest and generated service license notice include these files. Desktop
+release validation must exercise reference ingestion and artwork generation with
+the bundled Node runtime on each target architecture; a source-development smoke
+or successful packaging does not establish installed-app support for this flow.

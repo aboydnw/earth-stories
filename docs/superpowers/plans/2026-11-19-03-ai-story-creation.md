@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, React, Zod, Vite, Vitest, Testing Library, existing Yarn workspace packages; OpenAI HTTP APIs only in the generation stage.
 
-**Design:** [Approved design](../specs/2026-11-19-ai-story-creation-design.md). Status: ready for plan review, not implemented.
+**Design:** [Approved design](../specs/2026-11-19-ai-story-creation-design.md). Status: implemented on the stacked review branches; see execution evidence below. Individual planning checkboxes retain the original proposed sequence.
 
 ## Global Constraints
 
@@ -250,3 +250,16 @@ Use existing publication builder and offline verifier. Check narrow/reduced-moti
 - [ ] Push the focused branch and open a PR; attach it to this chat. Check CI and review feedback, fix sound findings, and leave the PR unmerged.
 
 - [ ] Also run `yarn test:publishing:no-git` and `yarn test:offline-runtime`. Run `yarn tsx scripts/smoke-story-generation.ts` only with configured real credentials and record usage. Archive the two supplied feedback ZIPs without modifying their attachment originals after the related PR work is complete; delete recoverable extracted copies and derived frame scratch files.
+
+## Execution evidence — 2026-11-20
+
+Implemented inline in `codex/generated-story-candidates`, stacked on the illustrated-scene and editor-feedback branches. The original task checkboxes describe the proposed sequence, not a claim that each proposed commit or command ran literally.
+
+- The service now owns OpenAI planning/artwork requests, bounded reference preparation, durable checkpoints, cancellation/retry, and isolated candidate assets. Provider responses are validated scene data, never executable content.
+- Acceptance imports the exact candidate atomically with a persistent receipt. Integration tests cover repeated/concurrent acceptance, crash recovery, editor changes after acceptance, hidden temporary projects, interrupted jobs, and checkpoint reuse.
+- The workspace offers a brief form, generation progress, candidate result/reader preview, explicit acceptance and discard. The old Studio prototype is removed. Browser checks used disposable workspaces and covered generation through acceptance, ordinary editor rendering, 1440px/390px layouts, and reduced motion.
+- The explicit mocked smoke completed generation, preview, acceptance twice, edit/save/reopen, and publication. It is not evidence of live OpenAI access. The live smoke stopped before any request because `OPENAI_API_KEY` is absent; actual account/model access and generated artwork quality remain unverified.
+- PDF extraction and native image decoding dependencies are included with local-service resources and notices. Service relocation and resource tests pass; signed packaging and installed target-machine generation were not run.
+- Reference archives were copied into the ignored `.feedback/archive/` without changing attachment originals. Byte-size-matching extracted copies and derived analysis frames were removed.
+
+Final verification: `yarn test --maxWorkers=2` passed all 159 files / 1,312 tests with local-server access enabled. `yarn typecheck`, `yarn check:ui`, `yarn check:independence`, `yarn build`, `yarn build:publication`, `yarn storybook:build`, and `yarn test:publishing:no-git` (126 tests) passed. Repository-wide `yarn format:check` still reports four untouched baseline files: the Kronebreen GeoJSON, the 2026-10-28 desktop pilot plan, and the two Roadless Rule GeoJSON assets. Changed-file formatting is checked separately.

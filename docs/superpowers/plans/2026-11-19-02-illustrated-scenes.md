@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, React, Zod, Vite, Vitest, Testing Library, existing Yarn workspace packages; OpenAI HTTP APIs only in the generation stage.
 
-**Design:** [Approved design](../specs/2026-11-19-ai-story-creation-design.md). Status: ready for plan review, not implemented.
+**Design:** [Approved design](../specs/2026-11-19-ai-story-creation-design.md). Status: implemented on the stacked review branches; see execution evidence below. Individual planning checkboxes retain the original proposed sequence.
 
 ## Global Constraints
 

@@ -1,0 +1,113 @@
+.story-creation {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+  color: var(--es-fg);
+}
+.story-creation__header,
+.story-creation__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.story-creation__intro {
+  margin: 40px 0 32px;
+  max-width: 700px;
+}
+.story-creation h1 {
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1.15;
+  margin: 12px 0;
+}
+.story-creation__form,
+.story-creation__fields,
+.generation-result {
+  display: grid;
+  gap: 24px;
+}
+.story-creation__form section,
+.story-creation__progress {
+  display: grid;
+  gap: 16px;
+}
+.story-creation__reference {
+  display: grid;
+  grid-template-columns: 1fr 180px auto;
+  gap: 12px;
+  align-items: center;
+}
+.story-creation__reference strong {
+  overflow-wrap: anywhere;
+}
+.generation-palette {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+.generation-palette > div {
+  display: grid;
+  gap: 6px;
+}
+.generation-palette span {
+  height: 48px;
+  border: 1px solid var(--es-border);
+  border-radius: 4px;
+}
+.generation-palette small {
+  font-family: monospace;
+}
+.generation-result li {
+  margin: 12px 0;
+}
+.generation-result li span {
+  display: block;
+}
+.generation-artwork {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.generation-artwork figure {
+  margin: 0;
+}
+.generation-artwork img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border: 1px solid var(--es-border);
+}
+.generation-preview-link {
+  text-decoration: underline;
+}
+.story-creation pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .story-creation {
+    padding: 16px;
+  }
+  .story-creation__reference {
+    grid-template-columns: 1fr;
+  }
+  .generation-palette {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .generation-artwork {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.story-creation h2 {
+  font-size: 24px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+.story-creation h3 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.generation-result {
+  margin: 24px 0;
+}

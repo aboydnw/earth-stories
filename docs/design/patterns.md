@@ -128,3 +128,15 @@ It is not a general animation timeline.
 Reader palette overrides belong to authored story content, are scoped to reader
 roots, and never recolor product controls or data visualization ramps. Resetting
 an override restores theme colors. Publication checks warn about low text contrast.
+
+### Story creation from a brief
+
+The workspace creation entry collects one brief and classified references. It
+shows credential availability and API-charge disclosure before generation.
+Progress survives a page reload and names the current stage; failed or cancelled
+jobs can be retried using completed artwork. The result shows reader colors,
+chapters, images, missing-content notes, and a separate candidate reader preview.
+Acceptance is disabled until validation succeeds and while import is pending.
+Only **Create this story** creates an editable workspace project; publishing
+remains a separate author action. The earlier chapter-specific Studio prototype
+has been removed. No conversation history or existing-story AI mutation is exposed.

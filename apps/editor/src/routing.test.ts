@@ -24,3 +24,14 @@ describe("editor routes", () => {
     expect(parseRoute("/stories/%")).toEqual({ page: "stories" });
   });
 });
+
+it("round trips a generation candidate preview without treating it as a story", () => {
+  const route = { page: "create", jobId: "job-1", preview: true } as const;
+  expect(routePath(route)).toBe("/create/job-1/preview");
+  expect(parseRoute(routePath(route))).toEqual(route);
+  expect(parseRoute("/create")).toEqual({
+    page: "create",
+    jobId: null,
+    preview: false,
+  });
+});

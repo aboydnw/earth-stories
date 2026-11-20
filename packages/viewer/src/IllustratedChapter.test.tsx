@@ -136,9 +136,11 @@ it("tracks the containing scrollport and recalculates progress after resize", ()
   raf.mockRestore();
 });
 
-it('explains an image that fails to load even when the manifest contains it',()=>{
- const assets=new Map([['missing',{id:'missing',kind:'image',href:'/broken.png'} as never]]);
- render(<IllustratedChapter chapter={chapter} assets={assets} snapshotMode/>);
- fireEvent.error(document.querySelector('svg image')!);
- expect(screen.getByText('Artwork unavailable: River banks')).toBeTruthy();
+it("explains an image that fails to load even when the manifest contains it", () => {
+  const assets = new Map([
+    ["missing", { id: "missing", kind: "image", href: "/broken.png" } as never],
+  ]);
+  render(<IllustratedChapter chapter={chapter} assets={assets} snapshotMode />);
+  fireEvent.error(document.querySelector("svg image")!);
+  expect(screen.getByText("Artwork unavailable: River banks")).toBeTruthy();
 });

@@ -1,3 +1,6 @@
+import type { GenerationProvider } from "@earth-stories/story-schema";
+import { GenerationJobs } from "./generation/jobs.js";
+import { OpenAIProvider } from "./generation/openai-provider.js";
 import { type Server } from "node:http";
 import type { Socket } from "node:net";
 import { ProjectStore } from "@earth-stories/project-store";
@@ -50,6 +53,7 @@ export interface StartingLocalService {
 }
 
 export interface RuntimeDependencies {
+  generationProvider?: GenerationProvider;
   bootstrapPixi?: (
     pixiExecutable: string,
     signal?: AbortSignal,
@@ -181,14 +185,19 @@ export function beginLocalService(
   const startup = new AbortController();
   const sockets = new Set<Socket>();
   let server: Server | null = null;
+  let generationJobs: GenerationJobs | null = null;
   let closePromise: Promise<void> | null = null;
   let githubConnection: GitHubAppConnection | null = null;
   const close = (): Promise<void> => {
     if (closePromise) return closePromise;
+    generationJobs?.close();
     startup.abort(
       new Error("The local service was closed before it was ready."),
     );
-    closePromise = (githubConnection?.close() ?? Promise.resolve()).then(
+    closePromise = Promise.all([
+      githubConnection?.close(),
+      generationJobs?.whenIdle(),
+    ]).then(
       () =>
         new Promise<void>((resolveClose, rejectClose) => {
           for (const socket of sockets) socket.destroy();
@@ -250,11 +259,17 @@ export function beginLocalService(
         connection.assertAuthorizationCurrent(identity, repository),
     });
     await store.initialize();
+    generationJobs = new GenerationJobs(
+      store,
+      dependencies.generationProvider ?? new OpenAIProvider(),
+    );
+    await generationJobs.initialize();
     if (startup.signal.aborted) throw closedBeforeReady(startup.signal);
     server = createLocalServer(store, resolved, {
       conversion: conversionJobs,
       pages: pagesJobs,
       github: connection,
+      generation: generationJobs,
     });
     server.on("connection", (socket) => {
       sockets.add(socket);
@@ -288,8 +303,11 @@ export function beginLocalService(
         return store.projectPath(projectId);
       },
       activity,
-      drain: (options) =>
-        drainJobRegistries(conversionJobs, pagesJobs, options),
+      drain: async (options) => {
+        generationJobs?.close();
+        await generationJobs?.whenIdle();
+        return drainJobRegistries(conversionJobs, pagesJobs, options);
+      },
       forceTerminateConversions: () => conversionJobs.forceTerminate(),
       close,
     };

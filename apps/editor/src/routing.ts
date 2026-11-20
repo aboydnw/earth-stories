@@ -1,5 +1,6 @@
 export type AppRoute =
   | { page: "stories" }
+  | { page: "create"; jobId: string | null; preview: boolean }
   | { page: "story"; storyId: string; preview: boolean }
   | { page: "data"; datasetId: string | null };
 
@@ -16,6 +17,12 @@ export function parseRoute(pathname: string): AppRoute {
       storyId: segments[1],
       preview: segments[2] === "preview",
     };
+  if (segments[0] === "create")
+    return {
+      page: "create",
+      jobId: segments[1] ?? null,
+      preview: segments[2] === "preview",
+    };
   if (segments[0] === "data")
     return { page: "data", datasetId: segments[1] ?? null };
   return { page: "stories" };
@@ -24,6 +31,8 @@ export function parseRoute(pathname: string): AppRoute {
 export function routePath(route: AppRoute) {
   if (route.page === "story")
     return `/stories/${encodeURIComponent(route.storyId)}${route.preview ? "/preview" : ""}`;
+  if (route.page === "create")
+    return `/create${route.jobId ? `/${encodeURIComponent(route.jobId)}${route.preview ? "/preview" : ""}` : ""}`;
   if (route.page === "data")
     return route.datasetId
       ? `/data/${encodeURIComponent(route.datasetId)}`

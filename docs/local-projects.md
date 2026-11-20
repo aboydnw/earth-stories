@@ -78,3 +78,19 @@ Successful builds replace the project’s `publication/` directory. A candidate
 is fully assembled before the existing directory is moved aside; if the final
 rename fails, the prior publication is restored. After success the prior copy
 is deleted. Publication history is intentionally deferred.
+
+## Generated candidates
+
+The local service keeps generation records under `.generation/<job-id>` in the
+workspace. This hidden staging area is excluded from project listings. Atomic
+records track stages, completed asset digests, usage, errors, and an immutable
+candidate. The service owns all paths and provider credentials; browser routes
+expose job actions and candidate assets, never arbitrary filesystem operations.
+
+Acceptance persists the destination and digest before importing. A hidden sibling
+holds the validated project, assets, and a private receipt until atomic rename
+makes it visible. Repeated acceptance uses that receipt and does not overwrite
+authored edits. The original brief is retained privately under `.earth-stories/`;
+unused references are not publication assets. Discarding staging cannot remove
+an accepted project. Keep workspace backups private: reference files and briefs
+may contain sensitive source material.
