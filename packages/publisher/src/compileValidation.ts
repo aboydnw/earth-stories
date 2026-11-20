@@ -28,6 +28,13 @@ export function chapterCompileIssues(
     for (const layer of chapter.scene.layers) {
       if (layer.kind !== "image") continue;
       const source = sources.get(layer.sourceId);
+      if (source?.kind === "image" && !/\.(png|jpe?g|webp)$/i.test(source.path))
+        issues.push({
+          code: "invalid-source",
+          chapterId: chapter.id,
+          resourceId: source.id,
+          message: "Illustrated scenes require PNG, JPEG, or WebP artwork.",
+        });
       if (!source || source.kind !== "image")
         issues.push({
           code: source ? "incompatible-source" : "missing-source",

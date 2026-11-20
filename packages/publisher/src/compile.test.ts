@@ -459,3 +459,28 @@ it("compiles every illustration image reference and rejects missing layer assets
   fixture.sources = [];
   expect(() => compileProject(fixture)).toThrow(/missing/i);
 });
+
+it("rejects non-raster image sources in illustrated scenes", async () => {
+  const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+  fixture.schema = "earth-stories/project/v3";
+  fixture.sources = [
+    { id: "art", kind: "image", label: "Markup", path: "assets/art.svg" },
+  ];
+  fixture.chapters = [
+    {
+      id: "scene",
+      type: "illustrated",
+      title: "Water",
+      narrative: "",
+      alt: "Water",
+      scene: {
+        width: 1000,
+        height: 600,
+        layers: [
+          { id: "art-layer", kind: "image", sourceId: "art", alt: "Water" },
+        ],
+      },
+    },
+  ];
+  expect(() => compileProject(fixture)).toThrow("PNG, JPEG, or WebP");
+});
