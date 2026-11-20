@@ -16,6 +16,7 @@ import {
 } from "@earth-stories/ui";
 import { StoryViewer } from "@earth-stories/viewer";
 import * as api from "./api";
+import { parseReferenceLinks } from "./reference-links";
 import { ChatGPTConnectionPanel } from "./ChatGPTConnectionPanel";
 import { GenerationResult } from "./GenerationResult";
 import "./storyCreation.css";
@@ -103,16 +104,7 @@ export function StoryCreationScreen({
     setBusy(true);
     setError("");
     try {
-      const links = urls
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((url) => ({
-          kind: "url" as const,
-          name: url.slice(0, 200),
-          classification: "background" as const,
-          url,
-        }));
+      const links = parseReferenceLinks(urls);
       const created = await api.startGeneration({
         ...brief,
         references: [...brief.references, ...links],
@@ -351,7 +343,7 @@ export function StoryCreationScreen({
             ))}
             <FormField
               label="Public reference links"
-              hint="One HTTPS link per line, directly to a supported file. Links are used as background context."
+              hint="One HTTPS link per line, directly to a supported file—not a webpage. Put descriptions in Visual direction or Story context and source material. For webpage styling, upload a screenshot and select Visual style."
             >
               <TextArea
                 rows={3}
