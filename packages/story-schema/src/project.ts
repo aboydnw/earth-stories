@@ -406,11 +406,13 @@ export const storyProjectSchema = z.preprocess((value) => {
   let migrated: unknown = value;
   if ((migrated as { schema?: unknown }).schema === "earth-stories/project/v1")
     migrated = migrateStoryProjectV1(migrated);
-  if ((migrated as { schema?: unknown }).schema === "earth-stories/project/v2")
-    migrated = {
-      ...storyProjectV2Schema.parse(migrated),
-      schema: "earth-stories/project/v3",
-    };
+  if (
+    (migrated as { schema?: unknown }).schema === "earth-stories/project/v2"
+  ) {
+    const parsed = storyProjectV2Schema.safeParse(migrated);
+    if (!parsed.success) return migrated;
+    migrated = { ...parsed.data, schema: "earth-stories/project/v3" };
+  }
   return migrated;
 }, storyProjectV3Schema);
 

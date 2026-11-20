@@ -1,5 +1,6 @@
 import {
-  defaultReaderPalette,
+  resolveReaderPalette,
+  type ReaderTheme,
   paletteRoles,
   type ReaderPalette,
 } from "@earth-stories/story-schema";
@@ -19,9 +20,11 @@ const labels = {
 };
 export function ReaderPaletteEditor({
   value,
+  theme = "cng",
   onChange,
 }: {
   value?: ReaderPalette;
+  theme?: ReaderTheme;
   onChange: (value: ReaderPalette | undefined) => void;
 }) {
   return (
@@ -34,7 +37,7 @@ export function ReaderPaletteEditor({
           <FormField key={role} label={labels[role]}>
             <TextInput
               type="color"
-              value={value?.[role] ?? defaultReaderPalette[role]}
+              value={resolveReaderPalette(value, theme)[role]}
               onChange={(e) => onChange({ ...value, [role]: e.target.value })}
             />
           </FormField>

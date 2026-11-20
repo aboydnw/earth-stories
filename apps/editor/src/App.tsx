@@ -2631,6 +2631,7 @@ export function App() {
                 </div>
                 <ReaderPaletteEditor
                   value={project.publication.palette}
+                  theme={project.publication.theme}
                   onChange={(palette) =>
                     changeProject((current) => ({
                       ...current,

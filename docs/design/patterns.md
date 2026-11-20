@@ -125,6 +125,8 @@ frame. Missing artwork is explicit. The inspector edits captions, descriptions,
 layer text, image source choices, motion strength, scroll length, and still frame.
 It is not a general animation timeline.
 
+Unspecified reader colors retain the active theme defaults; archive scenes,
+contrast checks, and palette controls resolve these through `resolveReaderPalette`.
 Reader palette overrides belong to authored story content, are scoped to reader
 roots, and never recolor product controls or data visualization ramps. Resetting
 an override restores theme colors. Publication checks warn about low text contrast.

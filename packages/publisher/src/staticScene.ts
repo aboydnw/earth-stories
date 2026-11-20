@@ -1,5 +1,6 @@
 import {
-  defaultReaderPalette,
+  resolveReaderPalette,
+  type ReaderTheme,
   sceneFrame,
   type SceneDefinition,
   type ReaderPalette,
@@ -16,8 +17,9 @@ export function staticScene(
   alt: string,
   images: Map<string, string>,
   palette: ReaderPalette = {},
+  theme: ReaderTheme = "cng",
 ): string {
-  const colors = { ...defaultReaderPalette, ...palette };
+  const colors = resolveReaderPalette(palette, theme);
   const frames = sceneFrame(scene, scene.staticProgress);
   const layers = scene.layers
     .map((layer, index) => {

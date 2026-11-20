@@ -270,6 +270,7 @@ export async function buildArchivalHtml({
         chapter.alt,
         images,
         project.publication.palette,
+        project.publication.theme,
       );
       chapters.push(
         `<section>${heading}<figure><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" alt="${escapeHtml(chapter.alt)}"><figcaption>${escapeHtml(chapter.caption)}</figcaption></figure>${chapterProvenance(chapter.scene.layers.flatMap((layer) => (layer.kind === "image" ? [layer.sourceId] : [])))}${narrative}</section>`,

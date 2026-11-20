@@ -87,3 +87,33 @@ describe("illustrated scenes", () => {
     });
   });
 });
+
+it("returns failed safeParse results for invalid legacy contracts", async () => {
+  const { storyProjectSchema } = await import("./project.js");
+  const { publicationManifestSchema } = await import("./publication.js");
+  for (const version of ["v1", "v2"]) {
+    expect(
+      storyProjectSchema.safeParse({
+        schema: `earth-stories/project/${version}`,
+      }).success,
+    ).toBe(false);
+    expect(
+      publicationManifestSchema.safeParse({
+        schema: `earth-stories/publication/${version}`,
+      }).success,
+    ).toBe(false);
+  }
+});
+
+it("evaluates partial palettes against their theme for contrast", async () => {
+  const { paletteContrastWarnings } = await import("./illustration.js");
+  // This authored surface matches the atlas text exactly.
+  expect(paletteContrastWarnings({ surface: "#203a49" }, "atlas")).toContain(
+    "text on surface has insufficient text contrast",
+  );
+  // Authored overrides always take precedence over theme defaults.
+  const { resolveReaderPalette } = await import("./illustration.js");
+  expect(resolveReaderPalette({ text: "#ffffff" }, "atlas").text).toBe(
+    "#ffffff",
+  );
+});

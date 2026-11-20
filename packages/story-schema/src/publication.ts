@@ -436,7 +436,9 @@ export const publicationManifestV3Schema = publicationManifestV2BaseSchema
   });
 
 function migratePublicationManifestV1(value: unknown): unknown {
-  const legacy = publicationManifestV1Schema.parse(value);
+  const parsed = publicationManifestV1Schema.safeParse(value);
+  if (!parsed.success) return value;
+  const legacy = parsed.data;
   const legacyDependencies = [
     ...(legacy.externalDependencies.some(
       ({ resourceId }) => resourceId === legacy.basemap.id,
@@ -493,11 +495,11 @@ export const publicationManifestSchema = z.preprocess((value) => {
     migrated = migratePublicationManifestV1(migrated);
   if (
     (migrated as { schema?: unknown }).schema === "earth-stories/publication/v2"
-  )
-    migrated = {
-      ...publicationManifestV2Schema.parse(migrated),
-      schema: "earth-stories/publication/v3",
-    };
+  ) {
+    const parsed = publicationManifestV2Schema.safeParse(migrated);
+    if (!parsed.success) return migrated;
+    migrated = { ...parsed.data, schema: "earth-stories/publication/v3" };
+  }
   return migrated;
 }, publicationManifestV3Schema);
 

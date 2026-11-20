@@ -174,8 +174,37 @@ export const defaultReaderPalette: Required<ReaderPalette> = {
   accent: "#cf3f02",
   accentText: "#bf3a00",
 };
-export function paletteContrastWarnings(palette: ReaderPalette): string[] {
-  const c = { ...defaultReaderPalette, ...palette };
+export type ReaderTheme = "cng" | "atlas" | "editorial";
+/** Reader-owned defaults shared by archive output, authoring controls and preflight. */
+export function resolveReaderPalette(
+  palette: ReaderPalette = {},
+  theme: ReaderTheme = "cng",
+): Required<ReaderPalette> {
+  const themeColors =
+    theme === "atlas"
+      ? {
+          background: "#f5efdf",
+          surface: "#faf5e9",
+          text: "#203a49",
+          mutedText: "#53616a",
+          accent: "#a4362a",
+          accentText: "#942e24",
+        }
+      : theme === "editorial"
+        ? {
+            background: "#f6f1e8",
+            surface: "#f6f1e8",
+            text: "#332b27",
+            mutedText: "#695d54",
+          }
+        : {};
+  return { ...defaultReaderPalette, ...themeColors, ...palette };
+}
+export function paletteContrastWarnings(
+  palette: ReaderPalette,
+  theme: ReaderTheme = "cng",
+): string[] {
+  const c = resolveReaderPalette(palette, theme);
   const luminance = (hex: string) => {
     const rgb = [1, 3, 5]
       .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)

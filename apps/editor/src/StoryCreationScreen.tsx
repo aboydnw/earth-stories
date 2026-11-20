@@ -122,7 +122,7 @@ export function StoryCreationScreen({
         .filter(Boolean)
         .map((url) => ({
           kind: "url" as const,
-          name: url,
+          name: url.slice(0, 200),
           classification: "background" as const,
           url,
         }));

@@ -323,6 +323,7 @@ export async function preflightPublication(
   if (project.publication.palette)
     for (const [index, message] of paletteContrastWarnings(
       project.publication.palette,
+      project.publication.theme,
     ).entries())
       issues.push({
         id: `palette-contrast-${index}`,

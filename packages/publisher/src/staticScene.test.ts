@@ -32,3 +32,26 @@ it("exports the authored still frame with text escaped and no network image URLs
     staticScene(scene, "Sea", new Map()),
   );
 });
+
+it.each([
+  ["atlas", "#faf5e9", "#203a49"],
+  ["editorial", "#f6f1e8", "#332b27"],
+] as const)(
+  "uses %s defaults for missing palette roles",
+  (theme, surface, text) => {
+    const scene = sceneSchema.parse({
+      width: 1000,
+      height: 600,
+      layers: [{ id: "t", kind: "text", text: "River", colorRole: "text" }],
+    });
+    const svg = staticScene(
+      scene,
+      "River",
+      new Map(),
+      { accent: "#112233" },
+      theme,
+    );
+    expect(svg).toContain(`fill="${surface}"`);
+    expect(svg).toContain(`fill="${text}"`);
+  },
+);
