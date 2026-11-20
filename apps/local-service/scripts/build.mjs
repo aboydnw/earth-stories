@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -28,7 +29,7 @@ const result = await build({
   sourcemap: true,
   sourcesContent: true,
   packages: "bundle",
-  external: ["node:*"],
+  external: ["node:*", "@napi-rs/canvas", "pdfjs-dist/*"],
   metafile: true,
   banner: {
     js: 'import { createRequire as __earthStoriesCreateRequire } from "node:module"; const require = __earthStoriesCreateRequire(import.meta.url);',
@@ -62,6 +63,48 @@ for (const input of Object.keys(result.metafile.inputs)) {
   const dependency = await bundledPackage(input);
   if (dependency) packages.set(dependency.directory, dependency);
 }
+// Native raster decoders and PDF workers must retain their package-relative files.
+const runtimeDirectory = resolve(packageDirectory, "dist/node_modules");
+await rm(runtimeDirectory, { recursive: true, force: true });
+await mkdir(runtimeDirectory, { recursive: true });
+const copied = new Map();
+async function copyRuntime(
+  name,
+  from = resolve(packageDirectory, "package.json"),
+  optional = false,
+) {
+  const require = createRequire(from);
+  let manifestPath;
+  try {
+    manifestPath = require.resolve(`${name}/package.json`);
+  } catch (error) {
+    if (optional) return;
+    throw error;
+  }
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  if (copied.has(name)) {
+    if (copied.get(name) !== manifest.version)
+      throw new Error(`Conflicting runtime dependency ${name}`);
+    return;
+  }
+  copied.set(name, manifest.version);
+  const directory = dirname(manifestPath);
+  await cp(directory, join(runtimeDirectory, name), {
+    recursive: true,
+    filter: (path) => !path.startsWith(join(directory, "node_modules")),
+  });
+  packages.set(directory, {
+    directory,
+    name: manifest.name,
+    version: manifest.version,
+  });
+  for (const dependency of Object.keys(manifest.dependencies ?? {}))
+    await copyRuntime(dependency, manifestPath);
+  for (const dependency of Object.keys(manifest.optionalDependencies ?? {}))
+    await copyRuntime(dependency, manifestPath, true);
+}
+await copyRuntime("@napi-rs/canvas");
+await copyRuntime("pdfjs-dist");
 const notices = [];
 const packagedLicenses = new Map([
   ["pmtiles", resolve(packageDirectory, "licenses/pmtiles-LICENSE")],
@@ -74,7 +117,16 @@ for (const dependency of [...packages.values()].sort((left, right) =>
   );
   const licensePath = licenseName
     ? join(dependency.directory, licenseName)
-    : packagedLicenses.get(dependency.name);
+    : dependency.name.startsWith("@napi-rs/canvas-")
+      ? join(
+          dirname(
+            createRequire(resolve(packageDirectory, "package.json")).resolve(
+              "@napi-rs/canvas/package.json",
+            ),
+          ),
+          "LICENSE",
+        )
+      : packagedLicenses.get(dependency.name);
   if (!licensePath)
     throw new Error(
       `Bundled dependency ${dependency.name} has no license file.`,

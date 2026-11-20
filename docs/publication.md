@@ -256,3 +256,9 @@ Scenes accept bounded primitives and keyframes, never executable script, markup,
 or arbitrary styles. Preview and publication use the shared viewer. Archival
 HTML embeds a deterministic SVG still at `staticProgress`, with raster artwork
 embedded and narrative, descriptions, captions, and provenance retained.
+
+Generated stories enter the editor with included local image sources and the
+custom publication profile. Candidate integrity checks do not claim offline
+publication verification. Authors can select offline delivery and build through
+the existing compiler, materializer, and post-build verifier. Generated artwork
+retains model and prompt provenance; no license or factual dataset is invented.

@@ -21,7 +21,10 @@
     "@earth-stories/project-store": "workspace:*",
     "@earth-stories/publisher": "workspace:*",
     "@earth-stories/story-schema": "workspace:*",
-    "fflate": "^0.8.2"
+    "@napi-rs/canvas": "0.1.100",
+    "fflate": "^0.8.2",
+    "image-size": "2.0.2",
+    "pdfjs-dist": "5.4.624"
   },
   "devDependencies": {
     "esbuild": "~0.28.0",

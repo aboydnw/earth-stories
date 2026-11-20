@@ -28,6 +28,7 @@
     "storybook": "storybook dev -p 6006",
     "storybook:build": "storybook build",
     "test:publishing:no-git": "node scripts/test-publishing-no-git.mjs",
+    "smoke:generation": "node --import tsx scripts/smoke-story-generation.ts",
     "mcp": "yarn workspace @earth-stories/mcp start"
   },
   "devDependencies": {

@@ -28,6 +28,7 @@ export function WorkspaceScreen({
   deleteError,
   onNewTitleChange,
   onCreate,
+  onCreateWithAI,
   onOpen,
   onRename,
   onShowProjectFolder,
@@ -58,6 +59,7 @@ export function WorkspaceScreen({
   deleteError: string | null;
   onNewTitleChange: (value: string) => void;
   onCreate: (event: FormEvent) => void;
+  onCreateWithAI?: () => void;
   onOpen: (id: string) => void;
   onRename: (project: ProjectSummary) => void;
   onShowProjectFolder?: (id: string) => void;
@@ -126,6 +128,11 @@ export function WorkspaceScreen({
                 editable example.
               </span>
             </div>
+            {onCreateWithAI ? (
+              <ActionButton variant="outline" onClick={onCreateWithAI}>
+                Create with AI
+              </ActionButton>
+            ) : null}
             <form className="workspace-create" onSubmit={onCreate}>
               <div className="workspace-create__controls">
                 <FormField label="New story title (optional)">

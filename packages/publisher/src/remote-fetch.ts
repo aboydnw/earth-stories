@@ -12,6 +12,8 @@ interface AuthorizedAddress {
 
 export interface AuthorizedFetchPolicy {
   allowedHosts?: ReadonlySet<string>;
+  httpsOnly?: boolean;
+  maxRedirects?: number;
 }
 
 function authorizeConfiguredHost(url: URL, policy: AuthorizedFetchPolicy) {
@@ -72,7 +74,10 @@ export async function authorizedFetch(
   policy: AuthorizedFetchPolicy = {},
 ): Promise<Response> {
   let url = validateRemoteUrl(input);
-  for (let redirects = 0; redirects <= 5; redirects += 1) {
+  const maxRedirects = policy.maxRedirects ?? 5;
+  for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
+    if (policy.httpsOnly && url.protocol !== "https:")
+      throw new Error("References require HTTPS.");
     authorizeConfiguredHost(url, policy);
     const authorized = await authorize(url);
     const response = await fetch(url, {
@@ -84,7 +89,7 @@ export async function authorizedFetch(
     const location = response.headers.get("location");
     if (!location)
       throw new Error("Remote server returned an invalid redirect.");
-    if (redirects === 5)
+    if (redirects === maxRedirects)
       throw new Error("Remote asset redirected too many times.");
     await response.body?.cancel();
     url = validateRemoteUrl(new URL(location, url).toString());

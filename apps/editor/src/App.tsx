@@ -1,3 +1,4 @@
+import { StoryCreationScreen } from "./StoryCreationScreen";
 import { defaultScene } from "@earth-stories/story-schema";
 import { ReaderPaletteEditor } from "./ReaderPaletteEditor";
 import {
@@ -93,10 +94,6 @@ import {
 import { captureKeyframe } from "./flyoverPath";
 import { pollConversionJob } from "./conversionPolling";
 
-const StoryStudio = lazy(async () => ({
-  default: (await import("./StoryStudio")).StoryStudio,
-}));
-
 type SaveState = "saved" | "changed" | "saving" | "save-error" | "exporting";
 type InspectorMode = "chapter" | "story" | "data";
 type PendingChapterType = "map" | "scrolly" | "image" | "chart";
@@ -136,8 +133,6 @@ function latestConversionTerminal(job: ConversionJobSnapshot) {
 }
 export function App() {
   const [desktop] = useState(detectDesktopBridge);
-  const [studioProject, setStudioProject] = useState<string | null>(null);
-  const studioEntry = useRef<HTMLButtonElement>(null);
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(
     () =>
       desktop !== null &&
@@ -1657,6 +1652,21 @@ export function App() {
         <p>Opening your local workspace…</p>
       </main>
     );
+  if (route.page === "create")
+    return (
+      <StoryCreationScreen
+        jobId={route.jobId}
+        preview={route.preview}
+        onNavigate={(jobId, preview = false) =>
+          navigate({ page: "create", jobId, preview })
+        }
+        onCreated={async (id) => {
+          await refreshProjects();
+          await handleOpen(id);
+        }}
+        onBack={() => navigate({ page: "stories" })}
+      />
+    );
   if (!project)
     return (
       <WorkspaceScreen
@@ -1668,6 +1678,9 @@ export function App() {
         deletePending={deletePending}
         deleteError={deleteError}
         onNewTitleChange={setNewTitle}
+        onCreateWithAI={() =>
+          navigate({ page: "create", jobId: null, preview: false })
+        }
         onCreate={handleCreate}
         onOpen={(id) => void handleOpen(id)}
         onRename={(item) => void handleRename(item)}
@@ -1747,34 +1760,11 @@ export function App() {
       </div>
     );
 
-  const studioAvailable =
-    selectedChapter?.id === "edge-compare" &&
-    project.sources.some((source) => source.id === "ice-front-first") &&
-    project.sources.some((source) => source.id === "ice-front-last");
   const editorCanvas =
     publishOpen && publication ? (
       <StoryViewer manifest={publication} snapshotMode />
-    ) : studioAvailable && studioProject === project.id ? (
-      <Suspense fallback={<p role="status">Preparing Story Studio…</p>}>
-        <StoryStudio
-          onClose={() => {
-            setStudioProject(null);
-            requestAnimationFrame(() => studioEntry.current?.focus());
-          }}
-        />
-      </Suspense>
     ) : (
       <>
-        {studioAvailable && (
-          <button
-            type="button"
-            className="secondary-button"
-            ref={studioEntry}
-            onClick={() => setStudioProject(project.id)}
-          >
-            Example animation experiment
-          </button>
-        )}
         <ChapterCanvas
           selectedChapter={selectedChapter ?? null}
           focusedManifest={focusedPublicationResult.manifest}
@@ -1948,7 +1938,6 @@ export function App() {
               setEditorRegion("edit");
             }}
             onSelectChapter={(chapterId) => {
-              if (chapterId !== selectedChapter?.id) setStudioProject(null);
               setActiveChapter(chapterId);
               setInspectorMode("chapter");
             }}

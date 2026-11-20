@@ -1,3 +1,8 @@
+import type {
+  StoryBrief,
+  GenerationJob,
+  PublicationManifest,
+} from "@earth-stories/story-schema";
 import {
   conversionJobEventSchema,
   storyProjectSchema,
@@ -502,3 +507,38 @@ export async function getGitHubRepositories(): Promise<GitHubRepository[]> {
 export interface ReviewedGitHubRepository extends GitHubRepository {
   login: string;
 }
+
+export const generationStatus = () =>
+  request<{ configured: boolean; running: boolean }>("/api/generation/status");
+export const startGeneration = (brief: StoryBrief) =>
+  request<GenerationJob>("/api/generation/jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(brief),
+  });
+export const getGeneration = (id: string) =>
+  request<GenerationJob>(`/api/generation/jobs/${encodeURIComponent(id)}`);
+export const generationPreview = (id: string) =>
+  request<PublicationManifest>(
+    `/api/generation/jobs/${encodeURIComponent(id)}/preview`,
+  );
+export const cancelGeneration = (id: string) =>
+  request<GenerationJob>(
+    `/api/generation/jobs/${encodeURIComponent(id)}/cancel`,
+    { method: "POST" },
+  );
+export const retryGeneration = (id: string) =>
+  request<GenerationJob>(
+    `/api/generation/jobs/${encodeURIComponent(id)}/retry`,
+    { method: "POST" },
+  );
+export const acceptGeneration = (id: string) =>
+  request<{ projectId: string; candidateDigest: string }>(
+    `/api/generation/jobs/${encodeURIComponent(id)}/accept`,
+    { method: "POST" },
+  );
+export const discardGeneration = (id: string) =>
+  request<{ discarded: boolean }>(
+    `/api/generation/jobs/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );

@@ -417,11 +417,21 @@ export const publicationManifestV3Schema = publicationManifestV2BaseSchema
     }),
   })
   .superRefine(publicationPolicy)
-  .superRefine((manifest,context)=>{
-    const assets=new Map(manifest.assets.map(asset=>[asset.id,asset]));
-    manifest.chapters.forEach((chapter,index)=>{
-      if(chapter.type!=="illustrated")return;
-      for(const layer of chapter.scene.layers) if(layer.kind==="image"&&assets.get(layer.assetId)?.kind!=="image")context.addIssue({code:"custom",path:["chapters",index,"scene"],message:"Illustration layers must reference an included image asset"});
+  .superRefine((manifest, context) => {
+    const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
+    manifest.chapters.forEach((chapter, index) => {
+      if (chapter.type !== "illustrated") return;
+      for (const layer of chapter.scene.layers)
+        if (
+          layer.kind === "image" &&
+          assets.get(layer.assetId)?.kind !== "image"
+        )
+          context.addIssue({
+            code: "custom",
+            path: ["chapters", index, "scene"],
+            message:
+              "Illustration layers must reference an included image asset",
+          });
     });
   });
 

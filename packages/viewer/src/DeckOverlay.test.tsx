@@ -100,6 +100,15 @@ describe("DeckOverlay", () => {
     expect(mocks.setProps).toHaveBeenCalledWith({ layers: second });
   });
 
+  it("does not update layers after the map loses its live style", () => {
+    const first = [{ id: "first" }] as unknown as Layer[];
+    const second = [{ id: "second" }] as unknown as Layer[];
+    const view = render(<DeckOverlay layers={first} />);
+    mocks.nativeMap.style = null;
+    view.rerender(<DeckOverlay layers={second} />);
+    expect(mocks.setProps).not.toHaveBeenCalled();
+  });
+
   it("reports rendered frames through the latest callback", () => {
     const firstCallback = vi.fn();
     const latestCallback = vi.fn();
