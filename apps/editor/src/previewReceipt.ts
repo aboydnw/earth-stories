@@ -1,9 +1,10 @@
 const prefix = "earth-stories:preview-receipt:";
 const memory = new Map<string, string>();
+const unsynced = new Set<string>();
 
 function storage(): Storage | null {
   try {
-    return typeof window !== "undefined" ? window.sessionStorage : null;
+    return typeof window !== "undefined" ? window.localStorage : null;
   } catch {
     return null;
   }
@@ -11,7 +12,16 @@ function storage(): Storage | null {
 
 export function readPreviewReceipt(projectId: string): string | null {
   const key = `${prefix}${projectId}`;
-  const raw = storage()?.getItem(key) ?? memory.get(key) ?? null;
+  let raw: string | null;
+  try {
+    const available = storage();
+    raw =
+      unsynced.has(key) || !available
+        ? (memory.get(key) ?? null)
+        : available.getItem(key);
+  } catch {
+    raw = memory.get(key) ?? null;
+  }
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as {
@@ -21,7 +31,7 @@ export function readPreviewReceipt(projectId: string): string | null {
     if (value.projectId === projectId && typeof value.revision === "string")
       return value.revision;
   } catch {
-    // Corrupt session values are discarded below.
+    // Corrupt stored values are discarded below.
   }
   try {
     storage()?.removeItem(key);
@@ -29,6 +39,7 @@ export function readPreviewReceipt(projectId: string): string | null {
     // The in-memory copy is cleared below.
   }
   memory.delete(key);
+  unsynced.delete(key);
   return null;
 }
 
@@ -40,9 +51,14 @@ export function recordPreviewReceipt(
   const value = JSON.stringify({ projectId, revision });
   memory.set(key, value);
   try {
-    storage()?.setItem(key, value);
+    const available = storage();
+    if (available) {
+      available.setItem(key, value);
+      unsynced.delete(key);
+    } else unsynced.add(key);
   } catch {
-    // The in-memory copy remains available when session storage is blocked.
+    unsynced.add(key);
+    // The in-memory copy remains available when local storage is blocked.
   }
 }
 
@@ -56,6 +72,7 @@ export function previewMatchesRevision(
 export function clearPreviewReceipt(projectId: string): void {
   const key = `${prefix}${projectId}`;
   memory.delete(key);
+  unsynced.delete(key);
   try {
     storage()?.removeItem(key);
   } catch {

@@ -156,8 +156,8 @@ export function PublishMenu({
           >
             <Eye size={18} />
             <span>
-              <strong>See as a reader</strong>
-              <small>Open the unpublished reader view</small>
+              <strong>View as reader</strong>
+              <small>Save and open the draft in a new tab</small>
             </span>
           </button>
           <button

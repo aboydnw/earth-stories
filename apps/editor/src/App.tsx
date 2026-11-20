@@ -64,7 +64,7 @@ import { WorkspaceScreen } from "./WorkspaceScreen";
 import { ChapterAddMenu } from "./ChapterAddMenu";
 import { ChapterRail } from "./ChapterRail";
 import type { EditorRegion } from "./EditorViewTabs";
-import { ChapterCanvas, type CanvasMode } from "./ChapterCanvas";
+import { ChapterCanvas } from "./ChapterCanvas";
 import { ChapterInspector } from "./ChapterInspector";
 import { SourceDetailsEditor } from "./SourceDetailsEditor";
 import { deriveChapterReadiness, referencedSources } from "./chapterReadiness";
@@ -74,6 +74,8 @@ import { PublishMenu } from "./PublishMenu";
 import { nextGuidanceAction, workflowStages } from "./editorReadiness";
 import type { GuidanceDestination } from "./editorReadiness";
 import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
+import { reconcileSavedDraft } from "./reconcileSavedDraft";
+import { openReaderPreview as openSavedReaderPreview } from "./openReaderPreview";
 import { usePublicationReadiness } from "./usePublicationReadiness";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 import { detectDesktopBridge } from "./desktop";
@@ -145,7 +147,6 @@ export function App() {
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
   const persistedProjectRef = useRef<StoryProject | null>(null);
   const prePublishViewRef = useRef<{
-    canvasMode: CanvasMode;
     editorRegion: EditorRegion;
   } | null>(null);
   const routeLoadRef = useRef(0);
@@ -172,7 +173,6 @@ export function App() {
   const [examples, setExamples] = useState<ExampleCatalog | null>(null);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("chapter");
   const [editorRegion, setEditorRegion] = useState<EditorRegion>("edit");
-  const [canvasMode, setCanvasMode] = useState<CanvasMode>("chapter");
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [pendingChapterType, setPendingChapterType] =
     useState<PendingChapterType | null>(null);
@@ -206,6 +206,20 @@ export function App() {
     Record<string, MultidimChoice>
   >({});
   const [previewReceiptVersion, setPreviewReceiptVersion] = useState(0);
+  const [previewLink, setPreviewLink] = useState<string | null>(null);
+  const previewOpening = useRef(false);
+  const pendingSave = useRef<Promise<StoryProject | null> | null>(null);
+  const lastSaveError = useRef<unknown>(null);
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  useEffect(() => {
+    const update = (event: StorageEvent) => {
+      if (event.key?.startsWith("earth-stories:preview-receipt:"))
+        setPreviewReceiptVersion((version) => version + 1);
+    };
+    window.addEventListener("storage", update);
+    return () => window.removeEventListener("storage", update);
+  }, []);
   const chapterAddRef = useRef<HTMLDivElement>(null);
   const publicationReadiness = usePublicationReadiness(project);
   const pendingProvisioning = Object.entries(conversionJobs).find(
@@ -335,13 +349,13 @@ export function App() {
     );
   }
   function activate(next: StoryProject) {
+    setPreviewLink(null);
     setProject(next);
     persistedProjectRef.current = structuredClone(next);
     setBasemapStyleDraft(next.basemap.styleUrl);
     setActiveChapter(next.chapters[0]?.id ?? "");
     setInspectorMode("chapter");
     setEditorRegion("edit");
-    setCanvasMode("chapter");
     setPendingChapterType(null);
     setAddChapterOpen(false);
     setSaveState("saved");
@@ -527,20 +541,46 @@ export function App() {
     }
   }
   async function persist(): Promise<StoryProject | null> {
-    if (!project) return null;
+    const projectId = projectRef.current?.id;
+    if (!projectId) return null;
+    while (pendingSave.current) {
+      const saved = await pendingSave.current;
+      if (!saved || projectRef.current?.id !== projectId) return null;
+      if (projectRef.current === persistedProjectRef.current) return saved;
+    }
+    const submitted = projectRef.current;
+    if (!submitted || submitted.id !== projectId) return null;
+    const saving = (async () => {
+      try {
+        lastSaveError.current = null;
+        setSaveState("saving");
+        const saved = await saveProject(submitted);
+        const current = reconcileSavedDraft(
+          projectRef.current,
+          submitted,
+          saved,
+        );
+        projectRef.current = current;
+        setProject(current);
+        if (current?.id === submitted.id) {
+          persistedProjectRef.current = saved;
+          setSaveState(current === saved ? "saved" : "changed");
+          publicationReadiness.invalidate();
+        }
+        await refreshProjects();
+        return saved;
+      } catch (cause) {
+        lastSaveError.current = cause;
+        setSaveState("save-error");
+        showError(cause);
+        return null;
+      }
+    })();
+    pendingSave.current = saving;
     try {
-      setSaveState("saving");
-      const saved = await saveProject(project);
-      setProject(saved);
-      persistedProjectRef.current = structuredClone(saved);
-      setSaveState("saved");
-      publicationReadiness.invalidate();
-      await refreshProjects();
-      return saved;
-    } catch (cause) {
-      setSaveState("save-error");
-      showError(cause);
-      return null;
+      return await saving;
+    } finally {
+      if (pendingSave.current === saving) pendingSave.current = null;
     }
   }
 
@@ -1519,18 +1559,46 @@ export function App() {
     ({ severity }) => severity === "warning",
   ).length;
   const blockingGuidance = guidance?.tone === "danger" ? guidance : null;
-  function openReaderPreview() {
-    if (!project || !publication) return;
-    recordPreviewReceipt(project.id, project.metadata.updated);
-    setPreviewReceiptVersion((version) => version + 1);
-    navigate({ page: "story", storyId: project.id, preview: true });
+  async function openReaderPreview() {
+    if (!project || !publication || previewOpening.current) return;
+    previewOpening.current = true;
+    setPreviewLink(null);
+    try {
+      await openSavedReaderPreview({
+        reserveTab: () => {
+          const tab = window.open("about:blank", "_blank");
+          if (!tab) return null;
+          tab.opener = null;
+          return {
+            navigate: (url) => tab.location.replace(url),
+            close: () => tab.close(),
+          };
+        },
+        saveDraft: async () => {
+          const saved = saveState === "saved" ? project : await persist();
+          if (!saved)
+            throw (
+              lastSaveError.current ??
+              new Error(
+                "Could not save the story for preview. Your edits remain in the editor.",
+              )
+            );
+          return { id: saved.id, revision: saved.metadata.updated };
+        },
+        previewUrl: (id) =>
+          routePath({ page: "story", storyId: id, preview: true }),
+        showError,
+        showFallbackLink: setPreviewLink,
+      });
+    } finally {
+      previewOpening.current = false;
+    }
   }
 
   function openPublicationWorkshop() {
     if (!project) return;
     const open = () => {
-      prePublishViewRef.current ??= { canvasMode, editorRegion };
-      setCanvasMode("story");
+      prePublishViewRef.current ??= { editorRegion };
       setEditorRegion("canvas");
       setPublishOpen(true);
     };
@@ -1549,7 +1617,6 @@ export function App() {
     const previous = prePublishViewRef.current;
     prePublishViewRef.current = null;
     if (!previous) return;
-    setCanvasMode(previous.canvasMode);
     setEditorRegion(previous.editorRegion);
   }
 
@@ -1679,7 +1746,9 @@ export function App() {
     project.sources.some((source) => source.id === "ice-front-first") &&
     project.sources.some((source) => source.id === "ice-front-last");
   const editorCanvas =
-    studioAvailable && studioProject === project.id ? (
+    publishOpen && publication ? (
+      <StoryViewer manifest={publication} snapshotMode />
+    ) : studioAvailable && studioProject === project.id ? (
       <Suspense fallback={<p role="status">Preparing Story Studio…</p>}>
         <StoryStudio
           onClose={() => {
@@ -1697,18 +1766,14 @@ export function App() {
             ref={studioEntry}
             onClick={() => setStudioProject(project.id)}
           >
-            Open Story Studio
+            Example animation experiment
           </button>
         )}
         <ChapterCanvas
-          mode={canvasMode}
-          onModeChange={setCanvasMode}
           selectedChapter={selectedChapter ?? null}
           focusedManifest={focusedPublicationResult.manifest}
-          fullManifest={publication}
           focusedError={focusedPublicationResult.error}
           savedCamera={savedChapterCamera}
-          snapshotMode={publishOpen}
           previewCamera={flyoverPreviewCamera}
           commitInitialFit={Boolean(
             selectedChapter &&
@@ -1790,6 +1855,15 @@ export function App() {
             followGuidance(action.destination, action.resourceId)
           }
         />
+        <div className="editor-reader-action">
+          <ActionButton
+            variant="surface"
+            onClick={openReaderPreview}
+            disabled={!publication || saveState === "saving"}
+          >
+            View as reader
+          </ActionButton>
+        </div>
         <ActionButton
           variant="surface"
           className="button button--save"
@@ -1832,7 +1906,16 @@ export function App() {
       <EditorShell
         region={editorRegion}
         onRegionChange={setEditorRegion}
-        guidance={null}
+        guidance={
+          previewLink ? (
+            <p className="reader-preview-link" role="status">
+              Your draft is saved.{" "}
+              <a href={previewLink} target="_blank" rel="noopener noreferrer">
+                Open saved reader preview
+              </a>
+            </p>
+          ) : null
+        }
         error={
           error ? (
             <p className="error-message" role="alert">

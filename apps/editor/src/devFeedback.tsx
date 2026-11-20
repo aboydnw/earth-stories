@@ -1,3 +1,4 @@
+import "./devFeedback.css";
 import { createRoot } from "react-dom/client";
 import { RiffrecProvider, RiffrecRecorder } from "riffrec";
 
@@ -8,10 +9,6 @@ export function mountDevFeedback() {
 
   const feedbackRoot = document.createElement("div");
   feedbackRoot.id = FEEDBACK_ROOT_ID;
-  feedbackRoot.style.position = "fixed";
-  feedbackRoot.style.zIndex = "var(--es-z-toast)";
-  feedbackRoot.style.insetInlineStart = "16px";
-  feedbackRoot.style.insetBlockEnd = "16px";
   document.body.append(feedbackRoot);
 
   createRoot(feedbackRoot).render(
@@ -23,6 +20,7 @@ export function mountDevFeedback() {
       }}
     >
       <RiffrecRecorder
+        className="feedback-recorder"
         startLabel="Record feedback"
         stopLabel="Stop and save"
         consentTitle="Record an Earth Stories issue"

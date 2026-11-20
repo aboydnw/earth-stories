@@ -1,3 +1,4 @@
+import { ActionButton } from "@earth-stories/ui";
 import { useEffect, useId, useRef, useState } from "react";
 import frontsRaw from "./storyStudioFronts.json?raw";
 import { studioFrame, studioTreatments } from "./storyStudioMotion";
@@ -85,9 +86,9 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
     setSelected(element);
     setShowOptions(false);
   };
-  const close = useRef<HTMLButtonElement>(null);
+  const close = useRef<HTMLElement>(null);
   useEffect(() => {
-    close.current?.focus();
+    close.current?.querySelector<HTMLButtonElement>("button")?.focus();
   }, []);
   useEffect(() => {
     const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -112,21 +113,22 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
     still || variant === "original",
   );
   const play = playing && progress < 1;
+  const motionUnavailable = still || variant === "original";
   return (
     <section className="story-studio" aria-label="Edge of Ice Story Studio">
-      <header className="story-studio__header">
+      <header className="story-studio__header" ref={close}>
         <div>
           <small>Experimental · Local rehearsal</small>
           <h2>Edge of Ice / Story Studio</h2>
         </div>
-        <button
+        <ActionButton
+          variant="surface"
           className="secondary-button"
           type="button"
-          ref={close}
           onClick={onClose}
         >
           Back to editor
-        </button>
+        </ActionButton>
       </header>
       <p>
         Notice · Quiet unease. Keep the shoreline recognizable. Don’t invent ice
@@ -246,18 +248,25 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
               .
             </figcaption>
           </figure>
+          {variant === "original" && (
+            <p role="status">
+              This is a static illustration. Choose an animated treatment using
+              Sketch alternatives to rehearse motion.
+            </p>
+          )}
           <div className="story-studio__controls">
-            <button
+            <ActionButton
+              variant="surface"
               type="button"
               className="secondary-button"
-              disabled={still || variant === "original"}
+              disabled={motionUnavailable}
               onClick={() => {
                 if (progress >= 1) setProgress(0);
                 setPlaying(!play);
               }}
             >
               {play && !still && variant !== "original" ? "Pause" : "Play"}
-            </button>
+            </ActionButton>
             <label>
               Rehearsal position{" "}
               <input
@@ -265,14 +274,15 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
                 min="0"
                 max="100"
                 value={Math.round(progress * 100)}
-                disabled={still}
+                disabled={motionUnavailable}
                 onChange={(event) => {
                   setPlaying(false);
                   setProgress(Number(event.currentTarget.value) / 100);
                 }}
               />
             </label>
-            <button
+            <ActionButton
+              variant="surface"
               type="button"
               className="secondary-button"
               aria-pressed={staticPreview || reduced}
@@ -283,7 +293,7 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
               }}
             >
               Read without motion
-            </button>
+            </ActionButton>
           </div>
           <div className="story-studio__controls" aria-label="Jump to keyframe">
             {(
@@ -293,18 +303,19 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
                 ["Notice", 1],
               ] as const
             ).map(([name, position]) => (
-              <button
+              <ActionButton
+                variant="surface"
                 type="button"
                 className="secondary-button"
                 key={name}
-                disabled={still}
+                disabled={motionUnavailable}
                 onClick={() => {
                   setPlaying(false);
                   setProgress(position);
                 }}
               >
                 {name}
-              </button>
+              </ActionButton>
             ))}
           </div>
           {(scene.gap || still) && (
@@ -319,7 +330,8 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
           <h3>Point, then ask</h3>
           <div className="story-studio__controls">
             {(["House", "Shoreline", "Date labels"] as const).map((element) => (
-              <button
+              <ActionButton
+                variant="surface"
                 type="button"
                 className="secondary-button"
                 aria-pressed={selected === element}
@@ -330,7 +342,7 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
                 }}
               >
                 {element}
-              </button>
+              </ActionButton>
             ))}
           </div>
           <label>
@@ -341,13 +353,14 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
               placeholder="What should the reader notice?"
             />
           </label>
-          <button
+          <ActionButton
+            variant="surface"
             type="button"
             className="secondary-button"
             onClick={() => setShowOptions(true)}
           >
             Sketch alternatives for {selected.toLowerCase()}
-          </button>
+          </ActionButton>
           {showOptions && (
             <>
               <p role="status">
@@ -356,7 +369,8 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
               </p>
               <div className="story-studio__variants">
                 {variants.map((option) => (
-                  <button
+                  <ActionButton
+                    variant="surface"
                     type="button"
                     key={option.id}
                     className="secondary-button"
@@ -368,11 +382,12 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
                   >
                     <strong>{option.title}</strong>
                     <span>{option.reason}</span>
-                  </button>
+                  </ActionButton>
                 ))}
               </div>
               {remixParent === null ? (
-                <button
+                <ActionButton
+                  variant="surface"
                   type="button"
                   className="secondary-button"
                   onClick={() => {
@@ -382,10 +397,11 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
                   }}
                 >
                   Remix house + staggered dates
-                </button>
+                </ActionButton>
               ) : (
                 <div className="story-studio__controls">
-                  <button
+                  <ActionButton
+                    variant="surface"
                     type="button"
                     className="secondary-button"
                     aria-pressed={variant === "remix"}
@@ -395,8 +411,9 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
                     }}
                   >
                     View remix
-                  </button>
-                  <button
+                  </ActionButton>
+                  <ActionButton
+                    variant="surface"
                     type="button"
                     className="secondary-button"
                     onClick={() => {
@@ -406,7 +423,7 @@ export function StoryStudio({ onClose }: { onClose: () => void }) {
                     }}
                   >
                     Undo remix
-                  </button>
+                  </ActionButton>
                 </div>
               )}
             </>

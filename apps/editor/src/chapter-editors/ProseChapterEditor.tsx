@@ -10,9 +10,11 @@ export function ProseChapterEditor({
   onChange: (next: ProseChapter) => void;
 }) {
   return (
-    <ChapterContentSection
-      chapter={chapter}
-      onChange={(next) => onChange(next as ProseChapter)}
-    />
+    <div className="chapter-type-editor">
+      <ChapterContentSection
+        chapter={chapter}
+        onChange={(next) => onChange(next as ProseChapter)}
+      />
+    </div>
   );
 }

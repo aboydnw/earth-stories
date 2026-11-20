@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   publicationManifestSchema,
   type ProjectChapter,
@@ -40,24 +39,18 @@ const manifest = publicationManifestSchema.parse({
 });
 
 describe("ChapterCanvas", () => {
-  it("switches between focused chapter and full story modes", async () => {
-    const user = userEvent.setup();
-    const onModeChange = vi.fn();
+  it("keeps a focused chapter canvas without inline reader mode", () => {
     render(
       <ChapterCanvas
-        mode="chapter"
-        onModeChange={onModeChange}
         selectedChapter={manifest.chapters[0] as ProjectChapter}
         focusedManifest={manifest}
-        fullManifest={manifest}
         savedCamera={null}
         onCameraCommit={() => undefined}
       />,
     );
-
     expect(screen.getByRole("heading", { name: "Introduction" })).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Preview story" }));
-    expect(onModeChange).toHaveBeenCalledWith("story");
+    expect(screen.queryByRole("button", { name: "Preview story" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit chapter" })).toBeNull();
   });
 
   it("shows map composition actions only for map-bound chapters", () => {
@@ -72,11 +65,9 @@ describe("ChapterCanvas", () => {
     };
     render(
       <ChapterCanvas
-        mode="chapter"
-        onModeChange={() => undefined}
         selectedChapter={mapChapter}
         focusedManifest={manifest}
-        fullManifest={manifest}
+
         savedCamera={mapChapter.camera}
         onCameraCommit={() => undefined}
       />,
@@ -110,11 +101,9 @@ describe("ChapterCanvas", () => {
     };
     render(
       <ChapterCanvas
-        mode="chapter"
-        onModeChange={() => undefined}
         selectedChapter={mapChapter}
         focusedManifest={manifest}
-        fullManifest={manifest}
+
         savedCamera={mapChapter.camera}
         onCameraCommit={() => undefined}
       />,

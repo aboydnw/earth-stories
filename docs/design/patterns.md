@@ -104,3 +104,14 @@ Use “on this computer,” “project folder,” “local service,” and “co
 source.” Prefer outcomes over implementation names. Errors say what failed,
 what remains intact, and the next action. Avoid account, cloud, and workspace
 server terminology unless the product actually introduces those concepts.
+
+### Reader preview from the editor
+
+The editing canvas always shows the selected chapter. **View as reader** saves
+that draft and opens its reader view in a separate tab, preserving editor
+selection and scroll position. Failed saves retain edits and do not open a stale
+preview; blocked popups offer a link after saving. A preview reviews the saved
+revision, not later edits. Publishing remains a separate explicit action.
+Development feedback controls occupy a reserved bottom dock rather than cover
+navigation. The example animation experiment labels its static baseline and
+requires an animated treatment before enabling rehearsal controls.

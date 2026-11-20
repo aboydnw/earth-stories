@@ -72,11 +72,9 @@ describe("ChapterCanvas fit lifecycle", () => {
   it("does not replay a fit request after switching chapter or source", async () => {
     const { rerender } = render(
       <ChapterCanvas
-        mode="chapter"
-        onModeChange={() => undefined}
         selectedChapter={chapter("one", "source-a")}
         focusedManifest={manifest}
-        fullManifest={null}
+
         savedCamera={camera}
         onCameraCommit={() => undefined}
       />,
@@ -90,11 +88,9 @@ describe("ChapterCanvas fit lifecycle", () => {
 
     rerender(
       <ChapterCanvas
-        mode="chapter"
-        onModeChange={() => undefined}
         selectedChapter={chapter("two", "source-b")}
         focusedManifest={manifest}
-        fullManifest={null}
+
         savedCamera={camera}
         onCameraCommit={() => undefined}
       />,
@@ -105,11 +101,9 @@ describe("ChapterCanvas fit lifecycle", () => {
 
     rerender(
       <ChapterCanvas
-        mode="chapter"
-        onModeChange={() => undefined}
         selectedChapter={chapter("two", "source-c")}
         focusedManifest={manifest}
-        fullManifest={null}
+
         savedCamera={camera}
         onCameraCommit={() => undefined}
       />,
@@ -123,11 +117,9 @@ describe("ChapterCanvas fit lifecycle", () => {
     const onCameraCommit = vi.fn();
     render(
       <ChapterCanvas
-        mode="chapter"
-        onModeChange={() => undefined}
         selectedChapter={chapter("new-map", "source")}
         focusedManifest={manifest}
-        fullManifest={null}
+
         savedCamera={camera}
         commitInitialFit
         onCameraCommit={onCameraCommit}
