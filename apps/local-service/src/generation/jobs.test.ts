@@ -267,3 +267,90 @@ it("rejects symlinked candidate files and encoded traversal", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("keeps uploaded inputs out of polling checkpoints and accepted briefs while retaining retry inputs", async () => {
+  const { readFile, stat } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "earth-reference-storage-"));
+  try {
+    const plan = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Temporary planning failure"))
+      .mockImplementation(provider.plan);
+    const store = new ProjectStore(root);
+    const jobs = new GenerationJobs(store, { ...provider, plan });
+    await jobs.initialize();
+    const text = "Reference context. ".repeat(8000);
+    const data = Buffer.from(text).toString("base64");
+    const job = await jobs.start({
+      ...brief,
+      references: [
+        {
+          kind: "upload",
+          name: "Context.txt",
+          classification: "background",
+          mediaType: "text/plain",
+          data,
+        },
+      ],
+    });
+    await jobs.whenIdle();
+    const path = join(root, ".generation", job.id, "job.json");
+    expect((await stat(path)).size).toBeLessThan(10000);
+    expect(JSON.stringify(await jobs.get(job.id))).not.toContain(data);
+    const restarted = new GenerationJobs(store, { ...provider, plan });
+    await restarted.initialize();
+    await restarted.retry(job.id);
+    await restarted.whenIdle();
+    expect((await restarted.get(job.id)).stage).toBe("ready");
+    expect(plan.mock.calls[1]![1][0].text).toBe(text);
+    const receipt = await restarted.accept(job.id);
+    const accepted = await readFile(
+      join(root, receipt.projectId, ".earth-stories", "generation-brief.json"),
+      "utf8",
+    );
+    expect(accepted).toContain("Context.txt");
+    expect(accepted).not.toContain(data);
+    expect(accepted.length).toBeLessThan(10000);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("migrates legacy inline references once at restart without losing retry context", async () => {
+  const { readFile, writeFile, unlink } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "earth-legacy-references-"));
+  try {
+    const store = new ProjectStore(root);
+    const jobs = new GenerationJobs(store, provider);
+    await jobs.initialize();
+    const created = await jobs.start(brief);
+    await jobs.whenIdle();
+    const folder = join(root, ".generation", created.id);
+    const path = join(folder, "job.json");
+    const legacy = JSON.parse(await readFile(path, "utf8"));
+    legacy.stage = "failed";
+    legacy.plan = null;
+    legacy.brief.references = [
+      {
+        kind: "text",
+        name: "Earlier context",
+        classification: "facts",
+        text: "A supplied reference.",
+      },
+    ];
+    delete legacy.referenceStorage;
+    delete legacy.referenceMetadata;
+    await writeFile(path, JSON.stringify(legacy));
+    await unlink(join(folder, "references.json"));
+    const plan = vi.fn(provider.plan);
+    const restarted = new GenerationJobs(store, { ...provider, plan });
+    await restarted.initialize();
+    expect((await restarted.get(created.id)).brief.references).toEqual([]);
+    await restarted.retry(created.id);
+    await restarted.whenIdle();
+    expect(plan.mock.calls[0]![1][0].text).toBe("A supplied reference.");
+    expect((await restarted.get(created.id)).stage).toBe("ready");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

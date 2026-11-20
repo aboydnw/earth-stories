@@ -15,6 +15,7 @@ import { compileProject } from "@earth-stories/publisher/compile";
 import {
   generationJobSchema,
   storyBriefSchema,
+  referenceInputSchema,
   generationPlanIssues,
   storyPlanSchema,
   type GenerationJob,
@@ -112,6 +113,10 @@ export class GenerationJobs {
       if (!entry.isDirectory()) continue;
       try {
         const job = await this.get(entry.name);
+        if (!job.referenceStorage && job.brief.references.length) {
+          await this.separateInputs(job);
+          await this.save(job);
+        }
         if (activeStages.has(job.stage)) {
           job.stage = "failed";
           job.error =
@@ -122,6 +127,24 @@ export class GenerationJobs {
         /* Invalid staging records are not opened as projects. */
       }
     }
+  }
+  private async separateInputs(job: GenerationJob) {
+    await this.contained(job.id, ".");
+    await atomic(
+      join(this.directory(job.id), "inputs.json"),
+      job.brief.references,
+    );
+    job.referenceMetadata = job.brief.references.map((reference) => ({
+      kind: reference.kind,
+      name: reference.name,
+      classification: reference.classification,
+      ...(reference.kind === "upload"
+        ? { mediaType: reference.mediaType }
+        : {}),
+      ...(reference.kind === "url" ? { url: reference.url } : {}),
+    }));
+    job.referenceStorage = "separate";
+    job.brief = { ...job.brief, references: [] };
   }
   private async save(job: GenerationJob) {
     job.updatedAt = new Date().toISOString();
@@ -177,6 +200,7 @@ export class GenerationJobs {
         usage: [],
         acceptance: null,
       };
+      await this.separateInputs(job);
       await this.save(job);
       this.launch(id);
       return job;
@@ -212,7 +236,21 @@ export class GenerationJobs {
           await readFile(await this.contained(id, "references.json"), "utf8"),
         );
       } catch {
-        references = await prepareReferences(job.brief.references, signal);
+        const inputs =
+          job.referenceStorage === "separate"
+            ? referenceInputSchema
+                .array()
+                .max(20)
+                .parse(
+                  JSON.parse(
+                    await readFile(
+                      await this.contained(id, "inputs.json"),
+                      "utf8",
+                    ),
+                  ),
+                )
+            : job.brief.references;
+        references = await prepareReferences(inputs, signal);
         signal.throwIfAborted();
         await atomic(refsPath, references);
       }
@@ -410,7 +448,7 @@ export class GenerationJobs {
         digest,
         project: job.candidate.project,
         assets,
-        brief: job.brief,
+        brief: { ...job.brief, referenceMetadata: job.referenceMetadata ?? [] },
       });
       job.stage = "accepted";
       await this.save(job);

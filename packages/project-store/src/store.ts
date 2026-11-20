@@ -521,9 +521,11 @@ export class ProjectStore {
         if (!info.isFile() || info.isSymbolicLink())
           throw new Error("Invalid candidate import lock.");
         let dead = false;
+        let knownOwner = false;
         try {
           const owner = JSON.parse(await readFile(lockPath, "utf8"));
           if (Number.isInteger(owner.pid) && owner.pid > 0) {
+            knownOwner = true;
             try {
               process.kill(owner.pid, 0);
             } catch (error) {
@@ -533,7 +535,9 @@ export class ProjectStore {
         } catch {
           /* A partial lock is not safe to reclaim immediately. */
         }
-        if (!dead)
+        const staleUnknownOwner =
+          !knownOwner && Date.now() - info.mtimeMs > STALE_LOCK_MS;
+        if (!dead && !staleUnknownOwner)
           throw new Error(
             "This candidate is already being imported. Wait and retry.",
           );

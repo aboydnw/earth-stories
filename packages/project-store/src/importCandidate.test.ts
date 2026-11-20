@@ -84,3 +84,59 @@ it("recovers an import lock left by a dead process without creating a duplicate"
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("recovers stale incomplete import locks but preserves fresh and live-owner locks", async () => {
+  const { writeFile, utimes } = await import("node:fs/promises");
+  const root = await mkdtemp(join(tmpdir(), "earth-import-partial-lock-"));
+  try {
+    const store = new ProjectStore(root);
+    const project = await store.create({ title: "Template" });
+    await store.archive(project.id);
+    const input = {
+      destinationId: "recovered",
+      jobId: "job",
+      digest: "a".repeat(64),
+      project: { ...project, id: "recovered" },
+      assets: [],
+      brief: {},
+    };
+    const path = join(root, ".candidate-recovered.lock");
+    await writeFile(path, "");
+    await expect(store.importCandidate(input)).rejects.toThrow(
+      "already being imported",
+    );
+    const old = new Date(Date.now() - 180000);
+    await utimes(path, old, old);
+    expect((await store.importCandidate(input)).id).toBe("recovered");
+    await writeFile(path, JSON.stringify({ pid: process.pid }));
+    await utimes(path, old, old);
+    await expect(store.importCandidate(input)).rejects.toThrow(
+      "already being imported",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("reports an ordinary project destination conflict without exposing filesystem paths", async () => {
+  const root = await mkdtemp(join(tmpdir(), "earth-import-conflict-"));
+  try {
+    const store = new ProjectStore(root);
+    const project = await store.create({ title: "Existing story" });
+    await expect(
+      store.importCandidate({
+        destinationId: project.id,
+        jobId: "job",
+        digest: "a".repeat(64),
+        project,
+        assets: [],
+        brief: {},
+      }),
+    ).rejects.toThrow(/^Candidate destination conflict\.$/);
+    expect((await store.read(project.id)).metadata.title).toBe(
+      "Existing story",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

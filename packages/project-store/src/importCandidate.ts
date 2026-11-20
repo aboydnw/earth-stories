@@ -65,8 +65,15 @@ export async function importCandidateDirectory(
       ".earth-stories",
       "generation-receipt.json",
     );
-    const parent = await lstat(join(destination, ".earth-stories"));
-    const file = await lstat(receiptPath);
+    const missingReceipt = (cause: NodeJS.ErrnoException): never => {
+      if (cause.code === "ENOENT" || cause.code === "ENOTDIR")
+        throw new Error("Candidate destination conflict.");
+      throw cause;
+    };
+    const parent = await lstat(join(destination, ".earth-stories")).catch(
+      missingReceipt,
+    );
+    const file = await lstat(receiptPath).catch(missingReceipt);
     if (parent.isSymbolicLink() || file.isSymbolicLink())
       throw new Error("Candidate receipt conflict.");
     const saved = JSON.parse(await readFile(receiptPath, "utf8"));

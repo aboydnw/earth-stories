@@ -167,6 +167,21 @@ export const generationJobSchema = z
     id,
     stage: generationStageSchema,
     brief: storyBriefSchema,
+    referenceStorage: z.literal("separate").optional(),
+    referenceMetadata: z
+      .array(
+        z
+          .object({
+            kind: z.enum(["text", "url", "upload"]),
+            name: z.string().max(200),
+            classification,
+            mediaType: z.string().optional(),
+            url: z.string().url().optional(),
+          })
+          .strict(),
+      )
+      .max(20)
+      .optional(),
     plan: storyPlanSchema.nullable(),
     assets: z.array(generatedAssetSchema),
     candidate: generationCandidateSchema.nullable(),
