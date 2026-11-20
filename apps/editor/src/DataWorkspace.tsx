@@ -780,7 +780,7 @@ function exampleDataItem(example: ExampleConnection): DataItem {
               }
             : { ...common, kind: example.kind };
   const project: StoryProject = {
-    schema: "earth-stories/project/v2",
+    schema: "earth-stories/project/v3",
     id: `catalog-${example.id}`,
     metadata: {
       title: example.title,

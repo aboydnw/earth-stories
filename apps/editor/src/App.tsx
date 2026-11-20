@@ -1,3 +1,5 @@
+import { defaultScene } from "@earth-stories/story-schema";
+import { ReaderPaletteEditor } from "./ReaderPaletteEditor";
 import {
   lazy,
   Suspense,
@@ -634,6 +636,10 @@ export function App() {
     if (!project) return;
     const usedBy = project.chapters.filter(
       (chapter) =>
+        (chapter.type === "illustrated" &&
+          chapter.scene.layers.some(
+            (layer) => layer.kind === "image" && layer.sourceId === source.id,
+          )) ||
         ("sourceId" in chapter && chapter.sourceId === source.id) ||
         ("overlaySourceIds" in chapter &&
           chapter.overlaySourceIds?.includes(source.id)),
@@ -1930,6 +1936,17 @@ export function App() {
                 )}
                 canAddChart={project.sources.some(supportsChart)}
                 onToggle={() => setAddChapterOpen((open) => !open)}
+                onAddIllustrated={() =>
+                  addChapter({
+                    id: crypto.randomUUID(),
+                    type: "illustrated",
+                    title: "Illustrated scene",
+                    narrative: "",
+                    alt: "",
+                    caption: "",
+                    scene: defaultScene(),
+                  })
+                }
                 onAddProse={addProse}
                 onAddScrolly={() => addMapChapter("scrolly")}
                 onAddMap={() => addMapChapter("map")}
@@ -2592,6 +2609,15 @@ export function App() {
                     </label>
                   )}
                 </div>
+                <ReaderPaletteEditor
+                  value={project.publication.palette}
+                  onChange={(palette) =>
+                    changeProject((current) => ({
+                      ...current,
+                      publication: { ...current.publication, palette },
+                    }))
+                  }
+                />
                 <details className="basemap-settings">
                   <summary>Basemap and credits</summary>
                   <div className="field-row">
@@ -2659,6 +2685,12 @@ export function App() {
                     source.id,
                     project.chapters.filter(
                       (chapter) =>
+                        (chapter.type === "illustrated" &&
+                          chapter.scene.layers.some(
+                            (layer) =>
+                              layer.kind === "image" &&
+                              layer.sourceId === source.id,
+                          )) ||
                         ("sourceId" in chapter &&
                           chapter.sourceId === source.id) ||
                         ("overlaySourceIds" in chapter &&

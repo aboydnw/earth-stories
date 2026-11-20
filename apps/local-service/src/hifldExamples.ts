@@ -79,7 +79,7 @@ function hifldSource(options: {
 }
 
 export const earthquakeStory: StoryProject = {
-  schema: "earth-stories/project/v2",
+  schema: "earth-stories/project/v3",
   id: "example-earthquakes",
   metadata: {
     title: "The Ground Remembers",
@@ -472,7 +472,7 @@ export const earthquakeStory: StoryProject = {
 };
 
 export const electricGridStory: StoryProject = {
-  schema: "earth-stories/project/v2",
+  schema: "earth-stories/project/v3",
   id: "example-electric-grid",
   metadata: {
     title: "The Grid Between Us",

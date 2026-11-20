@@ -1,0 +1,39 @@
+.story-illustration {
+  margin: 0;
+}
+.story-illustration__track {
+  position: relative;
+}
+.story-illustration__canvas {
+  position: sticky;
+  top: 0;
+  display: block;
+  width: 100%;
+  max-height: 100dvh;
+  background: var(--story-paper);
+}
+.story-illustration__track--static .story-illustration__canvas {
+  position: relative;
+  max-height: 65dvh;
+}
+.story-illustration figcaption {
+  color: var(--story-muted);
+  padding: 1rem 0;
+}
+.story-illustration__scrubber {
+  display: grid;
+  gap: 0.5rem;
+  color: var(--story-muted);
+}
+.story-illustration__scrubber input {
+  width: 100%;
+  accent-color: var(--story-accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-illustration__track {
+    min-height: 0 !important;
+  }
+  .story-illustration__canvas {
+    position: relative;
+  }
+}

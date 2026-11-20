@@ -245,3 +245,14 @@ publication manifest, archival output, reports, and every included asset. A
 failed verification leaves the existing latest publication untouched. A
 successful release includes `publication-verification.json` with the build ID,
 verification time, and number of checked files.
+
+### Illustrated scenes (v3)
+
+Project and publication v3 add reader palettes and illustrated chapters. Existing
+v1/v2 documents migrate on read without changing chapter or source IDs. Image
+layers reference source IDs in projects and compiled asset IDs in publications;
+all image dependencies participate in the existing publication inventory.
+Scenes accept bounded primitives and keyframes, never executable script, markup,
+or arbitrary styles. Preview and publication use the shared viewer. Archival
+HTML embeds a deterministic SVG still at `staticProgress`, with raster artwork
+embedded and narrative, descriptions, captions, and provenance retained.

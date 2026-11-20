@@ -115,3 +115,16 @@ revision, not later edits. Publishing remains a separate explicit action.
 Development feedback controls occupy a reserved bottom dock rather than cover
 navigation. The example animation experiment labels its static baseline and
 requires an animated treatment before enabling rehearsal controls.
+
+### Illustrated chapters and reader palettes
+
+Illustrated chapters contain validated image, text, and vector path layers.
+The focused canvas offers a scene scrubber; full reader scrolling advances the
+same shared renderer. Reduced motion and archival export use the authored still
+frame. Missing artwork is explicit. The inspector edits captions, descriptions,
+layer text, image source choices, motion strength, scroll length, and still frame.
+It is not a general animation timeline.
+
+Reader palette overrides belong to authored story content, are scoped to reader
+roots, and never recolor product controls or data visualization ramps. Resetting
+an override restores theme colors. Publication checks warn about low text contrast.

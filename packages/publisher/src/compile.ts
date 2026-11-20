@@ -361,6 +361,21 @@ function compileChapter(chapter: ProjectChapter): PublicationChapter {
   };
 
   switch (chapter.type) {
+    case "illustrated":
+      return {
+        ...base,
+        type: "illustrated",
+        alt: chapter.alt,
+        caption: chapter.caption,
+        scene: {
+          ...chapter.scene,
+          layers: chapter.scene.layers.map((layer) => {
+            if (layer.kind !== "image") return layer;
+            const { sourceId, ...rest } = layer;
+            return { ...rest, assetId: sourceId };
+          }),
+        },
+      };
     case "prose":
       return { ...base, type: "prose" };
     case "map":
@@ -519,7 +534,7 @@ export function compileProject(
     throw new Error("The neutral offline basemap has undeclared resources");
 
   return publicationManifestSchema.parse({
-    schema: "earth-stories/publication/v2",
+    schema: "earth-stories/publication/v3",
     build: {
       id: buildId,
       projectId: project.id,
@@ -535,6 +550,7 @@ export function compileProject(
     publication: {
       profile: project.publication.profile,
       theme: project.publication.theme,
+      palette: project.publication.palette,
       ...(project.publication.atmosphere === undefined
         ? {}
         : { atmosphere: project.publication.atmosphere }),

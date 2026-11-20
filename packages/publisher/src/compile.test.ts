@@ -6,7 +6,7 @@ import { compileProject } from "./compile.js";
 const fixturePath = join(process.cwd(), "fixtures/field-notes/story.json");
 
 describe("compileProject", () => {
-  it("emits publication v2 and changes build identity with ordered dependency digests", async () => {
+  it("emits publication v3 and changes build identity with ordered dependency digests", async () => {
     const fixture = JSON.parse(await readFile(fixturePath, "utf8")) as any;
     fixture.schema = "earth-stories/project/v2";
     fixture.publication.profile = "offline";
@@ -18,7 +18,7 @@ describe("compileProject", () => {
       dependencyDigests: { "source:survey-sites:data": "2".repeat(64) },
     });
 
-    expect(first.schema).toBe("earth-stories/publication/v2");
+    expect(first.schema).toBe("earth-stories/publication/v3");
     expect(first.basemap).toEqual(
       expect.objectContaining({
         delivery: "included",
@@ -426,4 +426,36 @@ describe("compileProject", () => {
       pointSize: 2,
     });
   });
+});
+
+it("compiles every illustration image reference and rejects missing layer assets", async () => {
+  const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+  fixture.schema = "earth-stories/project/v3";
+  fixture.sources = [
+    { id: "art", kind: "image", label: "Artwork", path: "assets/art.png" },
+  ];
+  fixture.chapters = [
+    {
+      id: "scene",
+      type: "illustrated",
+      title: "Water",
+      narrative: "Follow the river",
+      alt: "River illustration",
+      scene: {
+        width: 1000,
+        height: 600,
+        layers: [
+          { id: "art-layer", kind: "image", sourceId: "art", alt: "River" },
+        ],
+      },
+    },
+  ];
+  const output = compileProject(fixture);
+  expect(output.chapters[0]).toMatchObject({
+    type: "illustrated",
+    scene: { layers: [{ assetId: "art" }] },
+  });
+  expect(output.assets.map((a) => a.id)).toContain("art");
+  fixture.sources = [];
+  expect(() => compileProject(fixture)).toThrow(/missing/i);
 });

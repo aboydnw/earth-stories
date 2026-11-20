@@ -182,7 +182,7 @@ function exampleConnection(id: string): ExampleConnection {
 }
 
 const antakya: StoryProject = {
-  schema: "earth-stories/project/v2",
+  schema: "earth-stories/project/v3",
   id: "example-antakya",
   metadata: {
     title: "Antakya from above",
@@ -271,7 +271,7 @@ const antakya: StoryProject = {
 };
 
 const boundaries: StoryProject = {
-  schema: "earth-stories/project/v2",
+  schema: "earth-stories/project/v3",
   id: "example-boundaries",
   metadata: {
     title: "Lines on a shared planet",
@@ -432,7 +432,7 @@ const boundaries: StoryProject = {
 };
 
 const pointCloud: StoryProject = {
-  schema: "earth-stories/project/v2",
+  schema: "earth-stories/project/v3",
   id: "example-point-cloud",
   metadata: {
     title: "Anatomy of a point cloud",
@@ -596,7 +596,7 @@ const pointCloud: StoryProject = {
 };
 
 const temporalFields: StoryProject = {
-  schema: "earth-stories/project/v2",
+  schema: "earth-stories/project/v3",
   id: "example-temporal-fields",
   metadata: {
     title: "Fields through time",
@@ -744,7 +744,7 @@ const temporalFields: StoryProject = {
 };
 
 const richMedia: StoryProject = {
-  schema: "earth-stories/project/v2",
+  schema: "earth-stories/project/v3",
   id: "example-rich-media",
   metadata: {
     title: "A story beyond the map",
@@ -869,7 +869,7 @@ const stormAppearance = {
 } as const;
 
 const stormTrack: StoryProject = {
-  schema: "earth-stories/project/v2",
+  schema: "earth-stories/project/v3",
   id: "example-storm-track",
   metadata: {
     title: "Tracking a hurricane",

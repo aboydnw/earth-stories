@@ -1,3 +1,4 @@
+import { readerPaletteSchema, publicationSceneSchema } from "./illustration.js";
 import { z } from "zod";
 import { COLORMAP_NAMES } from "./colormaps.js";
 import {
@@ -127,7 +128,7 @@ const publicationChapterBaseSchema = z.object({
   narrative: z.string(),
 });
 
-export const publicationChapterSchema = z.discriminatedUnion("type", [
+export const legacyPublicationChapterSchema = z.discriminatedUnion("type", [
   publicationChapterBaseSchema.extend({ type: z.literal("prose") }),
   publicationChapterBaseSchema.extend({
     type: z.literal("map"),
@@ -180,6 +181,18 @@ export const publicationChapterSchema = z.discriminatedUnion("type", [
     keyframes: z.array(flyoverKeyframeSchema).min(2),
     scrollLength: z.number().min(0.5).max(5),
   }),
+]);
+
+export const publicationChapterSchema = z.discriminatedUnion("type", [
+  ...legacyPublicationChapterSchema.options,
+  publicationChapterBaseSchema
+    .extend({
+      type: z.literal("illustrated"),
+      alt: z.string(),
+      caption: z.string().default(""),
+      scene: publicationSceneSchema,
+    })
+    .strict(),
 ]);
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -277,7 +290,7 @@ const publicationManifestSharedFields = {
     author: z.string().nullable(),
   }),
   assets: z.array(publicationAssetSchema),
-  chapters: z.array(publicationChapterSchema).min(1),
+  chapters: z.array(legacyPublicationChapterSchema).min(1),
   externalDependencies: z.array(
     z.object({
       resourceId: z.string().min(1),
@@ -305,87 +318,111 @@ export const publicationManifestV1Schema = z.object({
   }),
 });
 
-export const publicationManifestV2Schema = z
-  .object({
-    schema: z.literal("earth-stories/publication/v2"),
-    ...publicationManifestSharedFields,
-    publication: z.object({
-      profile: z.enum(["connected", "portable", "custom", "offline"]),
-      theme: z.enum(["cng", "editorial", "atlas"]),
-      atmosphere: z.enum(["none", "sea", "ice"]).optional(),
-    }),
-    basemap: publicationBasemapSchema,
-    connectivity: publicationConnectivitySchema,
-    dependencies: z.array(publicationDependencySchema),
-    projectionDefinitions: z
-      .array(
-        z.object({
-          epsg: z.number().int().positive(),
-          definition: z.string().min(1),
-        }),
-      )
-      .default([]),
-    runtimeAssets: z
-      .array(
-        z.object({
-          id: z.string().min(1),
-          href: z.string().min(1),
-          sha256: sha256Schema,
-        }),
-      )
-      .default([]),
-  })
-  .superRefine((manifest, context) => {
-    if (manifest.connectivity.requested !== manifest.publication.profile)
-      context.addIssue({
-        code: "custom",
-        path: ["connectivity", "requested"],
-        message: "Connectivity request must match the publication profile",
-      });
-    if (
-      manifest.connectivity.state === "verified" &&
-      ((manifest.connectivity.requested === "offline" &&
-        manifest.connectivity.verified !== "offline") ||
-        (manifest.connectivity.requested !== "offline" &&
-          manifest.connectivity.verified === "offline"))
+const publicationManifestV2BaseSchema = z.object({
+  schema: z.literal("earth-stories/publication/v2"),
+  ...publicationManifestSharedFields,
+  publication: z.object({
+    profile: z.enum(["connected", "portable", "custom", "offline"]),
+    theme: z.enum(["cng", "editorial", "atlas"]),
+    atmosphere: z.enum(["none", "sea", "ice"]).optional(),
+  }),
+  basemap: publicationBasemapSchema,
+  connectivity: publicationConnectivitySchema,
+  dependencies: z.array(publicationDependencySchema),
+  projectionDefinitions: z
+    .array(
+      z.object({
+        epsg: z.number().int().positive(),
+        definition: z.string().min(1),
+      }),
     )
+    .default([]),
+  runtimeAssets: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        href: z.string().min(1),
+        sha256: sha256Schema,
+      }),
+    )
+    .default([]),
+});
+function publicationPolicy(
+  manifest: Omit<
+    z.infer<typeof publicationManifestV2BaseSchema>,
+    "schema" | "chapters"
+  >,
+  context: z.RefinementCtx,
+) {
+  if (manifest.connectivity.requested !== manifest.publication.profile)
+    context.addIssue({
+      code: "custom",
+      path: ["connectivity", "requested"],
+      message: "Connectivity request must match the publication profile",
+    });
+  if (
+    manifest.connectivity.state === "verified" &&
+    ((manifest.connectivity.requested === "offline" &&
+      manifest.connectivity.verified !== "offline") ||
+      (manifest.connectivity.requested !== "offline" &&
+        manifest.connectivity.verified === "offline"))
+  )
+    context.addIssue({
+      code: "custom",
+      path: ["connectivity", "verified"],
+      message: "Verified connectivity contradicts the requested profile",
+    });
+  if (
+    manifest.publication.profile === "offline" ||
+    manifest.connectivity.requested === "offline"
+  ) {
+    const invalid = manifest.dependencies.find(
+      ({ delivery }) => delivery !== "included",
+    );
+    if (invalid)
       context.addIssue({
         code: "custom",
-        path: ["connectivity", "verified"],
-        message: "Verified connectivity contradicts the requested profile",
+        path: ["dependencies"],
+        message: `Offline manifests may contain only included dependencies; ${invalid.id} is ${invalid.delivery}`,
       });
-    if (
-      manifest.publication.profile === "offline" ||
-      manifest.connectivity.requested === "offline"
-    ) {
-      const invalid = manifest.dependencies.find(
-        ({ delivery }) => delivery !== "included",
-      );
-      if (invalid)
-        context.addIssue({
-          code: "custom",
-          path: ["dependencies"],
-          message: `Offline manifests may contain only included dependencies; ${invalid.id} is ${invalid.delivery}`,
-        });
-      if (manifest.externalDependencies.length)
-        context.addIssue({
-          code: "custom",
-          path: ["externalDependencies"],
-          message: "Offline manifests cannot contain external dependencies",
-        });
-      if (manifest.basemap.delivery !== "included")
-        context.addIssue({
-          code: "custom",
-          path: ["basemap"],
-          message: "Offline manifests require an included basemap",
-        });
-      if (manifest.assets.some(({ delivery }) => delivery === "connected"))
-        context.addIssue({
-          code: "custom",
-          path: ["assets"],
-          message: "Offline manifests cannot contain connected assets",
-        });
-    }
+    if (manifest.externalDependencies.length)
+      context.addIssue({
+        code: "custom",
+        path: ["externalDependencies"],
+        message: "Offline manifests cannot contain external dependencies",
+      });
+    if (manifest.basemap.delivery !== "included")
+      context.addIssue({
+        code: "custom",
+        path: ["basemap"],
+        message: "Offline manifests require an included basemap",
+      });
+    if (manifest.assets.some(({ delivery }) => delivery === "connected"))
+      context.addIssue({
+        code: "custom",
+        path: ["assets"],
+        message: "Offline manifests cannot contain connected assets",
+      });
+  }
+}
+export const publicationManifestV2Schema =
+  publicationManifestV2BaseSchema.superRefine(publicationPolicy);
+
+export const publicationManifestV3Schema = publicationManifestV2BaseSchema
+  .extend({
+    schema: z.literal("earth-stories/publication/v3"),
+    chapters: z.array(publicationChapterSchema).min(1),
+    publication: publicationManifestV2BaseSchema.shape.publication.extend({
+      palette: readerPaletteSchema.optional(),
+    }),
+  })
+  .superRefine(publicationPolicy)
+  .superRefine((manifest,context)=>{
+    const assets=new Map(manifest.assets.map(asset=>[asset.id,asset]));
+    manifest.chapters.forEach((chapter,index)=>{
+      if(chapter.type!=="illustrated")return;
+      for(const layer of chapter.scene.layers) if(layer.kind==="image"&&assets.get(layer.assetId)?.kind!=="image")context.addIssue({code:"custom",path:["chapters",index,"scene"],message:"Illustration layers must reference an included image asset"});
+    });
   });
 
 function migratePublicationManifestV1(value: unknown): unknown {
@@ -436,16 +473,23 @@ function migratePublicationManifestV1(value: unknown): unknown {
   };
 }
 
-/** Canonical publication schema. V1 input is normalized to v2. */
+/** Canonical publication schema; preserve the legacy policy checks. */
 export const publicationManifestSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object") return value;
+  let migrated: unknown = value;
   if (
-    value &&
-    typeof value === "object" &&
-    (value as { schema?: unknown }).schema === "earth-stories/publication/v1"
+    (migrated as { schema?: unknown }).schema === "earth-stories/publication/v1"
   )
-    return migratePublicationManifestV1(value);
-  return value;
-}, publicationManifestV2Schema);
+    migrated = migratePublicationManifestV1(migrated);
+  if (
+    (migrated as { schema?: unknown }).schema === "earth-stories/publication/v2"
+  )
+    migrated = {
+      ...publicationManifestV2Schema.parse(migrated),
+      schema: "earth-stories/publication/v3",
+    };
+  return migrated;
+}, publicationManifestV3Schema);
 
 export function parsePublicationManifest(value: unknown): PublicationManifest {
   return publicationManifestSchema.parse(value);
@@ -466,6 +510,6 @@ export type PublicationConnectivity = z.infer<
   typeof publicationConnectivitySchema
 >;
 export type PublicationManifestV1 = z.infer<typeof publicationManifestV1Schema>;
-export type PublicationManifest = z.infer<typeof publicationManifestV2Schema>;
+export type PublicationManifest = z.infer<typeof publicationManifestV3Schema>;
 export type PublicationContinuation =
   PublicationManifest["continuations"][number];

@@ -80,7 +80,10 @@ export function deriveAuthoringReadiness(
         message: `“${chapter.title || "Untitled chapter"}” has no narrative.`,
         resolution: "Add context that explains what readers should notice.",
       });
-    if (chapter.type === "image" && !chapter.alt.trim())
+    if (
+      (chapter.type === "image" || chapter.type === "illustrated") &&
+      !chapter.alt.trim()
+    )
       findings.push({
         id: `image-alt-${chapter.id}`,
         area: "chapters",
@@ -132,7 +135,7 @@ export function deriveAuthoringReadiness(
         message: `“${chapter.title || "Untitled chapter"}” needs a data source.`,
         resolution: "Add or connect data, then choose it for this chapter.",
       });
-    if (chapter.type !== "prose" && chapter.type !== "video") {
+    if ("sourceId" in chapter) {
       const primary = chapter.sourceId ? sources.get(chapter.sourceId) : null;
       const incompatible =
         primary &&

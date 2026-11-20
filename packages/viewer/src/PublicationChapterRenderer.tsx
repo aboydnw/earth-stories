@@ -1,3 +1,4 @@
+import { IllustratedChapter } from "./IllustratedChapter.js";
 import { lazy, Suspense, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type {
@@ -149,6 +150,14 @@ export function PublicationChapterRenderer({
         </h2>
         <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
       </div>
+      {chapter.type === "illustrated" ? (
+        <IllustratedChapter
+          chapter={chapter}
+          assets={assets}
+          snapshotMode={snapshotMode}
+          focused={focused || composition === "atlas"}
+        />
+      ) : null}
       {mapChapter && asset ? (
         <StoryMapHydrationBoundary
           eager={snapshotMode || composition === "authoring-map"}

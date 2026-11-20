@@ -17,6 +17,7 @@ export function ChapterAddMenu({
   canAddChart,
   onToggle,
   onAddProse,
+  onAddIllustrated,
   onAddScrolly,
   onAddMap,
   onAddImage,
@@ -31,6 +32,7 @@ export function ChapterAddMenu({
   canAddChart: boolean;
   onToggle: () => void;
   onAddProse: () => void;
+  onAddIllustrated?: () => void;
   onAddScrolly: () => void;
   onAddMap: () => void;
   onAddImage: () => void;
@@ -103,6 +105,14 @@ export function ChapterAddMenu({
             description="Prose, headings and links"
             onClick={onAddProse}
           />
+          {onAddIllustrated ? (
+            <MenuItem
+              icon={<Image size={17} />}
+              title="Illustrated scene"
+              description="Layered artwork and scroll motion"
+              onClick={onAddIllustrated}
+            />
+          ) : null}
           <MenuItem
             icon={<Path size={17} />}
             title="Guided tour"

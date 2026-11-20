@@ -1,3 +1,4 @@
+import { staticScene } from "./staticScene.js";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import {
@@ -250,6 +251,28 @@ export async function buildArchivalHtml({
     if (chapter.type === "video") {
       chapters.push(
         `<section>${heading}<div class="unavailable">Embedded video is preserved as a reference in this archival edition. <a href="${escapeHtml(chapter.originalUrl)}">Open original video</a>.</div>${narrative}</section>`,
+      );
+      continue;
+    }
+    if (chapter.type === "illustrated") {
+      const images = new Map<string, string>();
+      for (const layer of chapter.scene.layers) {
+        if (layer.kind !== "image" || images.has(layer.sourceId)) continue;
+        const source = sources.get(layer.sourceId);
+        if (source?.kind === "image")
+          images.set(
+            source.id,
+            await dataUrl(await projectAsset(projectDirectory, source.path)),
+          );
+      }
+      const svg = staticScene(
+        chapter.scene,
+        chapter.alt,
+        images,
+        project.publication.palette,
+      );
+      chapters.push(
+        `<section>${heading}<figure><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" alt="${escapeHtml(chapter.alt)}"><figcaption>${escapeHtml(chapter.caption)}</figcaption></figure>${chapterProvenance(chapter.scene.layers.flatMap((layer) => (layer.kind === "image" ? [layer.sourceId] : [])))}${narrative}</section>`,
       );
       continue;
     }

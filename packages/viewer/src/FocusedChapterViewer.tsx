@@ -1,3 +1,4 @@
+import { readerPaletteStyle } from "./readerPalette.js";
 import { useMemo } from "react";
 import {
   publicationBasemapHref,
@@ -48,6 +49,7 @@ export function FocusedChapterViewer({
 
   return (
     <main
+      style={readerPaletteStyle(manifest.publication.palette)}
       className={`story-publication story-publication--${manifest.publication.theme} story-publication--focused`}
     >
       <article className="story-chapters story-chapters--focused">
