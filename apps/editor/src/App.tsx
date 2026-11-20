@@ -74,6 +74,7 @@ import { PublishMenu } from "./PublishMenu";
 import { nextGuidanceAction, workflowStages } from "./editorReadiness";
 import type { GuidanceDestination } from "./editorReadiness";
 import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
+import { reconcileSavedDraft } from "./reconcileSavedDraft";
 import { openReaderPreview as openSavedReaderPreview } from "./openReaderPreview";
 import { usePublicationReadiness } from "./usePublicationReadiness";
 import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
@@ -543,7 +544,7 @@ export function App() {
       setSaveState("saving");
       const saved = await saveProject(project);
       const unchanged = projectRef.current === project;
-      if (unchanged) setProject(saved);
+      setProject((current) => reconcileSavedDraft(current, project, saved));
       persistedProjectRef.current = structuredClone(saved);
       setSaveState(unchanged ? "saved" : "changed");
       publicationReadiness.invalidate();
@@ -1547,7 +1548,7 @@ export function App() {
           };
         },
         saveDraft: async () => {
-          const saved = await persist();
+          const saved = saveState === "saved" ? project : await persist();
           if (!saved)
             throw new Error(
               "Could not save the story for preview. Your edits remain in the editor.",

@@ -1,5 +1,6 @@
 const prefix = "earth-stories:preview-receipt:";
 const memory = new Map<string, string>();
+const unsynced = new Set<string>();
 
 function storage(): Storage | null {
   try {
@@ -14,7 +15,10 @@ export function readPreviewReceipt(projectId: string): string | null {
   let raw: string | null;
   try {
     const available = storage();
-    raw = available ? available.getItem(key) : (memory.get(key) ?? null);
+    raw =
+      unsynced.has(key) || !available
+        ? (memory.get(key) ?? null)
+        : available.getItem(key);
   } catch {
     raw = memory.get(key) ?? null;
   }
@@ -35,6 +39,7 @@ export function readPreviewReceipt(projectId: string): string | null {
     // The in-memory copy is cleared below.
   }
   memory.delete(key);
+  unsynced.delete(key);
   return null;
 }
 
@@ -46,8 +51,13 @@ export function recordPreviewReceipt(
   const value = JSON.stringify({ projectId, revision });
   memory.set(key, value);
   try {
-    storage()?.setItem(key, value);
+    const available = storage();
+    if (available) {
+      available.setItem(key, value);
+      unsynced.delete(key);
+    } else unsynced.add(key);
   } catch {
+    unsynced.add(key);
     // The in-memory copy remains available when local storage is blocked.
   }
 }
@@ -62,6 +72,7 @@ export function previewMatchesRevision(
 export function clearPreviewReceipt(projectId: string): void {
   const key = `${prefix}${projectId}`;
   memory.delete(key);
+  unsynced.delete(key);
   try {
     storage()?.removeItem(key);
   } catch {
