@@ -23,7 +23,7 @@ import {
   type StoryBrief,
   type PreparedReference,
 } from "@earth-stories/story-schema";
-import { prepareReferences, normalizeRaster } from "./reference-inputs.js";
+import { prepareReferences } from "./reference-inputs.js";
 import { assembleCandidate, digestBytes } from "./candidate.js";
 const activeStages = new Set([
   "queued",
@@ -120,7 +120,7 @@ export class GenerationJobs {
         if (activeStages.has(job.stage)) {
           job.stage = "failed";
           job.error =
-            "Generation was interrupted when the service stopped. Retry to reuse completed artwork.";
+            "Generation was interrupted when the service stopped. Retry to reuse the completed story plan.";
           await this.save(job);
         }
       } catch {
@@ -175,7 +175,7 @@ export class GenerationJobs {
   }
   async start(input: unknown): Promise<GenerationJob> {
     if (!this.provider.configured)
-      throw new Error("OpenAI API credentials are not configured.");
+      throw new Error("Continue with ChatGPT before generating a story.");
     if (this.closed || this.running || this.starting)
       throw new Error(
         "Another generation is running. Wait or cancel it first.",
@@ -275,57 +275,10 @@ export class GenerationJobs {
         },
         signal,
       );
-      for (const request of job.plan!.artwork) {
-        signal.throwIfAborted();
-        const cached = job.assets.find((a) => a.id === request.id);
-        if (cached) {
-          try {
-            const bytes = await this.asset(id, cached.path);
-            if (digestBytes(bytes) === cached.digest) continue;
-          } catch {
-            /* Regenerate a missing or damaged checkpoint. */
-          }
-        }
-        const result = await this.provider.illustrate(
-          request,
-          references,
-          signal,
+      if (job.plan!.artwork.length)
+        throw new Error(
+          "This unfinished candidate requires the retired image-generation service. Start a new vector story; existing ready stories are preserved.",
         );
-        signal.throwIfAborted();
-        const bytes = await normalizeRaster(result.bytes);
-        signal.throwIfAborted();
-        const digest = digestBytes(bytes),
-          path = `assets/${digest}.png`;
-        if (
-          job.assets
-            .filter((a) => a.id !== request.id)
-            .reduce((sum, a) => sum + a.sizeBytes, 0) +
-            bytes.length >
-          100 * 1024 * 1024
-        )
-          throw new Error(
-            "Generated assets exceed the 100 MiB candidate limit.",
-          );
-        await this.contained(id, "assets");
-        await atomic(join(this.directory(id), path), bytes);
-        job = await this.change(
-          id,
-          (j) => {
-            j.assets = j.assets.filter((a) => a.id !== request.id);
-            j.assets.push({
-              id: request.id,
-              path,
-              digest,
-              sizeBytes: bytes.length,
-              mediaType: "image/png",
-              model: result.model,
-              prompt: request.prompt,
-            });
-            j.usage.push(result.usage);
-          },
-          signal,
-        );
-      }
       job = await this.change(
         id,
         (j) => {
@@ -371,7 +324,7 @@ export class GenerationJobs {
       if (this.closed || this.running || this.starting)
         throw new Error("Another generation is running.");
       if (!this.provider.configured)
-        throw new Error("OpenAI API credentials are not configured.");
+        throw new Error("Continue with ChatGPT before generating a story.");
       this.starting = true;
       try {
         const job = await this.get(id);
@@ -468,6 +421,12 @@ export class GenerationJobs {
   }
   activity() {
     return this.running ? 1 : 0;
+  }
+  async cancelActive() {
+    if (this.running) {
+      await this.cancel(this.running.id);
+      await this.whenIdle();
+    }
   }
   close() {
     this.closed = true;

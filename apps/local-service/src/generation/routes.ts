@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { GenerationJob } from "@earth-stories/story-schema";
+import type { ChatGPTConnection } from "../chatgpt/connection.js";
+import { ChatGPTProvider } from "./chatgpt-provider.js";
 import type { GenerationJobs } from "./jobs.js";
 const publicJob = (job: GenerationJob) => ({
   ...job,
@@ -12,13 +14,13 @@ function json(res: ServerResponse, status: number, value: unknown) {
   });
   res.end(JSON.stringify(value));
 }
-async function body(req: IncomingMessage) {
+async function body(req: IncomingMessage, limit = 140 * 1024 * 1024) {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > 140 * 1024 * 1024)
-      throw new Error("Generation request exceeds 140 MiB.");
+    if (size > limit)
+      throw new Error("Generation request exceeds its size limit.");
     chunks.push(Buffer.from(chunk));
   }
   return JSON.parse(Buffer.concat(chunks).toString());
@@ -28,9 +30,43 @@ export async function generationRoute(
   res: ServerResponse,
   url: URL,
   jobs: GenerationJobs,
+  connection?: ChatGPTConnection,
 ): Promise<boolean> {
   if (!url.pathname.startsWith("/api/generation/")) return false;
   try {
+    if (url.pathname.startsWith("/api/generation/connection") && connection) {
+      const action = url.pathname.slice("/api/generation/connection".length);
+      if (req.method === "GET" && !action) json(res, 200, connection.status());
+      else if (req.method === "POST" && !action) {
+        if (jobs.activity())
+          throw new Error(
+            "Cancel generation before changing your ChatGPT connection.",
+          );
+        const input = await body(req, 4096);
+        if (
+          input?.accountId !== undefined &&
+          typeof input.accountId !== "string"
+        )
+          throw new Error("Invalid account selection.");
+        json(res, 200, await connection.start(input?.accountId));
+      } else if (req.method === "POST" && action === "/cancel") {
+        await connection.cancel();
+        json(res, 200, connection.status());
+      } else if (req.method === "DELETE" && !action) {
+        await jobs.cancelActive();
+        await connection.signOut();
+        json(res, 200, connection.status());
+      } else json(res, 405, { error: "Method not allowed." });
+      return true;
+    }
+    if (
+      url.pathname === "/api/generation/models" &&
+      req.method === "GET" &&
+      jobs.provider instanceof ChatGPTProvider
+    ) {
+      json(res, 200, await jobs.provider.models());
+      return true;
+    }
     if (url.pathname === "/api/generation/status" && req.method === "GET") {
       json(res, 200, {
         configured: jobs.provider.configured,

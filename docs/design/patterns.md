@@ -134,11 +134,19 @@ an override restores theme colors. Publication checks warn about low text contra
 ### Story creation from a brief
 
 The workspace creation entry collects one brief and classified references. It
-shows credential availability and API-charge disclosure before generation.
+offers Continue with ChatGPT, saved accounts, available models, and Manage usage before generation. It identifies when the ChatGPT plan is in use; sign-in errors and usage limits do not switch billing paths.
 Progress survives a page reload and names the current stage; failed or cancelled
-jobs can be retried using completed artwork. The result shows reader colors,
-chapters, images, missing-content notes, and a separate candidate reader preview.
+jobs can be retried using a completed valid plan. The result shows reader colors,
+chapters, composed scenes, missing-content notes, and a separate candidate reader preview.
 Acceptance is disabled until validation succeeds and while import is pending.
 Only **Create this story** creates an editable workspace project; publishing
 remains a separate author action. The earlier chapter-specific Studio prototype
 has been removed. No conversation history or existing-story AI mutation is exposed.
+
+Curated generation recipes select landscape, flow, reveal, or diagram layouts.
+They compile to editable path/text layers with short labels and restrained motion;
+no executable code, arbitrary drawing commands, or generated raster files are
+accepted by the generation provider. Each template preserves a finished still
+frame for reduced motion and archival export. Reader palettes use contrast-checked
+estuary, clay, or alpine roles. These are authored illustrations, never implied
+measurements or replacements for source data.

@@ -107,7 +107,10 @@ describe("DesktopService", () => {
         return { ready: Promise.resolve(running), close: running.close };
       },
       createCredentialStore: (path) => {
-        expect(path).toBe(paths.credentialsFile);
+        expect([
+          paths.credentialsFile,
+          `${paths.credentialsFile}.chatgpt`,
+        ]).toContain(path);
         return credentials;
       },
     });

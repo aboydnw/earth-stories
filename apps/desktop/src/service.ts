@@ -184,6 +184,10 @@ export class DesktopService {
         acquireCapability: this.#tools?.acquireCapability,
       },
       credentials: this.#createCredentialStore(this.#paths.credentialsFile),
+      chatgptCredentials: this.#createCredentialStore(
+        `${this.#paths.credentialsFile}.chatgpt`,
+      ),
+      chatgptLockPath: `${this.#paths.credentialsFile}.chatgpt.lock`,
       capabilityToken: this.capabilityToken,
     };
   }

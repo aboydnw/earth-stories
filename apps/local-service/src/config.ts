@@ -42,6 +42,8 @@ export interface LocalServiceConfig {
     ) => Promise<() => Promise<void>>;
   };
   credentials: CredentialStore;
+  chatgptCredentials?: CredentialStore;
+  chatgptLockPath?: string;
   githubApp?: GitHubAppConfig | null;
   capabilityToken: string | null;
   limits?: Partial<ServiceLimits>;

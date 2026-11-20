@@ -40,6 +40,7 @@ export const referenceInputSchema = z.discriminatedUnion("kind", [
 export const storyBriefSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
+    model: z.string().min(1).max(200).optional(),
     audience: z.string().max(2000),
     takeaway: z.string().max(4000),
     narrative: z.string().max(50000),
@@ -215,15 +216,6 @@ export interface GenerationProvider {
     references: PreparedReference[],
     signal: AbortSignal,
   ): Promise<{ plan: StoryPlan; usage: Record<string, unknown> }>;
-  illustrate(
-    request: IllustrationRequest,
-    references: PreparedReference[],
-    signal: AbortSignal,
-  ): Promise<{
-    bytes: Uint8Array;
-    model: string;
-    usage: Record<string, unknown>;
-  }>;
 }
 
 export function generationPlanIssues(
@@ -241,9 +233,16 @@ export function generationPlanIssues(
     ),
   );
   const issues: string[] = [];
-  if (brief.requestedOutputs.includes("illustration") && !images.size)
+  if (
+    brief.requestedOutputs.includes("illustration") &&
+    !scenes.some((scene) =>
+      scene.layers.some(
+        (layer) => layer.kind === "path" || layer.kind === "image",
+      ),
+    )
+  )
     issues.push(
-      "The brief requested generated artwork, but no scene uses artwork.",
+      "The brief requested an illustration, but no scene contains visual layers.",
     );
   if (
     brief.requestedOutputs.includes("animation") &&

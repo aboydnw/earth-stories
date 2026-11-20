@@ -1,6 +1,7 @@
 import type { GenerationProvider } from "@earth-stories/story-schema";
 import { GenerationJobs } from "./generation/jobs.js";
-import { OpenAIProvider } from "./generation/openai-provider.js";
+import { ChatGPTProvider } from "./generation/chatgpt-provider.js";
+import { ChatGPTConnection } from "./chatgpt/connection.js";
 import { type Server } from "node:http";
 import type { Socket } from "node:net";
 import { ProjectStore } from "@earth-stories/project-store";
@@ -186,6 +187,7 @@ export function beginLocalService(
   const sockets = new Set<Socket>();
   let server: Server | null = null;
   let generationJobs: GenerationJobs | null = null;
+  let chatgpt: ChatGPTConnection | null = null;
   let closePromise: Promise<void> | null = null;
   let githubConnection: GitHubAppConnection | null = null;
   const close = (): Promise<void> => {
@@ -196,6 +198,7 @@ export function beginLocalService(
     );
     closePromise = Promise.all([
       githubConnection?.close(),
+      chatgpt?.close(),
       generationJobs?.whenIdle(),
     ]).then(
       () =>
@@ -259,9 +262,23 @@ export function beginLocalService(
         connection.assertAuthorizationCurrent(identity, repository),
     });
     await store.initialize();
+    // Embedders must supply a dedicated store; never reuse GitHub credentials.
+    chatgpt = new ChatGPTConnection(
+      resolved.chatgptCredentials ?? {
+        read: async () => null,
+        write: async () => {
+          throw new Error(
+            "ChatGPT credential storage is not configured for this service.",
+          );
+        },
+        clear: async () => {},
+      },
+      { lockPath: resolved.chatgptLockPath },
+    );
+    await chatgpt.initialize();
     generationJobs = new GenerationJobs(
       store,
-      dependencies.generationProvider ?? new OpenAIProvider(),
+      dependencies.generationProvider ?? new ChatGPTProvider(chatgpt),
     );
     await generationJobs.initialize();
     if (startup.signal.aborted) throw closedBeforeReady(startup.signal);
@@ -270,6 +287,7 @@ export function beginLocalService(
       pages: pagesJobs,
       github: connection,
       generation: generationJobs,
+      chatgpt,
     });
     server.on("connection", (socket) => {
       sockets.add(socket);
@@ -305,13 +323,18 @@ export function beginLocalService(
       activity,
       drain: async (options) => {
         generationJobs?.close();
+        await chatgpt?.close();
         await generationJobs?.whenIdle();
         return drainJobRegistries(conversionJobs, pagesJobs, options);
       },
       forceTerminateConversions: () => conversionJobs.forceTerminate(),
       close,
     };
-  })();
+  })().catch(async (cause) => {
+    await chatgpt?.close().catch(() => {});
+    await close().catch(() => {});
+    throw cause;
+  });
 
   return { ready, close };
 }

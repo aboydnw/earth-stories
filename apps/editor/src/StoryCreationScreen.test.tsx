@@ -11,9 +11,19 @@ import { EarthStoriesProvider } from "@earth-stories/ui";
 import { StoryCreationScreen } from "./StoryCreationScreen";
 import * as api from "./api";
 vi.mock("./api", () => ({
-  generationStatus: vi
+  chatGPTStatus: vi.fn().mockResolvedValue({
+    configured: false,
+    pending: false,
+    activeAccount: null,
+    accounts: [],
+    error: null,
+  }),
+  chatGPTModels: vi
     .fn()
-    .mockResolvedValue({ configured: false, running: false }),
+    .mockResolvedValue([{ id: "model", label: "Story model" }]),
+  connectChatGPT: vi.fn(),
+  cancelChatGPT: vi.fn(),
+  disconnectChatGPT: vi.fn(),
   getGeneration: vi.fn(),
   acceptGeneration: vi.fn(),
   startGeneration: vi.fn(),
@@ -35,7 +45,7 @@ it("explains missing credentials and keeps generation disabled", async () => {
       />
     </EarthStoriesProvider>,
   );
-  await screen.findByText(/OPENAI_API_KEY/);
+  await screen.findByRole("button", { name: "Continue with ChatGPT" });
   expect(
     (
       screen.getByRole("button", {
@@ -83,9 +93,14 @@ it("accepts a ready candidate only once during rapid clicks", async () => {
 });
 
 it("submits long reference URLs with a bounded display name", async () => {
-  vi.mocked(api.generationStatus).mockResolvedValue({
+  vi.mocked(api.chatGPTStatus).mockResolvedValue({
     configured: true,
-    running: false,
+    pending: false,
+    activeAccount: "account",
+    accounts: [
+      { id: "account", label: "Author", connected: true, planEnabled: true },
+    ],
+    error: null,
   } as never);
   vi.mocked(api.startGeneration).mockResolvedValue({ id: "new-job" } as never);
   render(

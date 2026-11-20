@@ -1,0 +1,125 @@
+import { expect, it, vi } from "vitest";
+import { ChatGPTProvider } from "./chatgpt-provider.js";
+const brief = {
+  title: "Watershed",
+  audience: "Public",
+  takeaway: "Water connects places",
+  narrative: "Illustrative story",
+  visualDirection: "Editorial",
+  references: [],
+  requestedOutputs: ["illustration", "animation", "prose"] as (
+    "illustration" | "animation" | "prose"
+  )[],
+};
+const blueprint = {
+  title: "Watershed",
+  description: "An illustrative story",
+  palette: "estuary",
+  chapters: [
+    {
+      id: "river",
+      title: "Water connects us",
+      narrative: "An illustrative watershed.",
+      alt: "A stylized river",
+      caption: "Illustration, not measured data",
+      recipe: {
+        template: "landscape",
+        heading: "Water connects us",
+        labels: ["Headwaters", "Coast"],
+        motif: "river",
+        motion: true,
+      },
+    },
+  ],
+  warnings: [],
+};
+const connection = {
+  status: () => ({ configured: true }),
+  access: async () => ({ token: "private-token", accountId: "account" }),
+};
+const event = (type: string, data: object) =>
+  `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+const completed = () =>
+  event("response.output_text.delta", { delta: JSON.stringify(blueprint) }) +
+  event("response.completed", { response: { usage: { output_tokens: 42 } } });
+function setup(stream = completed()) {
+  const fetcher = vi.fn(async (input: URL | RequestInfo) =>
+    String(input).endsWith("/models")
+      ? Response.json({
+          models: [
+            {
+              slug: "available-model",
+              display_name: "Available model",
+              visibility: "list",
+            },
+          ],
+        })
+      : new Response(stream, {
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+  );
+  return {
+    provider: new ChatGPTProvider(connection as never, { fetcher }),
+    fetcher,
+  };
+}
+it("uses a listed model and streamed subscription inference to compose editable vectors", async () => {
+  const { provider, fetcher } = setup();
+  const result = await provider.plan(brief, [], new AbortController().signal);
+  expect(result.plan.artwork).toEqual([]);
+  expect(
+    result.plan.chapters[0]?.scene?.layers.every((l) => l.kind !== "image"),
+  ).toBe(true);
+  const call = fetcher.mock.calls.find(([url]) =>
+    String(url).endsWith("/responses"),
+  )!;
+  const body = JSON.parse(
+    (call as unknown as [string, RequestInit])[1].body as string,
+  );
+  expect(body).toMatchObject({
+    store: false,
+    stream: true,
+    model: "available-model",
+  });
+  expect(body).not.toHaveProperty("max_output_tokens");
+  expect(body).not.toHaveProperty("tools");
+  expect(
+    fetcher.mock.calls.every(([url]) => !String(url).includes("/images")),
+  ).toBe(true);
+});
+it.each([
+  "",
+  event("response.output_text.delta", { delta: JSON.stringify(blueprint) }),
+  event("response.incomplete", {}),
+])("does not accept missing terminal success", async (stream) => {
+  await expect(
+    setup(stream).provider.plan(brief, [], new AbortController().signal),
+  ).rejects.toThrow(/incomplete|interrupted|empty/i);
+});
+it("reports usage limits without retrying or falling back to other billing", async () => {
+  const { provider, fetcher } = setup(
+    event("response.failed", {
+      response: {
+        error: {
+          code: "subscription_sharing_usage_limit_exceeded",
+          message: "private provider details",
+        },
+      },
+    }),
+  );
+  await expect(
+    provider.plan(brief, [], new AbortController().signal),
+  ).rejects.toThrow(/usage limit/i);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+it("rejects unavailable models before inference", async () => {
+  const { provider, fetcher } = setup();
+  await expect(
+    provider.plan(
+      { ...brief, model: "not-listed" },
+      [],
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow(/available/i);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});

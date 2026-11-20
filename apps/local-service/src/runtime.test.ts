@@ -259,3 +259,53 @@ describe("startLocalService", () => {
     });
   });
 });
+
+it("releases the ChatGPT process lease after credential initialization fails", async () => {
+  const options = await config();
+  options.chatgptLockPath = join(
+    options.projectsDirectory,
+    "..",
+    "chatgpt.lock",
+  );
+  options.chatgptCredentials = {
+    ...credentials,
+    read: async () => ({ login: "ChatGPT", token: "invalid-state" }),
+  };
+  const degraded = await startLocalService(options);
+  expect(
+    (await (await fetch(`${degraded.origin}/api/generation/connection`)).json())
+      .error,
+  ).toContain("unreadable");
+  await degraded.close();
+  options.chatgptCredentials = credentials;
+  const service = await startLocalService(options);
+  await service.close();
+});
+
+it("keeps projects available when another service owns ChatGPT and retries after it closes", async () => {
+  const first = await config(),
+    second = await config();
+  first.chatgptLockPath = join(first.projectsDirectory, "..", "chatgpt.lock");
+  second.chatgptLockPath = first.chatgptLockPath;
+  first.chatgptCredentials = credentials;
+  second.chatgptCredentials = credentials;
+  const a = await startLocalService(first),
+    b = await startLocalService(second);
+  try {
+    expect((await fetch(`${b.origin}/api/projects`)).status).toBe(200);
+    expect(
+      (await (await fetch(`${b.origin}/api/generation/connection`)).json())
+        .error,
+    ).toMatch(/another|unavailable/i);
+    await a.close();
+    const response = await fetch(`${b.origin}/api/generation/connection`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(response.status).toBe(200);
+  } finally {
+    await a.close();
+    await b.close();
+  }
+});

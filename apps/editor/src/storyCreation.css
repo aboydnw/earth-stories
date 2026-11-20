@@ -111,3 +111,15 @@
 .generation-result {
   margin: 24px 0;
 }
+
+.chatgpt-connection {
+  display: grid;
+  gap: 12px;
+  border-bottom: 1px solid var(--es-border);
+  padding-bottom: 24px;
+}
+.chatgpt-connection__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
