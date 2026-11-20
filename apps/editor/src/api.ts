@@ -518,6 +518,8 @@ export const startGeneration = (brief: StoryBrief) =>
   });
 export const getGeneration = (id: string) =>
   request<GenerationJob>(`/api/generation/jobs/${encodeURIComponent(id)}`);
+export const getGenerationBrief = (id: string) =>
+  request<StoryBrief>(`/api/generation/jobs/${encodeURIComponent(id)}/brief`);
 export const generationPreview = (id: string) =>
   request<PublicationManifest>(
     `/api/generation/jobs/${encodeURIComponent(id)}/preview`,

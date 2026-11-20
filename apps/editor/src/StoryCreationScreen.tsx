@@ -16,6 +16,7 @@ import {
 } from "@earth-stories/ui";
 import { StoryViewer } from "@earth-stories/viewer";
 import * as api from "./api";
+import { parseReferenceLinks } from "./reference-links";
 import { ChatGPTConnectionPanel } from "./ChatGPTConnectionPanel";
 import { GenerationResult } from "./GenerationResult";
 import "./storyCreation.css";
@@ -57,6 +58,7 @@ export function StoryCreationScreen({
   onBack: () => void;
 }) {
   const [brief, setBrief] = useState<StoryBrief>(initial);
+  const [editing, setEditing] = useState(false);
   const [job, setJob] = useState<GenerationJob | null>(null);
   const [manifest, setManifest] = useState<PublicationManifest | null>(null);
   const [configured, setConfigured] = useState<boolean | null>(null);
@@ -68,6 +70,7 @@ export function StoryCreationScreen({
   const submitting = useRef(false),
     acceptLock = useRef(false);
   useEffect(() => {
+    setEditing(false);
     setJob(null);
     setManifest(null);
     setError("");
@@ -103,16 +106,11 @@ export function StoryCreationScreen({
     setBusy(true);
     setError("");
     try {
-      const links = urls
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((url) => ({
-          kind: "url" as const,
-          name: url.slice(0, 200),
-          classification: "background" as const,
-          url,
-        }));
+      const links = parseReferenceLinks(urls);
+      if (brief.references.length + links.length > 20)
+        throw new Error(
+          "Use at most 20 references, including files and links.",
+        );
       const created = await api.startGeneration({
         ...brief,
         references: [...brief.references, ...links],
@@ -233,7 +231,11 @@ export function StoryCreationScreen({
       <div className="story-creation__intro">
         <p className="eyebrow">From an idea to a story</p>
         <h1>
-          {job ? "Review your new story" : "What story do you want to tell?"}
+          {editing
+            ? "Edit your story brief"
+            : job
+              ? "Review your new story"
+              : "What story do you want to tell?"}
         </h1>
         <p>
           Describe the audience, message, and visual direction. Review a working
@@ -245,7 +247,7 @@ export function StoryCreationScreen({
           {error}
         </StatusNotice>
       ) : null}
-      {!jobId ? (
+      {!jobId || editing ? (
         <form
           className="story-creation__form"
           onSubmit={(e) => {
@@ -351,7 +353,7 @@ export function StoryCreationScreen({
             ))}
             <FormField
               label="Public reference links"
-              hint="One HTTPS link per line, directly to a supported file. Links are used as background context."
+              hint="One HTTPS link per line, directly to a supported file—not a webpage. Put descriptions in Visual direction or Story context and source material. For webpage styling, upload a screenshot and select Visual style."
             >
               <TextArea
                 rows={3}
@@ -376,7 +378,9 @@ export function StoryCreationScreen({
         <>
           <section className="story-creation__progress" aria-live="polite">
             <h2>{stageLabels[job.stage]}</h2>
-            <p>Composing editable chapters and vector scenes.</p>
+            {!terminal.has(job.stage) ? (
+              <p>Composing editable chapters and vector scenes.</p>
+            ) : null}
             {job.error ? <p>{job.error}</p> : null}
             {!terminal.has(job.stage) ? (
               <ActionButton
@@ -388,6 +392,21 @@ export function StoryCreationScreen({
                 }
               >
                 Cancel generation
+              </ActionButton>
+            ) : null}
+            {job.stage === "failed" || job.stage === "cancelled" ? (
+              <ActionButton
+                disabled={busy}
+                onClick={() =>
+                  void action(async () => {
+                    const restored = await api.getGenerationBrief(job.id);
+                    setBrief(restored);
+                    setUrls("");
+                    setEditing(true);
+                  })
+                }
+              >
+                Edit brief and references
               </ActionButton>
             ) : null}
             {job.stage === "failed" || job.stage === "cancelled" ? (
@@ -407,11 +426,13 @@ export function StoryCreationScreen({
           {job.stage === "failed" || job.stage === "cancelled" ? (
             <ChatGPTConnectionPanel onReady={() => {}} />
           ) : null}
-          <GenerationResult
-            job={job}
-            accepting={accepting}
-            onAccept={() => void accept()}
-          />
+          {job.stage !== "failed" && job.stage !== "cancelled" ? (
+            <GenerationResult
+              job={job}
+              accepting={accepting}
+              onAccept={() => void accept()}
+            />
+          ) : null}
           {job.stage === "accepted" && job.acceptance ? (
             <ActionButton
               onClick={() => void onCreated(job.acceptance!.projectId)}

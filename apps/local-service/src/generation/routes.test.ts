@@ -47,3 +47,20 @@ it("accepts through the job manager and returns its exact receipt", async () => 
     candidateDigest: "digest",
   });
 });
+
+it("returns original inputs only through the explicit brief recovery endpoint", async () => {
+  const brief = {
+    title: "Birds",
+    references: [{ kind: "text", text: "Original notes" }],
+  };
+  const getBrief = vi.fn().mockResolvedValue(brief);
+  const response = { writeHead: vi.fn(), end: vi.fn() };
+  await generationRoute(
+    { method: "GET" } as never,
+    response as never,
+    new URL("http://localhost/api/generation/jobs/job/brief"),
+    { getBrief } as unknown as GenerationJobs,
+  );
+  expect(getBrief).toHaveBeenCalledWith("job");
+  expect(JSON.parse(response.end.mock.calls[0]![0])).toEqual(brief);
+});
