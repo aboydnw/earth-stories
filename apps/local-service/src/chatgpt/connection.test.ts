@@ -11,6 +11,7 @@ afterEach(async () => {
 async function setup(
   overrides: Record<string, unknown> = {},
   tokenOverrides: Record<string, unknown> = {},
+  callbackPort?: number,
 ) {
   const pair = await generateKeyPair("RS256");
   const keys = {
@@ -63,7 +64,11 @@ async function setup(
       return new Response(null, { status: 200 });
     },
   );
-  const connection = new ChatGPTConnection(store, { fetcher, keys });
+  const connection = new ChatGPTConnection(store, {
+    fetcher,
+    keys,
+    callbackPort,
+  });
   connections.push(connection);
   await connection.initialize();
   const start = async (clientId?: string) => {
@@ -311,4 +316,22 @@ it("refreshes an expired quarantined access token after verification recovers", 
       String(init?.body).includes("grant_type=refresh_token"),
     ),
   ).toHaveLength(2);
+});
+
+it("uses the configured loopback port, reports conflicts, and reuses it after cancellation", async () => {
+  const first = await setup();
+  const launch = await first.connection.start();
+  const port = Number(new URL(launch.url).port);
+  const fixed = await setup({}, {}, port);
+  await expect(fixed.connection.start()).rejects.toThrow(
+    `ChatGPT sign-in port ${port} is already in use`,
+  );
+  await first.connection.cancel();
+  const auth = await fixed.start();
+  expect(auth.searchParams.get("redirect_uri")).toBe(
+    `http://127.0.0.1:${port}/auth/callback`,
+  );
+  expect((await fixed.complete(auth)).status).toBe(200);
+  await fixed.connection.cancel();
+  expect(new URL((await fixed.connection.start()).url).port).toBe(String(port));
 });

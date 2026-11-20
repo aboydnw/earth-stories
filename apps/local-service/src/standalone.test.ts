@@ -7,6 +7,17 @@ import {
 } from "./standalone.js";
 
 describe("resolveStandaloneConfig", () => {
+  it("uses an optional fixed ChatGPT callback port for SSH forwarding", () => {
+    expect(resolveStandaloneConfig({}).chatgptCallbackPort).toBeUndefined();
+    expect(
+      resolveStandaloneConfig({ EARTH_STORIES_CHATGPT_CALLBACK_PORT: " 4319 " })
+        .chatgptCallbackPort,
+    ).toBe(4319);
+    expect(
+      resolveStandaloneConfig({ EARTH_STORIES_CHATGPT_CALLBACK_PORT: " " })
+        .chatgptCallbackPort,
+    ).toBeUndefined();
+  });
   it("imports without starting the service and preserves every legacy default", () => {
     const repositoryDirectory = "/opt/earth-stories";
     const cwd = "/work";

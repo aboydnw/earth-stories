@@ -48,6 +48,17 @@ afterEach(async () => {
 });
 
 describe("resolveLocalServiceConfig", () => {
+  it.each([-1, 0, 65536, 1.5, Number.NaN])(
+    "rejects invalid fixed callback port %s",
+    async (chatgptCallbackPort) => {
+      await expect(
+        resolveLocalServiceConfig({
+          ...(await fixture()),
+          chatgptCallbackPort,
+        }),
+      ).rejects.toThrow(/ChatGPT callback port/);
+    },
+  );
   it("creates the projects directory and fills byte-identical default limits", async () => {
     const config = await fixture();
 
