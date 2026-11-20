@@ -208,6 +208,8 @@ export function App() {
   const [previewReceiptVersion, setPreviewReceiptVersion] = useState(0);
   const [previewLink, setPreviewLink] = useState<string | null>(null);
   const previewOpening = useRef(false);
+  const pendingSave = useRef<Promise<StoryProject | null> | null>(null);
+  const lastSaveError = useRef<unknown>(null);
   const projectRef = useRef(project);
   projectRef.current = project;
   useEffect(() => {
@@ -539,21 +541,46 @@ export function App() {
     }
   }
   async function persist(): Promise<StoryProject | null> {
-    if (!project) return null;
+    const projectId = projectRef.current?.id;
+    if (!projectId) return null;
+    while (pendingSave.current) {
+      const saved = await pendingSave.current;
+      if (!saved || projectRef.current?.id !== projectId) return null;
+      if (projectRef.current === persistedProjectRef.current) return saved;
+    }
+    const submitted = projectRef.current;
+    if (!submitted || submitted.id !== projectId) return null;
+    const saving = (async () => {
+      try {
+        lastSaveError.current = null;
+        setSaveState("saving");
+        const saved = await saveProject(submitted);
+        const current = reconcileSavedDraft(
+          projectRef.current,
+          submitted,
+          saved,
+        );
+        projectRef.current = current;
+        setProject(current);
+        if (current?.id === submitted.id) {
+          persistedProjectRef.current = saved;
+          setSaveState(current === saved ? "saved" : "changed");
+          publicationReadiness.invalidate();
+        }
+        await refreshProjects();
+        return saved;
+      } catch (cause) {
+        lastSaveError.current = cause;
+        setSaveState("save-error");
+        showError(cause);
+        return null;
+      }
+    })();
+    pendingSave.current = saving;
     try {
-      setSaveState("saving");
-      const saved = await saveProject(project);
-      const unchanged = projectRef.current === project;
-      setProject((current) => reconcileSavedDraft(current, project, saved));
-      persistedProjectRef.current = structuredClone(saved);
-      setSaveState(unchanged ? "saved" : "changed");
-      publicationReadiness.invalidate();
-      await refreshProjects();
-      return saved;
-    } catch (cause) {
-      setSaveState("save-error");
-      showError(cause);
-      return null;
+      return await saving;
+    } finally {
+      if (pendingSave.current === saving) pendingSave.current = null;
     }
   }
 
@@ -1550,8 +1577,11 @@ export function App() {
         saveDraft: async () => {
           const saved = saveState === "saved" ? project : await persist();
           if (!saved)
-            throw new Error(
-              "Could not save the story for preview. Your edits remain in the editor.",
+            throw (
+              lastSaveError.current ??
+              new Error(
+                "Could not save the story for preview. Your edits remain in the editor.",
+              )
             );
           return { id: saved.id, revision: saved.metadata.updated };
         },
@@ -1716,7 +1746,9 @@ export function App() {
     project.sources.some((source) => source.id === "ice-front-first") &&
     project.sources.some((source) => source.id === "ice-front-last");
   const editorCanvas =
-    studioAvailable && studioProject === project.id ? (
+    publishOpen && publication ? (
+      <StoryViewer manifest={publication} snapshotMode />
+    ) : studioAvailable && studioProject === project.id ? (
       <Suspense fallback={<p role="status">Preparing Story Studio…</p>}>
         <StoryStudio
           onClose={() => {
@@ -1742,7 +1774,6 @@ export function App() {
           focusedManifest={focusedPublicationResult.manifest}
           focusedError={focusedPublicationResult.error}
           savedCamera={savedChapterCamera}
-          snapshotMode={publishOpen}
           previewCamera={flyoverPreviewCamera}
           commitInitialFit={Boolean(
             selectedChapter &&
