@@ -107,6 +107,10 @@ export function StoryCreationScreen({
     setError("");
     try {
       const links = parseReferenceLinks(urls);
+      if (brief.references.length + links.length > 20)
+        throw new Error(
+          "Use at most 20 references, including files and links.",
+        );
       const created = await api.startGeneration({
         ...brief,
         references: [...brief.references, ...links],

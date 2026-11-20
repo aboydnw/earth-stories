@@ -5,6 +5,7 @@ export function parseReferenceLinks(value: string): ReferenceInput[] {
     const url = line.trim();
     if (!url) return [];
     try {
+      if (/\s/.test(url)) throw new Error();
       const parsed = new URL(url);
       if (parsed.protocol !== "https:" || url.length > 2048) throw new Error();
     } catch {

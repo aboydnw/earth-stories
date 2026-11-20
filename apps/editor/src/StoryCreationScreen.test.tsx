@@ -208,13 +208,33 @@ it("restores a failed brief and its references, then submits edits as a new job"
   await waitFor(() =>
     expect((submit as HTMLButtonElement).disabled).toBe(false),
   );
+  const links = Array.from(
+    { length: 20 },
+    (_, i) => `https://example.org/${i}.txt`,
+  );
+  fireEvent.change(screen.getByLabelText("Public reference links"), {
+    target: { value: links.join("\n") },
+  });
+  fireEvent.click(submit);
+  expect(
+    await screen.findByText(
+      "Use at most 20 references, including files and links.",
+    ),
+  ).toBeTruthy();
+  expect(api.startGeneration).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Public reference links"), {
+    target: { value: links.slice(0, 19).join("\n") },
+  });
   fireEvent.click(submit);
   await waitFor(() => expect(navigate).toHaveBeenCalledWith("corrected-job"));
+  expect(
+    vi.mocked(api.startGeneration).mock.calls[0]![0].references,
+  ).toHaveLength(20);
   expect(api.startGeneration).toHaveBeenLastCalledWith(
     expect.objectContaining({
       title: "Bird eggs",
       narrative: "Original context",
-      references: [original.references[1]],
+      references: expect.arrayContaining([original.references[1]]),
     }),
   );
 });
