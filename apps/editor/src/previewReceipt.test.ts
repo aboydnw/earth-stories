@@ -50,3 +50,14 @@ describe("preview receipts", () => {
     vi.restoreAllMocks();
   });
 });
+
+it("retains a receipt when writing storage fails", () => {
+  clearPreviewReceipt("quota");
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  recordPreviewReceipt("quota", "rev-3");
+  expect(readPreviewReceipt("quota")).toBe("rev-3");
+  vi.restoreAllMocks();
+  clearPreviewReceipt("quota");
+});
