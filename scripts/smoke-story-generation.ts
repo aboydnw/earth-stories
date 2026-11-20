@@ -4,118 +4,64 @@ import { join, resolve } from "node:path";
 import { ProjectStore } from "@earth-stories/project-store";
 import { buildLatestPublication } from "@earth-stories/publisher";
 import {
-  defaultReaderPalette,
-  sceneSchema,
   type GenerationProvider,
   type StoryBrief,
 } from "@earth-stories/story-schema";
 import { GenerationJobs } from "../apps/local-service/src/generation/jobs.js";
-import { OpenAIProvider } from "../apps/local-service/src/generation/openai-provider.js";
+import { composePlan } from "../apps/local-service/src/generation/vector-plan.js";
 const mock = process.argv.includes("--mock");
-let provider: GenerationProvider = new OpenAIProvider();
-if (!mock && !provider.configured) {
+if (!mock) {
   console.log(
     JSON.stringify({
       status: "blocked",
-      reason: "OPENAI_API_KEY is not configured. No live request was made.",
+      reason:
+        "For a live test, Continue with ChatGPT in the running local editor and generate a story there. This script does not read credentials.",
     }),
   );
   process.exit(2);
 }
-if (mock) {
-  const { createCanvas } = await import("@napi-rs/canvas");
-  const canvas = createCanvas(1024, 1024),
-    context = canvas.getContext("2d");
-  context.fillStyle = "#dbe9e5";
-  context.fillRect(0, 0, 1024, 1024);
-  context.strokeStyle = "#006b7a";
-  context.lineWidth = 100;
-  context.beginPath();
-  context.moveTo(100, 0);
-  context.bezierCurveTo(900, 300, 100, 700, 850, 1024);
-  context.stroke();
-  const bytes = await canvas.encode("png");
-  provider = {
-    configured: true,
-    plan: async () => ({
-      usage: { mock: true },
-      plan: {
+const provider: GenerationProvider = {
+  configured: true,
+  plan: async (brief) => ({
+    plan: composePlan(
+      {
         title: "A fictional river",
-        description: "A simulated generation for end-to-end verification.",
-        palette: {
-          ...defaultReaderPalette,
-          text: "#17313a",
-          mutedText: "#344955",
-          accent: "#006b7a",
-          accentText: "#005463",
-        },
+        description: "An editorial vector journey",
+        palette: "estuary",
         chapters: [
           {
-            id: "river",
-            type: "illustrated",
-            title: "From source to sea",
+            id: "scene",
+            title: "Follow the water",
             narrative:
-              "This fictional river illustrates a journey. It is not measured data.",
-            alt: "A blue river running through pale land",
-            caption: "Simulated artwork for verification",
-            scene: sceneSchema.parse({
-              width: 1000,
-              height: 700,
-              staticProgress: 0.5,
-              layers: [
-                {
-                  id: "art",
-                  kind: "image",
-                  sourceId: "river-art",
-                  alt: "Fictional river",
-                  keyframes: [
-                    { at: 0, x: 0, y: -0.1, scale: 1, opacity: 1, reveal: 1 },
-                    { at: 1, x: 0, y: 0, scale: 1, opacity: 1, reveal: 1 },
-                  ],
-                },
-                {
-                  id: "label",
-                  kind: "text",
-                  text: "River to sea",
-                  x: 0.1,
-                  y: 0.1,
-                  width: 0.8,
-                  height: 0.2,
-                },
-              ],
-            }),
+              "This fictional river is an illustration, not measured geographic data.",
+            alt: "Layered river landscape",
+            caption: "Illustrative vector scene",
+            recipe: {
+              template: "landscape",
+              heading: "Follow the water",
+              labels: ["Headwaters", "Coast"],
+              motif: "river",
+              motion: true,
+            },
           },
           {
-            id: "closing",
-            type: "prose",
-            title: "The journey continues",
-            narrative: "Placeholder: add your closing takeaway.",
+            id: "ending",
+            title: "At the coast",
+            narrative: "An illustrative ending.",
             alt: "",
             caption: "",
-            scene: null,
-          },
-        ],
-        artwork: [
-          {
-            id: "river-art",
-            prompt: "A fictional river compositing layer",
-            referenceIds: [],
-            width: 1024,
-            height: 1024,
+            recipe: null,
           },
         ],
         warnings: [
-          "This is an explicit mock provider test, not live AI output.",
+          "Illustrative content; verify factual claims before publishing.",
         ],
       },
-    }),
-    illustrate: async () => ({
-      bytes,
-      model: "mock-raster",
-      usage: { images: 1 },
-    }),
-  };
-}
+      brief,
+    ),
+    usage: {},
+  }),
+};
 const root = await mkdtemp(join(tmpdir(), "earth-generation-smoke-"));
 const store = new ProjectStore(join(root, "projects")),
   jobs = new GenerationJobs(store, provider);
@@ -127,7 +73,7 @@ const brief: StoryBrief = {
   narrative:
     "Create exactly two chapters: one layered illustration and one short prose ending. This is a fictional scene, not factual geographic data.",
   visualDirection:
-    "Restrained paper illustration, teal water, warm pale land, one generated image layer and one text layer, subtle scroll movement.",
+    "Restrained paper illustration, teal water, warm pale land, curated vector layers and text, subtle scroll movement.",
   references: [],
   requestedOutputs: ["illustration", "animation", "prose"],
 };
@@ -161,7 +107,7 @@ const publication = await buildLatestPublication({
 });
 const report = {
   status: "passed",
-  provider: mock ? "explicit mock" : "live OpenAI",
+  provider: mock ? "explicit mock" : "live ChatGPT",
   root,
   jobId: started.id,
   projectId: project.id,

@@ -1,3 +1,4 @@
+import type { ChatGPTConnection } from "./chatgpt/connection.js";
 import { generationRoute } from "./generation/routes.js";
 import type { GenerationJobs } from "./generation/jobs.js";
 import { createReadStream } from "node:fs";
@@ -272,6 +273,7 @@ export function createLocalServer(
     pages: PagesJobs;
     github?: GitHubAppConnection;
     generation?: GenerationJobs;
+    chatgpt?: ChatGPTConnection;
   },
   internal: {
     testOnlyDisableTrustedMutationOrigin?: boolean;
@@ -310,7 +312,13 @@ export function createLocalServer(
       }
       if (
         jobs.generation &&
-        (await generationRoute(request, response, url, jobs.generation))
+        (await generationRoute(
+          request,
+          response,
+          url,
+          jobs.generation,
+          jobs.chatgpt,
+        ))
       )
         return;
       if (request.method === "GET" && url.pathname === "/health") {

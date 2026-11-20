@@ -3,7 +3,7 @@ import { generationRoute } from "./routes.js";
 import type { GenerationJobs } from "./jobs.js";
 it("routes status without exposing provider credentials and rejects unsupported paths", async () => {
   const jobs = {
-    provider: { configured: true, apiKey: "private" },
+    provider: { configured: true, accessToken: "private" },
     activity: () => 0,
   } as unknown as GenerationJobs;
   const response = { writeHead: vi.fn(), end: vi.fn() } as never;

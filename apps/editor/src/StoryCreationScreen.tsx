@@ -16,6 +16,7 @@ import {
 } from "@earth-stories/ui";
 import { StoryViewer } from "@earth-stories/viewer";
 import * as api from "./api";
+import { ChatGPTConnectionPanel } from "./ChatGPTConnectionPanel";
 import { GenerationResult } from "./GenerationResult";
 import "./storyCreation.css";
 const initial: StoryBrief = {
@@ -24,14 +25,14 @@ const initial: StoryBrief = {
   takeaway: "",
   narrative: "",
   visualDirection:
-    "Layered editorial illustration with restrained scroll motion",
+    "Editorial vector scenes with layered landscapes, flowing paths and restrained scroll motion",
   references: [],
   requestedOutputs: ["illustration", "animation", "prose"],
 };
 const stageLabels = {
   queued: "Waiting to start",
   planning: "Planning chapters and visual direction",
-  illustrating: "Creating artwork",
+  illustrating: "Composing vector scenes",
   assembling: "Assembling the story",
   validating: "Checking the preview",
   ready: "Ready for your review",
@@ -66,20 +67,6 @@ export function StoryCreationScreen({
   const [accepting, setAccepting] = useState(false);
   const submitting = useRef(false),
     acceptLock = useRef(false);
-  useEffect(() => {
-    let live = true;
-    api
-      .generationStatus()
-      .then((s) => {
-        if (live) setConfigured(s.configured);
-      })
-      .catch((e) => {
-        if (live) setError(message(e));
-      });
-    return () => {
-      live = false;
-    };
-  }, []);
   useEffect(() => {
     setJob(null);
     setManifest(null);
@@ -266,12 +253,14 @@ export function StoryCreationScreen({
             void generate();
           }}
         >
-          {configured === false ? (
-            <StatusNotice tone="warning" title="Connect OpenAI to generate">
-              Set OPENAI_API_KEY in the local service environment, then restart
-              the service. API usage is billed to that account.
-            </StatusNotice>
-          ) : null}
+          <ChatGPTConnectionPanel
+            onReady={(ready, model) => {
+              setConfigured(ready);
+              setBrief((current) =>
+                current.model === model ? current : { ...current, model },
+              );
+            }}
+          />
           <div className="story-creation__fields">
             {(
               [
@@ -372,9 +361,9 @@ export function StoryCreationScreen({
             </FormField>
           </section>
           <StatusNotice tone="info" title="Before you generate">
-            Your brief and reference contents will be sent to OpenAI. Generation
-            may incur API charges, including artwork and retries. This creates a
-            private local candidate; it does not publish a story.
+            Your brief and reference contents will be sent to OpenAI using your
+            ChatGPT plan allowance. This creates a private local candidate; it
+            does not publish a story.
           </StatusNotice>
           <ActionButton
             type="submit"
@@ -387,10 +376,7 @@ export function StoryCreationScreen({
         <>
           <section className="story-creation__progress" aria-live="polite">
             <h2>{stageLabels[job.stage]}</h2>
-            <p>
-              {job.assets.length} artwork{" "}
-              {job.assets.length === 1 ? "asset" : "assets"} completed
-            </p>
+            <p>Composing editable chapters and vector scenes.</p>
             {job.error ? <p>{job.error}</p> : null}
             {!terminal.has(job.stage) ? (
               <ActionButton
@@ -418,6 +404,9 @@ export function StoryCreationScreen({
               </ActionButton>
             ) : null}
           </section>
+          {job.stage === "failed" || job.stage === "cancelled" ? (
+            <ChatGPTConnectionPanel onReady={() => {}} />
+          ) : null}
           <GenerationResult
             job={job}
             accepting={accepting}

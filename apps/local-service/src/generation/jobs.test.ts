@@ -43,7 +43,6 @@ const provider: GenerationProvider = {
     },
     usage: {},
   }),
-  illustrate: vi.fn(),
 };
 it("keeps candidates outside the workspace until accepted and imports exactly once", async () => {
   const root = await mkdtemp(join(tmpdir(), "earth-generation-"));
@@ -132,87 +131,94 @@ it("recovers acceptance after project rename succeeds but the job receipt write 
   }
 });
 
-it("retries artwork from validated checkpoints, then compiles the same accepted scene", async () => {
-  const { createCanvas } = await import("@napi-rs/canvas");
-  const canvas = createCanvas(8, 8);
-  const context = canvas.getContext("2d");
-  context.fillStyle = "teal";
-  context.fillRect(0, 0, 8, 8);
-  const bytes = await canvas.encode("png");
-  const { sceneSchema } = await import("@earth-stories/story-schema");
+it("creates vector previews that compile identically after acceptance and author edits", async () => {
+  const { composeVectorScene } = await import("@earth-stories/story-schema");
   const { compileProject } = await import("@earth-stories/publisher/compile");
   const plan = (await provider.plan(brief, [], new AbortController().signal))
     .plan;
-  plan.artwork = [
-    {
-      id: "background",
-      prompt: "River background",
-      width: 1024,
-      height: 1024,
-      referenceIds: [],
-    },
-    {
-      id: "foreground",
-      prompt: "River foreground",
-      width: 1024,
-      height: 1024,
-      referenceIds: [],
-    },
-  ];
   plan.chapters.push({
     id: "scene",
     type: "illustrated",
     title: "River scene",
-    narrative: "Fictional illustration",
-    alt: "River",
+    narrative: "Illustrative, not measured data",
+    alt: "A flowing river",
     caption: "Illustration",
-    scene: sceneSchema.parse({
-      width: 1000,
-      height: 600,
-      layers: [
-        {
-          id: "back",
-          kind: "image",
-          sourceId: "background",
-          alt: "River banks",
-        },
-        { id: "front", kind: "image", sourceId: "foreground", alt: "Water" },
-      ],
+    scene: composeVectorScene({
+      template: "flow",
+      heading: "Follow the water",
+      labels: ["Source", "Sea"],
+      motif: "river",
+      motion: true,
     }),
   });
-  let fail = true;
-  const illustrate = vi.fn(async (request: { id: string }) => {
-    if (request.id === "foreground" && fail)
-      throw new Error("Temporary artwork failure");
-    return { bytes, model: "test-model", usage: { images: 1 } };
-  });
-  const root = await mkdtemp(join(tmpdir(), "earth-checkpoint-"));
+  const root = await mkdtemp(join(tmpdir(), "earth-vector-candidate-"));
   try {
     const store = new ProjectStore(root),
       jobs = new GenerationJobs(store, {
         configured: true,
         plan: async () => ({ plan, usage: {} }),
-        illustrate,
       });
     await jobs.initialize();
-    const created = await jobs.start(brief);
-    await jobs.whenIdle();
-    expect((await jobs.get(created.id)).stage).toBe("failed");
-    fail = false;
-    await jobs.retry(created.id);
+    const created = await jobs.start({
+      ...brief,
+      requestedOutputs: ["illustration", "animation"],
+    });
     await jobs.whenIdle();
     const job = await jobs.get(created.id);
     expect(job.stage, job.error ?? undefined).toBe("ready");
-    expect(
-      illustrate.mock.calls.filter(([r]) => r.id === "background"),
-    ).toHaveLength(1);
+    expect(job.assets).toEqual([]);
+    const preview = await jobs.preview(created.id);
     const accepted = await jobs.accept(created.id);
     expect(compileProject(await store.read(accepted.projectId))).toEqual(
-      compileProject(job.candidate!.project),
+      preview,
+    );
+    const edited = await store.read(accepted.projectId);
+    const chapter = edited.chapters.find((c) => c.type === "illustrated")!;
+    if (chapter.type !== "illustrated") throw new Error("Expected scene");
+    const layer = chapter.scene.layers.find((l) => l.kind === "text")!;
+    if (layer.kind === "text") layer.text = "Author's revised title";
+    await store.save(edited.id, edited);
+    expect(JSON.stringify(await store.read(edited.id))).toContain(
+      "Author's revised title",
     );
     await expect(
       jobs.asset(created.id, "assets/../../secret"),
     ).rejects.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("explains that unfinished legacy image candidates must be regenerated as vectors", async () => {
+  const plan = (await provider.plan(brief, [], new AbortController().signal))
+    .plan;
+  plan.artwork = [
+    {
+      id: "old",
+      prompt: "Legacy image",
+      width: 1024,
+      height: 1024,
+      referenceIds: [],
+    },
+  ];
+  const root = await mkdtemp(join(tmpdir(), "earth-legacy-image-"));
+  try {
+    const jobs = new GenerationJobs(new ProjectStore(root), provider);
+    await jobs.initialize();
+    const created = await jobs.start(brief);
+    await jobs.whenIdle();
+    const job = await jobs.get(created.id);
+    job.plan = plan;
+    job.stage = "failed";
+    job.candidate = null;
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      join(root, ".generation", job.id, "job.json"),
+      JSON.stringify(job),
+    );
+    await jobs.retry(job.id);
+    await jobs.whenIdle();
+    expect((await jobs.get(job.id)).error).toMatch(/retired image-generation/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

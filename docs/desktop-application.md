@@ -44,7 +44,10 @@ them.
 | Stored credential      | `<application data>/credentials.json`          | `<application data>\credentials.json`    | `<application data>/credentials.json`                            |
 
 The application-data root also contains the selected-workspace pointer and
-window preferences. Stored credentials use the operating system protection
+window preferences. ChatGPT sign-in has a separate `credentials.json.chatgpt` record and session
+lease alongside the GitHub credential record. Sign-in opens the system browser
+and returns to an ephemeral loopback callback; no Codex installation is required.
+Stored credentials use the operating system protection
 available through Electron when supported. Diagnostics are bounded and contain
 allowlisted codes and coarse state, not story content, paths, URLs, or tokens.
 

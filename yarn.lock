@@ -776,6 +776,7 @@ __metadata:
     esbuild: "npm:~0.28.0"
     fflate: "npm:^0.8.2"
     image-size: "npm:2.0.2"
+    jose: "npm:^6.1.3"
     pdfjs-dist: "npm:5.4.624"
     tsx: "npm:^4.20.5"
   languageName: unknown

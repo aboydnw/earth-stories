@@ -259,3 +259,20 @@ describe("startLocalService", () => {
     });
   });
 });
+
+it("releases the ChatGPT process lease after credential initialization fails", async () => {
+  const options = await config();
+  options.chatgptLockPath = join(
+    options.projectsDirectory,
+    "..",
+    "chatgpt.lock",
+  );
+  options.chatgptCredentials = {
+    ...credentials,
+    read: async () => ({ login: "ChatGPT", token: "invalid-state" }),
+  };
+  await expect(startLocalService(options)).rejects.toThrow("unreadable");
+  options.chatgptCredentials = credentials;
+  const service = await startLocalService(options);
+  await service.close();
+});

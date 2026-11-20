@@ -542,3 +542,28 @@ export const discardGeneration = (id: string) =>
     `/api/generation/jobs/${encodeURIComponent(id)}`,
     { method: "DELETE" },
   );
+
+export const chatGPTStatus = () =>
+  request<import("@earth-stories/story-schema").ChatGPTStatus>(
+    "/api/generation/connection",
+  );
+export const chatGPTModels = () =>
+  request<import("@earth-stories/story-schema").ChatGPTModel[]>(
+    "/api/generation/models",
+  );
+export const connectChatGPT = (accountId?: string) =>
+  request<{ url: string }>("/api/generation/connection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accountId }),
+  });
+export const cancelChatGPT = () =>
+  request<import("@earth-stories/story-schema").ChatGPTStatus>(
+    "/api/generation/connection/cancel",
+    { method: "POST" },
+  );
+export const disconnectChatGPT = () =>
+  request<import("@earth-stories/story-schema").ChatGPTStatus>(
+    "/api/generation/connection",
+    { method: "DELETE" },
+  );

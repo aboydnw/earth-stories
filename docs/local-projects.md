@@ -96,3 +96,12 @@ an accepted project. Keep workspace backups private: reference files and briefs
 may contain sensitive source material.
 
 Generation reference uploads are stored once in a private candidate input file. Polling and stage checkpoints contain the brief and reference metadata, not upload payloads. Prepared references remain available for retries; accepted projects keep reference metadata with their generation brief. Existing inline-reference checkpoints are migrated when the service starts.
+
+ChatGPT sign-in state is separate from project staging: standalone service records
+live under `~/.earth-stories/chatgpt.json`, and desktop uses a dedicated
+`credentials.json.chatgpt` record in its application-data directory. The protected
+record contains account/client mappings, a stable host ID, and rotating tokens;
+none are exposed in editor API responses or copied into a project. A service lease
+prevents concurrent processes refreshing the same token. Sign-out cancels active
+generation, attempts session revocation, clears local tokens, and preserves the
+account registration for later reconnection. The UI reports unconfirmed revocation.

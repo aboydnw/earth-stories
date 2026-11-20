@@ -181,19 +181,27 @@ the [packaging groundwork devlog](docs/devlog/2026-08-13-desktop-packaging-groun
 
 Choose **Create with AI** in the workspace. Enter an audience, takeaway, context,
 and visual direction, optionally attach references, then choose **Generate story**.
-Review the palette, chapter outline, generated artwork, and **View as reader**
+Review the palette, chapter outline, composed vector scenes, and **View as reader**
 preview. **Create this story** imports that exact candidate into the ordinary
 editor. It does not publish anything. Existing stories are not modified by AI.
 
-Set `OPENAI_API_KEY` in the local service's environment before starting it.
-Never put a key in a story, browser setting, or committed file. Planning defaults
-to `gpt-6.2-astra`; artwork defaults to `gpt-image-2.5-flare`. Override explicitly
-with `EARTH_STORIES_PLANNING_MODEL` and `EARTH_STORIES_IMAGE_MODEL` only with models
-that support the same structured-output and image APIs. Access is checked before
-planning and no alternate model is silently selected. API usage, including
-artwork and retries, is charged to the API account. A ChatGPT login alone does not
-configure this service; any eligible subscription API credits must be activated
-in the API account separately.
+Choose **Continue with ChatGPT**, finish authorization in your system browser,
+and select an available story model. Generation uses your ChatGPT plan allowance;
+**Manage usage** opens ChatGPT's app limits. API-key authentication and generated
+image requests have been removed; there is no automatic billing fallback.
+
+AI composes editable vector scenes from landscape, flow, reveal, and diagram
+templates, with coordinated reader palettes and scroll motion. These are
+illustrations, not measured data. Uploaded reference images can inform the story,
+but this flow does not generate raster artwork. Previously created image stories
+and ready candidates remain readable.
+
+Sign-in credentials stay outside story projects in protected local storage.
+Standalone development uses owner-only files under `~/.earth-stories/`; desktop
+uses its dedicated OS-protected credential store when available. The separate
+loopback callback opens only during sign-in. Account registrations survive local
+sign-out for reconnection, while tokens are cleared and revocation is attempted.
+Only one service may own a stored ChatGPT session at a time.
 
 The brief and selected reference contents are sent to OpenAI. Supported references
 are UTF-8 TXT/Markdown, PDFs with extractable text, and PNG/JPEG/WebP images. Public
@@ -202,17 +210,16 @@ version; SVG and general webpage scraping are unsupported. Limits: 20 references
 20 MiB each, 200,000 extracted text characters, and 100 MiB combined input files.
 Images are decoded, bounded to 16 million pixels and 8192 pixels per edge, and re-encoded as PNG.
 
-Only one generation runs at a time. A job can produce at most 30 chapters,
-12 illustrated scenes, and 24 artwork requests (plus bounded transient retries).
-Two transient retries and one planning repair are allowed. There is no promised
-dollar ceiling. Cancel stops further work; already incurred API usage remains.
-Retry reuses validated completed artwork. A service restart marks unfinished work
-as interrupted. Candidate URLs survive restart. Discard removes candidate files;
-accepted project assets remain intact.
+Only one generation runs at a time. A job can produce up to 12 chapters with
+curated vector scenes. Invalid structured output gets one repair attempt; usage
+limits and incomplete streams stop the job. Cancel stops further work. Retry
+reuses the validated plan when available. An unfinished legacy image-generation
+job must be replaced with a new vector story; it is not silently reinterpreted.
+Candidate URLs survive restart. Discarding a candidate preserves accepted stories.
 
-Run `yarn smoke:generation` with configured credentials for
-live verification in a disposable workspace. `--mock` explicitly uses a simulated
-provider for integration testing; it is not evidence of live model access. The
-script prints a redacted report and local artifact paths. Model request formats
-follow the [official structured-output guide](https://developers.openai.com/api/docs/guides/structured-outputs)
-and [image-generation guide](https://developers.openai.com/api/docs/guides/image-generation).
+Run `yarn smoke:generation --mock` for disposable integration verification. This
+is not evidence of live account/model access. For a live test, sign in through the
+running editor and generate a story, inspect its reader preview, create it, edit
+it, and reopen it. No credential is read or printed by the smoke script.
+The integration follows the official [local sign-in flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
+and [plan-usage limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).

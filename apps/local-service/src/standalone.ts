@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LocalServiceConfig } from "./config.js";
 import { runCommand, type Command } from "./command-runner.js";
-import { FileCredentialStore } from "./credentials.js";
+import { FileCredentialStore, credentialsPath } from "./credentials.js";
 import { startLocalService, type RuntimeDependencies } from "./runtime.js";
 
 type CommandExecutor = (command: Command) => Promise<unknown>;
@@ -49,6 +49,13 @@ export function resolveStandaloneConfig(
       pixiHome: null,
     },
     credentials: new FileCredentialStore(),
+    chatgptCredentials: new FileCredentialStore(
+      credentialsPath().replace(/credentials\.json$/, "chatgpt.json"),
+    ),
+    chatgptLockPath: credentialsPath().replace(
+      /credentials\.json$/,
+      "chatgpt.lock",
+    ),
     capabilityToken: null,
   };
 }
