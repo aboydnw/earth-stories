@@ -35,3 +35,15 @@ it("round trips a generation candidate preview without treating it as a story", 
     preview: false,
   });
 });
+
+it("round trips enhancement forms and previews without opening an editor route", () => {
+  for (const jobId of [null, "job-1"]) {
+    const route = {
+      page: "enhance",
+      storyId: "existing-story",
+      jobId,
+      preview: Boolean(jobId),
+    } as const;
+    expect(parseRoute(routePath(route))).toEqual(route);
+  }
+});

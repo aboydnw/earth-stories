@@ -294,6 +294,38 @@ export class ProjectStore {
     });
   }
 
+  async applyEnhancement(
+    id: string,
+    value: unknown,
+    original: StoryProject,
+    verifyAssets: () => Promise<void> = async () => {},
+  ): Promise<StoryProject> {
+    const project = storyProjectSchema.parse(value);
+    if (project.id !== id || original.id !== id)
+      throw new Error("Project ID cannot be changed");
+    return this.writeAtomicWithCheck(id, true, async () => {
+      const current = await this.read(id);
+      const withoutUpdated = (p: StoryProject) =>
+        JSON.stringify({ ...p, metadata: { ...p.metadata, updated: "" } });
+      // Recover an apply whose story save succeeded before its job receipt was saved.
+      if (withoutUpdated(current) === withoutUpdated(project))
+        return { unchanged: current };
+      await verifyAssets();
+      if (JSON.stringify(current) !== JSON.stringify(original))
+        throw new Error(
+          "This story changed during generation. Edit the brief and generate again before applying.",
+        );
+      return storyProjectSchema.parse({
+        ...project,
+        metadata: {
+          ...project.metadata,
+          created: current.metadata.created,
+          updated: nextUpdated(current.metadata.updated),
+        },
+      });
+    });
+  }
+
   async archive(id: string): Promise<void> {
     await this.read(id);
     const trash = join(this.root, ".trash");
@@ -446,7 +478,7 @@ export class ProjectStore {
   private async writeAtomicWithCheck(
     id: string,
     createBackup: boolean,
-    projectFactory: () => Promise<StoryProject>,
+    projectFactory: () => Promise<StoryProject | { unchanged: StoryProject }>,
   ): Promise<StoryProject> {
     const projectDirectory = this.directory(id);
     const storyPath = join(projectDirectory, STORY_FILENAME);
@@ -458,7 +490,9 @@ export class ProjectStore {
     const lock = await this.acquireWriteLock(lockPath);
 
     try {
-      const project = await projectFactory();
+      const result = await projectFactory();
+      if ("unchanged" in result) return result.unchanged;
+      const project = result;
       if (createBackup) {
         const backupDirectory = join(
           projectDirectory,

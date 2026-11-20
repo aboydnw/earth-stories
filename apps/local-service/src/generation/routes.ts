@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { GenerationJob } from "@earth-stories/story-schema";
 import type { ChatGPTConnection } from "../chatgpt/connection.js";
@@ -72,6 +73,33 @@ export async function generationRoute(
         configured: jobs.provider.configured,
         running: jobs.activity() > 0,
       });
+      return true;
+    }
+    if (url.pathname === "/api/generation/enhance" && req.method === "POST") {
+      const input = z
+        .object({
+          projectId: z.string().min(1).max(64),
+          sourceUpdated: z.string().datetime(),
+          brief: z.unknown(),
+          maps: z
+            .record(z.string(), z.string().max(12 * 1024 * 1024))
+            .refine((v) => Object.keys(v).length <= 12)
+            .default({}),
+        })
+        .strict()
+        .parse(await body(req));
+      json(
+        res,
+        202,
+        publicJob(
+          await jobs.start(
+            input.brief,
+            input.projectId,
+            input.maps,
+            input.sourceUpdated,
+          ),
+        ),
+      );
       return true;
     }
     if (url.pathname === "/api/generation/jobs" && req.method === "POST") {

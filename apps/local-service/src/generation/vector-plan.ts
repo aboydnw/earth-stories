@@ -5,6 +5,7 @@ import {
   vectorRecipeSchema,
   storyPlanSchema,
   type StoryBrief,
+  enhancementTextEditSchema,
 } from "@earth-stories/story-schema";
 export const vectorPlanSchema = z
   .object({
@@ -29,12 +30,35 @@ export const vectorPlanSchema = z
     warnings: z.array(z.string().max(2000)).max(30),
   })
   .strict();
+export const enhancementVectorPlanSchema = vectorPlanSchema.extend({
+  chapters: z
+    .array(
+      vectorPlanSchema.shape.chapters.element.extend({
+        afterChapterId: z.string().nullable(),
+        recipe: vectorRecipeSchema,
+      }),
+    )
+    .min(1)
+    .max(12),
+  textEdits: z.array(enhancementTextEditSchema).max(8),
+});
+const { $schema: _enhancementDialect, ...enhancementJson } = z.toJSONSchema(
+  enhancementVectorPlanSchema,
+  { target: "draft-7" },
+);
+export const enhancementPlanJsonSchema = enhancementJson;
 const { $schema: _dialect, ...jsonSchema } = z.toJSONSchema(vectorPlanSchema, {
   target: "draft-7",
 });
 export const vectorPlanJsonSchema = jsonSchema;
-export function composePlan(value: unknown, brief: StoryBrief) {
-  const plan = vectorPlanSchema.parse(value);
+export function composePlan(
+  value: unknown,
+  brief: StoryBrief,
+  enhancement = false,
+) {
+  const plan = (
+    enhancement ? enhancementVectorPlanSchema : vectorPlanSchema
+  ).parse(value);
   return storyPlanSchema.parse({
     ...plan,
     palette: vectorScenePalettes[plan.palette],

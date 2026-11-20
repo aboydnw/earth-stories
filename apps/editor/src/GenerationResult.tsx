@@ -31,6 +31,40 @@ export function GenerationResult({
               ),
             )}
           </div>
+          {job.enhancement ? (
+            <section aria-label="Proposed changes">
+              <h3>Proposed visual additions</h3>
+              <ul>
+                {job.plan?.chapters.map((c) => (
+                  <li key={c.id}>
+                    {c.title} —{" "}
+                    {c.afterChapterId
+                      ? `after ${candidate.project.chapters.find((original) => original.id === c.afterChapterId)?.title ?? c.afterChapterId}`
+                      : "before the first chapter"}
+                  </li>
+                ))}
+              </ul>
+              <h3>Supporting text edits</h3>
+              {job.plan?.textEdits?.length ? (
+                job.plan.textEdits.map((edit) => (
+                  <div key={edit.chapterId}>
+                    <strong>
+                      {
+                        candidate.project.chapters.find(
+                          (c) => c.id === edit.chapterId,
+                        )?.title
+                      }
+                    </strong>
+                    <p>Before: {edit.before}</p>
+                    <p>After: {edit.after}</p>
+                    <p>Reason: {edit.reason}</p>
+                  </div>
+                ))
+              ) : (
+                <p>No existing text changes proposed.</p>
+              )}
+            </section>
+          ) : null}
           <h3>Chapters</h3>
           <ol>
             {candidate.project.chapters.map((chapter) => (
@@ -39,7 +73,7 @@ export function GenerationResult({
                 <span>
                   {chapter.type === "illustrated"
                     ? "Illustrated scene"
-                    : "Text chapter"}
+                    : chapter.type}
                 </span>
               </li>
             ))}
@@ -61,7 +95,14 @@ export function GenerationResult({
             </>
           ) : null}
           {candidate.warnings.length ? (
-            <StatusNotice title="Review before creating" tone="warning">
+            <StatusNotice
+              title={
+                job.enhancement
+                  ? "Context coverage and review notes"
+                  : "Review before creating"
+              }
+              tone="warning"
+            >
               <ul>
                 {candidate.warnings.map((warning, i) => (
                   <li key={i}>{warning}</li>
@@ -71,7 +112,11 @@ export function GenerationResult({
           ) : null}
           <a
             className="generation-preview-link"
-            href={`/create/${encodeURIComponent(job.id)}/preview`}
+            href={
+              job.enhancement
+                ? `/stories/${encodeURIComponent(job.enhancement.projectId)}/enhance/${encodeURIComponent(job.id)}/preview`
+                : `/create/${encodeURIComponent(job.id)}/preview`
+            }
             target="_blank"
             rel="noreferrer"
           >
@@ -83,10 +128,18 @@ export function GenerationResult({
         disabled={job.stage !== "ready" || accepting}
         onClick={onAccept}
       >
-        {accepting ? "Creating your story…" : "Create this story"}
+        {job.enhancement
+          ? accepting
+            ? "Applying enhancements…"
+            : "Apply to story"
+          : accepting
+            ? "Creating your story…"
+            : "Create this story"}
       </ActionButton>
       <p>
-        Creating saves an editable local story. You decide when to publish it.
+        {job.enhancement
+          ? "Apply updates this existing story. If the story changed during generation, generate again before applying. You decide when to publish."
+          : "Creating saves an editable local story. You decide when to publish it."}
       </p>
     </section>
   );

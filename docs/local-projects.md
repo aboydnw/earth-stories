@@ -113,3 +113,13 @@ verification are stored privately and cannot be used until verification succeeds
 Sign-out cancels active
 generation, attempts session revocation, clears local tokens, and preserves the
 account registration for later reconnection. The UI reports unconfirmed revocation.
+
+Existing-story AI enhancements stage an original project snapshot and bounded
+context under `.generation/<job>/source.json`. Routine status responses exclude
+these image/data inputs. The candidate retains the original project ID and asset
+paths, and only inserts illustrated chapters plus bounded supporting narrative
+replacements. Applying compares the current parsed project against the original
+under the project write lock, checks inspected/local source file size and modification
+time, and uses the ordinary atomic-save/backup mechanism. A repeat after a saved
+candidate but missing job receipt recognizes that same content and avoids duplicate
+chapters. No publication is produced or replaced by applying an enhancement.

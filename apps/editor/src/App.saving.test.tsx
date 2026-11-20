@@ -199,3 +199,41 @@ it("shows the full story in the publishing workshop instead of the editable chap
   expect(screen.queryByRole("region", { name: "Chapter canvas" })).toBeNull();
   expect(api.saveProject).not.toHaveBeenCalled();
 });
+
+it("saves the current story before opening its visual enhancement form", async () => {
+  await openEditor();
+  fireEvent.click(screen.getByRole("button", { name: /Story settings/i }));
+  fireEvent.change(await screen.findByLabelText("Story title"), {
+    target: { value: "Saved for enhancement" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Enhance with AI" }));
+  await waitFor(() =>
+    expect(window.location.pathname).toBe(`/stories/${project.id}/enhance`),
+  );
+  expect((await store.read(project.id)).metadata.title).toBe(
+    "Saved for enhancement",
+  );
+});
+
+it("keeps edits made while enhancement entry waits for a save", async () => {
+  let finish!: (value: StoryProject) => void;
+  api.saveProject.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await openEditor();
+  fireEvent.click(screen.getByRole("button", { name: /Story settings/i }));
+  const title = await screen.findByLabelText("Story title");
+  fireEvent.change(title, { target: { value: "First title" } });
+  fireEvent.click(screen.getByRole("button", { name: "Enhance with AI" }));
+  await waitFor(() => expect(api.saveProject).toHaveBeenCalledTimes(1));
+  fireEvent.change(title, { target: { value: "Latest title" } });
+  const saved = await store.save(project.id, api.saveProject.mock.calls[0]![0]);
+  await act(async () => finish(saved));
+  await waitFor(() =>
+    expect(window.location.pathname).toBe(`/stories/${project.id}/enhance`),
+  );
+  expect((await store.read(project.id)).metadata.title).toBe("Latest title");
+});

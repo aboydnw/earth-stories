@@ -247,3 +247,32 @@ running editor and generate a story, inspect its reader preview, create it, edit
 it, and reopen it. No credential is read or printed by the smoke script.
 The integration follows the official [local sign-in flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
 and [plan-usage limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
+
+### Enhance an existing story with AI
+
+Open **Story settings → Enhance with AI**. Pending edits are saved before the
+form opens. Describe the visual direction, add references, and choose **Generate
+visual enhancements**. The existing story supplies the context; there is no need
+to paste its content into the form.
+
+Review the complete reader preview, insertion positions, context-coverage notes,
+and exact proposed text changes, then choose **Apply to story**. The result updates
+the same editable project through the normal atomic save and backup path. It does
+not publish. If the story or an inspected local asset changed during generation,
+applying is blocked. **Edit brief and references** preserves your direction and
+references while loading the latest story for another generation.
+
+This first version adds chapters using the four existing vector templates. It
+preserves original chapter order, metadata, publication settings, maps, images,
+data sources and attribution. Text changes must be small, exact replacements
+supporting a named new visual, with reasons shown before applying; general prose
+refinement is outside this feature.
+
+Context includes the saved project structure, up to eight supported local images
+(up to 8 MiB each), bounded CSV/GeoJSON/trajectory extracts, and available map
+captures (at most twelve images total). Data extracts are limited to the first
+20,000 UTF-8 bytes per file and 200,000 bytes in total; the serialized story project
+is limited to 500,000 characters. External source contents, unsupported/oversized files, raw
+unused library assets, and video/audio are not silently claimed as inspected.
+Coverage limits appear in the candidate and are supplied to the AI. Existing
+connected sources remain connected in the preview and publication.

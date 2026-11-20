@@ -1652,6 +1652,22 @@ export function App() {
         <p>Opening your local workspace…</p>
       </main>
     );
+  if (route.page === "enhance")
+    return (
+      <StoryCreationScreen
+        sourceProjectId={route.storyId}
+        jobId={route.jobId}
+        preview={route.preview}
+        onNavigate={(jobId, preview = false) =>
+          navigate({ page: "enhance", storyId: route.storyId, jobId, preview })
+        }
+        onCreated={async (id) => {
+          await refreshProjects();
+          await handleOpen(id);
+        }}
+        onBack={() => void handleOpen(route.storyId)}
+      />
+    );
   if (route.page === "create")
     return (
       <StoryCreationScreen
@@ -2531,6 +2547,29 @@ export function App() {
             ) : null}
             {inspectorMode === "story" ? (
               <div className="story-settings">
+                <ActionButton
+                  disabled={saveState === "saving"}
+                  onClick={() =>
+                    void (async () => {
+                      let saved = await persist();
+                      while (
+                        saved &&
+                        projectRef.current?.id === saved.id &&
+                        projectRef.current !== persistedProjectRef.current
+                      )
+                        saved = await persist();
+                      if (saved && projectRef.current?.id === saved.id)
+                        navigate({
+                          page: "enhance",
+                          storyId: saved.id,
+                          jobId: null,
+                          preview: false,
+                        });
+                    })()
+                  }
+                >
+                  Enhance with AI
+                </ActionButton>
                 <label>
                   Story title
                   <input

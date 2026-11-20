@@ -657,3 +657,72 @@ describe("createLocalServer", () => {
     ).toThrow(/trusted.*origin/i);
   });
 });
+
+it("guards enhancement requests and rejects stale source versions through the HTTP route", async () => {
+  const token = "enhancement-test-capability-secret";
+  const { config, store, jobs } = await setup({ capabilityToken: token });
+  const { GenerationJobs } = await import("./generation/jobs.js");
+  const { createLocalServer } = await import("./server.js");
+  let planned = false;
+  const generation = new GenerationJobs(store, {
+    configured: true,
+    plan: async () => {
+      planned = true;
+      throw new Error("Unexpected generation");
+    },
+  });
+  const source = await store.create({ title: "Existing story" });
+  const server = createLocalServer(store, config, { ...jobs, generation });
+  const port = await listen(server);
+  const url = `http://127.0.0.1:${port}/api/generation/enhance`;
+  try {
+    for (const authorization of [undefined, "Bearer wrong"]) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: authorization ? { authorization } : {},
+        body: "{}",
+      });
+      expect(response.status).toBe(401);
+    }
+    const unauthorizedOrigin = await fetch(url, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        origin: "https://attacker.example",
+      },
+      body: "{}",
+    });
+    expect(unauthorizedOrigin.status).toBe(403);
+    const stale = await fetch(url, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        origin: "http://localhost:5173",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        projectId: source.id,
+        sourceUpdated: "2000-01-01T00:00:00.000Z",
+        brief: {
+          title: "Enhance",
+          audience: "Public",
+          takeaway: "",
+          narrative: "",
+          visualDirection: "River",
+          references: [],
+          requestedOutputs: ["illustration"],
+        },
+      }),
+    });
+    expect(stale.status).toBe(400);
+    expect((await stale.json()).error).toBe(
+      "This story changed after the enhancement form opened. Reload the page to use its latest content.",
+    );
+    expect(planned).toBe(false);
+    expect(generation.activity()).toBe(0);
+    expect(await store.read(source.id)).toEqual(source);
+  } finally {
+    generation.close();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

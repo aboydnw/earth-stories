@@ -123,3 +123,49 @@ it("rejects unavailable models before inference", async () => {
   ).rejects.toThrow(/available/i);
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
+
+it("uses a constrained additive plan and supplies authored context for enhancements", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { parseStoryProject } = await import("@earth-stories/story-schema");
+  const source = parseStoryProject(
+    JSON.parse(
+      await readFile(
+        new URL(
+          "../../../../../../fixtures/field-notes/story.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ),
+  );
+  const result = {
+    ...blueprint,
+    chapters: blueprint.chapters.map((c) => ({
+      ...c,
+      afterChapterId: source.chapters[0]!.id,
+    })),
+    textEdits: [],
+  };
+  const { provider, fetcher } = setup(
+    event("response.output_text.delta", { delta: JSON.stringify(result) }) +
+      event("response.completed", { response: { usage: {} } }),
+  );
+  const generated = await provider.plan(
+    brief,
+    [],
+    new AbortController().signal,
+    source,
+  );
+  expect(generated.plan.chapters[0]!.afterChapterId).toBe(
+    source.chapters[0]!.id,
+  );
+  const call = fetcher.mock.calls.find((c) =>
+    String(c[0]).endsWith("/responses"),
+  ) as unknown as [string, RequestInit];
+  const payload = JSON.parse(call[1].body as string);
+  expect(payload.instructions).toContain("Do NOT refine, rewrite");
+  expect(payload.text.format.schema.properties.textEdits).toBeTruthy();
+  expect(JSON.parse(payload.input[0].content[0].text).existingStory).toEqual(
+    source,
+  );
+});
