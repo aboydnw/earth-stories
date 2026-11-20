@@ -1,3 +1,4 @@
+import { readerPaletteStyle } from "./readerPalette.js";
 import {
   useEffect,
   useMemo,
@@ -181,6 +182,7 @@ export function AtlasStoryViewer({
   return (
     <AtlasMotionContext.Provider value={motion}>
       <main
+        style={readerPaletteStyle(manifest.publication.palette)}
         className={`story-publication story-publication--atlas${sea ? " atlas--sea" : ice ? " atlas--ice" : ""}${embed ? " story-publication--embed" : ""}${allVisible ? " atlas--read-all" : ""}`}
         data-motion={atmosphericMotion ? "running" : "still"}
       >

@@ -40,3 +40,35 @@ describe("authorizedFetch", () => {
     expect(request).not.toHaveBeenCalled();
   });
 });
+
+it("requires HTTPS on every reference redirect and caps redirect count", async () => {
+  const request = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(null, {
+      status: 302,
+      headers: { location: "http://data.example/file.txt" },
+    }),
+  );
+  await expect(
+    authorizedFetch(
+      "https://data.example/file.txt",
+      {},
+      { httpsOnly: true, maxRedirects: 3 },
+    ),
+  ).rejects.toThrow("HTTPS");
+  expect(request).toHaveBeenCalledTimes(1);
+  request.mockResolvedValue(
+    new Response(null, {
+      status: 302,
+      headers: { location: "https://data.example/again.txt" },
+    }),
+  );
+  request.mockClear();
+  await expect(
+    authorizedFetch(
+      "https://data.example/file.txt",
+      {},
+      { httpsOnly: true, maxRedirects: 3 },
+    ),
+  ).rejects.toThrow("too many");
+  expect(request).toHaveBeenCalledTimes(4);
+});

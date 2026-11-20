@@ -13,11 +13,13 @@ export function DeckOverlay({
   onError?: (message: string) => void;
 }) {
   const maps = useMap();
+  const map = maps.current?.getMap();
+  const attachedMap = useRef<typeof map>(undefined);
   const onAfterRenderRef = useRef(onAfterRender);
   onAfterRenderRef.current = onAfterRender;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
-  const [mapReady, setMapReady] = useState(false);
+  const [attachmentRevision, setAttachmentRevision] = useState(0);
   const overlay = useMemo(
     () =>
       new MapboxOverlay({
@@ -34,7 +36,6 @@ export function DeckOverlay({
     [],
   );
   useEffect(() => {
-    const map = maps.current?.getMap();
     if (!map) return;
     const eventMap = map as {
       style?: unknown;
@@ -50,26 +51,30 @@ export function DeckOverlay({
       if (attached || !eventMap.loaded?.() || !eventMap.style) return;
       eventMap.addControl(overlay);
       attached = true;
-      setMapReady(true);
+      attachedMap.current = map;
+      setAttachmentRevision((revision) => revision + 1);
     };
     ready();
     if (!attached) eventMap.once?.("load", ready);
     return () => {
+      attachedMap.current = undefined;
       eventMap.off?.("load", ready);
       if (attached && eventMap.hasControl(overlay))
         eventMap.removeControl(overlay);
     };
-  }, [maps, overlay]);
+  }, [map, overlay]);
   const appliedLayers = useRef(layers);
   useEffect(() => {
     if (
-      !mapReady ||
+      !map ||
+      attachedMap.current !== map ||
+      !map.style ||
       appliedLayers.current === layers ||
       overlay.getCanvas() === null
     )
       return;
     overlay.setProps({ layers });
     appliedLayers.current = layers;
-  }, [overlay, layers, mapReady]);
+  }, [map, overlay, layers, attachmentRevision]);
   return null;
 }

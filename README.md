@@ -176,3 +176,43 @@ the [packaging groundwork devlog](docs/devlog/2026-08-13-desktop-packaging-groun
 - [GitHub authentication from sandboxed agents](docs/github-auth-troubleshooting.md)
   explains why a restricted `gh auth status` can incorrectly look like an
   expired token and the checks required before asking someone to re-authenticate.
+
+### Create a story with AI (local pilot)
+
+Choose **Create with AI** in the workspace. Enter an audience, takeaway, context,
+and visual direction, optionally attach references, then choose **Generate story**.
+Review the palette, chapter outline, generated artwork, and **View as reader**
+preview. **Create this story** imports that exact candidate into the ordinary
+editor. It does not publish anything. Existing stories are not modified by AI.
+
+Set `OPENAI_API_KEY` in the local service's environment before starting it.
+Never put a key in a story, browser setting, or committed file. Planning defaults
+to `gpt-6.2-astra`; artwork defaults to `gpt-image-2.5-flare`. Override explicitly
+with `EARTH_STORIES_PLANNING_MODEL` and `EARTH_STORIES_IMAGE_MODEL` only with models
+that support the same structured-output and image APIs. Access is checked before
+planning and no alternate model is silently selected. API usage, including
+artwork and retries, is charged to the API account. A ChatGPT login alone does not
+configure this service; any eligible subscription API credits must be activated
+in the API account separately.
+
+The brief and selected reference contents are sent to OpenAI. Supported references
+are UTF-8 TXT/Markdown, PDFs with extractable text, and PNG/JPEG/WebP images. Public
+HTTPS links must point directly to those formats. Scanned PDFs require a text
+version; SVG and general webpage scraping are unsupported. Limits: 20 references,
+20 MiB each, 200,000 extracted text characters, and 100 MiB combined input files.
+Images are decoded, bounded to 16 million pixels and 8192 pixels per edge, and re-encoded as PNG.
+
+Only one generation runs at a time. A job can produce at most 30 chapters,
+12 illustrated scenes, and 24 artwork requests (plus bounded transient retries).
+Two transient retries and one planning repair are allowed. There is no promised
+dollar ceiling. Cancel stops further work; already incurred API usage remains.
+Retry reuses validated completed artwork. A service restart marks unfinished work
+as interrupted. Candidate URLs survive restart. Discard removes candidate files;
+accepted project assets remain intact.
+
+Run `yarn smoke:generation` with configured credentials for
+live verification in a disposable workspace. `--mock` explicitly uses a simulated
+provider for integration testing; it is not evidence of live model access. The
+script prints a redacted report and local artifact paths. Model request formats
+follow the [official structured-output guide](https://developers.openai.com/api/docs/guides/structured-outputs)
+and [image-generation guide](https://developers.openai.com/api/docs/guides/image-generation).

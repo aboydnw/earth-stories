@@ -1,3 +1,4 @@
+import { readerPaletteSchema, sceneSchema } from "./illustration.js";
 import { z } from "zod";
 import { COLORMAP_NAMES } from "./colormaps.js";
 
@@ -244,7 +245,7 @@ const chapterBaseSchema = z.object({
   narrative: z.string(),
 });
 
-export const projectChapterSchema = z.discriminatedUnion("type", [
+export const legacyProjectChapterSchema = z.discriminatedUnion("type", [
   chapterBaseSchema.extend({ type: z.literal("prose") }),
   chapterBaseSchema.extend({
     type: z.literal("map"),
@@ -299,6 +300,18 @@ export const projectChapterSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+export const projectChapterSchema = z.discriminatedUnion("type", [
+  ...legacyProjectChapterSchema.options,
+  chapterBaseSchema
+    .extend({
+      type: z.literal("illustrated"),
+      alt: z.string(),
+      caption: z.string().default(""),
+      scene: sceneSchema,
+    })
+    .strict(),
+]);
+
 const storyProjectFields = {
   id: z.string().min(1),
   metadata: z.object({
@@ -316,7 +329,7 @@ const storyProjectFields = {
   }),
   sources: z.array(projectSourceSchema),
   dataAssets: z.array(projectDataAssetSchema).default([]),
-  chapters: z.array(projectChapterSchema).min(1),
+  chapters: z.array(legacyProjectChapterSchema).min(1),
 };
 
 export const storyProjectV1Schema = z
@@ -360,6 +373,19 @@ export const storyProjectV2Schema = z
   })
   .strict();
 
+export const storyProjectV3Schema = storyProjectV2Schema.extend({
+  schema: z.literal("earth-stories/project/v3"),
+  chapters: z.array(projectChapterSchema).min(1),
+  publication: storyProjectV2Schema.shape.publication
+    .removeDefault()
+    .extend({ palette: readerPaletteSchema.optional() })
+    .default({
+      profile: "connected",
+      theme: "cng",
+      offlineBasemap: { mode: "neutral" },
+    }),
+});
+
 function migrateStoryProjectV1(value: unknown): unknown {
   const parsed = storyProjectV1Schema.safeParse(value);
   if (!parsed.success) return value;
@@ -374,16 +400,21 @@ function migrateStoryProjectV1(value: unknown): unknown {
   };
 }
 
-/** Canonical persisted-project schema. V1 input is normalized to v2. */
+/** Canonical persisted project. Older contracts are migrated without losing IDs. */
 export const storyProjectSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object") return value;
+  let migrated: unknown = value;
+  if ((migrated as { schema?: unknown }).schema === "earth-stories/project/v1")
+    migrated = migrateStoryProjectV1(migrated);
   if (
-    value &&
-    typeof value === "object" &&
-    (value as { schema?: unknown }).schema === "earth-stories/project/v1"
-  )
-    return migrateStoryProjectV1(value);
-  return value;
-}, storyProjectV2Schema);
+    (migrated as { schema?: unknown }).schema === "earth-stories/project/v2"
+  ) {
+    const parsed = storyProjectV2Schema.safeParse(migrated);
+    if (!parsed.success) return migrated;
+    migrated = { ...parsed.data, schema: "earth-stories/project/v3" };
+  }
+  return migrated;
+}, storyProjectV3Schema);
 
 export class UnsupportedProjectSchemaError extends Error {
   constructor(schema: unknown) {
@@ -406,9 +437,11 @@ export function parseStoryProject(value: unknown): StoryProject {
   const schema = (value as { schema?: unknown }).schema;
   switch (schema) {
     case "earth-stories/project/v1":
-      return storyProjectV2Schema.parse(migrateStoryProjectV1(value));
+      return storyProjectSchema.parse(value);
     case "earth-stories/project/v2":
-      return storyProjectV2Schema.parse(value);
+      return storyProjectSchema.parse(value);
+    case "earth-stories/project/v3":
+      return storyProjectV3Schema.parse(value);
     default:
       throw new UnsupportedProjectSchemaError(schema);
   }
@@ -448,4 +481,4 @@ export function supportsChart(source: ProjectSource): boolean {
   );
 }
 export type StoryProjectV1 = z.infer<typeof storyProjectV1Schema>;
-export type StoryProject = z.infer<typeof storyProjectV2Schema>;
+export type StoryProject = z.infer<typeof storyProjectV3Schema>;

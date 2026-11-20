@@ -1,3 +1,4 @@
+import { paletteContrastWarnings } from "@earth-stories/story-schema";
 import { access, readFile, stat, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import type {
@@ -319,6 +320,18 @@ export async function preflightPublication(
       resolution:
         "Review the dependency report. Earth Stories does not claim offline support yet.",
     });
+  if (project.publication.palette)
+    for (const [index, message] of paletteContrastWarnings(
+      project.publication.palette,
+      project.publication.theme,
+    ).entries())
+      issues.push({
+        id: `palette-contrast-${index}`,
+        area: "publish",
+        severity: "warning",
+        message,
+        resolution: "Adjust reader colors for readable text.",
+      });
   const cardPath = join(projectDirectory, SHARE_CARD_SOURCE_FILENAME);
   let cardReadable = false;
   try {

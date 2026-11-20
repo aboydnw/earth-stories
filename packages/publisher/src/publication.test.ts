@@ -445,7 +445,7 @@ describe("publication hardening", () => {
       JSON.parse(
         await readFile(join(results[0].directory, "publication.json"), "utf8"),
       ),
-    ).toHaveProperty("schema", "earth-stories/publication/v2");
+    ).toHaveProperty("schema", "earth-stories/publication/v3");
   });
 
   it("escapes embed attributes and preserves the fixed iframe scrollport", () => {

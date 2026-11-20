@@ -24,6 +24,29 @@ export function chapterCompileIssues(
 ): DeterministicCompileIssue[] {
   if (chapter.type === "prose" || chapter.type === "video") return [];
   const issues: DeterministicCompileIssue[] = [];
+  if (chapter.type === "illustrated") {
+    for (const layer of chapter.scene.layers) {
+      if (layer.kind !== "image") continue;
+      const source = sources.get(layer.sourceId);
+      if (source?.kind === "image" && !/\.(png|jpe?g|webp)$/i.test(source.path))
+        issues.push({
+          code: "invalid-source",
+          chapterId: chapter.id,
+          resourceId: source.id,
+          message: "Illustrated scenes require PNG, JPEG, or WebP artwork.",
+        });
+      if (!source || source.kind !== "image")
+        issues.push({
+          code: source ? "incompatible-source" : "missing-source",
+          chapterId: chapter.id,
+          resourceId: layer.sourceId,
+          message: source
+            ? `Illustration layer ${layer.id} requires an image source`
+            : `Illustration layer ${layer.id} references missing source ${layer.sourceId}`,
+        });
+    }
+    return issues;
+  }
   if ("overlaySourceIds" in chapter) {
     for (const overlayId of chapter.overlaySourceIds ?? []) {
       const overlay = sources.get(overlayId);

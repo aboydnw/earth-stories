@@ -12,7 +12,7 @@ const created = "2026-11-16T00:00:00.000Z";
 
 function story(id: string, title: string, description: string): StoryProject {
   return {
-    schema: "earth-stories/project/v2",
+    schema: "earth-stories/project/v3",
     id: `example-${id}`,
     metadata: {
       title,

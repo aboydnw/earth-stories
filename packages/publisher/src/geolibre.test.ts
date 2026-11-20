@@ -7,7 +7,7 @@ import {
 
 function manifest(): PublicationManifest {
   return {
-    schema: "earth-stories/publication/v2",
+    schema: "earth-stories/publication/v3",
     build: {
       id: "build-123",
       projectId: "coast",

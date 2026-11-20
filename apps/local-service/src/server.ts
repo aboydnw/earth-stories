@@ -1,3 +1,5 @@
+import { generationRoute } from "./generation/routes.js";
+import type { GenerationJobs } from "./generation/jobs.js";
 import { createReadStream } from "node:fs";
 import { access, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import {
@@ -269,6 +271,7 @@ export function createLocalServer(
     conversion: ConversionJobs;
     pages: PagesJobs;
     github?: GitHubAppConnection;
+    generation?: GenerationJobs;
   },
   internal: {
     testOnlyDisableTrustedMutationOrigin?: boolean;
@@ -305,6 +308,11 @@ export function createLocalServer(
         json(response, 403, { error: "Untrusted request origin" });
         return;
       }
+      if (
+        jobs.generation &&
+        (await generationRoute(request, response, url, jobs.generation))
+      )
+        return;
       if (request.method === "GET" && url.pathname === "/health") {
         json(response, 200, { status: "ready", projectsDirectory: store.root });
         return;

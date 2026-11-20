@@ -1,3 +1,4 @@
+import { readerPaletteStyle } from "./readerPalette.js";
 import { useMemo } from "react";
 import {
   publicationBasemapHref,
@@ -17,6 +18,7 @@ export interface FocusedChapterViewerProps {
   onFitAvailabilityChange?: (available: boolean) => void;
   onFitCameraChange?: (camera: Camera) => void;
   cameraOverride?: Camera | null;
+  snapshotMode?: boolean;
 }
 
 export function FocusedChapterViewer({
@@ -29,6 +31,7 @@ export function FocusedChapterViewer({
   onFitAvailabilityChange,
   onFitCameraChange,
   cameraOverride,
+  snapshotMode,
 }: FocusedChapterViewerProps) {
   const assets = useMemo(
     () => new Map(manifest.assets.map((asset) => [asset.id, asset])),
@@ -48,10 +51,12 @@ export function FocusedChapterViewer({
 
   return (
     <main
+      style={readerPaletteStyle(manifest.publication.palette)}
       className={`story-publication story-publication--${manifest.publication.theme} story-publication--focused`}
     >
       <article className="story-chapters story-chapters--focused">
         <PublicationChapterRenderer
+          snapshotMode={snapshotMode}
           chapter={chapter}
           assets={assets}
           basemapStyle={publicationBasemapHref(manifest.basemap)}

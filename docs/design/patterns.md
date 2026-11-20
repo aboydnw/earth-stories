@@ -115,3 +115,30 @@ revision, not later edits. Publishing remains a separate explicit action.
 Development feedback controls occupy a reserved bottom dock rather than cover
 navigation. The example animation experiment labels its static baseline and
 requires an animated treatment before enabling rehearsal controls.
+
+### Illustrated chapters and reader palettes
+
+Illustrated chapters contain validated image, text, and vector path layers.
+The focused canvas offers a scene scrubber; full reader scrolling advances the
+same shared renderer. Reduced motion and archival export use the authored still
+frame. Missing artwork is explicit. The inspector edits captions, descriptions,
+layer text, image source choices, motion strength, scroll length, and still frame.
+It is not a general animation timeline.
+
+Unspecified reader colors retain the active theme defaults; archive scenes,
+contrast checks, and palette controls resolve these through `resolveReaderPalette`.
+Reader palette overrides belong to authored story content, are scoped to reader
+roots, and never recolor product controls or data visualization ramps. Resetting
+an override restores theme colors. Publication checks warn about low text contrast.
+
+### Story creation from a brief
+
+The workspace creation entry collects one brief and classified references. It
+shows credential availability and API-charge disclosure before generation.
+Progress survives a page reload and names the current stage; failed or cancelled
+jobs can be retried using completed artwork. The result shows reader colors,
+chapters, images, missing-content notes, and a separate candidate reader preview.
+Acceptance is disabled until validation succeeds and while import is pending.
+Only **Create this story** creates an editable workspace project; publishing
+remains a separate author action. The earlier chapter-specific Studio prototype
+has been removed. No conversation history or existing-story AI mutation is exposed.

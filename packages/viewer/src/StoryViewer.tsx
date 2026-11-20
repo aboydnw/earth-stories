@@ -1,3 +1,4 @@
+import { readerPaletteStyle } from "./readerPalette.js";
 import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   publicationBasemapHref,
@@ -84,6 +85,7 @@ export function StoryViewer({
 
   return (
     <main
+      style={readerPaletteStyle(manifest.publication.palette)}
       className={`story-publication story-publication--${theme ?? manifest.publication.theme}${embed ? " story-publication--embed" : ""}`}
     >
       {!embed ? (

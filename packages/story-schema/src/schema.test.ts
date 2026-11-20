@@ -12,7 +12,7 @@ import {
 import { publicationAssetSchema } from "./publication.js";
 
 describe("storyProjectSchema", () => {
-  it("migrates v1 projects losslessly to v2 with the neutral offline basemap default", async () => {
+  it("migrates v1 projects losslessly to v3 with the neutral offline basemap default", async () => {
     const legacy = JSON.parse(
       await readFile(
         join(process.cwd(), "fixtures/field-notes/story.json"),
@@ -22,7 +22,7 @@ describe("storyProjectSchema", () => {
 
     const migrated = parseStoryProject(legacy);
 
-    expect(migrated.schema).toBe("earth-stories/project/v2");
+    expect(migrated.schema).toBe("earth-stories/project/v3");
     expect(migrated.publication).toEqual({
       ...(legacy.publication as object),
       offlineBasemap: { mode: "neutral" },
@@ -258,4 +258,53 @@ describe("storyProjectSchema", () => {
     flyover.keyframes[0]!.caption = "First view";
     expect(flyover.keyframes[1]!.caption).toBe("");
   });
+});
+
+it("round trips a v3 illustrated scene and palette without changing stable IDs", async () => {
+  const base = parseStoryProject(
+    JSON.parse(
+      await readFile(
+        join(process.cwd(), "fixtures/field-notes/story.json"),
+        "utf8",
+      ),
+    ),
+  );
+  const scene = projectChapterSchema.parse({
+    id: "scene",
+    type: "illustrated",
+    title: "River",
+    narrative: "Water flows",
+    alt: "River",
+    caption: "Illustration",
+    scene: {
+      width: 1000,
+      height: 600,
+      staticProgress: 0.3,
+      motionStrength: 0.4,
+      scrollLength: 3,
+      layers: [
+        {
+          id: "label",
+          kind: "text",
+          text: "River",
+          x: 0.2,
+          y: 0.3,
+          keyframes: [
+            { at: 0, x: 0.2, y: 0.3, scale: 1, opacity: 1, reveal: 0 },
+            { at: 1, x: 0.4, y: 0.3, scale: 2, opacity: 0.5, reveal: 1 },
+          ],
+        },
+      ],
+    },
+  });
+  const project = {
+    ...base,
+    chapters: [scene],
+    publication: { ...base.publication, palette: { text: "#112233" } },
+  };
+  expect(parseStoryProject(JSON.parse(JSON.stringify(project)))).toEqual(
+    project,
+  );
+  const v2 = { ...base, schema: "earth-stories/project/v2" };
+  expect(parseStoryProject(v2)).toEqual(base);
 });

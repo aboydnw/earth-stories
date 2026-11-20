@@ -1,0 +1,99 @@
+{
+  "schema": "earth-stories/project/v3",
+  "id": "illustrated-river",
+  "metadata": {
+    "title": "Illustrated river",
+    "description": "A fictional illustration for scene verification.",
+    "author": "Development Seed",
+    "created": "2026-08-04T00:00:00.000Z",
+    "updated": "2026-08-04T00:00:00.000Z"
+  },
+  "basemap": {
+    "id": "carto-positron",
+    "label": "CARTO Positron",
+    "styleUrl": "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+    "attribution": "\u00a9 OpenStreetMap contributors \u00a9 CARTO"
+  },
+  "publication": {
+    "profile": "offline",
+    "theme": "cng",
+    "palette": {
+      "text": "#172b36",
+      "mutedText": "#344955",
+      "background": "#f5f3f0",
+      "surface": "#ffffff",
+      "accent": "#006b7a",
+      "accentText": "#005463"
+    }
+  },
+  "sources": [
+    {
+      "id": "art",
+      "kind": "image",
+      "label": "Test swatch",
+      "path": "assets/swatch.png",
+      "delivery": "included"
+    }
+  ],
+  "chapters": [
+    {
+      "id": "river",
+      "type": "illustrated",
+      "title": "Follow the river",
+      "narrative": "This is a fictional illustration, not measured data.",
+      "alt": "A river line and a label",
+      "caption": "Illustration test",
+      "scene": {
+        "width": 1000,
+        "height": 600,
+        "staticProgress": 0.5,
+        "layers": [
+          {
+            "id": "river-line",
+            "kind": "path",
+            "pathData": "M 0.1 0.1 C 0.8 0.2 0.2 0.8 0.9 0.9",
+            "fillRole": null,
+            "strokeRole": "accent",
+            "strokeWidth": 0.03,
+            "keyframes": [
+              {
+                "at": 0,
+                "x": 0,
+                "y": 0,
+                "scale": 1,
+                "opacity": 1,
+                "reveal": 0
+              },
+              {
+                "at": 1,
+                "x": 0,
+                "y": 0,
+                "scale": 1,
+                "opacity": 1,
+                "reveal": 1
+              }
+            ]
+          },
+          {
+            "id": "label",
+            "kind": "text",
+            "text": "River to sea",
+            "x": 0.1,
+            "y": 0.7
+          },
+          {
+            "id": "swatch",
+            "kind": "image",
+            "sourceId": "art",
+            "alt": "Color swatch",
+            "x": 0.8,
+            "y": 0.1,
+            "width": 0.1,
+            "height": 0.1
+          }
+        ]
+      }
+    }
+  ],
+  "dataAssets": []
+}

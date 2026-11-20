@@ -1,3 +1,4 @@
+import { IllustrationInspector } from "./IllustrationInspector";
 import type {
   Camera,
   ProjectChapter,
@@ -18,6 +19,7 @@ export interface ChapterInspectorReadiness {
 
 const typeLabels: Record<ProjectChapter["type"], string> = {
   prose: "Text",
+  illustrated: "Illustrated scene",
   map: "Map",
   scrolly: "Guided map",
   image: "Image",
@@ -83,6 +85,13 @@ export function ChapterInspector({
           {readiness.label}
         </StatusBadge>
       </header>
+      {chapter.type === "illustrated" ? (
+        <IllustrationInspector
+          {...common}
+          chapter={chapter}
+          onChange={onUpdateChapter}
+        />
+      ) : null}
       {chapter.type === "prose" ? (
         <ProseChapterEditor chapter={chapter} onChange={onUpdateChapter} />
       ) : null}

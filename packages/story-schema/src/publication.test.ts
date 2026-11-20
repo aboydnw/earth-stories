@@ -111,7 +111,7 @@ describe("publication manifests", () => {
   it("normalizes a v1 basemap and dependency into the v2 contract", () => {
     const parsed = parsePublicationManifest(legacyManifest);
 
-    expect(parsed.schema).toBe("earth-stories/publication/v2");
+    expect(parsed.schema).toBe("earth-stories/publication/v3");
     expect(parsed.basemap).toEqual({
       delivery: "connected",
       id: "legacy-map",
