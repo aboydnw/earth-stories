@@ -4,6 +4,7 @@ import {
   generationJobSchema,
   storyProjectSchema,
   defaultReaderPalette,
+  composeVectorScene,
 } from "@earth-stories/story-schema";
 import "./storyCreation.css";
 const meta = { title: "Editor/Story creation" } satisfies Meta;
@@ -74,6 +75,59 @@ export const Waiting: Story = {
   render: () => (
     <GenerationResult
       job={{ ...job, stage: "planning", candidate: null }}
+      accepting={false}
+      onAccept={() => {}}
+    />
+  ),
+};
+
+const enhancementChapter = {
+  id: "visual",
+  type: "illustrated",
+  title: "From source to sea",
+  narrative: "An illustrative journey.",
+  alt: "River flow",
+  caption: "Illustrative, not measured data",
+  scene: composeVectorScene({
+    template: "flow",
+    heading: "Source to sea",
+    labels: ["Source", "Sea"],
+    motif: "river",
+    motion: true,
+  }),
+};
+const enhancementJob = generationJobSchema.parse({
+  ...job,
+  enhancement: { projectId: "river", sourceDigest: "original", warnings: [] },
+  candidate: {
+    ...job.candidate,
+    project: {
+      ...project,
+      chapters: [...project.chapters, enhancementChapter],
+    },
+  },
+  plan: {
+    title: "River",
+    description: "",
+    palette: { ...defaultReaderPalette, mutedText: defaultReaderPalette.text },
+    artwork: [],
+    warnings: [],
+    chapters: [{ ...enhancementChapter, afterChapterId: "opening" }],
+    textEdits: [
+      {
+        chapterId: "opening",
+        before: "A fictional river.",
+        after: "Follow the river in the illustration below.",
+        reason: "Introduce the flow illustration",
+        visualChapterId: "visual",
+      },
+    ],
+  },
+});
+export const EnhancementReview: Story = {
+  render: () => (
+    <GenerationResult
+      job={enhancementJob}
       accepting={false}
       onAccept={() => {}}
     />

@@ -296,3 +296,41 @@ describe("ProjectStore", () => {
     ).resolves.toMatchObject({ metadata: { title: "Recovered" } });
   });
 });
+
+it("applies enhancement atomically, preserves backups, refuses stale stories, and recovers a repeated apply", async () => {
+  const store = await createStore();
+  const source = await store.create({ title: "Existing story" });
+  const candidate = {
+    ...source,
+    chapters: [
+      ...source.chapters,
+      {
+        id: "visual-intro",
+        type: "prose" as const,
+        title: "Visual context",
+        narrative: "Illustrative",
+      },
+    ],
+  };
+  const saved = await store.applyEnhancement(source.id, candidate, source);
+  expect(saved.chapters).toEqual(candidate.chapters);
+  expect(saved.metadata.updated).not.toBe(source.metadata.updated);
+  expect(await store.applyEnhancement(source.id, candidate, source)).toEqual(
+    saved,
+  );
+  const userEdit = await store.save(source.id, {
+    ...saved,
+    metadata: { ...saved.metadata, title: "Changed by author" },
+  });
+  await expect(
+    store.applyEnhancement(source.id, candidate, source),
+  ).rejects.toThrow("changed during generation");
+  expect(await store.read(source.id)).toEqual(userEdit);
+  expect(
+    (
+      await readdir(
+        join(store.projectPath(source.id), ".earth-stories/backups"),
+      )
+    ).length,
+  ).toBeGreaterThan(0);
+});

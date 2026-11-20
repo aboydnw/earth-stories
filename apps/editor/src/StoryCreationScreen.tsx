@@ -1,9 +1,13 @@
+import { compileProject } from "@earth-stories/publisher/compile";
+import { resolvePreviewManifest } from "./resolvePreviewManifest";
+import { captureMapSnapshots } from "./captureSnapshots";
 import { useEffect, useRef, useState } from "react";
 import type {
   GenerationJob,
   PublicationManifest,
   ReferenceInput,
   StoryBrief,
+  StoryProject,
 } from "@earth-stories/story-schema";
 import {
   ActionButton,
@@ -46,17 +50,23 @@ const message = (cause: unknown) =>
   cause instanceof Error ? cause.message : "This action could not finish.";
 export function StoryCreationScreen({
   jobId,
+  sourceProjectId,
   preview,
   onNavigate,
   onCreated,
   onBack,
 }: {
   jobId: string | null;
+  sourceProjectId?: string;
   preview: boolean;
   onNavigate: (jobId: string | null, preview?: boolean) => void;
   onCreated: (id: string) => Promise<void>;
   onBack: () => void;
 }) {
+  const [source, setSource] = useState<StoryProject | null>(null);
+  const [sourceManifest, setSourceManifest] =
+    useState<PublicationManifest | null>(null);
+  const sourcePreview = useRef<HTMLDivElement>(null);
   const [brief, setBrief] = useState<StoryBrief>(initial);
   const [editing, setEditing] = useState(false);
   const [job, setJob] = useState<GenerationJob | null>(null);
@@ -69,6 +79,34 @@ export function StoryCreationScreen({
   const [accepting, setAccepting] = useState(false);
   const submitting = useRef(false),
     acceptLock = useRef(false);
+  const enhancing = Boolean(sourceProjectId || job?.enhancement);
+  useEffect(() => {
+    if (!sourceProjectId || preview) return;
+    let live = true;
+    setSource(null);
+    setSourceManifest(null);
+    void api
+      .openProject(sourceProjectId)
+      .then((project) => {
+        if (!live) return;
+        setSourceManifest(
+          resolvePreviewManifest(project, compileProject(project)),
+        );
+        setSource(project);
+        if (!jobId)
+          setBrief({
+            ...initial,
+            title: project.metadata.title,
+            narrative: "",
+          });
+      })
+      .catch((cause) => {
+        if (live) setError(message(cause));
+      });
+    return () => {
+      live = false;
+    };
+  }, [sourceProjectId, jobId, preview]);
   useEffect(() => {
     setEditing(false);
     setJob(null);
@@ -81,6 +119,10 @@ export function StoryCreationScreen({
       try {
         const next = await api.getGeneration(jobId);
         if (!live) return;
+        if (sourceProjectId && next.enhancement?.projectId !== sourceProjectId)
+          throw new Error(
+            "This enhancement belongs to a different story. Return to your story and reopen Enhance with AI.",
+          );
         setJob(next);
         if (preview && ["ready", "accepted"].includes(next.stage)) {
           const view = await api.generationPreview(jobId);
@@ -99,7 +141,7 @@ export function StoryCreationScreen({
       live = false;
       clearTimeout(timer);
     };
-  }, [jobId, preview, pollVersion]);
+  }, [jobId, preview, pollVersion, sourceProjectId]);
   async function generate() {
     if (submitting.current) return;
     submitting.current = true;
@@ -111,10 +153,24 @@ export function StoryCreationScreen({
         throw new Error(
           "Use at most 20 references, including files and links.",
         );
-      const created = await api.startGeneration({
-        ...brief,
-        references: [...brief.references, ...links],
-      });
+      const input = { ...brief, references: [...brief.references, ...links] };
+      if (enhancing && !source)
+        throw new Error(
+          "The original story must finish loading before generation.",
+        );
+      const maps =
+        enhancing && sourcePreview.current
+          ? await captureMapSnapshots(sourcePreview.current)
+          : {};
+      const created =
+        enhancing && source
+          ? await api.enhanceStory(
+              source.id,
+              input,
+              Object.fromEntries(Object.entries(maps).slice(0, 12)),
+              source.metadata.updated,
+            )
+          : await api.startGeneration(input);
       onNavigate(created.id);
     } catch (e) {
       setError(message(e));
@@ -207,10 +263,16 @@ export function StoryCreationScreen({
     return (
       <div className="story-preview-shell">
         <header className="story-preview-bar">
-          <a href={`/create/${encodeURIComponent(jobId ?? "")}`}>
+          <a
+            href={
+              sourceProjectId
+                ? `/stories/${encodeURIComponent(sourceProjectId)}/enhance/${encodeURIComponent(jobId ?? "")}`
+                : `/create/${encodeURIComponent(jobId ?? "")}`
+            }
+          >
             Back to candidate
           </a>
-          <strong>Candidate preview · not created or published</strong>
+          <strong>Candidate preview · not applied or published</strong>
         </header>
         {error ? <p role="alert">{error}</p> : null}
         {manifest ? (
@@ -224,22 +286,31 @@ export function StoryCreationScreen({
     <main className="story-creation">
       <header className="story-creation__header">
         <ActionButton variant="ghost" onClick={onBack}>
-          Back to stories
+          {enhancing ? "Back to story" : "Back to stories"}
         </ActionButton>
-        <span>Earth Stories / Story creation</span>
+        <span>
+          Earth Stories / {enhancing ? "Visual enhancement" : "Story creation"}
+        </span>
       </header>
       <div className="story-creation__intro">
-        <p className="eyebrow">From an idea to a story</p>
+        <p className="eyebrow">
+          {enhancing
+            ? "Visual direction for your story"
+            : "From an idea to a story"}
+        </p>
         <h1>
           {editing
             ? "Edit your story brief"
-            : job
-              ? "Review your new story"
-              : "What story do you want to tell?"}
+            : enhancing
+              ? "Enhance your story with AI"
+              : job
+                ? "Review your new story"
+                : "What story do you want to tell?"}
         </h1>
         <p>
-          Describe the audience, message, and visual direction. Review a working
-          preview before adding it to your stories.
+          {enhancing
+            ? "Add illustrations and animation to your existing story. Its chapters, maps, images and data are preserved; any small supporting text edits are shown for approval."
+            : "Describe the audience, message, and visual direction. Review a working preview before adding it to your stories."}
         </p>
       </div>
       {error ? (
@@ -272,26 +343,41 @@ export function StoryCreationScreen({
                 ["narrative", "Story context and source material", true],
                 ["visualDirection", "Visual direction", true],
               ] as const
-            ).map(([key, label, multiline]) => (
-              <FormField key={key} label={label} required={key === "title"}>
-                {multiline ? (
-                  <TextArea
-                    rows={key === "narrative" ? 7 : 3}
-                    value={brief[key]}
-                    onChange={(e) =>
-                      setBrief({ ...brief, [key]: e.target.value })
-                    }
-                  />
-                ) : (
-                  <TextInput
-                    value={brief[key]}
-                    onChange={(e) =>
-                      setBrief({ ...brief, [key]: e.target.value })
-                    }
-                  />
-                )}
-              </FormField>
-            ))}
+            )
+              .filter(
+                ([key]) =>
+                  !enhancing ||
+                  key === "narrative" ||
+                  key === "visualDirection",
+              )
+              .map(([key, label, multiline]) => (
+                <FormField
+                  key={key}
+                  label={
+                    enhancing && key === "narrative"
+                      ? "Additional context for the visuals"
+                      : label
+                  }
+                  required={key === "title"}
+                >
+                  {multiline ? (
+                    <TextArea
+                      rows={key === "narrative" ? 7 : 3}
+                      value={brief[key]}
+                      onChange={(e) =>
+                        setBrief({ ...brief, [key]: e.target.value })
+                      }
+                    />
+                  ) : (
+                    <TextInput
+                      value={brief[key]}
+                      onChange={(e) =>
+                        setBrief({ ...brief, [key]: e.target.value })
+                      }
+                    />
+                  )}
+                </FormField>
+              ))}
           </div>
           <section>
             <h2>References</h2>
@@ -363,15 +449,24 @@ export function StoryCreationScreen({
             </FormField>
           </section>
           <StatusNotice tone="info" title="Before you generate">
-            Your brief and reference contents will be sent to OpenAI using your
-            ChatGPT plan allowance. This creates a private local candidate; it
-            does not publish a story.
+            {enhancing
+              ? "Your saved story, supported images, data extracts, available map previews, directions and references will be sent to OpenAI using your ChatGPT plan allowance. You review a private candidate before applying it to this story. Content that could not be inspected is listed in the result. Nothing is published."
+              : "Your brief and reference contents will be sent to OpenAI using your ChatGPT plan allowance. This creates a private local candidate; it does not publish a story."}
           </StatusNotice>
           <ActionButton
             type="submit"
-            disabled={!configured || busy || !brief.title.trim()}
+            disabled={
+              !configured ||
+              busy ||
+              !brief.title.trim() ||
+              (enhancing && !source)
+            }
           >
-            {busy ? "Starting generation…" : "Generate story"}
+            {busy
+              ? "Starting generation…"
+              : enhancing
+                ? "Generate visual enhancements"
+                : "Generate story"}
           </ActionButton>
         </form>
       ) : job ? (
@@ -394,12 +489,25 @@ export function StoryCreationScreen({
                 Cancel generation
               </ActionButton>
             ) : null}
-            {job.stage === "failed" || job.stage === "cancelled" ? (
+            {job.stage === "failed" ||
+            job.stage === "cancelled" ||
+            (job.enhancement && job.stage === "ready") ? (
               <ActionButton
                 disabled={busy}
                 onClick={() =>
                   void action(async () => {
                     const restored = await api.getGenerationBrief(job.id);
+                    if (job.enhancement) {
+                      const latest = await api.openProject(
+                        job.enhancement.projectId,
+                      );
+                      const manifest = resolvePreviewManifest(
+                        latest,
+                        compileProject(latest),
+                      );
+                      setSource(latest);
+                      setSourceManifest(manifest);
+                    }
                     setBrief(restored);
                     setUrls("");
                     setEditing(true);
@@ -446,7 +554,7 @@ export function StoryCreationScreen({
               disabled={busy}
               onClick={() => onNavigate(null)}
             >
-              Start another brief
+              {enhancing ? "Start a fresh enhancement" : "Start another brief"}
             </ActionButton>
             <ActionButton
               variant="ghost"
@@ -472,6 +580,16 @@ export function StoryCreationScreen({
       ) : (
         <p role="status">Loading generation…</p>
       )}
+      {(!jobId || editing) && enhancing && sourceManifest ? (
+        <section ref={sourcePreview} aria-label="Original story context">
+          <h2>Original story</h2>
+          <p>
+            Existing content is included as context. Maps that cannot finish
+            loading are identified in the result.
+          </p>
+          <StoryViewer manifest={sourceManifest} snapshotMode />
+        </section>
+      ) : null}
     </main>
   );
 }

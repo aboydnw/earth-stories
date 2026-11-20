@@ -25,6 +25,8 @@ vi.mock("./api", () => ({
   connectChatGPT: vi.fn(),
   cancelChatGPT: vi.fn(),
   disconnectChatGPT: vi.fn(),
+  openProject: vi.fn(),
+  enhanceStory: vi.fn(),
   getGeneration: vi.fn(),
   getGenerationBrief: vi.fn(),
   acceptGeneration: vi.fn(),
@@ -237,4 +239,74 @@ it("restores a failed brief and its references, then submits edits as a new job"
       references: expect.arrayContaining([original.references[1]]),
     }),
   );
+});
+
+it("generates enhancements from the existing story without asking for its text again", async () => {
+  const { storyProjectSchema } = await import("@earth-stories/story-schema");
+  const project = storyProjectSchema.parse({
+    schema: "earth-stories/project/v3",
+    id: "existing",
+    metadata: {
+      title: "Existing river",
+      description: "",
+      author: null,
+      created: "2026-11-20T00:00:00Z",
+      updated: "2026-11-20T00:00:00Z",
+    },
+    basemap: {
+      id: "neutral",
+      label: "Neutral",
+      styleUrl: "https://example.org/style.json",
+      attribution: null,
+    },
+    sources: [],
+    chapters: [
+      {
+        id: "opening",
+        type: "prose",
+        title: "Opening",
+        narrative: "Keep this authored text.",
+      },
+    ],
+  });
+  vi.mocked(api.openProject).mockResolvedValue(project);
+  vi.mocked(api.enhanceStory).mockResolvedValue({
+    id: "enhancement-job",
+  } as never);
+  vi.mocked(api.startGeneration).mockClear();
+  const navigate = vi.fn();
+  render(
+    <EarthStoriesProvider>
+      <StoryCreationScreen
+        sourceProjectId="existing"
+        jobId={null}
+        preview={false}
+        onNavigate={navigate}
+        onCreated={async () => {}}
+        onBack={() => {}}
+      />
+    </EarthStoriesProvider>,
+  );
+  const button = await screen.findByRole("button", {
+    name: "Generate visual enhancements",
+  });
+  await waitFor(() =>
+    expect((button as HTMLButtonElement).disabled).toBe(false),
+  );
+  expect(screen.queryByLabelText(/Working title/)).toBeNull();
+  fireEvent.change(screen.getByLabelText("Visual direction"), {
+    target: { value: "Explain the flow visually" },
+  });
+  fireEvent.click(button);
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("enhancement-job"));
+  expect(api.enhanceStory).toHaveBeenCalledWith(
+    "existing",
+    expect.objectContaining({
+      title: "Existing river",
+      visualDirection: "Explain the flow visually",
+    }),
+    {},
+    project.metadata.updated,
+  );
+  expect(api.startGeneration).not.toHaveBeenCalled();
 });

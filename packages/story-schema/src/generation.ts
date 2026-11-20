@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { readerPaletteSchema, sceneSchema } from "./illustration.js";
-import { storyProjectV3Schema } from "./project.js";
+import { type StoryProject, storyProjectV3Schema } from "./project.js";
 const id = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/);
 const classification = z.enum(["facts", "visual-style", "background"]);
 export const referenceInputSchema = z.discriminatedUnion("kind", [
@@ -61,6 +61,15 @@ export const illustrationRequestSchema = z
     height: z.literal(1024),
   })
   .strict();
+export const enhancementTextEditSchema = z
+  .object({
+    chapterId: z.string().min(1),
+    before: z.string().min(1).max(240),
+    after: z.string().min(1).max(360),
+    reason: z.string().min(1).max(500),
+    visualChapterId: id,
+  })
+  .strict();
 export const storyPlanSchema = z
   .object({
     title: z.string().min(1).max(200),
@@ -77,11 +86,13 @@ export const storyPlanSchema = z
             alt: z.string().max(2000),
             caption: z.string().max(2000),
             scene: sceneSchema.nullable(),
+            afterChapterId: z.string().min(1).nullable().optional(),
           })
           .strict(),
       )
       .min(1)
       .max(30),
+    textEdits: z.array(enhancementTextEditSchema).max(8).optional(),
     artwork: z.array(illustrationRequestSchema).max(24),
     warnings: z.array(z.string().max(2000)).max(30),
   })
@@ -168,6 +179,14 @@ export const generationJobSchema = z
     id,
     stage: generationStageSchema,
     brief: storyBriefSchema,
+    enhancement: z
+      .object({
+        projectId: z.string().min(1),
+        sourceDigest: z.string(),
+        warnings: z.array(z.string()),
+      })
+      .strict()
+      .optional(),
     referenceStorage: z.literal("separate").optional(),
     referenceMetadata: z
       .array(
@@ -215,6 +234,7 @@ export interface GenerationProvider {
     brief: StoryBrief,
     references: PreparedReference[],
     signal: AbortSignal,
+    source?: StoryProject,
   ): Promise<{ plan: StoryPlan; usage: Record<string, unknown> }>;
 }
 

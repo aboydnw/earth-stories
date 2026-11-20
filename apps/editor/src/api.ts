@@ -516,6 +516,17 @@ export const startGeneration = (brief: StoryBrief) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(brief),
   });
+export const enhanceStory = (
+  projectId: string,
+  brief: StoryBrief,
+  maps: Record<string, string>,
+  sourceUpdated: string,
+) =>
+  request<GenerationJob>("/api/generation/enhance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId, brief, maps, sourceUpdated }),
+  });
 export const getGeneration = (id: string) =>
   request<GenerationJob>(`/api/generation/jobs/${encodeURIComponent(id)}`);
 export const getGenerationBrief = (id: string) =>

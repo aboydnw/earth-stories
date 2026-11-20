@@ -1,3 +1,9 @@
+import { assembleEnhancement } from "./enhancement.js";
+import {
+  enhancementContext,
+  verifySourceFiles,
+  type EnhancementSnapshot,
+} from "./enhancement-context.js";
 import { randomUUID } from "node:crypto";
 import {
   lstat,
@@ -18,6 +24,7 @@ import {
   referenceInputSchema,
   generationPlanIssues,
   storyPlanSchema,
+  storyProjectSchema,
   type GenerationJob,
   type GenerationProvider,
   type StoryBrief,
@@ -58,6 +65,8 @@ export class GenerationJobs {
     promise: Promise<void>;
   } | null = null;
   private starting = false;
+  private startController: AbortController | null = null;
+  private startDone: Promise<void> | null = null;
   private closed = false;
   private realRoot: string | null = null;
   constructor(
@@ -162,7 +171,11 @@ export class GenerationJobs {
   async getBrief(id: string): Promise<StoryBrief> {
     return this.lock(id, async () => {
       const job = await this.get(id);
-      if (job.stage !== "failed" && job.stage !== "cancelled")
+      if (
+        job.stage !== "failed" &&
+        job.stage !== "cancelled" &&
+        !(job.stage === "ready" && job.enhancement)
+      )
         throw new Error("Cancel generation before editing its brief.");
       const references =
         job.referenceStorage === "separate"
@@ -187,7 +200,12 @@ export class GenerationJobs {
       return job;
     });
   }
-  async start(input: unknown): Promise<GenerationJob> {
+  async start(
+    input: unknown,
+    projectId?: string,
+    maps: Record<string, string> = {},
+    sourceUpdated?: string,
+  ): Promise<GenerationJob> {
     if (!this.provider.configured)
       throw new Error("Continue with ChatGPT before generating a story.");
     if (this.closed || this.running || this.starting)
@@ -195,8 +213,31 @@ export class GenerationJobs {
         "Another generation is running. Wait or cancel it first.",
       );
     this.starting = true;
+    const controller = new AbortController();
+    this.startController = controller;
+    let finishStart!: () => void;
+    this.startDone = new Promise<void>((resolve) => {
+      finishStart = resolve;
+    });
     try {
       const brief = storyBriefSchema.parse(input);
+      const snapshot = projectId
+        ? await enhancementContext(
+            this.store,
+            projectId,
+            maps,
+            AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]),
+          )
+        : null;
+      if (
+        snapshot &&
+        sourceUpdated &&
+        snapshot.project.metadata.updated !== sourceUpdated
+      )
+        throw new Error(
+          "This story changed after the enhancement form opened. Reload the page to use its latest content.",
+        );
+      controller.signal.throwIfAborted();
       const id = randomUUID();
       await mkdir(this.directory(id), { mode: 0o700 });
       await mkdir(join(this.directory(id), "assets"));
@@ -213,14 +254,46 @@ export class GenerationJobs {
         updatedAt: now,
         usage: [],
         acceptance: null,
+        ...(snapshot
+          ? {
+              enhancement: {
+                projectId: snapshot.project.id,
+                sourceDigest: digestBytes(JSON.stringify(snapshot.project)),
+                warnings: snapshot.warnings,
+              },
+            }
+          : {}),
       };
+      if (snapshot)
+        await atomic(join(this.directory(id), "source.json"), snapshot);
       await this.separateInputs(job);
       await this.save(job);
-      this.launch(id);
+      if (controller.signal.aborted) {
+        job.stage = "cancelled";
+        job.error = "Generation was cancelled while preparing story context.";
+        await this.save(job);
+      } else this.launch(id);
       return job;
     } finally {
       this.starting = false;
+      this.startController = null;
+      finishStart();
+      this.startDone = null;
     }
+  }
+  private async source(job: GenerationJob): Promise<EnhancementSnapshot> {
+    if (!job.enhancement) throw new Error("This job is not an enhancement.");
+    const snapshot = JSON.parse(
+      await readFile(await this.contained(job.id, "source.json"), "utf8"),
+    ) as EnhancementSnapshot;
+    snapshot.project = storyProjectSchema.parse(snapshot.project);
+    if (
+      digestBytes(JSON.stringify(snapshot.project)) !==
+        job.enhancement.sourceDigest ||
+      snapshot.project.id !== job.enhancement.projectId
+    )
+      throw new Error("The original story snapshot failed validation.");
+    return snapshot;
   }
   private launch(id: string) {
     const controller = new AbortController();
@@ -269,7 +342,13 @@ export class GenerationJobs {
         await atomic(refsPath, references);
       }
       if (!job.plan) {
-        const result = await this.provider.plan(job.brief, references, signal);
+        const snapshot = job.enhancement ? await this.source(job) : null;
+        const result = await this.provider.plan(
+          job.brief,
+          [...references, ...(snapshot?.references ?? [])],
+          signal,
+          snapshot?.project,
+        );
         const plan = storyPlanSchema.parse(result.plan);
         const issues = generationPlanIssues(plan, job.brief);
         if (issues.length) throw new Error(issues.join(" "));
@@ -300,7 +379,9 @@ export class GenerationJobs {
         },
         signal,
       );
-      const candidate = assembleCandidate(job);
+      const candidate = job.enhancement
+        ? assembleEnhancement(job, (await this.source(job)).project)
+        : assembleCandidate(job);
       await this.change(
         id,
         (j) => {
@@ -382,7 +463,37 @@ export class GenerationJobs {
     const { digest, ...candidateData } = job.candidate;
     if (digestBytes(JSON.stringify(candidateData)) !== digest)
       throw new Error("Candidate integrity check failed.");
+    if (job.enhancement)
+      await verifySourceFiles(this.store, await this.source(job));
     const manifest = compileProject(job.candidate.project);
+    if (job.enhancement) {
+      for (const asset of manifest.assets) {
+        const source = job.candidate.project.sources.find(
+          (s) => s.id === asset.id,
+        );
+        if (!source) continue;
+        if (
+          asset.delivery === "connected" &&
+          source.kind !== "zarr" &&
+          source.kind !== "xyz"
+        ) {
+          asset.href = `/api/projects/${encodeURIComponent(job.enhancement.projectId)}/sources/${encodeURIComponent(source.id)}/content`;
+          continue;
+        }
+        const path =
+          "path" in source
+            ? source.path
+            : "locator" in source
+              ? source.locator
+              : null;
+        if (
+          asset.delivery === "included" &&
+          path &&
+          !/^https?:\/\//i.test(path)
+        )
+          asset.href = `/api/projects/${encodeURIComponent(job.enhancement.projectId)}/assets/${path.split("/").map(encodeURIComponent).join("/")}`;
+      }
+    }
     for (const asset of manifest.assets) {
       const source = job.candidate.assets.find((a) => a.id === asset.id);
       if (source) asset.href = `/api/generation/jobs/${id}/${source.path}`;
@@ -398,6 +509,27 @@ export class GenerationJobs {
       const { digest, ...data } = job.candidate;
       if (digestBytes(JSON.stringify(data)) !== digest)
         throw new Error("Candidate integrity check failed.");
+      if (job.enhancement) {
+        const snapshot = await this.source(job);
+        const expected = assembleEnhancement(job, snapshot.project);
+        if (expected.digest !== digest)
+          throw new Error(
+            "The enhancement no longer matches its approved plan.",
+          );
+        await this.store.applyEnhancement(
+          job.enhancement.projectId,
+          job.candidate.project,
+          snapshot.project,
+          () => verifySourceFiles(this.store, snapshot),
+        );
+        job.acceptance = {
+          projectId: job.enhancement.projectId,
+          candidateDigest: digest,
+        };
+        job.stage = "accepted";
+        await this.save(job);
+        return job.acceptance;
+      }
       job.acceptance ??= {
         projectId: job.candidate.project.id,
         candidateDigest: digest,
@@ -434,9 +566,11 @@ export class GenerationJobs {
     });
   }
   activity() {
-    return this.running ? 1 : 0;
+    return this.running || this.starting ? 1 : 0;
   }
   async cancelActive() {
+    this.startController?.abort();
+    await this.startDone;
     if (this.running) {
       await this.cancel(this.running.id);
       await this.whenIdle();
@@ -444,9 +578,11 @@ export class GenerationJobs {
   }
   close() {
     this.closed = true;
+    this.startController?.abort();
     this.running?.controller.abort();
   }
   async whenIdle() {
+    await this.startDone;
     await this.running?.promise;
   }
 }
