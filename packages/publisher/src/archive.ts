@@ -222,8 +222,26 @@ export async function buildArchivalHtml({
   for (const chapter of project.chapters) {
     const heading = `<h2>${escapeHtml(chapter.title)}</h2>`;
     const narrative = `<div class="narrative">${prose(chapter.narrative)}</div>`;
+    const sequence = project.visualSequences?.find((s) =>
+      s.steps.some((step) => step.chapterId === chapter.id),
+    );
+    let sequenceFigure = "";
+    if (sequence) {
+      const step = sequence.steps.find((s) => s.chapterId === chapter.id)!;
+      const svg = staticScene(
+        sequence.scene,
+        sequence.alt,
+        new Map(),
+        project.publication.palette,
+        project.publication.theme,
+        Math.max(step.start, Math.min(step.end, sequence.scene.staticProgress)),
+      );
+      sequenceFigure = `<figure><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" alt="${escapeHtml(sequence.alt)}"><figcaption>${escapeHtml(sequence.caption)}</figcaption></figure>`;
+    }
     if (chapter.type === "prose") {
-      chapters.push(`<section>${heading}${narrative}</section>`);
+      chapters.push(
+        `<section>${heading}${sequenceFigure}${narrative}</section>`,
+      );
       continue;
     }
     if (
@@ -273,7 +291,7 @@ export async function buildArchivalHtml({
         project.publication.theme,
       );
       chapters.push(
-        `<section>${heading}<figure><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" alt="${escapeHtml(chapter.alt)}"><figcaption>${escapeHtml(chapter.caption)}</figcaption></figure>${chapterProvenance(chapter.scene.layers.flatMap((layer) => (layer.kind === "image" ? [layer.sourceId] : [])))}${narrative}</section>`,
+        `<section>${heading}${sequenceFigure}<figure><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" alt="${escapeHtml(chapter.alt)}"><figcaption>${escapeHtml(chapter.caption)}</figcaption></figure>${chapterProvenance(chapter.scene.layers.flatMap((layer) => (layer.kind === "image" ? [layer.sourceId] : [])))}${narrative}</section>`,
       );
       continue;
     }

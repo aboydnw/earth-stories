@@ -17,9 +17,22 @@ export function assembleEnhancement(
     throw new Error("Enhancements require vector scenes only.");
   const existing = new Set(source.chapters.map((c) => c.id));
   const additions = new Set<string>();
+  const protectedAnchors = new Map(
+    (source.visualSequences ?? []).flatMap((sequence) =>
+      sequence.steps
+        .slice(0, -1)
+        .map(
+          (step) => [step.chapterId, sequence.steps.at(-1)!.chapterId] as const,
+        ),
+    ),
+  );
   for (const chapter of plan.chapters) {
     if (existing.has(chapter.id) || additions.has(chapter.id))
       throw new Error("Visual chapter IDs must be new and unique.");
+    if (chapter.afterChapterId && protectedAnchors.has(chapter.afterChapterId))
+      throw new Error(
+        `Cannot insert after ${chapter.afterChapterId} inside an existing visual sequence. Insert after the final chapter ${protectedAnchors.get(chapter.afterChapterId)} or before the sequence instead.`,
+      );
     additions.add(chapter.id);
     if (
       chapter.type !== "illustrated" ||
@@ -36,6 +49,12 @@ export function assembleEnhancement(
       throw new Error("Each visual must be placed beside an existing chapter.");
   }
   const project = structuredClone(source);
+  for (const sequence of plan.visualSequences ?? []) additions.add(sequence.id);
+  if (plan.visualSequences?.length)
+    project.visualSequences = [
+      ...(source.visualSequences ?? []),
+      ...plan.visualSequences,
+    ];
   const edited = new Set<string>();
   let changed = 0;
   for (const edit of plan.textEdits ?? []) {

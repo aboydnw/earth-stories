@@ -1,3 +1,4 @@
+import { VisualSequence } from "./VisualSequence.js";
 import { readerPaletteStyle } from "./readerPalette.js";
 import {
   useEffect,
@@ -327,23 +328,42 @@ export function AtlasStoryViewer({
             </div>
           )}
           {chapter ? (
-            (allVisible ? chapters : [chapter]).map((item) => (
-              <PublicationChapterRenderer
-                // Preserve the map between chapter changes so camera and time can animate.
-                key={allVisible ? item.id : `atlas-stage-${resetKey}`}
-                chapter={item}
-                index={chapters.indexOf(item)}
-                assets={assets}
-                basemapStyle={publicationBasemapHref(manifest.basemap)}
-                runtimePolicy={runtimePolicy}
-                snapshotMode={snapshotMode}
-                composition="atlas"
-                illustratedScene={sea && !allVisible && item.type === "image"}
-                onCameraChange={(camera) =>
-                  onChapterCameraChange?.(item.id, camera)
-                }
-              />
-            ))
+            (allVisible ? chapters : [chapter]).map((item) => {
+              const sequence = manifest.visualSequences?.find((s) =>
+                s.steps.some((step) => step.chapterId === item.id),
+              );
+              if (sequence) {
+                if (allVisible && sequence.steps[0]!.chapterId !== item.id)
+                  return null;
+                return (
+                  <VisualSequence
+                    assets={assets}
+                    key={sequence.id}
+                    sequence={sequence}
+                    chapters={chapters}
+                    snapshotMode={snapshotMode}
+                    focusedChapterId={allVisible ? undefined : item.id}
+                  />
+                );
+              }
+              return (
+                <PublicationChapterRenderer
+                  // Preserve the map between chapter changes so camera and time can animate.
+                  key={allVisible ? item.id : `atlas-stage-${resetKey}`}
+                  chapter={item}
+                  index={chapters.indexOf(item)}
+                  assets={assets}
+                  basemapStyle={publicationBasemapHref(manifest.basemap)}
+                  runtimePolicy={runtimePolicy}
+                  snapshotMode={snapshotMode}
+                  composition="atlas"
+                  illustratedScene={sea && !allVisible && item.type === "image"}
+                  onCameraChange={(camera) =>
+                    onChapterCameraChange?.(item.id, camera)
+                  }
+                />
+              );
+            })
           ) : (
             <p role="status">This atlas has no chapters yet.</p>
           )}

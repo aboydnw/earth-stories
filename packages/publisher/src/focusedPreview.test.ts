@@ -95,3 +95,51 @@ describe("compileFocusedChapter", () => {
     ]);
   });
 });
+
+it("keeps the selected continuous scene while excluding unrelated incomplete chapters", async () => {
+  const project = await fixture();
+  const { visualSequenceSchema } = await import("@earth-stories/story-schema");
+  const prose = [
+    { id: "a", type: "prose" as const, title: "A", narrative: "First" },
+    { id: "b", type: "prose" as const, title: "B", narrative: "Second" },
+  ];
+  project.chapters.unshift(...prose);
+  project.visualSequences = [
+    visualSequenceSchema.parse({
+      id: "visual",
+      alt: "Drawing",
+      caption: "",
+      scene: {
+        width: 1000,
+        height: 800,
+        layers: [{ id: "line", kind: "path", pathData: "M 0 0 L 1 1" }],
+      },
+      steps: [
+        { chapterId: "a", start: 0, end: 0.5 },
+        { chapterId: "b", start: 0.5, end: 1 },
+      ],
+    }),
+  ];
+  project.chapters.push({
+    id: "unfinished",
+    type: "image",
+    title: "Draft",
+    narrative: "",
+    sourceId: "missing",
+    alt: "",
+    caption: "",
+  });
+  const before = structuredClone(project);
+  for (const id of ["a", "b", "sites"]) {
+    const result = compileFocusedChapter(project, id);
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") throw new Error(result.message);
+    expect(result.manifest.chapters.map((c) => c.id)).toEqual(
+      id === "sites" ? ["sites"] : ["a", "b"],
+    );
+    expect(result.manifest.visualSequences?.length ?? 0).toBe(
+      id === "sites" ? 0 : 1,
+    );
+  }
+  expect(project).toEqual(before);
+});

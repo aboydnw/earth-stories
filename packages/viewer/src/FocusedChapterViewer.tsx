@@ -1,3 +1,4 @@
+import { VisualSequence } from "./VisualSequence.js";
 import { readerPaletteStyle } from "./readerPalette.js";
 import { useMemo } from "react";
 import {
@@ -49,27 +50,40 @@ export function FocusedChapterViewer({
       </div>
     );
 
+  const sequence = manifest.visualSequences?.find((s) =>
+    s.steps.some((step) => step.chapterId === chapterId),
+  );
   return (
     <main
       style={readerPaletteStyle(manifest.publication.palette)}
       className={`story-publication story-publication--${manifest.publication.theme} story-publication--focused`}
     >
       <article className="story-chapters story-chapters--focused">
-        <PublicationChapterRenderer
-          snapshotMode={snapshotMode}
-          chapter={chapter}
-          assets={assets}
-          basemapStyle={publicationBasemapHref(manifest.basemap)}
-          runtimePolicy={runtimePolicy}
-          composition={interactiveMap ? "authoring-map" : "focused-preview"}
-          interactiveMap={interactiveMap}
-          fitRequestToken={fitRequestToken}
-          commitAutoFit={commitAutoFit}
-          onCameraChange={onCameraChange}
-          onFitAvailabilityChange={onFitAvailabilityChange}
-          onFitCameraChange={onFitCameraChange}
-          cameraOverride={cameraOverride}
-        />
+        {sequence ? (
+          <VisualSequence
+            assets={assets}
+            sequence={sequence}
+            chapters={manifest.chapters}
+            focusedChapterId={chapterId}
+            snapshotMode={snapshotMode}
+          />
+        ) : (
+          <PublicationChapterRenderer
+            snapshotMode={snapshotMode}
+            chapter={chapter}
+            assets={assets}
+            basemapStyle={publicationBasemapHref(manifest.basemap)}
+            runtimePolicy={runtimePolicy}
+            composition={interactiveMap ? "authoring-map" : "focused-preview"}
+            interactiveMap={interactiveMap}
+            fitRequestToken={fitRequestToken}
+            commitAutoFit={commitAutoFit}
+            onCameraChange={onCameraChange}
+            onFitAvailabilityChange={onFitAvailabilityChange}
+            onFitCameraChange={onFitCameraChange}
+            cameraOverride={cameraOverride}
+          />
+        )}
       </article>
     </main>
   );

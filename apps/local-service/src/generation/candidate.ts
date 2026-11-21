@@ -63,6 +63,7 @@ export function assembleCandidate(job: GenerationJob): GenerationCandidate {
         : { ...chapter, scene: chapter.scene },
     ),
     dataAssets: [],
+    visualSequences: plan.visualSequences,
   });
   compileProject(project);
   const data = { project, assets: job.assets, warnings: plan.warnings };

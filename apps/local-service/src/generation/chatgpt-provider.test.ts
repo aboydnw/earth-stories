@@ -22,16 +22,26 @@ const blueprint = {
       narrative: "An illustrative watershed.",
       alt: "A stylized river",
       caption: "Illustration, not measured data",
-      recipe: {
-        template: "landscape",
-        heading: "Water connects us",
-        labels: ["Headwaters", "Coast"],
-        motif: "river",
-        motion: true,
+      type: "illustrated",
+      scene: {
+        width: 1000,
+        height: 800,
+        layers: [
+          {
+            id: "bank",
+            kind: "path",
+            pathData: "M 0 0 L 1 0 L .5 1 Z",
+            keyframes: [
+              { at: 0, x: 0, y: 0, scale: 1, opacity: 1, reveal: 1 },
+              { at: 1, x: 0.2, y: 0, scale: 1, opacity: 1, reveal: 1 },
+            ],
+          },
+        ],
       },
     },
   ],
   warnings: [],
+  visualSequences: [],
 };
 const connection = {
   status: () => ({ configured: true }),

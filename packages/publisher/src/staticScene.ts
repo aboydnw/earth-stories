@@ -18,9 +18,10 @@ export function staticScene(
   images: Map<string, string>,
   palette: ReaderPalette = {},
   theme: ReaderTheme = "cng",
+  progress = scene.staticProgress,
 ): string {
   const colors = resolveReaderPalette(palette, theme);
-  const frames = sceneFrame(scene, scene.staticProgress);
+  const frames = sceneFrame(scene, progress);
   const layers = scene.layers
     .map((layer, index) => {
       const f = frames[index]!,
@@ -39,7 +40,7 @@ export function staticScene(
             ? `<image href="${src}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet"><title>${escape(layer.alt)}</title></image>`
             : `<text y="24">${escape(`Artwork unavailable: ${layer.alt}`)}</text>`;
       }
-      return `<g transform="translate(${f.x * scene.width} ${f.y * scene.height}) scale(${f.scale})" opacity="${f.opacity}"><svg width="${w * f.reveal}" height="${h}" overflow="hidden">${content}</svg></g>`;
+      return `<g transform="translate(${f.x * scene.width} ${f.y * scene.height}) scale(${f.scale}) rotate(${f.rotation ?? 0} ${w / 2} ${h / 2})" opacity="${f.opacity}"><svg width="${w * f.reveal}" height="${h}" overflow="hidden">${content}</svg></g>`;
     })
     .join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${scene.width} ${scene.height}" role="img" aria-label="${escape(alt)}"><title>${escape(alt)}</title><rect width="100%" height="100%" fill="${colors.surface}"/>${layers}</svg>`;

@@ -1,3 +1,4 @@
+import { VisualSequence } from "./VisualSequence.js";
 import { readerPaletteStyle } from "./readerPalette.js";
 import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
@@ -39,8 +40,8 @@ export function StoryViewer({
     [manifest.assets],
   );
   const chapterBlocks = useMemo(
-    () => groupChaptersIntoBlocks(manifest.chapters),
-    [manifest.chapters],
+    () => groupChaptersIntoBlocks(manifest.chapters, manifest.visualSequences),
+    [manifest.chapters, manifest.visualSequences],
   );
   const runtimePolicy = useMemo(
     () => publicationRuntimePolicy(manifest),
@@ -107,6 +108,16 @@ export function StoryViewer({
 
       <article className="story-chapters">
         {chapterBlocks.map((block) => {
+          if (block.type === "visual")
+            return (
+              <VisualSequence
+                assets={assets}
+                key={block.sequence.id}
+                sequence={block.sequence}
+                chapters={block.chapters}
+                snapshotMode={snapshotMode}
+              />
+            );
           if (block.type === "scrolly") {
             const blockAssets = block.chapters.flatMap((chapter) => [
               ...(assets.get(chapter.assetId)

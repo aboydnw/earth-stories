@@ -1,3 +1,5 @@
+import { VisualSequenceInspector } from "./VisualSequenceInspector";
+import { reconcileVisualSequences } from "./reconcileVisualSequences";
 import { StoryCreationScreen } from "./StoryCreationScreen";
 import { defaultScene } from "@earth-stories/story-schema";
 import { ReaderPaletteEditor } from "./ReaderPaletteEditor";
@@ -358,7 +360,19 @@ export function App() {
     setSaveState("saved");
   }
   function changeProject(update: (current: StoryProject) => StoryProject) {
-    setProject((current) => (current ? update(current) : current));
+    setProject((current) => {
+      if (!current) return current;
+      const next = update(current);
+      if (next.visualSequences?.length && next.chapters !== current.chapters)
+        return {
+          ...next,
+          visualSequences: reconcileVisualSequences(
+            next.chapters,
+            next.visualSequences,
+          ),
+        };
+      return next;
+    });
     setSaveState("changed");
     setError(null);
   }
@@ -2547,6 +2561,34 @@ export function App() {
             ) : null}
             {inspectorMode === "story" ? (
               <div className="story-settings">
+                {project.visualSequences?.map((sequence) => (
+                  <VisualSequenceInspector
+                    key={sequence.id}
+                    sequence={sequence}
+                    chapters={project.chapters}
+                    onChange={(next) =>
+                      changeProject((current) => ({
+                        ...current,
+                        visualSequences: current.visualSequences?.map((s) =>
+                          s.id === next.id ? next : s,
+                        ),
+                      }))
+                    }
+                    onRemove={() =>
+                      changeProject((current) => ({
+                        ...current,
+                        visualSequences: current.visualSequences?.filter(
+                          (s) => s.id !== sequence.id,
+                        ),
+                      }))
+                    }
+                    onInspect={(id) => {
+                      setActiveChapter(id);
+                      setInspectorMode("chapter");
+                      setEditorRegion("edit");
+                    }}
+                  />
+                ))}
                 <ActionButton
                   disabled={saveState === "saving"}
                   onClick={() =>

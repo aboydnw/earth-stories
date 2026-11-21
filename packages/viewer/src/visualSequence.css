@@ -1,0 +1,90 @@
+.story-visual {
+  position: relative;
+  width: 100%;
+  isolation: isolate;
+  background: var(--story-paper);
+}
+.story-visual__stage {
+  position: sticky;
+  top: 0;
+  height: var(--visual-viewport, 100dvh);
+  width: 100%;
+  overflow: hidden;
+}
+.story-visual__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.story-visual__steps {
+  position: relative;
+  margin-top: calc(-1 * var(--visual-viewport, 100dvh));
+}
+.story-visual__step {
+  min-height: calc(1.1 * var(--visual-viewport, 100dvh));
+  padding: 12dvh clamp(1rem, 5vw, 5rem);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+.story-visual__copy {
+  max-width: 30rem;
+  padding: clamp(1rem, 3vw, 2.5rem);
+  background: var(--story-paper);
+  color: var(--story-ink);
+  border: 1px solid var(--story-border);
+  border-radius: 0.4rem;
+}
+.story-visual__copy h2 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.6rem, 3vw, 2.7rem);
+  line-height: 1.12;
+}
+.story-visual__copy p {
+  line-height: 1.65;
+}
+.story-visual__caption {
+  padding: 1rem 5vw;
+  color: var(--story-muted);
+}
+.story-visual__still {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+.story-visual__still .story-visual__canvas {
+  height: 55dvh;
+}
+.story-visual--static .story-visual__copy {
+  max-width: 65ch;
+}
+@media (max-width: 600px) {
+  .story-visual__step {
+    align-items: flex-end;
+    padding: 2rem 1rem;
+  }
+  .story-visual__copy {
+    max-width: 100%;
+  }
+}
+@media print {
+  .story-visual__stage {
+    position: relative;
+    height: 60vh;
+  }
+  .story-visual__steps {
+    margin-top: 0;
+  }
+  .story-visual__step {
+    min-height: 0;
+    padding: 1rem;
+  }
+}
+/* Size to the reader container, including embedded and nested editor previews. */
+.story-publication {
+  container-type: inline-size;
+}
+.story-chapters > .story-visual {
+  width: 100cqw;
+  margin-inline: calc(50% - 50cqw);
+}

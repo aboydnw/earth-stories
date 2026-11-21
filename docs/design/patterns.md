@@ -141,12 +141,25 @@ chapters, composed scenes, missing-content notes, and a separate candidate reade
 Acceptance is disabled until validation succeeds and while import is pending.
 Only **Create this story** creates an editable workspace project; publishing
 remains a separate author action. The earlier chapter-specific Studio prototype
-has been removed. No conversation history or existing-story AI mutation is exposed.
+has been removed. Existing-story enhancement is accessed from Story settings
+and requires explicit application of a reviewed candidate. No conversation history is exposed.
 
-Curated generation recipes select landscape, flow, reveal, or diagram layouts.
-They compile to editable path/text layers with short labels and restrained motion;
-no executable code, arbitrary drawing commands, or generated raster files are
-accepted by the generation provider. Each template preserves a finished still
-frame for reduced motion and archival export. Reader palettes use contrast-checked
+Legacy recipes select landscape, flow, reveal, or diagram layouts and remain
+readable. New generation supplies validated custom path/text layers and motion
+tracks. Executable code, injected markup, and generated raster files are not
+accepted. Every scene retains a still frame for reduced motion and archival export. Reader palettes use contrast-checked
 estuary, clay, or alpine roles. These are authored illustrations, never implied
 measurements or replacements for source data.
+
+### Continuous vector narratives
+
+Visual sequences belong to the reader and authored rendering domains. A single
+sticky vector canvas accompanies ordinary HTML narrative steps. Composition must
+reserve quiet space for text, retain readable palette contrast, and remain usable
+in narrow previews. Sequences reference chapter IDs, not duplicated prose; maps
+and other media keep their existing renderers and interrupt continuity. Focused
+previews expose a step-bounded scrubber. When a step is already an illustrated
+chapter, its original artwork and caption stay visible alongside its narrative. Reduced-motion and print layouts retain
+all narrative with descriptive stills. Preview, publication and archival export
+use the same normalized geometry and keyframe interpretation. No generated code,
+markup, external image URL or product-chrome styling enters a scene description.

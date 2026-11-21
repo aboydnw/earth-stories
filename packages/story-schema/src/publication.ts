@@ -1,3 +1,7 @@
+import {
+  visualSequencesSchema,
+  validateVisualSequences,
+} from "./visualSequences.js";
 import { readerPaletteSchema, publicationSceneSchema } from "./illustration.js";
 import { z } from "zod";
 import { COLORMAP_NAMES } from "./colormaps.js";
@@ -412,12 +416,18 @@ export const publicationManifestV3Schema = publicationManifestV2BaseSchema
   .extend({
     schema: z.literal("earth-stories/publication/v3"),
     chapters: z.array(publicationChapterSchema).min(1),
+    visualSequences: visualSequencesSchema.optional(),
     publication: publicationManifestV2BaseSchema.shape.publication.extend({
       palette: readerPaletteSchema.optional(),
     }),
   })
   .superRefine(publicationPolicy)
   .superRefine((manifest, context) => {
+    for (const message of validateVisualSequences(
+      manifest.chapters,
+      manifest.visualSequences,
+    ))
+      context.addIssue({ code: "custom", path: ["visualSequences"], message });
     const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
     manifest.chapters.forEach((chapter, index) => {
       if (chapter.type !== "illustrated") return;

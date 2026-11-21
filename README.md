@@ -190,8 +190,9 @@ and select an available story model. Generation uses your ChatGPT plan allowance
 **Manage usage** opens ChatGPT's app limits. API-key authentication and generated
 image requests have been removed; there is no automatic billing fallback.
 
-AI composes editable vector scenes from landscape, flow, reveal, and diagram
-templates, with coordinated reader palettes and scroll motion. These are
+AI composes original layered vector geometry and continuous visual sequences
+with coordinated reader palettes and scroll-driven translation, rotation, scale,
+and reveals. Sequences place existing chapter text over one persistent scene. These are
 illustrations, not measured data. Uploaded reference images can inform the story,
 but this flow does not generate raster artwork. Previously created image stories
 and ready candidates remain readable.
@@ -234,8 +235,8 @@ version; SVG and general webpage scraping are unsupported. Limits: 20 references
 20 MiB each, 200,000 extracted text characters, and 100 MiB combined input files.
 Images are decoded, bounded to 16 million pixels and 8192 pixels per edge, and re-encoded as PNG.
 
-Only one generation runs at a time. A job can produce up to 12 chapters with
-curated vector scenes. Invalid structured output gets one repair attempt; usage
+Only one generation runs at a time. A new-story job can produce up to 20 chapters; enhancement can add up to 12.
+Both support up to 12 continuous custom vector scenes. Invalid structured output gets one repair attempt; usage
 limits and incomplete streams stop the job. Cancel stops further work. Retry
 reuses the validated plan when available. An unfinished legacy image-generation
 job must be replaced with a new vector story; it is not silently reinterpreted.
@@ -262,8 +263,9 @@ not publish. If the story or an inspected local asset changed during generation,
 applying is blocked. **Edit brief and references** preserves your direction and
 references while loading the latest story for another generation.
 
-This first version adds chapters using the four existing vector templates. It
-preserves original chapter order, metadata, publication settings, maps, images,
+Enhancement can illustrate existing prose directly with continuous scenes and
+add illustrated chapters when needed. Sequences end at maps and other media so
+those keep their own interactive renderers. It preserves original chapter order, metadata, publication settings, maps, images,
 data sources and attribution. Text changes must be small, exact replacements
 supporting a named new visual, with reasons shown before applying; general prose
 refinement is outside this feature.
@@ -276,3 +278,12 @@ is limited to 500,000 characters. External source contents, unsupported/oversize
 unused library assets, and video/audio are not silently claimed as inspected.
 Coverage limits appear in the candidate and are supplied to the AI. Existing
 connected sources remain connected in the preview and publication.
+
+Continuous scenes can be inspected in **Story settings**, including captions,
+labels, motion strength, and the static frame. Select a step to scrub its artwork
+in the chapter preview. Chapter edits remain normal content edits; inserting or
+reordering chapters splits visual continuity at the new boundary. Removing a
+visual scene leaves its narrative chapters intact. Reduced motion and archival
+exports show stills with the complete narrative. Legacy template scenes remain
+supported, but new ChatGPT generation must return custom geometry rather than
+legacy recipes. Artwork quality still requires author review.

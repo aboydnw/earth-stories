@@ -30,7 +30,7 @@ const initial: StoryBrief = {
   takeaway: "",
   narrative: "",
   visualDirection:
-    "Editorial vector scenes with layered landscapes, flowing paths and restrained scroll motion",
+    "Original illustrations of the story’s subject, with continuous scenes and meaningful scroll-driven motion",
   references: [],
   requestedOutputs: ["illustration", "animation", "prose"],
 };

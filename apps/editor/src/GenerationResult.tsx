@@ -65,6 +65,33 @@ export function GenerationResult({
               )}
             </section>
           ) : null}
+          {candidate.project.visualSequences?.length ? (
+            <section aria-label="Continuous visual scenes">
+              <h3>Continuous visual scenes</h3>
+              <ul>
+                {candidate.project.visualSequences.map((sequence) => (
+                  <li key={sequence.id}>
+                    <strong>{sequence.alt}</strong>
+                    <p>
+                      {sequence.steps
+                        .map(
+                          (step) =>
+                            candidate.project.chapters.find(
+                              (c) => c.id === step.chapterId,
+                            )?.title ?? step.chapterId,
+                        )
+                        .join(" → ")}
+                    </p>
+                    <p>{sequence.caption}</p>
+                  </li>
+                ))}
+              </ul>
+              <p>
+                These scenes use the chapters’ current text. Your content
+                remains editable.
+              </p>
+            </section>
+          ) : null}
           <h3>Chapters</h3>
           <ol>
             {candidate.project.chapters.map((chapter) => (
