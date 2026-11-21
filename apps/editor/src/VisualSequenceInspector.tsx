@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type {
   VisualSequence,
   ProjectChapter,
@@ -22,16 +23,30 @@ export function VisualSequenceInspector({
   onRemove: () => void;
   onInspect: (id: string) => void;
 }) {
+  const [altDraft, setAltDraft] = useState(sequence.alt);
+  useEffect(() => setAltDraft(sequence.alt), [sequence.id, sequence.alt]);
+  const altError = !altDraft.trim()
+    ? "Enter a description. The story keeps the last valid description until you do."
+    : altDraft.length > 2000
+      ? "Use at most 2,000 characters."
+      : undefined;
   return (
     <InspectorSection title="Continuous visual scene">
-      <FormField label="Alternative description">
+      <FormField label="Alternative description" required error={altError}>
         <TextArea
-          value={sequence.alt}
-          onChange={(e) => onChange({ ...sequence, alt: e.target.value })}
+          value={altDraft}
+          maxLength={2000}
+          onChange={(e) => {
+            const value = e.target.value;
+            setAltDraft(value);
+            if (value.trim() && value.length <= 2000)
+              onChange({ ...sequence, alt: value });
+          }}
         />
       </FormField>
       <FormField label="Caption">
         <TextArea
+          maxLength={2000}
           value={sequence.caption}
           onChange={(e) => onChange({ ...sequence, caption: e.target.value })}
         />
@@ -79,6 +94,7 @@ export function VisualSequenceInspector({
             {layer.kind === "text" ? (
               <FormField label="Label">
                 <TextInput
+                  maxLength={2000}
                   value={layer.text}
                   onChange={(e) =>
                     onChange({

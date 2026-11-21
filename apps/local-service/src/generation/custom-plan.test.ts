@@ -4,7 +4,11 @@ import {
   parseStoryProject,
   generationPlanIssues,
 } from "@earth-stories/story-schema";
-import { composePlan } from "./vector-plan.js";
+import {
+  composePlan,
+  vectorPlanJsonSchema,
+  enhancementPlanJsonSchema,
+} from "./vector-plan.js";
 import { assembleEnhancement } from "./enhancement.js";
 const brief = {
   title: "Visuals",
@@ -149,5 +153,27 @@ it("persists a sequence through preview, restart, apply, content editing, and pu
     );
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("uses supported strict-output union and object forms for both provider schemas", () => {
+  function inspect(value: unknown): void {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      value.forEach(inspect);
+      return;
+    }
+    const schema = value as Record<string, unknown>;
+    for (const keyword of ["oneOf", "allOf", "not", "default"])
+      expect(schema).not.toHaveProperty(keyword);
+    if (schema.properties) {
+      expect(schema.additionalProperties).toBe(false);
+      expect(schema.required).toEqual(Object.keys(schema.properties));
+    }
+    Object.values(schema).forEach(inspect);
+  }
+  for (const schema of [vectorPlanJsonSchema, enhancementPlanJsonSchema]) {
+    expect(schema.type).toBe("object");
+    inspect(schema);
   }
 });

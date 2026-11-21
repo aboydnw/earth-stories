@@ -165,7 +165,10 @@ function strictProviderSchema(schema: z.ZodType): Record<string, unknown> {
     if (!value || typeof value !== "object") return value;
     const result: Record<string, any> = {};
     for (const [key, child] of Object.entries(value))
-      if (key !== "default" && key !== "$schema") result[key] = visit(child);
+      if (key !== "default" && key !== "$schema")
+        // Path/text variants have disjoint kind constants, so anyOf is equivalent
+        // to Zod's oneOf and fits the provider's structured-output vocabulary.
+        result[key === "oneOf" ? "anyOf" : key] = visit(child);
     if (result.properties) {
       result.required = Object.keys(result.properties);
       result.additionalProperties = false;

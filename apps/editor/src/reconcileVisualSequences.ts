@@ -1,5 +1,6 @@
 import {
   sceneFrame,
+  VISUAL_PROGRESS_EPSILON,
   type ProjectChapter,
   type VisualSequence,
 } from "@earth-stories/story-schema";
@@ -23,7 +24,7 @@ export function reconcileVisualSequences(
       if (
         previous &&
         chapters.findIndex((c) => c.id === previous.chapterId) === index - 1 &&
-        previous.end === step.start
+        Math.abs(previous.end - step.start) <= VISUAL_PROGRESS_EPSILON
       )
         run!.push(step);
       else runs.push([step]);

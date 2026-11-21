@@ -91,4 +91,6 @@ Files: `apps/editor/src/GenerationResult.tsx`, `IllustrationInspector.tsx`, rele
 - Normal content edits retain scene references; structural chapter edits split scene ranges and resample boundary keyframes.
 - New generation requires custom scene output and substantive vector motion when animation is requested. Legacy recipe parsing remains for persisted candidates and compatibility.
 - Review regressions cover chapter readiness/navigation markers in scroll, focused and still modes, and preservation of original illustrated artwork/captions in sequences and archival exports. Both initial review findings were reproduced and corrected; 157 relevant tests and typecheck passed afterward.
+- Follow-up review fixes preserve complete sequences in focused fallback previews, keep invalid description drafts out of the saved story with inline feedback, and share progress tolerance between validation and reconciliation. Added reorder, middle-deletion and map-boundary regressions.
+- The AI-facing schema converts disjoint path/text unions to `anyOf`, matching the provider subset; strict-schema regression coverage guards this conversion.
 - No live ChatGPT generation or real author project mutations were performed. The separate unavailable-data warning from the hurricane recording has not been diagnosed by this visual-rendering work.

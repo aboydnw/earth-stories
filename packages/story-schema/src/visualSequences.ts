@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { sceneSchema } from "./illustration.js";
 
+export const VISUAL_PROGRESS_EPSILON = 1e-6;
+
 /** Vector-only sequences carry no source authority or executable markup. */
 export const vectorSceneSchema = sceneSchema
   .extend({
@@ -74,7 +76,9 @@ export const visualSequenceSchema = z
       sequence.steps.some(
         (s, i) =>
           s.end <= s.start ||
-          (i > 0 && Math.abs(s.start - sequence.steps[i - 1]!.end) > 1e-6),
+          (i > 0 &&
+            Math.abs(s.start - sequence.steps[i - 1]!.end) >
+              VISUAL_PROGRESS_EPSILON),
       )
     )
       ctx.addIssue({

@@ -25,10 +25,18 @@ export function compileFocusedChapter(
       message: "The selected chapter is no longer available.",
     };
 
-  const sourceIds = new Set(referencedSourceIds(chapter));
+  const sequence = project.visualSequences?.find((s) =>
+    s.steps.some((step) => step.chapterId === chapterId),
+  );
+  const chapterIds = new Set(
+    sequence?.steps.map((step) => step.chapterId) ?? [chapterId],
+  );
+  const chapters = project.chapters.filter((item) => chapterIds.has(item.id));
+  const sourceIds = new Set(chapters.flatMap(referencedSourceIds));
   const focusedProject: StoryProject = {
     ...project,
-    chapters: [structuredClone(chapter)],
+    chapters: structuredClone(chapters),
+    visualSequences: sequence ? [structuredClone(sequence)] : undefined,
     sources: project.sources
       .filter(({ id }) => sourceIds.has(id))
       .map((source) => structuredClone(source)),
