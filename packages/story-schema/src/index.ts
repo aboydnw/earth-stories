@@ -11,3 +11,5 @@ export * from "./generation.js";
 export * from "./vectorScenes.js";
 
 export * from "./chatgpt.js";
+
+export * from "./visualSequences.js";

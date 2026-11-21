@@ -1,10 +1,9 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   PublicationAsset,
   PublicationChapter,
 } from "@earth-stories/story-schema";
-import { sceneFrame } from "./sceneFrame.js";
-import { paletteColor } from "./readerPalette.js";
+import { SceneCanvas } from "./SceneCanvas.js";
 import "./illustrated.css";
 
 type Illustrated = Extract<PublicationChapter, { type: "illustrated" }>;
@@ -34,7 +33,6 @@ export function IllustratedChapter({
 }) {
   const { scene } = chapter;
   const root = useRef<HTMLDivElement>(null);
-  const uid = useId().replace(/:/g, "");
   const [progress, setProgress] = useState(scene.staticProgress);
   const [scrub, setScrub] = useState(scene.staticProgress);
   const [failedImages, setFailedImages] = useState<Set<string>>(
@@ -101,12 +99,6 @@ export function IllustratedChapter({
     };
   }, [scene, snapshotMode, reduced, focused, previewProgress]);
   const staticMode = snapshotMode || reduced;
-  const frames = sceneFrame(
-    scene,
-    staticMode
-      ? scene.staticProgress
-      : (previewProgress ?? (focused ? scrub : progress)),
-  );
   const missing = scene.layers.filter(
     (l) =>
       l.kind === "image" &&
@@ -124,77 +116,19 @@ export function IllustratedChapter({
               : `${(scene.scrollLength + 1) * 100}dvh`,
         }}
       >
-        <svg
-          className="story-illustration__canvas"
-          viewBox={`0 0 ${scene.width} ${scene.height}`}
-          role="img"
-          aria-labelledby={`${uid}-title`}
-          data-static-progress={scene.staticProgress}
-        >
-          <title id={`${uid}-title`}>{chapter.alt || chapter.title}</title>
-          {scene.layers.map((layer, index) => {
-            const frame = frames[index]!;
-            const w = layer.width * scene.width,
-              h = layer.height * scene.height;
-            const clip = `${uid}-${index}`;
-            return (
-              <g
-                key={layer.id}
-                data-layer-id={layer.id}
-                transform={`translate(${frame.x * scene.width} ${frame.y * scene.height}) scale(${frame.scale})`}
-                opacity={frame.opacity}
-              >
-                <defs>
-                  <clipPath id={clip}>
-                    <rect width={w * frame.reveal} height={h} />
-                  </clipPath>
-                </defs>
-                <g clipPath={`url(#${clip})`}>
-                  {layer.kind === "image" && assets.get(layer.assetId) ? (
-                    <image
-                      href={assets.get(layer.assetId)!.href}
-                      onError={() =>
-                        setFailedImages((current) =>
-                          new Set(current).add(assets.get(layer.assetId)!.href),
-                        )
-                      }
-                      width={w}
-                      height={h}
-                      preserveAspectRatio="xMidYMid meet"
-                    >
-                      <title>{layer.alt}</title>
-                    </image>
-                  ) : null}
-                  {layer.kind === "text" ? (
-                    <text
-                      x={0}
-                      y={layer.fontSize * scene.width}
-                      style={{ fontSize: layer.fontSize * scene.width }}
-                      fill={paletteColor(layer.colorRole)}
-                    >
-                      {layer.text}
-                    </text>
-                  ) : null}
-                  {layer.kind === "path" ? (
-                    <path
-                      d={layer.pathData}
-                      transform={`scale(${w} ${h})`}
-                      fill={
-                        layer.fillRole ? paletteColor(layer.fillRole) : "none"
-                      }
-                      stroke={
-                        layer.strokeRole
-                          ? paletteColor(layer.strokeRole)
-                          : "none"
-                      }
-                      strokeWidth={layer.strokeWidth}
-                    />
-                  ) : null}
-                </g>
-              </g>
-            );
-          })}
-        </svg>
+        <SceneCanvas
+          scene={scene}
+          progress={
+            staticMode
+              ? scene.staticProgress
+              : (previewProgress ?? (focused ? scrub : progress))
+          }
+          alt={chapter.alt || chapter.title}
+          assets={assets}
+          onImageError={(href) =>
+            setFailedImages((current) => new Set(current).add(href))
+          }
+        />
       </div>
       {missing.map((l) => (
         <p role="status" key={l.id}>

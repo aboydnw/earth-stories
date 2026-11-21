@@ -1,3 +1,4 @@
+import { visualSequencesSchema } from "./visualSequences.js";
 import { z } from "zod";
 import { readerPaletteSchema, sceneSchema } from "./illustration.js";
 import { type StoryProject, storyProjectV3Schema } from "./project.js";
@@ -90,14 +91,19 @@ export const storyPlanSchema = z
           })
           .strict(),
       )
-      .min(1)
       .max(30),
+    visualSequences: visualSequencesSchema.optional(),
     textEdits: z.array(enhancementTextEditSchema).max(8).optional(),
     artwork: z.array(illustrationRequestSchema).max(24),
     warnings: z.array(z.string().max(2000)).max(30),
   })
   .strict()
   .superRefine((plan, ctx) => {
+    if (!plan.chapters.length && !plan.visualSequences?.length)
+      ctx.addIssue({
+        code: "custom",
+        message: "A plan must contain chapters or visual sequences",
+      });
     if (
       new Set(plan.chapters.map((c) => c.id)).size !== plan.chapters.length ||
       new Set(plan.artwork.map((a) => a.id)).size !== plan.artwork.length
@@ -242,9 +248,12 @@ export function generationPlanIssues(
   plan: StoryPlan,
   brief: StoryBrief,
 ): string[] {
-  const scenes = plan.chapters.flatMap((chapter) =>
-    chapter.scene ? [chapter.scene] : [],
-  );
+  const scenes = [
+    ...plan.chapters.flatMap((chapter) =>
+      chapter.scene ? [chapter.scene] : [],
+    ),
+    ...(plan.visualSequences ?? []).map((s) => s.scene),
+  ];
   const images = new Set(
     scenes.flatMap((scene) =>
       scene.layers.flatMap((layer) =>

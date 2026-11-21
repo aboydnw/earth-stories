@@ -68,6 +68,7 @@ export function validScenePath(value: string): boolean {
 export const sceneKeyframeSchema = z
   .object({
     at: unit,
+    rotation: z.number().finite().min(-1440).max(1440).optional(),
     x: coordinate,
     y: coordinate,
     scale: z.number().min(0.01).max(10),
@@ -128,6 +129,7 @@ export const publicationSceneLayerSchema = z.discriminatedUnion("kind", [
   z.object({ ...imageFields, assetId: z.string().min(1) }).strict(),
 ]);
 const sceneFields = {
+  focalX: unit.optional(),
   width: z.number().int().min(100).max(4096),
   height: z.number().int().min(100).max(4096),
   staticProgress: unit.default(1),
@@ -141,7 +143,7 @@ export const sceneSchema = z
     ...sceneFields,
     layers: z
       .array(sceneLayerSchema)
-      .max(24)
+      .max(64)
       .refine(unique, "Layer IDs must be unique"),
   })
   .strict();
@@ -150,7 +152,7 @@ export const publicationSceneSchema = z
     ...sceneFields,
     layers: z
       .array(publicationSceneLayerSchema)
-      .max(24)
+      .max(64)
       .refine(unique, "Layer IDs must be unique"),
   })
   .strict();

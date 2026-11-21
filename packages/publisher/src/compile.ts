@@ -567,6 +567,7 @@ export function compileProject(
         : { delivery: "connected", ...project.basemap },
     assets,
     chapters: project.chapters.map(compileChapter),
+    visualSequences: project.visualSequences,
     connectivity: {
       requested: project.publication.profile,
       state: "pending",

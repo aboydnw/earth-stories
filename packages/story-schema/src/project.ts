@@ -1,3 +1,7 @@
+import {
+  visualSequencesSchema,
+  validateVisualSequences,
+} from "./visualSequences.js";
 import { readerPaletteSchema, sceneSchema } from "./illustration.js";
 import { z } from "zod";
 import { COLORMAP_NAMES } from "./colormaps.js";
@@ -373,18 +377,27 @@ export const storyProjectV2Schema = z
   })
   .strict();
 
-export const storyProjectV3Schema = storyProjectV2Schema.extend({
-  schema: z.literal("earth-stories/project/v3"),
-  chapters: z.array(projectChapterSchema).min(1),
-  publication: storyProjectV2Schema.shape.publication
-    .removeDefault()
-    .extend({ palette: readerPaletteSchema.optional() })
-    .default({
-      profile: "connected",
-      theme: "cng",
-      offlineBasemap: { mode: "neutral" },
-    }),
-});
+export const storyProjectV3Schema = storyProjectV2Schema
+  .extend({
+    schema: z.literal("earth-stories/project/v3"),
+    chapters: z.array(projectChapterSchema).min(1),
+    visualSequences: visualSequencesSchema.optional(),
+    publication: storyProjectV2Schema.shape.publication
+      .removeDefault()
+      .extend({ palette: readerPaletteSchema.optional() })
+      .default({
+        profile: "connected",
+        theme: "cng",
+        offlineBasemap: { mode: "neutral" },
+      }),
+  })
+  .superRefine((project, ctx) => {
+    for (const message of validateVisualSequences(
+      project.chapters,
+      project.visualSequences,
+    ))
+      ctx.addIssue({ code: "custom", path: ["visualSequences"], message });
+  });
 
 function migrateStoryProjectV1(value: unknown): unknown {
   const parsed = storyProjectV1Schema.safeParse(value);

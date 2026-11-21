@@ -20,6 +20,12 @@ export function sceneFrame(
       u = (at - a.at) / (b.at - a.at);
     return {
       at,
+      ...(a.rotation !== undefined || b.rotation !== undefined
+        ? {
+            rotation:
+              (a.rotation ?? 0) + ((b.rotation ?? 0) - (a.rotation ?? 0)) * u,
+          }
+        : {}),
       x: a.x + (b.x - a.x) * u,
       y: a.y + (b.y - a.y) * u,
       scale: a.scale + (b.scale - a.scale) * u,
@@ -43,6 +49,14 @@ export function sceneFrame(
       still[key] + (live[key] - still[key]) * scene.motionStrength;
     return {
       id: layer.id,
+      ...(layer.keyframes.some((k) => k.rotation !== undefined)
+        ? {
+            rotation:
+              (still.rotation ?? 0) +
+              ((live.rotation ?? 0) - (still.rotation ?? 0)) *
+                scene.motionStrength,
+          }
+        : {}),
       x: blend("x"),
       y: blend("y"),
       scale: blend("scale"),

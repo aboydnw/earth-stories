@@ -71,7 +71,7 @@ describe("illustrated scenes", () => {
     expect(
       sceneSchema.safeParse({
         ...scene,
-        layers: Array.from({ length: 25 }, (_, i) => ({
+        layers: Array.from({ length: 65 }, (_, i) => ({
           ...layer,
           id: `p${i}`,
         })),

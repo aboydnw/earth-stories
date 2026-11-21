@@ -36,6 +36,12 @@ export function assembleEnhancement(
       throw new Error("Each visual must be placed beside an existing chapter.");
   }
   const project = structuredClone(source);
+  for (const sequence of plan.visualSequences ?? []) additions.add(sequence.id);
+  if (plan.visualSequences?.length)
+    project.visualSequences = [
+      ...(source.visualSequences ?? []),
+      ...plan.visualSequences,
+    ];
   const edited = new Set<string>();
   let changed = 0;
   for (const edit of plan.textEdits ?? []) {
