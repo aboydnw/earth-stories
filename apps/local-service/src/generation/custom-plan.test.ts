@@ -3,6 +3,7 @@ import { expect, it } from "vitest";
 import {
   parseStoryProject,
   generationPlanIssues,
+  vectorScenePalettes,
 } from "@earth-stories/story-schema";
 import {
   composePlan,
@@ -176,4 +177,58 @@ it("uses supported strict-output union and object forms for both provider schema
     expect(schema.type).toBe("object");
     inspect(schema);
   }
+});
+
+it("explains enhancement anchors that would interrupt an existing sequence", async () => {
+  const { visualSequenceSchema } = await import("@earth-stories/story-schema");
+  const source = parseStoryProject(
+    JSON.parse(await readFile("fixtures/field-notes/story.json", "utf8")),
+  );
+  source.chapters = [
+    { id: "first", type: "prose", title: "First", narrative: "First" },
+    { id: "last", type: "prose", title: "Last", narrative: "Last" },
+  ];
+  const sequence = visualSequenceSchema.parse({
+    id: "existing",
+    alt: "Existing scene",
+    caption: "",
+    scene: {
+      width: 1000,
+      height: 800,
+      layers: [{ id: "line", kind: "path", pathData: "M 0 0 L 1 1" }],
+    },
+    steps: [
+      { chapterId: "first", start: 0, end: 0.5 },
+      { chapterId: "last", start: 0.5, end: 1 },
+    ],
+  });
+  source.visualSequences = [sequence];
+  const plan = {
+    title: "Visuals",
+    description: "",
+    palette: vectorScenePalettes.alpine,
+    chapters: [
+      {
+        id: "addition",
+        type: "illustrated" as const,
+        title: "Addition",
+        narrative: "",
+        alt: "New scene",
+        caption: "",
+        scene: sequence.scene,
+        afterChapterId: "first",
+      },
+    ],
+    artwork: [],
+    warnings: [],
+  };
+  const before = structuredClone(source);
+  expect(() => assembleEnhancement({ plan, assets: [] }, source)).toThrow(
+    /after the final chapter last/,
+  );
+  plan.chapters[0]!.afterChapterId = "last";
+  expect(
+    assembleEnhancement({ plan, assets: [] }, source).project.visualSequences,
+  ).toEqual([sequence]);
+  expect(source).toEqual(before);
 });

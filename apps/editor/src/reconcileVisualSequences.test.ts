@@ -81,3 +81,47 @@ it("splits moved, deleted and media steps without retaining invalid anchors", ()
     expect(new Set(result.map((s) => s.id)).size).toBe(result.length);
   }
 });
+
+it.each([0, 0.5])(
+  "preserves displayed geometry when splitting motion strength %s",
+  (motionStrength) => {
+    const sequence = structuredClone(hurricaneSequence);
+    sequence.scene.motionStrength = motionStrength;
+    sequence.scene.staticProgress = 1;
+    const animated = sequence.scene.layers.find(
+      (layer) => layer.keyframes.length,
+    )!;
+    animated.keyframes.splice(1, 0, {
+      ...animated.keyframes[0]!,
+      at: 0.25,
+      x: 0.3,
+      rotation: 30,
+    });
+    const inserted = [
+      visualFixtureChapters[0]!,
+      { ...visualFixtureChapters[0]!, id: "break" },
+      visualFixtureChapters[1]!,
+    ];
+    const parts = reconcileVisualSequences(inserted, [sequence]);
+    for (const [index, part] of parts.entries()) {
+      for (const progress of [0, 0.25, 0.5, 0.75, 1]) {
+        const expected = sceneFrame(
+          sequence.scene,
+          index * 0.5 + progress * 0.5,
+        );
+        const actual = sceneFrame(part.scene, progress);
+        for (const [layerIndex, frame] of expected.entries()) {
+          for (const key of [
+            "x",
+            "y",
+            "scale",
+            "opacity",
+            "reveal",
+            "rotation",
+          ] as const)
+            expect(actual[layerIndex]![key] ?? 0).toBeCloseTo(frame[key] ?? 0);
+        }
+      }
+    }
+  },
+);

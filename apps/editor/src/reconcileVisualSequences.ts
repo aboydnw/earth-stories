@@ -31,13 +31,15 @@ export function reconcileVisualSequences(
     }
     if (runs.length === 1 && runs[0]!.length === sequence.steps.length)
       return [sequence];
+    const samples = new Map<number, ReturnType<typeof sceneFrame>>();
+    const sample = (at: number) => {
+      if (!samples.has(at)) samples.set(at, sceneFrame(sequence.scene, at));
+      return samples.get(at)!;
+    };
     return runs.map((steps, i) => {
       const start = steps[0]!.start,
         end = steps.at(-1)!.end,
         span = end - start;
-      const raw = { ...sequence.scene, motionStrength: 1 };
-      const first = sceneFrame(raw, start),
-        last = sceneFrame(raw, end);
       let id = `${sequence.id.slice(0, 60)}-part-${i}`,
         suffix = 0;
       while (usedIds.has(id))
@@ -53,35 +55,33 @@ export function reconcileVisualSequences(
         })),
         scene: {
           ...sequence.scene,
+          // Bake the displayed blend before trimming its original resting frame.
+          motionStrength: 1,
           staticProgress: Math.max(
             0,
             Math.min(1, (sequence.scene.staticProgress - start) / span),
           ),
           layers: sequence.scene.layers.map((layer, j) => {
-            const { id: _a, ...a } = first[j]!,
-              { id: _b, ...b } = last[j]!;
-            // sceneFrame multiplies authored opacity; divide it out for track samples.
+            const keyframe = (at: number) => {
+              const { id: _id, ...frame } = sample(at)[j]!;
+              return {
+                ...frame,
+                // sceneFrame applies layer opacity; tracks must not apply it twice.
+                opacity: layer.opacity
+                  ? Math.min(1, Math.max(0, frame.opacity / layer.opacity))
+                  : 0,
+                at: (at - start) / span,
+              };
+            };
             return {
               ...layer,
               keyframes: layer.keyframes.length
                 ? [
-                    {
-                      ...a,
-                      opacity: layer.opacity
-                        ? Math.min(1, Math.max(0, a.opacity / layer.opacity))
-                        : 0,
-                      at: 0,
-                    },
+                    keyframe(start),
                     ...layer.keyframes
                       .filter((k) => k.at > start && k.at < end)
-                      .map((k) => ({ ...k, at: (k.at - start) / span })),
-                    {
-                      ...b,
-                      opacity: layer.opacity
-                        ? Math.min(1, Math.max(0, b.opacity / layer.opacity))
-                        : 0,
-                      at: 1,
-                    },
+                      .map((k) => keyframe(k.at)),
+                    keyframe(end),
                   ]
                 : [],
             };
