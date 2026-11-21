@@ -337,6 +337,7 @@ export function AtlasStoryViewer({
                   return null;
                 return (
                   <VisualSequence
+                    assets={assets}
                     key={sequence.id}
                     sequence={sequence}
                     chapters={chapters}

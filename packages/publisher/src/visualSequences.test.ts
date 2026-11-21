@@ -47,7 +47,10 @@ it("preserves sequences through deterministic compilation and accessible archiva
       },
       {
         id: "b",
-        type: "prose" as const,
+        type: "illustrated" as const,
+        scene: sequence.scene,
+        alt: "Original drawing",
+        caption: "Original attribution",
         title: "Second",
         narrative: "Original second passage",
       },
@@ -73,7 +76,9 @@ it("preserves sequences through deterministic compilation and accessible archiva
   });
   expect(html).toContain("Original first passage");
   expect(html).toContain("Original second passage");
-  expect(html.match(/data:image\/svg\+xml;base64,/g)).toHaveLength(2);
+  expect(html).toContain("Original drawing");
+  expect(html).toContain("Original attribution");
+  expect(html.match(/data:image\/svg\+xml;base64,/g)).toHaveLength(3);
   const stills = [...html.matchAll(/data:image\/svg\+xml;base64,([^"]+)/g)].map(
     (match) => Buffer.from(match[1]!, "base64").toString("utf8"),
   );

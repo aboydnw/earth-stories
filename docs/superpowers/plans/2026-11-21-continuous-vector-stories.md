@@ -71,7 +71,7 @@ Files: `apps/editor/src/GenerationResult.tsx`, `IllustrationInspector.tsx`, rele
 - [x] Exercise new-story generation and enhancement using controlled provider output, then reload, edit content, apply, compile, and render the publication.
 - [x] Run the required checks and report limitations. Offline browser verification failed with CDP timeout/connection closure; full-repository formatting flags four unchanged baseline files. Changed-file formatting, typecheck, tests, builds, publication, Storybook and publishing-no-git were checked.
 - [x] Update README and relevant design/publication guidance to describe custom sequences and compatibility behavior.
-- [ ] Open a ready-for-review PR, inspect code review and CI findings, and provide the author with manual testing steps for Ice followed by Hurricane.
+- [x] Open ready-for-review PR #45, inspect code review findings, and provide manual testing steps for Ice followed by Hurricane.
 
 ## Acceptance checklist
 
@@ -90,4 +90,5 @@ Files: `apps/editor/src/GenerationResult.tsx`, `IllustrationInspector.tsx`, rele
 - Added an authored focal point for full-height responsive composition, discovered during narrow browser verification.
 - Normal content edits retain scene references; structural chapter edits split scene ranges and resample boundary keyframes.
 - New generation requires custom scene output and substantive vector motion when animation is requested. Legacy recipe parsing remains for persisted candidates and compatibility.
+- Review regressions cover chapter readiness/navigation markers in scroll, focused and still modes, and preservation of original illustrated artwork/captions in sequences and archival exports. Both initial review findings were reproduced and corrected; 157 relevant tests and typecheck passed afterward.
 - No live ChatGPT generation or real author project mutations were performed. The separate unavailable-data warning from the hurricane recording has not been diagnosed by this visual-rendering work.

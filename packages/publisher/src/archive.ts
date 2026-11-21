@@ -225,6 +225,7 @@ export async function buildArchivalHtml({
     const sequence = project.visualSequences?.find((s) =>
       s.steps.some((step) => step.chapterId === chapter.id),
     );
+    let sequenceFigure = "";
     if (sequence) {
       const step = sequence.steps.find((s) => s.chapterId === chapter.id)!;
       const svg = staticScene(
@@ -235,13 +236,12 @@ export async function buildArchivalHtml({
         project.publication.theme,
         Math.max(step.start, Math.min(step.end, sequence.scene.staticProgress)),
       );
-      chapters.push(
-        `<section>${heading}<figure><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" alt="${escapeHtml(sequence.alt)}"><figcaption>${escapeHtml(sequence.caption)}</figcaption></figure>${narrative}</section>`,
-      );
-      continue;
+      sequenceFigure = `<figure><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" alt="${escapeHtml(sequence.alt)}"><figcaption>${escapeHtml(sequence.caption)}</figcaption></figure>`;
     }
     if (chapter.type === "prose") {
-      chapters.push(`<section>${heading}${narrative}</section>`);
+      chapters.push(
+        `<section>${heading}${sequenceFigure}${narrative}</section>`,
+      );
       continue;
     }
     if (
@@ -291,7 +291,7 @@ export async function buildArchivalHtml({
         project.publication.theme,
       );
       chapters.push(
-        `<section>${heading}<figure><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" alt="${escapeHtml(chapter.alt)}"><figcaption>${escapeHtml(chapter.caption)}</figcaption></figure>${chapterProvenance(chapter.scene.layers.flatMap((layer) => (layer.kind === "image" ? [layer.sourceId] : [])))}${narrative}</section>`,
+        `<section>${heading}${sequenceFigure}<figure><img src="data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}" alt="${escapeHtml(chapter.alt)}"><figcaption>${escapeHtml(chapter.caption)}</figcaption></figure>${chapterProvenance(chapter.scene.layers.flatMap((layer) => (layer.kind === "image" ? [layer.sourceId] : [])))}${narrative}</section>`,
       );
       continue;
     }

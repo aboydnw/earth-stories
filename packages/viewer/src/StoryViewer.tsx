@@ -111,6 +111,7 @@ export function StoryViewer({
           if (block.type === "visual")
             return (
               <VisualSequence
+                assets={assets}
                 key={block.sequence.id}
                 sequence={block.sequence}
                 chapters={block.chapters}

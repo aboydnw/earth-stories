@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type {
   PublicationChapter,
+  PublicationAsset,
   VisualSequence as Sequence,
 } from "@earth-stories/story-schema";
+import { IllustratedChapter } from "./IllustratedChapter.js";
 import { SceneCanvas } from "./SceneCanvas.js";
 import "./visualSequence.css";
 
@@ -13,9 +15,11 @@ export function VisualSequence({
   chapters,
   snapshotMode = false,
   focusedChapterId,
+  assets = new Map(),
 }: {
   sequence: Sequence;
   chapters: PublicationChapter[];
+  assets?: Map<string, PublicationAsset>;
   snapshotMode?: boolean;
   focusedChapterId?: string;
 }) {
@@ -93,9 +97,25 @@ export function VisualSequence({
   );
   const narrative = (id: string) => {
     const chapter = chapters.find((c) => c.id === id);
+    const step = sequence.steps.find((s) => s.chapterId === id)!;
+    const current = focusedChapterId
+      ? (scrub ??
+        Math.max(step.start, Math.min(step.end, sequence.scene.staticProgress)))
+      : progress;
     return chapter ? (
       <div className="story-visual__copy">
         <h2>{chapter.title}</h2>
+        {chapter.type === "illustrated" ? (
+          <IllustratedChapter
+            chapter={chapter}
+            assets={assets}
+            snapshotMode={snapshotMode || reduced}
+            previewProgress={Math.max(
+              0,
+              Math.min(1, (current - step.start) / (step.end - step.start)),
+            )}
+          />
+        ) : null}
         <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
       </div>
     ) : null;
@@ -111,6 +131,7 @@ export function VisualSequence({
           <section
             key={step.chapterId}
             id={step.chapterId}
+            data-chapter-id={step.chapterId}
             className="story-visual__still"
           >
             <SceneCanvas
@@ -149,6 +170,7 @@ export function VisualSequence({
               <section
                 key={step.chapterId}
                 id={step.chapterId}
+                data-chapter-id={step.chapterId}
                 data-visual-step
                 className="story-visual__step"
               >

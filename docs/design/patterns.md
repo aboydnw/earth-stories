@@ -158,7 +158,8 @@ sticky vector canvas accompanies ordinary HTML narrative steps. Composition must
 reserve quiet space for text, retain readable palette contrast, and remain usable
 in narrow previews. Sequences reference chapter IDs, not duplicated prose; maps
 and other media keep their existing renderers and interrupt continuity. Focused
-previews expose a step-bounded scrubber. Reduced-motion and print layouts retain
+previews expose a step-bounded scrubber. When a step is already an illustrated
+chapter, its original artwork and caption stay visible alongside its narrative. Reduced-motion and print layouts retain
 all narrative with descriptive stills. Preview, publication and archival export
 use the same normalized geometry and keyframe interpretation. No generated code,
 markup, external image URL or product-chrome styling enters a scene description.

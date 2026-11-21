@@ -145,3 +145,36 @@ it("honors an authored still frame within each chapter interval", () => {
   expect(layers[0]?.getAttribute("transform")).toContain("rotate(22.5");
   expect(layers[1]?.getAttribute("transform")).toContain("rotate(45");
 });
+
+it.each(["scroll", "still", "focused"])(
+  "preserves chapter readiness markers and original artwork in %s mode",
+  (mode) => {
+    const chapters = [
+      visualFixtureChapters[0]!,
+      {
+        ...visualFixtureChapters[1]!,
+        type: "illustrated" as const,
+        scene: hurricaneSequence.scene,
+        alt: "Original authored drawing",
+        caption: "Original authored attribution",
+      },
+    ];
+    const { container } = render(
+      <VisualSequence
+        sequence={hurricaneSequence}
+        chapters={chapters}
+        snapshotMode={mode === "still"}
+        focusedChapterId={mode === "focused" ? "change" : undefined}
+      />,
+    );
+    for (const id of mode === "focused" ? ["change"] : ["arrival", "change"])
+      expect(
+        container.querySelectorAll(`[data-chapter-id="${id}"]`),
+      ).toHaveLength(1);
+    expect(
+      screen.getByRole("img", { name: "Original authored drawing" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Original authored attribution")).toBeTruthy();
+    expect(screen.getAllByText("Second")).toHaveLength(1);
+  },
+);

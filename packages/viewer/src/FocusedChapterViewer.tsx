@@ -61,6 +61,7 @@ export function FocusedChapterViewer({
       <article className="story-chapters story-chapters--focused">
         {sequence ? (
           <VisualSequence
+            assets={assets}
             sequence={sequence}
             chapters={manifest.chapters}
             focusedChapterId={chapterId}
