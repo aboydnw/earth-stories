@@ -17,8 +17,10 @@ textarea,
 a {
   font: inherit;
 }
-button {
-  color: inherit;
+@layer reset {
+  button {
+    color: inherit;
+  }
 }
 button,
 a,

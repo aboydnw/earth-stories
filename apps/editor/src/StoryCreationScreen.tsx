@@ -1,6 +1,8 @@
 import { compileProject } from "@earth-stories/publisher/compile";
 import { resolvePreviewManifest } from "./resolvePreviewManifest";
-import { captureMapSnapshots } from "./captureSnapshots";
+import { captureEnhancementMaps } from "./EnhancementContextCapture";
+import { enhancementDirections } from "./enhancementDirections";
+import { EditorBrand } from "./EditorBrand";
 import { useEffect, useRef, useState } from "react";
 import type {
   GenerationJob,
@@ -55,7 +57,9 @@ export function StoryCreationScreen({
   onNavigate,
   onCreated,
   onBack,
+  onWorkspace,
 }: {
+  onWorkspace: () => void;
   jobId: string | null;
   sourceProjectId?: string;
   preview: boolean;
@@ -66,7 +70,9 @@ export function StoryCreationScreen({
   const [source, setSource] = useState<StoryProject | null>(null);
   const [sourceManifest, setSourceManifest] =
     useState<PublicationManifest | null>(null);
-  const sourcePreview = useRef<HTMLDivElement>(null);
+  const captureController = useRef<AbortController | null>(null);
+  const [preparingContext, setPreparingContext] = useState(false);
+  useEffect(() => () => captureController.current?.abort(), []);
   const [brief, setBrief] = useState<StoryBrief>(initial);
   const [editing, setEditing] = useState(false);
   const [job, setJob] = useState<GenerationJob | null>(null);
@@ -158,10 +164,15 @@ export function StoryCreationScreen({
         throw new Error(
           "The original story must finish loading before generation.",
         );
+      const controller = new AbortController();
+      captureController.current = controller;
+      setPreparingContext(enhancing);
       const maps =
-        enhancing && sourcePreview.current
-          ? await captureMapSnapshots(sourcePreview.current)
+        enhancing && sourceManifest
+          ? await captureEnhancementMaps(sourceManifest, controller.signal)
           : {};
+      controller.signal.throwIfAborted();
+      setPreparingContext(false);
       const created =
         enhancing && source
           ? await api.enhanceStory(
@@ -175,6 +186,8 @@ export function StoryCreationScreen({
     } catch (e) {
       setError(message(e));
     } finally {
+      captureController.current = null;
+      setPreparingContext(false);
       submitting.current = false;
       setBusy(false);
     }
@@ -187,7 +200,7 @@ export function StoryCreationScreen({
     try {
       const result = await api.acceptGeneration(job.id);
       if (result.candidateDigest !== job.candidate?.digest)
-        throw new Error("The accepted candidate did not match this preview.");
+        throw new Error("The accepted result did not match this preview.");
       await onCreated(result.projectId);
     } catch (e) {
       setError(message(e));
@@ -259,337 +272,404 @@ export function StoryCreationScreen({
       setBusy(false);
     }
   }
+  async function editInstructions() {
+    if (!job) return;
+    return action(async () => {
+      const restored = await api.getGenerationBrief(job.id);
+      if (job.enhancement) {
+        const latest = await api.openProject(job.enhancement.projectId);
+        const manifest = resolvePreviewManifest(latest, compileProject(latest));
+        setSource(latest);
+        setSourceManifest(manifest);
+      }
+      setBrief(
+        job.enhancement
+          ? {
+              ...restored,
+              narrative: "",
+              visualDirection: enhancementDirections(restored),
+            }
+          : restored,
+      );
+      setUrls("");
+      setEditing(true);
+    });
+  }
   if (preview)
     return (
       <div className="story-preview-shell">
         <header className="story-preview-bar">
-          <a
-            href={
-              sourceProjectId
-                ? `/stories/${encodeURIComponent(sourceProjectId)}/enhance/${encodeURIComponent(jobId ?? "")}`
-                : `/create/${encodeURIComponent(jobId ?? "")}`
-            }
-          >
-            Back to candidate
-          </a>
-          <strong>Candidate preview · not applied or published</strong>
+          <strong>
+            {job?.stage === "accepted"
+              ? "Story preview · saved result"
+              : "Story preview · not applied or published"}
+          </strong>
         </header>
         {error ? <p role="alert">{error}</p> : null}
         {manifest ? (
           <StoryViewer manifest={manifest} />
         ) : (
-          <p role="status">Preparing candidate preview…</p>
+          <p role="status">Preparing story preview…</p>
         )}
       </div>
     );
   return (
-    <main className="story-creation">
-      <header className="story-creation__header">
-        <ActionButton variant="ghost" onClick={onBack}>
-          {enhancing ? "Back to story" : "Back to stories"}
-        </ActionButton>
-        <span>
-          Earth Stories / {enhancing ? "Visual enhancement" : "Story creation"}
-        </span>
-      </header>
-      <div className="story-creation__intro">
-        <p className="eyebrow">
-          {enhancing
-            ? "Visual direction for your story"
-            : "From an idea to a story"}
-        </p>
-        <h1>
-          {editing
-            ? "Edit your story brief"
-            : enhancing
-              ? "Enhance your story with AI"
-              : job
-                ? "Review your new story"
-                : "What story do you want to tell?"}
-        </h1>
-        <p>
-          {enhancing
-            ? "Add illustrations and animation to your existing story. Its chapters, maps, images and data are preserved; any small supporting text edits are shown for approval."
-            : "Describe the audience, message, and visual direction. Review a working preview before adding it to your stories."}
-        </p>
-      </div>
-      {error ? (
-        <StatusNotice tone="danger" title="Something needs attention">
-          {error}
-        </StatusNotice>
-      ) : null}
-      {!jobId || editing ? (
-        <form
-          className="story-creation__form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void generate();
-          }}
-        >
-          <ChatGPTConnectionPanel
-            onReady={(ready, model) => {
-              setConfigured(ready);
-              setBrief((current) =>
-                current.model === model ? current : { ...current, model },
-              );
-            }}
-          />
-          <div className="story-creation__fields">
-            {(
-              [
-                ["title", "Working title", false],
-                ["audience", "Who is this for?", false],
-                ["takeaway", "What should readers take away?", true],
-                ["narrative", "Story context and source material", true],
-                ["visualDirection", "Visual direction", true],
-              ] as const
-            )
-              .filter(
-                ([key]) =>
-                  !enhancing ||
-                  key === "narrative" ||
-                  key === "visualDirection",
-              )
-              .map(([key, label, multiline]) => (
-                <FormField
-                  key={key}
-                  label={
-                    enhancing && key === "narrative"
-                      ? "Additional context for the visuals"
-                      : label
-                  }
-                  required={key === "title"}
-                >
-                  {multiline ? (
-                    <TextArea
-                      rows={key === "narrative" ? 7 : 3}
-                      value={brief[key]}
-                      onChange={(e) =>
-                        setBrief({ ...brief, [key]: e.target.value })
-                      }
-                    />
-                  ) : (
-                    <TextInput
-                      value={brief[key]}
-                      onChange={(e) =>
-                        setBrief({ ...brief, [key]: e.target.value })
-                      }
-                    />
-                  )}
-                </FormField>
-              ))}
-          </div>
-          <section>
-            <h2>References</h2>
-            <p>
-              Use factual references for claims and visual references for style.
-              Instructions inside reference documents are treated as source
-              material.
-            </p>
-            <FormField
-              label="Reference files"
-              hint="TXT, Markdown, extractable PDF, PNG, JPEG, or WebP. Up to 20 MiB per file."
-            >
-              <FileInput
-                multiple
-                accept=".txt,.md,.pdf,.png,.jpg,.jpeg,.webp"
-                disabled={busy}
-                onChange={(e) => void files(e.target.files)}
-              />
-            </FormField>
-            {brief.references.map((reference, index) => (
-              <div className="story-creation__reference" key={index}>
-                <strong>{reference.name}</strong>
-                <SelectInput
-                  aria-label={`Use ${reference.name} as`}
-                  value={reference.classification}
-                  onChange={(e) =>
-                    setBrief({
-                      ...brief,
-                      references: brief.references.map((r, i) =>
-                        i === index
-                          ? {
-                              ...r,
-                              classification: e.target
-                                .value as ReferenceInput["classification"],
-                            }
-                          : r,
-                      ),
-                    })
-                  }
-                >
-                  <option value="facts">Factual reference</option>
-                  <option value="visual-style">Visual style</option>
-                  <option value="background">Background context</option>
-                </SelectInput>
-                <ActionButton
-                  variant="ghost"
-                  onClick={() =>
-                    setBrief({
-                      ...brief,
-                      references: brief.references.filter(
-                        (_, i) => i !== index,
-                      ),
-                    })
-                  }
-                >
-                  Remove
-                </ActionButton>
-              </div>
-            ))}
-            <FormField
-              label="Public reference links"
-              hint="One HTTPS link per line, directly to a supported file—not a webpage. Put descriptions in Visual direction or Story context and source material. For webpage styling, upload a screenshot and select Visual style."
-            >
-              <TextArea
-                rows={3}
-                value={urls}
-                onChange={(e) => setUrls(e.target.value)}
-              />
-            </FormField>
-          </section>
-          <StatusNotice tone="info" title="Before you generate">
-            {enhancing
-              ? "Your saved story, supported images, data extracts, available map previews, directions and references will be sent to OpenAI using your ChatGPT plan allowance. You review a private candidate before applying it to this story. Content that could not be inspected is listed in the result. Nothing is published."
-              : "Your brief and reference contents will be sent to OpenAI using your ChatGPT plan allowance. This creates a private local candidate; it does not publish a story."}
-          </StatusNotice>
-          <ActionButton
-            type="submit"
-            disabled={
-              !configured ||
-              busy ||
-              !brief.title.trim() ||
-              (enhancing && !source)
-            }
-          >
-            {busy
-              ? "Starting generation…"
-              : enhancing
-                ? "Generate visual enhancements"
-                : "Generate story"}
+    <>
+      <header className="editor-topbar story-creation-topbar">
+        <EditorBrand onClick={onWorkspace} />
+        <nav aria-label="Story navigation">
+          <ActionButton variant="surface" onClick={onBack}>
+            {enhancing ? "Back to story" : "Back to stories"}
           </ActionButton>
-        </form>
-      ) : job ? (
-        <>
-          <section className="story-creation__progress" aria-live="polite">
-            <h2>{stageLabels[job.stage]}</h2>
-            {!terminal.has(job.stage) ? (
-              <p>Composing editable chapters and vector scenes.</p>
-            ) : null}
-            {job.error ? <p>{job.error}</p> : null}
-            {!terminal.has(job.stage) ? (
-              <ActionButton
-                disabled={busy}
-                onClick={() =>
-                  void action(async () =>
-                    setJob(await api.cancelGeneration(job.id)),
-                  )
-                }
-              >
-                Cancel generation
-              </ActionButton>
-            ) : null}
-            {job.stage === "failed" ||
-            job.stage === "cancelled" ||
-            (job.enhancement && job.stage === "ready") ? (
-              <ActionButton
-                disabled={busy}
-                onClick={() =>
-                  void action(async () => {
-                    const restored = await api.getGenerationBrief(job.id);
-                    if (job.enhancement) {
-                      const latest = await api.openProject(
-                        job.enhancement.projectId,
-                      );
-                      const manifest = resolvePreviewManifest(
-                        latest,
-                        compileProject(latest),
-                      );
-                      setSource(latest);
-                      setSourceManifest(manifest);
-                    }
-                    setBrief(restored);
-                    setUrls("");
-                    setEditing(true);
-                  })
-                }
-              >
-                Edit brief and references
-              </ActionButton>
-            ) : null}
-            {job.stage === "failed" || job.stage === "cancelled" ? (
-              <ActionButton
-                disabled={busy}
-                onClick={() =>
-                  void action(async () => {
-                    await api.retryGeneration(job.id);
-                    setPollVersion((value) => value + 1);
-                  })
-                }
-              >
-                Retry generation
-              </ActionButton>
-            ) : null}
-          </section>
-          {job.stage === "failed" || job.stage === "cancelled" ? (
-            <ChatGPTConnectionPanel onReady={() => {}} />
-          ) : null}
-          {job.stage !== "failed" && job.stage !== "cancelled" ? (
-            <GenerationResult
-              job={job}
-              accepting={accepting}
-              onAccept={() => void accept()}
-            />
-          ) : null}
-          {job.stage === "accepted" && job.acceptance ? (
-            <ActionButton
-              onClick={() => void onCreated(job.acceptance!.projectId)}
-            >
-              Open created story
-            </ActionButton>
-          ) : null}
-          <div className="story-creation__actions">
-            <ActionButton
-              variant="ghost"
-              disabled={busy}
-              onClick={() => onNavigate(null)}
-            >
-              {enhancing ? "Start a fresh enhancement" : "Start another brief"}
-            </ActionButton>
-            <ActionButton
-              variant="ghost"
-              disabled={busy || accepting}
-              onClick={() =>
-                void action(async () => {
-                  await api.discardGeneration(job.id);
-                  onNavigate(null);
-                })
-              }
-            >
-              Discard candidate files
-            </ActionButton>
-          </div>
-          <details>
-            <summary>Recorded API usage</summary>
-            <p>
-              {job.usage.length} completed provider operations reported usage.
-              Your OpenAI account is the source for billing totals.
-            </p>
-          </details>
-        </>
-      ) : (
-        <p role="status">Loading generation…</p>
-      )}
-      {(!jobId || editing) && enhancing && sourceManifest ? (
-        <section ref={sourcePreview} aria-label="Original story context">
-          <h2>Original story</h2>
-          <p>
-            Existing content is included as context. Maps that cannot finish
-            loading are identified in the result.
+        </nav>
+      </header>
+      <main className="story-creation">
+        <div className="story-creation__intro">
+          <p className="eyebrow">
+            {enhancing
+              ? "Visual direction for your story"
+              : "From an idea to a story"}
           </p>
-          <StoryViewer manifest={sourceManifest} snapshotMode />
-        </section>
-      ) : null}
-    </main>
+          <h1>
+            {editing
+              ? "Edit your story brief"
+              : enhancing
+                ? "Enhance your story with AI"
+                : job
+                  ? "Review your new story"
+                  : "What story do you want to tell?"}
+          </h1>
+          <p>
+            {enhancing
+              ? "Add illustrations and animation to your existing story. Its chapters, maps, images and data are preserved; any small supporting text edits are shown for approval."
+              : "Describe the audience, message, and visual direction. Review a working preview before adding it to your stories."}
+          </p>
+        </div>
+        {error ? (
+          <StatusNotice tone="danger" title="Something needs attention">
+            {error}
+          </StatusNotice>
+        ) : null}
+        {!jobId || editing ? (
+          <form
+            className="story-creation__form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void generate();
+            }}
+          >
+            <div className="story-creation__fields">
+              {(
+                [
+                  ["title", "Working title", false],
+                  ["audience", "Who is this for?", false],
+                  ["takeaway", "What should readers take away?", true],
+                  ["narrative", "Story context and source material", true],
+                  ["visualDirection", "Visual direction", true],
+                ] as const
+              )
+                .filter(([key]) => !enhancing || key === "visualDirection")
+                .map(([key, label, multiline]) => (
+                  <FormField
+                    key={key}
+                    label={
+                      enhancing && key === "visualDirection"
+                        ? "What would you like to add or change visually?"
+                        : label
+                    }
+                    hint={
+                      enhancing
+                        ? "Describe the atmosphere, colors, illustration style and motion you want. Your saved story supplies the facts."
+                        : undefined
+                    }
+                    required={key === "title"}
+                  >
+                    {multiline ? (
+                      <TextArea
+                        rows={enhancing || key === "narrative" ? 7 : 3}
+                        value={brief[key]}
+                        onChange={(e) =>
+                          setBrief({ ...brief, [key]: e.target.value })
+                        }
+                      />
+                    ) : (
+                      <TextInput
+                        value={brief[key]}
+                        onChange={(e) =>
+                          setBrief({ ...brief, [key]: e.target.value })
+                        }
+                      />
+                    )}
+                  </FormField>
+                ))}
+            </div>
+            <section>
+              <h2>References</h2>
+              <p>
+                Use factual references for claims and visual references for
+                style. Instructions inside reference documents are treated as
+                source material.
+              </p>
+              <FormField
+                label="Reference files"
+                hint="TXT, Markdown, extractable PDF, PNG, JPEG, or WebP. Up to 20 MiB per file."
+              >
+                <FileInput
+                  multiple
+                  accept=".txt,.md,.pdf,.png,.jpg,.jpeg,.webp"
+                  disabled={busy}
+                  onChange={(e) => void files(e.target.files)}
+                />
+              </FormField>
+              {brief.references.map((reference, index) => (
+                <div className="story-creation__reference" key={index}>
+                  <div>
+                    <strong>{reference.name}</strong>
+                    {reference.kind === "url" ? (
+                      <>
+                        <FormField label="Link">
+                          <TextInput
+                            value={reference.url}
+                            onChange={(e) =>
+                              setBrief((current) => ({
+                                ...current,
+                                references: current.references.map((r, i) =>
+                                  i === index && r.kind === "url"
+                                    ? { ...r, url: e.target.value }
+                                    : r,
+                                ),
+                              }))
+                            }
+                          />
+                        </FormField>
+                        <FormField label="What should we use from this reference?">
+                          <TextArea
+                            rows={2}
+                            maxLength={4000}
+                            value={reference.notes ?? ""}
+                            onChange={(e) =>
+                              setBrief((current) => ({
+                                ...current,
+                                references: current.references.map((r, i) =>
+                                  i === index && r.kind === "url"
+                                    ? { ...r, notes: e.target.value }
+                                    : r,
+                                ),
+                              }))
+                            }
+                          />
+                        </FormField>
+                      </>
+                    ) : null}
+                  </div>
+                  <SelectInput
+                    aria-label={`Use ${reference.name} as`}
+                    value={reference.classification}
+                    onChange={(e) =>
+                      setBrief({
+                        ...brief,
+                        references: brief.references.map((r, i) =>
+                          i === index
+                            ? {
+                                ...r,
+                                classification: e.target
+                                  .value as ReferenceInput["classification"],
+                              }
+                            : r,
+                        ),
+                      })
+                    }
+                  >
+                    <option value="facts">Factual reference</option>
+                    <option value="visual-style">Visual style</option>
+                    <option value="background">Background context</option>
+                  </SelectInput>
+                  <ActionButton
+                    variant="ghost"
+                    onClick={() =>
+                      setBrief({
+                        ...brief,
+                        references: brief.references.filter(
+                          (_, i) => i !== index,
+                        ),
+                      })
+                    }
+                  >
+                    Remove
+                  </ActionButton>
+                </div>
+              ))}
+              <FormField
+                label="Reference links and notes"
+                hint="One link or public domain per line, with a note about what to use. For example: example.org — I like the colors. Add links below to choose Visual style, Facts or Background. Webpage previews may be incomplete; screenshots also work."
+              >
+                <TextArea
+                  rows={3}
+                  value={urls}
+                  onChange={(e) => setUrls(e.target.value)}
+                />
+              </FormField>
+              <ActionButton
+                type="button"
+                variant="surface"
+                disabled={busy || !urls.trim()}
+                onClick={() => {
+                  try {
+                    const links = parseReferenceLinks(urls);
+                    if (brief.references.length + links.length > 20)
+                      throw new Error("Use at most 20 references.");
+                    setBrief((current) => ({
+                      ...current,
+                      references: [...current.references, ...links],
+                    }));
+                    setUrls("");
+                    setError("");
+                  } catch (cause) {
+                    setError(message(cause));
+                  }
+                }}
+              >
+                Add links
+              </ActionButton>
+            </section>
+            <ChatGPTConnectionPanel
+              selectedModel={brief.model}
+              onReady={(ready, model) => {
+                setConfigured(ready);
+                if (model)
+                  setBrief((current) =>
+                    current.model === model ? current : { ...current, model },
+                  );
+              }}
+            />
+            <StatusNotice tone="info" title="Before you generate">
+              {enhancing
+                ? "Your saved story, supported images, data extracts, available map previews, directions and references will be sent to OpenAI using your ChatGPT plan allowance. You review a private preview before applying it to this story. Content that could not be inspected is listed in the result. Nothing is published."
+                : "Your brief and reference contents will be sent to OpenAI using your ChatGPT plan allowance. This creates a private local preview; it does not publish a story."}
+            </StatusNotice>
+            <div className="story-creation__submit">
+              {editing ? (
+                <ActionButton
+                  type="button"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel editing
+                </ActionButton>
+              ) : null}
+              <ActionButton
+                type="submit"
+                disabled={
+                  !configured ||
+                  busy ||
+                  !brief.title.trim() ||
+                  (enhancing && !source)
+                }
+              >
+                {busy
+                  ? preparingContext
+                    ? "Preparing story context…"
+                    : "Starting generation…"
+                  : enhancing
+                    ? "Generate visual enhancements"
+                    : "Generate story"}
+              </ActionButton>
+            </div>
+          </form>
+        ) : job ? (
+          <>
+            <section className="story-creation__progress" aria-live="polite">
+              <h2>
+                {job.stage === "ready" && enhancing
+                  ? "Your enhanced story is ready"
+                  : stageLabels[job.stage]}
+              </h2>
+              {!terminal.has(job.stage) ? (
+                <p>Composing editable chapters and vector scenes.</p>
+              ) : null}
+              {job.error ? <p>{job.error}</p> : null}
+              {!terminal.has(job.stage) ? (
+                <ActionButton
+                  disabled={busy}
+                  onClick={() =>
+                    void action(async () =>
+                      setJob(await api.cancelGeneration(job.id)),
+                    )
+                  }
+                >
+                  Cancel generation
+                </ActionButton>
+              ) : null}
+              {job.stage === "failed" || job.stage === "cancelled" ? (
+                <ActionButton
+                  disabled={busy}
+                  onClick={() => void editInstructions()}
+                >
+                  Edit instructions
+                </ActionButton>
+              ) : null}
+              {job.stage === "failed" || job.stage === "cancelled" ? (
+                <ActionButton
+                  disabled={busy}
+                  onClick={() =>
+                    void action(async () => {
+                      await api.retryGeneration(job.id);
+                      setPollVersion((value) => value + 1);
+                    })
+                  }
+                >
+                  Retry generation
+                </ActionButton>
+              ) : null}
+            </section>
+            {job.stage === "failed" || job.stage === "cancelled" ? (
+              <ChatGPTConnectionPanel onReady={() => {}} />
+            ) : null}
+            {job.stage !== "failed" && job.stage !== "cancelled" ? (
+              <GenerationResult
+                job={job}
+                accepting={accepting}
+                onAccept={() => void accept()}
+                onEditInstructions={() => void editInstructions()}
+              />
+            ) : null}
+            {job.stage === "accepted" && job.acceptance ? (
+              <ActionButton
+                onClick={() => void onCreated(job.acceptance!.projectId)}
+              >
+                Open created story
+              </ActionButton>
+            ) : null}
+            <div className="story-creation__actions">
+              <ActionButton
+                variant="ghost"
+                disabled={busy || accepting}
+                onClick={() =>
+                  void action(async () => {
+                    await api.discardGeneration(job.id);
+                    onNavigate(null);
+                  })
+                }
+              >
+                Discard this result
+              </ActionButton>
+            </div>
+            <p>
+              Discard removes this saved result. It does not change your story.
+            </p>
+            <details>
+              <summary>Generation details</summary>
+              <p>
+                {job.usage.length} completed provider operations reported usage.
+                Your ChatGPT account is the source for current usage limits.
+              </p>
+            </details>
+          </>
+        ) : (
+          <p role="status">Loading generation…</p>
+        )}
+      </main>
+    </>
   );
 }

@@ -41,6 +41,7 @@ it("explains missing credentials and keeps generation disabled", async () => {
   render(
     <EarthStoriesProvider>
       <StoryCreationScreen
+        onWorkspace={() => {}}
         jobId={null}
         preview={false}
         onNavigate={() => {}}
@@ -80,6 +81,7 @@ it("accepts a ready candidate only once during rapid clicks", async () => {
   render(
     <EarthStoriesProvider>
       <StoryCreationScreen
+        onWorkspace={() => {}}
         jobId="job"
         preview={false}
         onNavigate={() => {}}
@@ -110,6 +112,7 @@ it("submits long reference URLs with a bounded display name", async () => {
   render(
     <EarthStoriesProvider>
       <StoryCreationScreen
+        onWorkspace={() => {}}
         jobId={null}
         preview={false}
         onNavigate={() => {}}
@@ -122,7 +125,7 @@ it("submits long reference URLs with a bounded display name", async () => {
     target: { value: "River" },
   });
   const url = "https://example.org/report.pdf?signature=" + "a".repeat(300);
-  fireEvent.change(screen.getByLabelText("Public reference links"), {
+  fireEvent.change(screen.getByLabelText("Reference links and notes"), {
     target: { value: url },
   });
   const button = screen.getByRole("button", { name: "Generate story" });
@@ -187,6 +190,7 @@ it("restores a failed brief and its references, then submits edits as a new job"
   render(
     <EarthStoriesProvider>
       <StoryCreationScreen
+        onWorkspace={() => {}}
         jobId="failed-job"
         preview={false}
         onNavigate={navigate}
@@ -196,7 +200,7 @@ it("restores a failed brief and its references, then submits edits as a new job"
     </EarthStoriesProvider>,
   );
   fireEvent.click(
-    await screen.findByRole("button", { name: "Edit brief and references" }),
+    await screen.findByRole("button", { name: "Edit instructions" }),
   );
   const title = await screen.findByLabelText(/Working title/);
   expect((title as HTMLInputElement).value).toBe("Birds");
@@ -214,7 +218,7 @@ it("restores a failed brief and its references, then submits edits as a new job"
     { length: 20 },
     (_, i) => `https://example.org/${i}.txt`,
   );
-  fireEvent.change(screen.getByLabelText("Public reference links"), {
+  fireEvent.change(screen.getByLabelText("Reference links and notes"), {
     target: { value: links.join("\n") },
   });
   fireEvent.click(submit);
@@ -224,7 +228,7 @@ it("restores a failed brief and its references, then submits edits as a new job"
     ),
   ).toBeTruthy();
   expect(api.startGeneration).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByLabelText("Public reference links"), {
+  fireEvent.change(screen.getByLabelText("Reference links and notes"), {
     target: { value: links.slice(0, 19).join("\n") },
   });
   fireEvent.click(submit);
@@ -278,6 +282,7 @@ it("generates enhancements from the existing story without asking for its text a
   render(
     <EarthStoriesProvider>
       <StoryCreationScreen
+        onWorkspace={() => {}}
         sourceProjectId="existing"
         jobId={null}
         preview={false}
@@ -294,9 +299,12 @@ it("generates enhancements from the existing story without asking for its text a
     expect((button as HTMLButtonElement).disabled).toBe(false),
   );
   expect(screen.queryByLabelText(/Working title/)).toBeNull();
-  fireEvent.change(screen.getByLabelText("Visual direction"), {
-    target: { value: "Explain the flow visually" },
-  });
+  fireEvent.change(
+    screen.getByLabelText("What would you like to add or change visually?"),
+    {
+      target: { value: "Explain the flow visually" },
+    },
+  );
   fireEvent.click(button);
   await waitFor(() => expect(navigate).toHaveBeenCalledWith("enhancement-job"));
   expect(api.enhanceStory).toHaveBeenCalledWith(
@@ -309,4 +317,27 @@ it("generates enhancements from the existing story without asking for its text a
     project.metadata.updated,
   );
   expect(api.startGeneration).not.toHaveBeenCalled();
+});
+
+it("does not label an already accepted result as unapplied", async () => {
+  vi.mocked(api.getGeneration).mockResolvedValue({
+    stage: "accepted",
+  } as never);
+  vi.mocked(api.generationPreview).mockResolvedValue({} as never);
+  render(
+    <EarthStoriesProvider>
+      <StoryCreationScreen
+        jobId="accepted"
+        preview
+        onWorkspace={() => {}}
+        onBack={() => {}}
+        onNavigate={() => {}}
+        onCreated={async () => {}}
+      />
+    </EarthStoriesProvider>,
+  );
+  await screen.findByText("Story preview · saved result");
+  expect(
+    screen.queryByText("Story preview · not applied or published"),
+  ).toBeNull();
 });

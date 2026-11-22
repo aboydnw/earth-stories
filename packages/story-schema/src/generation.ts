@@ -19,6 +19,7 @@ export const referenceInputSchema = z.discriminatedUnion("kind", [
       name: z.string().max(200),
       classification,
       url: z.string().url().max(2048),
+      notes: z.string().max(4000).optional(),
     })
     .strict(),
   z
@@ -45,7 +46,7 @@ export const storyBriefSchema = z
     audience: z.string().max(2000),
     takeaway: z.string().max(4000),
     narrative: z.string().max(50000),
-    visualDirection: z.string().max(10000),
+    visualDirection: z.string().max(60002),
     references: z.array(referenceInputSchema).max(20),
     requestedOutputs: z
       .array(z.enum(["illustration", "animation", "prose"]))
@@ -233,6 +234,10 @@ export type PreparedReference = {
   classification: ReferenceInput["classification"];
   text?: string;
   image?: string;
+  notes?: string;
+  sourceUrl?: string;
+  requestedUrl?: string;
+  warnings?: string[];
 };
 export interface GenerationProvider {
   configured: boolean;

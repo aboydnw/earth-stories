@@ -86,8 +86,8 @@ export async function readPlanStream(
 }
 export function providerError(code: unknown): string {
   if (code === "subscription_sharing_usage_limit_exceeded")
-    return "Your ChatGPT usage limit has been reached. Open Manage usage in ChatGPT before retrying.";
+    return "Your ChatGPT usage limit has been reached. Review your limits in ChatGPT before retrying.";
   if (code === "subscription_sharing_usage_unavailable")
-    return "ChatGPT plan usage is unavailable for this account. Open Manage usage or reconnect.";
+    return "ChatGPT plan usage is unavailable for this account. Review your plan settings in ChatGPT or reconnect.";
   return "ChatGPT could not complete this request. Please retry or reconnect.";
 }

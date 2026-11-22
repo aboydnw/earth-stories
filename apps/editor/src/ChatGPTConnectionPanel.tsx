@@ -8,10 +8,11 @@ import {
 } from "@earth-stories/ui";
 import { detectDesktopBridge } from "./desktop";
 import * as api from "./api";
-const usageUrl = "https://chatgpt.com/settings/usage";
 export function ChatGPTConnectionPanel({
   onReady,
+  selectedModel,
 }: {
+  selectedModel?: string;
   onReady: (ready: boolean, model?: string) => void;
 }) {
   const [status, setStatus] = useState<ChatGPTStatus | null>(null),
@@ -22,6 +23,8 @@ export function ChatGPTConnectionPanel({
     [error, setError] = useState(""),
     [refresh, setRefresh] = useState(0),
     [launch, setLaunch] = useState<string | null>(null);
+  const desiredModel = useRef(selectedModel);
+  desiredModel.current = selectedModel;
   const notify = useRef(onReady);
   notify.current = onReady;
   useEffect(() => {
@@ -52,6 +55,10 @@ export function ChatGPTConnectionPanel({
     };
   }, [refresh]);
   useEffect(() => {
+    if (status)
+      setAccount(status.activeAccount ?? status.accounts[0]?.id ?? "");
+  }, [status?.activeAccount, status?.accounts[0]?.id]);
+  useEffect(() => {
     setModels([]);
     setModel("");
     setError("");
@@ -62,7 +69,11 @@ export function ChatGPTConnectionPanel({
       .then((list) => {
         if (live) {
           setModels(list);
-          setModel(list[0]?.id ?? "");
+          setModel(
+            list.some((m) => m.id === desiredModel.current)
+              ? desiredModel.current!
+              : (list[0]?.id ?? ""),
+          );
           if (!list.length)
             setError("No models are available for this ChatGPT account.");
         }
@@ -81,18 +92,34 @@ export function ChatGPTConnectionPanel({
   }, [status?.activeAccount, status?.configured, status?.pending, refresh]);
   useEffect(() => {
     notify.current(
-      Boolean(status?.configured && !status.pending && model && !busy),
+      Boolean(
+        status?.configured &&
+        !status.pending &&
+        status.activeAccount === account &&
+        models.some((m) => m.id === model) &&
+        !busy &&
+        !launch,
+      ),
       model || undefined,
     );
-  }, [status?.configured, status?.pending, model, busy]);
-  async function signIn() {
+  }, [
+    status?.configured,
+    status?.pending,
+    status?.activeAccount,
+    account,
+    models,
+    model,
+    busy,
+    launch,
+  ]);
+  async function signIn(accountId?: string) {
     const desktop = detectDesktopBridge();
     const tab = desktop ? null : window.open("about:blank", "_blank");
     if (tab) tab.opener = null;
     setBusy(true);
     setError("");
     try {
-      const result = await api.connectChatGPT(account || undefined);
+      const result = await api.connectChatGPT(accountId);
       const url = new URL(result.url);
       if (
         url.protocol !== "http:" ||
@@ -107,6 +134,7 @@ export function ChatGPTConnectionPanel({
       setRefresh((v) => v + 1);
     } catch (cause) {
       tab?.close();
+      setAccount(status?.activeAccount ?? status?.accounts[0]?.id ?? "");
       setError(
         cause instanceof Error ? cause.message : "Sign-in could not start.",
       );
@@ -119,6 +147,8 @@ export function ChatGPTConnectionPanel({
     setError("");
     try {
       await run();
+      setAccount(status?.activeAccount ?? status?.accounts[0]?.id ?? "");
+      setLaunch(null);
       setRefresh((v) => v + 1);
     } catch (cause) {
       setError(
@@ -130,85 +160,78 @@ export function ChatGPTConnectionPanel({
       setBusy(false);
     }
   }
-  const active = status?.accounts.find((a) => a.id === status.activeAccount);
   return (
     <section className="chatgpt-connection" aria-label="ChatGPT connection">
-      <h2>Your ChatGPT connection</h2>
-      <p>
-        Use your ChatGPT plan to create an editable story with composed vector
-        illustrations and scroll animation.
-      </p>
+      <h2>Account and model</h2>
       {!status && !error ? (
         <p role="status">Checking your connection…</p>
       ) : null}
-      {active ? (
-        <p>
-          {active.label} · Account {status!.accounts.indexOf(active) + 1}
-        </p>
-      ) : null}
-      {status?.configured ? (
-        <p>
-          <strong>Using ChatGPT plan</strong>
-        </p>
-      ) : null}
-      {status?.accounts.length ? (
-        <FormField label="ChatGPT account">
-          <SelectInput
-            value={account}
-            onChange={(e) => setAccount(e.target.value)}
-            disabled={busy || status.pending}
-          >
-            <option value="">Add a ChatGPT account</option>
-            {status.accounts.map((a, i) => (
-              <option key={a.id} value={a.id}>
-                {a.label} · Account {i + 1}
-              </option>
-            ))}
-          </SelectInput>
-        </FormField>
-      ) : null}
+      <div className="chatgpt-connection__fields">
+        {status?.accounts.length ? (
+          <FormField label="ChatGPT account">
+            <SelectInput
+              value={account}
+              onChange={(e) => {
+                const id = e.target.value;
+                setAccount(id);
+                if (id !== status.activeAccount) void signIn(id);
+              }}
+              disabled={busy || status.pending}
+            >
+              {status.accounts.map((a, i) => (
+                <option key={a.id} value={a.id}>
+                  {a.label} · Account {i + 1}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+        ) : null}
+        {models.length ? (
+          <FormField label="Story model">
+            <SelectInput
+              value={model}
+              disabled={busy || status?.pending}
+              onChange={(e) => setModel(e.target.value)}
+            >
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </SelectInput>
+          </FormField>
+        ) : null}
+      </div>
       <div className="chatgpt-connection__actions">
         <ActionButton
           type="button"
+          variant="surface"
           data-oai-siwc-button=""
           disabled={!status || busy || status.pending}
           onClick={() => void signIn()}
         >
-          Continue with ChatGPT
+          {status?.accounts.length ? "Add account" : "Continue with ChatGPT"}
         </ActionButton>
+        {status && !status.configured && account ? (
+          <ActionButton
+            type="button"
+            variant="surface"
+            disabled={busy || status.pending}
+            onClick={() => void signIn(account)}
+          >
+            Reconnect
+          </ActionButton>
+        ) : null}
         {status?.pending ? (
           <ActionButton
             type="button"
+            variant="ghost"
             disabled={busy}
             onClick={() => void action(api.cancelChatGPT)}
           >
             Cancel sign-in
           </ActionButton>
         ) : null}
-        {active?.connected ? (
-          <ActionButton
-            type="button"
-            disabled={busy}
-            onClick={() => void action(api.disconnectChatGPT)}
-          >
-            Sign out
-          </ActionButton>
-        ) : null}
-        <ActionButton
-          type="button"
-          onClick={() => {
-            const desktop = detectDesktopBridge();
-            if (desktop)
-              void desktop
-                .openExternal(usageUrl)
-                .catch(() =>
-                  setError("Could not open ChatGPT usage settings."),
-                );
-            else window.open(usageUrl, "_blank", "noopener,noreferrer");
-          }}
-        >
-          Manage usage
-        </ActionButton>
       </div>
       {status?.pending ? (
         <p role="status">Finish signing in with ChatGPT in your browser.</p>
@@ -217,21 +240,6 @@ export function ChatGPTConnectionPanel({
         <a href={launch} target="_blank" rel="noreferrer">
           Open sign-in window
         </a>
-      ) : null}
-      {models.length ? (
-        <FormField label="Story model">
-          <SelectInput
-            value={model}
-            disabled={busy || status?.pending}
-            onChange={(e) => setModel(e.target.value)}
-          >
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </SelectInput>
-        </FormField>
       ) : null}
       {error || status?.error ? (
         <StatusNotice tone="warning" title="ChatGPT connection needs attention">

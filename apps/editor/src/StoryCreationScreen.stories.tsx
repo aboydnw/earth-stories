@@ -6,8 +6,18 @@ import {
   defaultReaderPalette,
   composeVectorScene,
 } from "@earth-stories/story-schema";
+import "./editor.css";
 import "./storyCreation.css";
-const meta = { title: "Editor/Story creation" } satisfies Meta;
+const meta = {
+  title: "Editor/Story creation",
+  decorators: [
+    (Story) => (
+      <main className="story-creation">
+        <Story />
+      </main>
+    ),
+  ],
+} satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 const project = storyProjectSchema.parse({
@@ -65,15 +75,28 @@ const job = generationJobSchema.parse({
 });
 export const Ready: Story = {
   render: () => (
-    <GenerationResult job={job} accepting={false} onAccept={() => {}} />
+    <GenerationResult
+      onEditInstructions={() => {}}
+      job={job}
+      accepting={false}
+      onAccept={() => {}}
+    />
   ),
 };
 export const Creating: Story = {
-  render: () => <GenerationResult job={job} accepting onAccept={() => {}} />,
+  render: () => (
+    <GenerationResult
+      onEditInstructions={() => {}}
+      job={job}
+      accepting
+      onAccept={() => {}}
+    />
+  ),
 };
 export const Waiting: Story = {
   render: () => (
     <GenerationResult
+      onEditInstructions={() => {}}
       job={{ ...job, stage: "planning", candidate: null }}
       accepting={false}
       onAccept={() => {}}
@@ -127,9 +150,39 @@ const enhancementJob = generationJobSchema.parse({
 export const EnhancementReview: Story = {
   render: () => (
     <GenerationResult
+      onEditInstructions={() => {}}
       job={enhancementJob}
       accepting={false}
       onAccept={() => {}}
+    />
+  ),
+};
+
+export const NarrowReview: Story = {
+  ...EnhancementReview,
+  parameters: { viewport: { defaultViewport: "mobile1" } },
+};
+export const WithoutWarnings: Story = {
+  render: () => (
+    <GenerationResult
+      job={{
+        ...enhancementJob,
+        candidate: { ...enhancementJob.candidate!, warnings: [] },
+        plan: { ...enhancementJob.plan!, textEdits: [] },
+      }}
+      accepting={false}
+      onAccept={() => {}}
+      onEditInstructions={() => {}}
+    />
+  ),
+};
+export const ApplyingEnhancements: Story = {
+  render: () => (
+    <GenerationResult
+      job={enhancementJob}
+      accepting
+      onAccept={() => {}}
+      onEditInstructions={() => {}}
     />
   ),
 };

@@ -163,3 +163,37 @@ chapter, its original artwork and caption stay visible alongside its narrative. 
 all narrative with descriptive stills. Preview, publication and archival export
 use the same normalized geometry and keyframe interpretation. No generated code,
 markup, external image URL or product-chrome styling enters a scene description.
+
+### AI visual enhancement review
+
+Enhancement stays in the editor navigation, with one visual-direction field,
+annotated references, and compact account/model controls next to Generate.
+Reopening older briefs combines their context and visual direction without
+truncation; new-story creation retains separate content and visual fields.
+The active ChatGPT account and a still-available saved model are selected by
+default. Account switching remains unavailable for generation until sign-in
+finishes. Adding an account is a separate action.
+
+Ready results lead with Preview story, followed by equally prominent secondary
+Apply to story and Edit instructions actions. Controls fit their labels and wrap
+on narrow screens. Instructions, proposed changes, source coverage and generation
+details use disclosures; supporting edits to original text remain expanded.
+Preview opens separately and states that the result is not applied or published.
+Applying preserves ordinary editing and author-controlled publishing.
+
+Generate gathers map context through temporary focused chapter renderers, one
+chapter at a time. The form does not display another copy of the source story.
+Missing previews and unavailable sources remain explicit review notes.
+
+Generated art should support the story's thematic subject with recognizable,
+coherent illustrations and visible scroll movement. Avoid unsolicited diagrams,
+new factual labels, and decoration of credits. Existing maps and charts remain
+authoritative. Keyframe positions are absolute; scroll length sets minimum
+travel. Quality checks apply to new generation, never reinterpret saved scenes.
+
+Reference links can include an explanation on each line and an unambiguous bare
+domain. Authors can edit the URL, notes, and intended use before generation.
+Public HTML supplies bounded text and, when available, a static appearance
+capture in an isolated browser with scripts disabled. This does not imply that
+interactive page content was inspected. Browser availability or blocked resources
+produce explicit limitations and a screenshot-upload fallback.

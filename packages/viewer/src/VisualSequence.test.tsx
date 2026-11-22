@@ -117,9 +117,9 @@ it("scrubs against a nested editor scrollport rather than the browser window", a
     container.querySelectorAll<HTMLElement>("[data-visual-step]"),
   );
   steps[0]!.getBoundingClientRect = () =>
-    ({ top: -300, height: 400 }) as DOMRect;
+    ({ top: -500, height: 600 }) as DOMRect;
   steps[1]!.getBoundingClientRect = () =>
-    ({ top: 100, height: 400 }) as DOMRect;
+    ({ top: 100, height: 600 }) as DOMRect;
   fireEvent.scroll(scrollport);
   await waitFor(() =>
     expect(
@@ -178,3 +178,34 @@ it.each(["scroll", "still", "focused"])(
     expect(screen.getAllByText("Second")).toHaveLength(1);
   },
 );
+it("allocates scroll travel using the authored scene pacing", () => {
+  const sequence = structuredClone(hurricaneSequence);
+  sequence.scene.scrollLength = 4;
+  const { container } = render(
+    <VisualSequence sequence={sequence} chapters={visualFixtureChapters} />,
+  );
+  const steps = container.querySelectorAll<HTMLElement>("[data-visual-step]");
+  expect(steps[0]!.style.getPropertyValue("--visual-step-height")).toContain(
+    "2.5",
+  );
+  expect(steps[1]!.style.getPropertyValue("--visual-step-height")).toContain(
+    "2.5",
+  );
+});
+
+it("keeps viewport entry and exit space separate from uneven step travel", () => {
+  const sequence = structuredClone(hurricaneSequence);
+  sequence.scene.scrollLength = 4;
+  sequence.steps[0]!.end = 0.1;
+  sequence.steps[1]!.start = 0.1;
+  const { container } = render(
+    <VisualSequence sequence={sequence} chapters={visualFixtureChapters} />,
+  );
+  const steps = container.querySelectorAll<HTMLElement>("[data-visual-step]");
+  expect(steps[0]!.style.getPropertyValue("--visual-step-height")).toContain(
+    "0.9",
+  );
+  expect(steps[1]!.style.getPropertyValue("--visual-step-height")).toContain(
+    "4.1",
+  );
+});

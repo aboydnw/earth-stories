@@ -382,6 +382,19 @@ export class GenerationJobs {
       const candidate = job.enhancement
         ? assembleEnhancement(job, (await this.source(job)).project)
         : assembleCandidate(job);
+      const referenceWarnings = references.flatMap((r) =>
+        (r.warnings ?? []).map((w) => `${r.name}: ${w}`),
+      );
+      if (referenceWarnings.length) {
+        candidate.warnings = [...candidate.warnings, ...referenceWarnings];
+        candidate.digest = digestBytes(
+          JSON.stringify({
+            project: candidate.project,
+            assets: candidate.assets,
+            warnings: candidate.warnings,
+          }),
+        );
+      }
       await this.change(
         id,
         (j) => {
