@@ -48,3 +48,14 @@ it.each([
 ])("explains invalid lines without echoing their contents", (value) => {
   expect(() => parseReferenceLinks(value)).toThrow(/Reference.*line 1/);
 });
+
+it("keeps filenames in the notes of an explicit link", () => {
+  expect(
+    parseReferenceLinks(
+      "https://example.org/a see the chart in figure.png and data.json",
+    )[0],
+  ).toMatchObject({
+    url: "https://example.org/a",
+    notes: "see the chart in figure.png and data.json",
+  });
+});

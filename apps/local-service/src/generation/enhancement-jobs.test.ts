@@ -7,6 +7,7 @@ import {
   parseStoryProject,
   type GenerationProvider,
 } from "@earth-stories/story-schema";
+import * as referencePreparation from "./reference-inputs.js";
 import { GenerationJobs } from "./jobs.js";
 import { composePlan } from "./vector-plan.js";
 const fixture = new URL(
@@ -22,102 +23,138 @@ const brief = {
   references: [],
   requestedOutputs: ["illustration" as const],
 };
-it("uses the existing story as context, previews original assets, survives restart, and applies only additions", async () => {
-  const root = await mkdtemp(join(tmpdir(), "earth-enhance-"));
-  try {
-    const store = new ProjectStore(root);
-    const template = parseStoryProject(
-      JSON.parse(await readFile(new URL("story.json", fixture), "utf8")),
-    );
-    const bytes = await readFile(new URL("data/survey-sites.geojson", fixture));
-    const source = await store.createFromTemplate(
-      { ...template, id: "example-enhance" },
-      [{ path: "data/survey-sites.geojson", contents: bytes }],
-    );
-    let contextTitle = "";
-    let dataSeen = false;
-    const provider: GenerationProvider = {
-      configured: true,
-      plan: async (input, refs, _signal, context) => {
-        contextTitle = context!.metadata.title;
-        dataSeen = refs.some((r) => r.text?.includes("FeatureCollection"));
-        return {
-          plan: composePlan(
+it.each([false, true])(
+  "uses existing context and applies only additions after restart (webpage notes: %s)",
+  async (withWebpage) => {
+    const referenceSpy = withWebpage
+      ? vi
+          .spyOn(referencePreparation, "prepareReferences")
+          .mockResolvedValueOnce([
             {
-              title: "Do not replace",
-              description: "Do not replace",
-              palette: "estuary",
-              chapters: [
-                {
-                  id: "new-river",
-                  afterChapterId: source.chapters[0]!.id,
-                  title: "River flow",
-                  narrative: "Illustrative, not measured.",
-                  alt: "River illustration",
-                  caption: "Illustrative",
-                  recipe: {
-                    template: "flow",
-                    heading: "River",
-                    labels: ["Land", "Water"],
-                    motif: "river",
-                    motion: false,
-                  },
-                },
-              ],
-              textEdits: [],
-              warnings: [],
+              id: "reference-1",
+              name: "Style page",
+              classification: "visual-style",
+              text: "Coast",
+              warnings: ["Appearance unavailable"],
             },
-            input,
-            true,
-          ),
-          usage: {},
-        };
-      },
-    };
-    const jobs = new GenerationJobs(store, provider);
-    await jobs.initialize();
-    const created = await jobs.start(
-      brief,
-      source.id,
-      {},
-      source.metadata.updated,
-    );
-    await jobs.whenIdle();
-    const ready = await jobs.get(created.id);
-    expect(ready.stage).toBe("ready");
-    expect(await jobs.getBrief(created.id)).toEqual(brief);
-    expect(contextTitle).toBe(source.metadata.title);
-    expect(dataSeen).toBe(true);
-    expect(ready.candidate!.warnings.join(" ")).toContain(
-      "no readable map preview",
-    );
-    expect((await jobs.preview(created.id)).assets[0]!.href).toContain(
-      `/api/projects/${source.id}/assets/data/survey-sites.geojson`,
-    );
-    expect(await store.read(source.id)).toEqual(source);
-    const reopened = new GenerationJobs(store, provider);
-    await reopened.initialize();
-    const receipt = await reopened.accept(created.id);
-    expect(receipt.projectId).toBe(source.id);
-    const saved = await store.read(source.id);
-    expect(saved.chapters.filter((c) => c.id !== "new-river")).toEqual(
-      source.chapters,
-    );
-    expect(saved.sources).toEqual(source.sources);
-    expect(saved.metadata.title).toBe(source.metadata.title);
-    expect(
-      await readFile(store.assetPath(source.id, "data/survey-sites.geojson")),
-    ).toEqual(bytes);
-    expect(await reopened.accept(created.id)).toEqual(receipt);
-    // A new candidate cannot replace later author edits.
-    const next = await jobs.start(brief, source.id);
-    await jobs.whenIdle();
-    // The provider's reused ID is now a collision, which must fail closed.
-    expect((await jobs.get(next.id)).stage).toBe("failed");
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
+          ])
+      : null;
+    const inputBrief = withWebpage
+      ? {
+          ...brief,
+          references: [
+            {
+              kind: "url",
+              name: "Style page",
+              classification: "visual-style",
+              url: "https://example.org/",
+            },
+          ],
+        }
+      : brief;
+    const root = await mkdtemp(join(tmpdir(), "earth-enhance-"));
+    try {
+      const store = new ProjectStore(root);
+      const template = parseStoryProject(
+        JSON.parse(await readFile(new URL("story.json", fixture), "utf8")),
+      );
+      const bytes = await readFile(
+        new URL("data/survey-sites.geojson", fixture),
+      );
+      const source = await store.createFromTemplate(
+        { ...template, id: "example-enhance" },
+        [{ path: "data/survey-sites.geojson", contents: bytes }],
+      );
+      let contextTitle = "";
+      let dataSeen = false;
+      const provider: GenerationProvider = {
+        configured: true,
+        plan: async (input, refs, _signal, context) => {
+          contextTitle = context!.metadata.title;
+          dataSeen = refs.some((r) => r.text?.includes("FeatureCollection"));
+          return {
+            plan: composePlan(
+              {
+                title: "Do not replace",
+                description: "Do not replace",
+                palette: "estuary",
+                chapters: [
+                  {
+                    id: "new-river",
+                    afterChapterId: source.chapters[0]!.id,
+                    title: "River flow",
+                    narrative: "Illustrative, not measured.",
+                    alt: "River illustration",
+                    caption: "Illustrative",
+                    recipe: {
+                      template: "flow",
+                      heading: "River",
+                      labels: ["Land", "Water"],
+                      motif: "river",
+                      motion: false,
+                    },
+                  },
+                ],
+                textEdits: [],
+                warnings: [],
+              },
+              input,
+              true,
+            ),
+            usage: {},
+          };
+        },
+      };
+      const jobs = new GenerationJobs(store, provider);
+      await jobs.initialize();
+      const created = await jobs.start(
+        inputBrief,
+        source.id,
+        {},
+        source.metadata.updated,
+      );
+      await jobs.whenIdle();
+      const ready = await jobs.get(created.id);
+      expect(ready.stage).toBe("ready");
+      expect(await jobs.getBrief(created.id)).toEqual(inputBrief);
+      if (withWebpage)
+        expect(ready.candidate?.warnings).toContain(
+          "Style page: Appearance unavailable",
+        );
+      expect(contextTitle).toBe(source.metadata.title);
+      expect(dataSeen).toBe(true);
+      expect(ready.candidate!.warnings.join(" ")).toContain(
+        "no readable map preview",
+      );
+      expect((await jobs.preview(created.id)).assets[0]!.href).toContain(
+        `/api/projects/${source.id}/assets/data/survey-sites.geojson`,
+      );
+      expect(await store.read(source.id)).toEqual(source);
+      const reopened = new GenerationJobs(store, provider);
+      await reopened.initialize();
+      const receipt = await reopened.accept(created.id);
+      expect(receipt.projectId).toBe(source.id);
+      const saved = await store.read(source.id);
+      expect(saved.chapters.filter((c) => c.id !== "new-river")).toEqual(
+        source.chapters,
+      );
+      expect(saved.sources).toEqual(source.sources);
+      expect(saved.metadata.title).toBe(source.metadata.title);
+      expect(
+        await readFile(store.assetPath(source.id, "data/survey-sites.geojson")),
+      ).toEqual(bytes);
+      expect(await reopened.accept(created.id)).toEqual(receipt);
+      // A new candidate cannot replace later author edits.
+      const next = await jobs.start(brief, source.id);
+      await jobs.whenIdle();
+      // The provider's reused ID is now a collision, which must fail closed.
+      expect((await jobs.get(next.id)).stage).toBe("failed");
+    } finally {
+      referenceSpy?.mockRestore();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
 it("blocks apply when a source asset changes", async () => {
   const root = await mkdtemp(join(tmpdir(), "earth-enhance-assets-"));
   try {

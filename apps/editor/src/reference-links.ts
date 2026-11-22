@@ -7,11 +7,14 @@ export function parseReferenceLinks(value: string): ReferenceInput[] {
       detail = "Use a complete HTTPS link or public domain with optional notes.",
     ) => new Error(`Reference on line ${index + 1}: ${detail}`);
     // Explicit schemes take precedence, so unsafe schemes cannot be reinterpreted as a bare domain.
-    const matches = [
-      ...line.matchAll(
-        /(?:[a-z][a-z0-9+.-]*:\/\/[^\s<>"`]+)|(?:\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}(?:[/:?#][^\s<>"`]*)?)/gi,
-      ),
-    ];
+    const explicit = [...line.matchAll(/[a-z][a-z0-9+.-]*:\/\/[^\s<>"`]+/gi)];
+    const matches = explicit.length
+      ? explicit
+      : [
+          ...line.matchAll(
+            /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}(?:[/:?#][^\s<>"`]*)?/gi,
+          ),
+        ];
     if (matches.length !== 1)
       throw fail(
         matches.length > 1

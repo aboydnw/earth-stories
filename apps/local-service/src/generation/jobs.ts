@@ -379,13 +379,26 @@ export class GenerationJobs {
         },
         signal,
       );
-      const candidate = job.enhancement
-        ? assembleEnhancement(job, (await this.source(job)).project)
-        : assembleCandidate(job);
       const referenceWarnings = references.flatMap((r) =>
         (r.warnings ?? []).map((w) => `${r.name}: ${w}`),
       );
-      if (referenceWarnings.length) {
+      // Enhancement acceptance rebuilds from the saved plan and coverage notes.
+      // Persist these notes before assembly so review and apply have one digest.
+      if (job.enhancement && referenceWarnings.length) {
+        job = await this.change(
+          id,
+          (j) => {
+            j.enhancement!.warnings = [
+              ...new Set([...j.enhancement!.warnings, ...referenceWarnings]),
+            ];
+          },
+          signal,
+        );
+      }
+      const candidate = job.enhancement
+        ? assembleEnhancement(job, (await this.source(job)).project)
+        : assembleCandidate(job);
+      if (!job.enhancement && referenceWarnings.length) {
         candidate.warnings = [...candidate.warnings, ...referenceWarnings];
         candidate.digest = digestBytes(
           JSON.stringify({

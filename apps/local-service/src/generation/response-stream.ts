@@ -52,7 +52,7 @@ export async function readPlanStream(
     }
   };
   const abort = () => {
-    void reader.cancel();
+    void reader.cancel().catch(() => {});
   };
   signal.addEventListener("abort", abort, { once: true });
   try {
@@ -81,7 +81,7 @@ export async function readPlanStream(
     return { text, usage };
   } finally {
     signal.removeEventListener("abort", abort);
-    await reader.cancel();
+    await reader.cancel().catch(() => {});
   }
 }
 export function providerError(code: unknown): string {
