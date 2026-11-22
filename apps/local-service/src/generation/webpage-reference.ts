@@ -1,4 +1,27 @@
 import { captureReferencePage } from "./webpage-capture.js";
+/** Decode once before text extraction and UTF-8 browser re-serving. */
+export function decodeWebpage(bytes: Uint8Array, contentType: string): string {
+  const bom =
+    bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
+      ? "utf-8"
+      : bytes[0] === 0xff && bytes[1] === 0xfe
+        ? "utf-16le"
+        : bytes[0] === 0xfe && bytes[1] === 0xff
+          ? "utf-16be"
+          : undefined;
+  const header = /charset\s*=\s*["']?([^"';\s]+)/i.exec(contentType)?.[1];
+  const head = Buffer.from(bytes.subarray(0, 1024)).toString("latin1");
+  const meta =
+    /<meta\b[^<>]{0,1000}\bcharset\s*=\s*["']?\s*([^\s"'/>;]+)/i.exec(
+      head,
+    )?.[1];
+  try {
+    return new TextDecoder(bom ?? header ?? meta ?? "utf-8").decode(bytes);
+  } catch {
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+}
+
 /** Plain text extraction only; this output is never treated as trusted markup or instructions. */
 export function extractWebpageText(html: string): string {
   const parts: string[] = [];

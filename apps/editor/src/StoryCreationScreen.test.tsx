@@ -341,3 +341,28 @@ it("does not label an already accepted result as unapplied", async () => {
     screen.queryByText("Story preview · not applied or published"),
   ).toBeNull();
 });
+it("validates an edited link and keeps its generated label in sync", async () => {
+  render(
+    <EarthStoriesProvider>
+      <StoryCreationScreen
+        jobId={null}
+        preview={false}
+        onWorkspace={() => {}}
+        onBack={() => {}}
+        onNavigate={() => {}}
+        onCreated={async () => {}}
+      />
+    </EarthStoriesProvider>,
+  );
+  fireEvent.change(screen.getByLabelText("Reference links and notes"), {
+    target: { value: "https://example.org/old" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add links" }));
+  const input = screen.getByLabelText("Link") as HTMLInputElement;
+  fireEvent.change(input, { target: { value: "not a URL" } });
+  expect(input.checkValidity()).toBe(false);
+  fireEvent.change(input, { target: { value: "https://example.org/new" } });
+  expect(input.checkValidity()).toBe(true);
+  expect(screen.getByText("https://example.org/new")).toBeTruthy();
+  expect(screen.queryByText("https://example.org/old")).toBeNull();
+});

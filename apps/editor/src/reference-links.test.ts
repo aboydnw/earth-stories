@@ -59,3 +59,32 @@ it("keeps filenames in the notes of an explicit link", () => {
     notes: "see the chart in figure.png and data.json",
   });
 });
+it.each([
+  "Match the Node.js docs palette",
+  "see the chart in figure.png",
+  "use data.json and figure.png",
+  "figure.png",
+  "Node.js docs palette",
+])(
+  "does not reinterpret ambiguous prose or a filename as a bare domain: %s",
+  (value) => {
+    expect(() => parseReferenceLinks(value)).toThrow(/Reference.*line 1/);
+  },
+);
+it("accepts a leading bare domain with a filename in its notes", () => {
+  expect(
+    parseReferenceLinks("google.com use spacing like figure.png")[0],
+  ).toMatchObject({
+    url: "https://google.com/",
+    notes: "use spacing like figure.png",
+  });
+});
+
+it("accepts a file path beneath an unambiguous bare host", () => {
+  expect(
+    parseReferenceLinks("example.org/figure.png use its colors")[0],
+  ).toMatchObject({
+    url: "https://example.org/figure.png",
+    notes: "use its colors",
+  });
+});

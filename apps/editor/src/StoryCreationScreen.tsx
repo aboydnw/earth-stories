@@ -429,13 +429,24 @@ export function StoryCreationScreen({
                       <>
                         <FormField label="Link">
                           <TextInput
+                            type="url"
+                            required
+                            pattern="https://.*"
+                            maxLength={2048}
                             value={reference.url}
                             onChange={(e) =>
                               setBrief((current) => ({
                                 ...current,
                                 references: current.references.map((r, i) =>
                                   i === index && r.kind === "url"
-                                    ? { ...r, url: e.target.value }
+                                    ? {
+                                        ...r,
+                                        url: e.target.value,
+                                        name:
+                                          r.name === r.url.slice(0, 200)
+                                            ? e.target.value.slice(0, 200)
+                                            : r.name,
+                                      }
                                     : r,
                                 ),
                               }))

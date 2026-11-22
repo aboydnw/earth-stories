@@ -2,7 +2,8 @@ import { expect, it, vi } from "vitest";
 import { captureReferencePage } from "./webpage-capture.js";
 import { prepareReferences } from "./reference-inputs.js";
 import { prepareWebpageReference } from "./webpage-reference.js";
-vi.mock("./webpage-reference.js", () => ({
+vi.mock("./webpage-reference.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./webpage-reference.js")>()),
   prepareWebpageReference: vi.fn(async () => ({
     text: "A public page",
     warnings: ["Appearance unavailable"],

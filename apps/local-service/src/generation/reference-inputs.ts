@@ -1,5 +1,5 @@
 import { readReferenceBody } from "./webpage-capture.js";
-import { prepareWebpageReference } from "./webpage-reference.js";
+import { prepareWebpageReference, decodeWebpage } from "./webpage-reference.js";
 import { dirname, join, sep } from "node:path";
 import { createRequire } from "node:module";
 import { authorizedFetch } from "@earth-stories/publisher";
@@ -171,7 +171,7 @@ export async function prepareReferences(
         type === "text/html"
           ? await prepareWebpageReference(
               sourceUrl,
-              new TextDecoder().decode(bytes),
+              decodeWebpage(bytes, response.headers.get("content-type") ?? ""),
               signal,
             )
           : await extract(bytes, type);

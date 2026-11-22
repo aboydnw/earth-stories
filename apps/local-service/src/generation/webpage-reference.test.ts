@@ -87,3 +87,26 @@ it("ignores comments and handles repeated unclosed script tags in a bounded scan
   );
   expect(extractWebpageText("<script>".repeat(20000))).toBe("");
 });
+it("decodes declared legacy HTML encodings and falls back for unknown labels", async () => {
+  const { decodeWebpage } = await import("./webpage-reference.js");
+  const latin = Buffer.from([67, 97, 102, 233]);
+  expect(decodeWebpage(latin, 'text/html; charset="windows-1252"')).toBe(
+    "Café",
+  );
+  expect(
+    decodeWebpage(
+      Buffer.concat([
+        Buffer.from('<meta charset="windows-1252"><p>'),
+        latin,
+        Buffer.from("</p>"),
+      ]),
+      "text/html",
+    ),
+  ).toContain("Café");
+  expect(
+    decodeWebpage(
+      Buffer.from("Glacier ❄"),
+      "text/html; charset=unknown-encoding",
+    ),
+  ).toBe("Glacier ❄");
+});
