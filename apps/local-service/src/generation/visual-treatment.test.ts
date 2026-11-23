@@ -104,3 +104,35 @@ it("counts narrative titles and IDs that merely mention references or how landsc
   };
   expect(inspectVisualTreatment(distributed, narrative)).toEqual([]);
 });
+
+it.each([3, 4, 5, 6])(
+  "accepts distributed artwork across %i narrative chapters",
+  (count) => {
+    const chapters = Array.from({ length: count }, (_, i) => ({
+      id: `chapter-${i}`,
+      type: "prose",
+      title: `Chapter ${i + 1}`,
+    }));
+    const distributed = {
+      ...plan,
+      visualSequences: [
+        {
+          ...plan.visualSequences![0]!,
+          steps: [{ chapterId: chapters[0]!.id, start: 0, end: 1 }],
+        },
+      ],
+      chapters: [
+        {
+          ...plan.chapters[0]!,
+          afterChapterId: chapters[Math.floor(count / 2)]!.id,
+        },
+      ],
+      visualAccents: [
+        { ...plan.visualAccents![0]!, chapterId: chapters[count - 1]!.id },
+      ],
+    };
+    expect(
+      inspectVisualTreatment(distributed, { chapters } as StoryProject),
+    ).toEqual([]);
+  },
+);

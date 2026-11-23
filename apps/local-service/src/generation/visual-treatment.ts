@@ -66,12 +66,14 @@ export function inspectVisualTreatment(
       "Include companion artwork on existing story content beyond credits.",
     );
   const placements = [...immersive, ...transitions, ...companions];
-  const last = narrative.length - 1;
-  if (
-    !placements.some((p) => p <= last / 3) ||
-    !placements.some((p) => p > last / 3 && p < (last * 2) / 3) ||
-    !placements.some((p) => p >= (last * 2) / 3)
-  )
+  // Bucket chapter centers into thirds so short stories still have a middle
+  // (four chapters occupy beginning, middle, middle, and later).
+  const bands = new Set(
+    placements.map((position) =>
+      Math.min(2, Math.floor(((position + 0.5) * 3) / narrative.length)),
+    ),
+  );
+  if (bands.size < 3)
     issues.push(
       "Distribute artwork through the beginning, middle and later narrative. Opening-only or credits-only decoration does not satisfy Whole story.",
     );

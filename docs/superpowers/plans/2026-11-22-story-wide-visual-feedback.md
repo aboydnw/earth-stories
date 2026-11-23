@@ -198,7 +198,7 @@ Excluded: reader typography redesign, replacing map data with generated graphics
 The tasks above were executed together. A checked verification task means the
 check was performed; it does not conceal the limitations below.
 
-- 1,499 tests passed across 188 test files. The isolated production service bundle
+- 1,503 tests passed across 188 test files. The isolated production service bundle
   check also passed (1 test). Three unrelated UI tests timed out during a concurrent
   build; the complete suite passed when rerun alone. Focused-preview filtering and archival stills gained
   regressions after validation exposed those missing paths.
@@ -258,3 +258,9 @@ stacking in narrow containers and print. A regression keeps artwork outside
 map overlay cards while preserving two steps and one map. Real browser geometry
 checks confirmed separate map/art bounds on desktop, on 390 px phones, in narrow
 embedded previews, and in print; scrolling and reduced-motion behavior remained intact.
+
+The final review caught an empty middle band for exactly four narrative chapters.
+Coverage now assigns chapter centers to three discrete bands, preserving valid
+five-chapter placements and giving four-chapter stories a reachable middle.
+Parameterized regressions cover three through six chapters; opening-only and
+credits-only rejection remains covered.
