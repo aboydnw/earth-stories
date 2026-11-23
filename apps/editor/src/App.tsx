@@ -1,3 +1,4 @@
+import { IllustrationStudio } from "./IllustrationStudio";
 import {
   validateVisualAccents,
   type VisualSequence,
@@ -158,6 +159,8 @@ export function App() {
   const routeLoadRef = useRef(0);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StoryProject | null>(null);
+  const [illustrationStudio, setIllustrationStudio] =
+    useState<StoryProject | null>(null);
   const [route, setRoute] = useState<AppRoute>(() =>
     parseRoute(window.location.pathname),
   );
@@ -355,6 +358,7 @@ export function App() {
     );
   }
   function activate(next: StoryProject) {
+    setIllustrationStudio(null);
     setPreviewLink(null);
     setProject(next);
     persistedProjectRef.current = structuredClone(next);
@@ -1739,6 +1743,25 @@ export function App() {
         onBack={() => navigate({ page: "stories" })}
       />
     );
+  if (
+    project &&
+    illustrationStudio?.id === project.id &&
+    route.page === "story" &&
+    !route.preview
+  )
+    return (
+      <IllustrationStudio
+        project={illustrationStudio}
+        onBack={() => setIllustrationStudio(null)}
+        onSaved={(saved, chapterId) => {
+          if (projectRef.current?.id !== saved.id) return;
+          activate(saved);
+          setActiveChapter(chapterId);
+          setIllustrationStudio(null);
+          void refreshProjects();
+        }}
+      />
+    );
   if (!project)
     return (
       <WorkspaceScreen
@@ -2637,6 +2660,24 @@ export function App() {
                   }
                 >
                   Enhance with AI
+                </ActionButton>
+                <ActionButton
+                  disabled={saveState === "saving"}
+                  onClick={() =>
+                    void (async () => {
+                      let saved = await persist();
+                      while (
+                        saved &&
+                        projectRef.current?.id === saved.id &&
+                        projectRef.current !== persistedProjectRef.current
+                      )
+                        saved = await persist();
+                      if (saved && projectRef.current?.id === saved.id)
+                        setIllustrationStudio(saved);
+                    })()
+                  }
+                >
+                  Animate an illustration
                 </ActionButton>
                 <label>
                   Story title

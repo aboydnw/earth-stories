@@ -233,3 +233,18 @@ per chapter; it cannot overlap an immersive sequence. Vector scene limits and a
 combined sequence/accent budget apply. It grants no script, CSS, image-fetch, or
 filesystem authority to generated content. Preview and explicit Apply remain the
 only route to changing a saved story; publication remains author controlled.
+
+### Supplied illustration studio
+
+Story settings exposes a focused studio for one supplied illustration. Original
+artwork and prepared transparent layers are separate inputs: the original is
+retained in Story data, while prepared layers replace it in the scene. The UI
+must never imply automatic separation. Display explicit whole-image behavior
+when no prepared layers are supplied, and warn when an upper layer is opaque.
+
+Scene editing reuses the chapter inspector and shared reader; product controls
+use UI tokens and artwork retains authored colors. Desktop/narrow, scroll,
+scrubbed, and still previews are available before applying. Optional ChatGPT
+motion suggestions are disclosed separately from local file preparation. They
+cannot replace images or change story text. Apply creates and saves a new chapter;
+Back discards the in-memory candidate after the ordinary unsaved-work prompt.

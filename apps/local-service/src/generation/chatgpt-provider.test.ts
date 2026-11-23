@@ -459,3 +459,35 @@ it("repairs overlapping companion artwork in a new story", async () => {
     { id: "delta-art", chapterId: "delta" },
   ]);
 });
+
+it("suggests bounded motion for uploaded artwork without generating replacement images", async () => {
+  const plan = { layers: [{ id: "mist", dx: 0.02, dy: 0, scale: 1 }] };
+  const { provider, fetcher } = setup(completed(plan));
+  const result = await provider.artworkMotion(
+    {
+      direction: "Gentle mist",
+      context: "A glacier",
+      images: [{ id: "mist", name: "Mist", data: "aW1hZ2U=" }],
+    },
+    new AbortController().signal,
+  );
+  expect(result).toEqual(plan);
+  const request = JSON.parse(fetcher.mock.calls.at(-1)?.[1]?.body as string);
+  expect(
+    request.input[0].content.some((c: any) => c.type === "input_image"),
+  ).toBe(true);
+  expect(request).not.toHaveProperty("tools");
+  const invalid = setup(
+    completed({ layers: [{ id: "invented", dx: 0, dy: 0, scale: 1 }] }),
+  );
+  await expect(
+    invalid.provider.artworkMotion(
+      {
+        direction: "Gentle",
+        context: "",
+        images: [{ id: "mist", name: "Mist", data: "aW1hZ2U=" }],
+      },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow(/match/);
+});

@@ -141,3 +141,24 @@ it("forwards a valid enhancement request including map limits and source version
     brief: { references: [] },
   });
 });
+
+it("normalizes uploaded artwork without requiring ChatGPT or modifying a story", async () => {
+  const { createCanvas } = await import("@napi-rs/canvas");
+  const data = (await createCanvas(300, 200).encode("png")).toString("base64");
+  const response = { writeHead: vi.fn(), end: vi.fn() };
+  const req = Object.assign(Readable.from([JSON.stringify({ data })]), {
+    method: "POST",
+  });
+  await generationRoute(
+    req as never,
+    response as never,
+    new URL("http://localhost/api/generation/artwork/image"),
+    { provider: { configured: false } } as never,
+  );
+  expect(response.writeHead.mock.calls[0]?.[0]).toBe(200);
+  expect(JSON.parse(response.end.mock.calls[0]?.[0])).toMatchObject({
+    width: 300,
+    height: 200,
+    hasTransparency: true,
+  });
+});
