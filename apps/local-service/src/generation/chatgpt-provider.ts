@@ -117,7 +117,8 @@ export class ChatGPTProvider implements GenerationProvider {
       const issue = wholeStoryVisualTreatmentIssue(source);
       if (issue) throw new Error(issue);
     }
-    const timeout = AbortSignal.any([signal, AbortSignal.timeout(240000)]);
+    // Whole-story artwork and its optional repair share one bounded budget.
+    const timeout = AbortSignal.any([signal, AbortSignal.timeout(15 * 60_000)]);
     const { token, accountId } = await this.connection.access();
     const models = await this.listModels(token, timeout);
     const model = brief.model ?? models[0]?.id;
