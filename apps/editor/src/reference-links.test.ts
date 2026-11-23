@@ -88,3 +88,14 @@ it("accepts a file path beneath an unambiguous bare host", () => {
     notes: "use its colors",
   });
 });
+
+it.each([
+  "https://example.org/wiki/Glacier_(landform)",
+  "https://example.org/reference?signature=abc!,",
+])("keeps the exact URL when adding notes: %s", (url) => {
+  expect(parseReferenceLinks(`${url} use the map`)[0]).toMatchObject({
+    url,
+    notes: "use the map",
+  });
+  expect(parseReferenceLinks(`<${url}> use the map`)[0]).toMatchObject({ url });
+});

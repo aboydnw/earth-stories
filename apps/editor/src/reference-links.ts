@@ -29,9 +29,10 @@ export function parseReferenceLinks(value: string): ReferenceInput[] {
           ? "Put one link per line so each explanation stays with its link."
           : undefined,
       );
-    const match = matches[0]!,
-      raw = match[0];
-    const token = raw === line ? raw : raw.replace(/[.,;!?)]+$/, "");
+    const match = matches[0]!;
+    // A whitespace-delimited URL can legally end in punctuation. Keep its bytes
+    // intact so adding notes never changes the path or invalidates a signature.
+    const token = match[0];
     let url: string;
     try {
       const parsed = new URL(
@@ -49,7 +50,7 @@ export function parseReferenceLinks(value: string): ReferenceInput[] {
       throw fail();
     }
     const notes = (
-      line.slice(0, match.index) + line.slice(match.index! + raw.length)
+      line.slice(0, match.index) + line.slice(match.index! + token.length)
     ).trim();
     if (notes.length > 4000)
       throw fail("Keep the explanation under 4,000 characters.");
