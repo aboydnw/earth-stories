@@ -222,9 +222,9 @@ export class ChatGPTProvider implements GenerationProvider {
               plan,
               assets: supplied.map((r) => ({
                 id: r.artwork!.sourceId,
-                path: `assets/${"0".repeat(64)}.png`,
-                digest: "0".repeat(64),
-                sizeBytes: 1,
+                path: `assets/${r.artwork!.digest}.png`,
+                digest: r.artwork!.digest,
+                sizeBytes: r.artwork!.sizeBytes,
                 mediaType: "image/png" as const,
                 model: "",
                 prompt: "",

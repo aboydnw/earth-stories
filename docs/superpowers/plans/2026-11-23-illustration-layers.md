@@ -21,7 +21,7 @@ to the overall Enhance with AI flow, with no automatic separation.
       existing formatting issues and the absence of live ChatGPT artistic evaluation.
 - [x] Complete independent review and prepare one ready-for-review PR.
 
-Validation: 1,543 tests passed; typecheck, UI/independence checks, editor/viewer,
+Validation: 1,544 tests passed; typecheck, UI/independence checks, editor/viewer,
 publication and Storybook builds passed. Publishing without Git and offline runtime
 browser proof passed. All changed files pass formatting; the repository-wide check
 reports four unchanged baseline files. Browser checks used synthetic artwork and a

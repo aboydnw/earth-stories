@@ -12,6 +12,7 @@ import {
   type GenerationProvider,
 } from "@earth-stories/story-schema";
 import { GenerationJobs } from "./jobs.js";
+import { assembleEnhancement } from "./enhancement.js";
 import { composePlan } from "./vector-plan.js";
 import { buildArchivalHtml } from "@earth-stories/publisher";
 import { compileFocusedChapter } from "@earth-stories/publisher/focused-preview";
@@ -193,6 +194,66 @@ it("stages illustration across the whole story, previews asset links, and applie
     expect(compileProject(await store.read(source.id)).assets[0]?.id).toBe(
       ready.assets[0]!.id,
     );
+    // Reusing the same image in a later enhancement preserves the source and its metadata.
+    const secondPlan = {
+      ...ready.plan!,
+      chapters: ready.plan!.chapters.map((c) => ({
+        ...c,
+        id: "second-transition",
+        afterChapterId: "end",
+      })),
+      visualSequences: [],
+      visualAccents: [],
+    };
+    const named = await store.save(source.id, {
+      ...saved,
+      sources: saved.sources.map((s) => ({
+        ...s,
+        label: "Author's chosen label",
+        attribution: "Supplied by author",
+      })),
+    });
+    for (const conflict of [
+      { path: "assets/different.png" },
+      { sizeBytes: 1234567 },
+      { delivery: "excluded" },
+    ]) {
+      expect(() =>
+        assembleEnhancement(
+          { plan: secondPlan, assets: ready.assets },
+          {
+            ...named,
+            sources: named.sources.map((s) => ({
+              ...s,
+              ...conflict,
+            })) as typeof named.sources,
+          },
+        ),
+      ).toThrow(/conflicts with an existing source/);
+    }
+    const reuseJobs = new GenerationJobs(store, {
+      configured: true,
+      plan: async () => ({ plan: secondPlan, usage: {} }),
+    });
+    await reuseJobs.initialize();
+    const reused = await reuseJobs.start(
+      { ...brief, visualTreatment: "focused" },
+      source.id,
+      {},
+      named.metadata.updated,
+    );
+    await reuseJobs.whenIdle();
+    expect((await reuseJobs.get(reused.id)).error).toBeNull();
+    expect((await reuseJobs.get(reused.id)).stage).toBe("ready");
+    await reuseJobs.accept(reused.id);
+    expect((await store.read(source.id)).sources).toEqual(named.sources);
+    expect((await store.read(source.id)).chapters.at(-1)?.id).toBe(
+      "second-transition",
+    );
+    expect(
+      await readFile(join(root, source.id, ready.assets[0]!.path)),
+    ).toEqual(await reuseJobs.asset(reused.id, ready.assets[0]!.path));
+    reuseJobs.close();
     const archive = await buildArchivalHtml({
       project: saved,
       manifest: compileProject(saved),

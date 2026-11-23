@@ -1,4 +1,8 @@
-import { suppliedSource, validateSuppliedImages } from "./supplied-artwork.js";
+import {
+  suppliedSource,
+  validateSuppliedImages,
+  validateSuppliedSources,
+} from "./supplied-artwork.js";
 import { compileProject } from "@earth-stories/publisher/compile";
 import {
   storyProjectSchema,
@@ -51,12 +55,13 @@ export function assembleEnhancement(
     plan,
     job.assets.map((a) => a.id),
   );
-  if (job.assets.some((a) => source.sources.some((s) => s.id === a.id)))
-    throw new Error(
-      "Supplied artwork conflicts with an existing source. Use a different illustration.",
-    );
+  validateSuppliedSources(job.assets, source.sources);
   const project = structuredClone(source);
-  project.sources.push(...job.assets.map(suppliedSource));
+  project.sources.push(
+    ...job.assets
+      .filter((a) => !source.sources.some((s) => s.id === a.id))
+      .map(suppliedSource),
+  );
   for (const sequence of plan.visualSequences ?? []) additions.add(sequence.id);
   if (plan.visualSequences?.length)
     project.visualSequences = [

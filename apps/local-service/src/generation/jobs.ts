@@ -1,4 +1,7 @@
-import { prepareSuppliedArtwork } from "./supplied-artwork.js";
+import {
+  prepareSuppliedArtwork,
+  validateSuppliedSources,
+} from "./supplied-artwork.js";
 import { assembleEnhancement } from "./enhancement.js";
 import {
   enhancementContext,
@@ -371,6 +374,8 @@ export class GenerationJobs {
         signal.throwIfAborted();
         await atomic(refsPath, references);
       }
+      if (snapshot)
+        validateSuppliedSources(job.assets, snapshot.project.sources);
       if (!job.plan) {
         const result = await this.provider.plan(
           job.brief,

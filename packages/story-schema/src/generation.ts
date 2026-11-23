@@ -244,6 +244,8 @@ export type PreparedReference = {
     width: number;
     height: number;
     hasTransparency: boolean;
+    digest: string;
+    sizeBytes: number;
   };
   sourceUrl?: string;
   requestedUrl?: string;

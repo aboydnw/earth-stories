@@ -91,6 +91,8 @@ export async function prepareSuppliedArtwork(
         width: image.width,
         height: image.height,
         hasTransparency: image.hasTransparency,
+        digest,
+        sizeBytes: bytes.length,
       },
     });
   }
@@ -125,4 +127,22 @@ export function validateSuppliedImages(plan: StoryPlan, ids: string[]) {
     throw new Error(
       "Use the supplied illustration in the story, not only as a style reference.",
     );
+}
+
+/** Reuse matching content-addressed sources without replacing authored metadata. */
+export function validateSuppliedSources(
+  assets: GeneratedAsset[],
+  sources: ProjectSource[],
+) {
+  for (const asset of assets) {
+    const existing = sources.find((s) => s.id === asset.id);
+    if (
+      existing &&
+      (existing.kind !== "image" ||
+        existing.path !== asset.path ||
+        existing.sizeBytes !== asset.sizeBytes ||
+        existing.delivery !== "included")
+    )
+      throw new Error("Supplied artwork conflicts with an existing source.");
+  }
 }

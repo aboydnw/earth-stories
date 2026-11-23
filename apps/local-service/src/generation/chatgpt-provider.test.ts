@@ -489,6 +489,8 @@ it("uses actual supplied artwork in subscription-generated scenes without image 
           width: 1000,
           height: 800,
           hasTransparency: false,
+          digest: "a".repeat(64),
+          sizeBytes: 123,
         },
       },
     ],
@@ -510,4 +512,74 @@ it("uses actual supplied artwork in subscription-generated scenes without image 
     ),
   ).toBe(true);
   expect(body).not.toHaveProperty("tools");
+});
+
+it("allows subscription enhancement to reuse an existing supplied image source", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { parseStoryProject, projectSourceSchema } =
+    await import("@earth-stories/story-schema");
+  const source = parseStoryProject(
+    JSON.parse(
+      await readFile(
+        new URL("../../../../fixtures/field-notes/story.json", import.meta.url),
+        "utf8",
+      ),
+    ),
+  );
+  source.sources.push(
+    projectSourceSchema.parse({
+      id: "supplied-ice",
+      kind: "image",
+      label: "Author's label",
+      path: `assets/${"a".repeat(64)}.png`,
+      sizeBytes: 123,
+      delivery: "included",
+    }),
+  );
+  const output = {
+    ...blueprint,
+    chapters: blueprint.chapters.map((c) => ({
+      ...c,
+      afterChapterId: source.chapters[0]!.id,
+      scene: {
+        ...c.scene,
+        layers: [
+          {
+            ...c.scene.layers[0],
+            kind: "image",
+            pathData: undefined,
+            sourceId: "supplied-ice",
+            alt: "Ice",
+          },
+        ],
+      },
+    })),
+    textEdits: [],
+  };
+  const { provider } = setup(completed(output));
+  const result = await provider.plan(
+    brief,
+    [
+      {
+        id: "supplied-ice",
+        name: "New upload name",
+        classification: "visual-style",
+        image: "data:image/png;base64,YQ==",
+        artwork: {
+          sourceId: "supplied-ice",
+          role: "original",
+          width: 1000,
+          height: 800,
+          hasTransparency: false,
+          digest: "a".repeat(64),
+          sizeBytes: 123,
+        },
+      },
+    ],
+    new AbortController().signal,
+    source,
+  );
+  expect(result.plan.chapters[0]?.scene?.layers[0]).toMatchObject({
+    sourceId: "supplied-ice",
+  });
 });
