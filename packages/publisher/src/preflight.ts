@@ -6,7 +6,7 @@ import type {
   StoryProject,
 } from "@earth-stories/story-schema";
 import { storyProjectSchema } from "@earth-stories/story-schema";
-import { containedRealPath } from "./paths.js";
+import { resolveProjectAsset } from "@earth-stories/project-store";
 import { authorizedFetch } from "./remote-fetch.js";
 import { inventoryPublicationDependencies } from "./dependencies.js";
 import { findVerifiedRemoteMaterialization } from "./materialize.js";
@@ -257,7 +257,7 @@ export async function preflightPublication(
     const locator = localLocator(source);
     if (!locator) continue;
     try {
-      const candidate = await containedRealPath(
+      const candidate = await resolveProjectAsset(
         projectDirectory,
         locator,
         `“${source.label}” points outside the project folder.`,

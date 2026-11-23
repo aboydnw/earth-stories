@@ -63,7 +63,7 @@ async function openEditor() {
       <App />
     </EarthStoriesProvider>,
   );
-  await screen.findByRole("button", { name: "View as reader" });
+  await screen.findByRole("button", { name: "Publish" });
 }
 it("keeps edits made during a pending save and saves them again without a revision conflict", async () => {
   let finish!: (value: StoryProject) => void;
@@ -101,31 +101,16 @@ it("opens an already-saved reader without writing the project again", async () =
     close: vi.fn(),
   } as unknown as Window);
   await openEditor();
-  fireEvent.click(screen.getByRole("button", { name: "View as reader" }));
+  fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: /^Preview/ }));
   await waitFor(() => expect(replace).toHaveBeenCalled());
   expect(api.saveProject).not.toHaveBeenCalled();
 });
-it("updates review readiness when another reader tab records the saved revision", async () => {
+it("keeps the header focused on saving and publishing", async () => {
   await openEditor();
-  fireEvent.click(screen.getByRole("button", { name: /Workflow status/ }));
-  expect(await screen.findByText("Review again")).toBeTruthy();
-  const key = `earth-stories:preview-receipt:${project.id}`;
-  const value = JSON.stringify({
-    projectId: project.id,
-    revision: project.metadata.updated,
-  });
-  localStorage.setItem(key, value);
-  act(() =>
-    window.dispatchEvent(
-      new StorageEvent("storage", {
-        key,
-        newValue: value,
-        storageArea: localStorage,
-      }),
-    ),
-  );
-  await waitFor(() => expect(screen.queryByText("Review again")).toBeNull());
-  expect(screen.getByText("Checks required")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /Workflow status/ })).toBeNull();
+  expect(screen.queryByText("Saved locally")).toBeNull();
+  expect(screen.queryByRole("button", { name: "View as reader" })).toBeNull();
 });
 
 it("waits for a pending save before preview saves newer edits", async () => {
@@ -149,7 +134,8 @@ it("waits for a pending save before preview saves newer edits", async () => {
   fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
   await waitFor(() => expect(api.saveProject).toHaveBeenCalledTimes(1));
   fireEvent.change(title, { target: { value: "Latest preview title" } });
-  fireEvent.click(screen.getByRole("button", { name: "View as reader" }));
+  fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: /^Preview/ }));
   await act(async () => {});
   expect(api.saveProject).toHaveBeenCalledTimes(1);
   const saved = await store.save(project.id, api.saveProject.mock.calls[0]![0]);
@@ -175,7 +161,8 @@ it("preserves the specific save failure and closes the reserved preview tab", as
   fireEvent.change(await screen.findByLabelText("Story title"), {
     target: { value: "Unsaved title" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "View as reader" }));
+  fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: /^Preview/ }));
   await waitFor(() => expect(screen.getByText("Disk is full")).toBeTruthy());
   expect(close).toHaveBeenCalledOnce();
 });

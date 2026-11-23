@@ -12,7 +12,12 @@ import {
 import { extname, join, relative } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { ProjectStore } from "@earth-stories/project-store";
+import {
+  ProjectStore,
+  WorkspaceDataStore,
+  resolveProjectAsset,
+  workspaceDataLocator,
+} from "@earth-stories/project-store";
 import {
   buildLatestPublication,
   authorizedFetch,
@@ -434,6 +439,61 @@ export function createLocalServer(
         return;
       }
 
+      const library = new WorkspaceDataStore(store.root);
+      if (url.pathname === "/api/data-library" && request.method === "GET") {
+        json(response, 200, await library.list());
+        return;
+      }
+      if (url.pathname === "/api/data-library" && request.method === "POST") {
+        const filename = url.searchParams.get("filename");
+        const source = filename
+          ? await library.importFile(
+              filename,
+              request,
+              config.limits.maxAssetBytes,
+            )
+          : await library.connect(
+              await readJson(request, config.limits.maxBodyBytes),
+            );
+        json(response, 201, source);
+        return;
+      }
+      const libraryAttach = url.pathname.match(
+        /^\/api\/data-library\/([^/]+)\/stories\/([^/]+)$/,
+      );
+      if (libraryAttach && request.method === "POST") {
+        const source = await library.read(decodeURIComponent(libraryAttach[1]));
+        if (workspaceDataLocator(source).startsWith("workspace-data/"))
+          await resolveProjectAsset(
+            join(store.root, "library-preview"),
+            workspaceDataLocator(source),
+          );
+        json(
+          response,
+          200,
+          await store.addSource(decodeURIComponent(libraryAttach[2]), source),
+        );
+        return;
+      }
+      const libraryContent = url.pathname.match(
+        /^\/api\/data-library\/([^/]+)\/content$/,
+      );
+      let libraryAssetPath: string | null = null;
+      if (libraryContent && request.method === "GET") {
+        const source = await library.read(
+          decodeURIComponent(libraryContent[1]),
+        );
+        const locator = workspaceDataLocator(source);
+        if (source.delivery === "connected") {
+          await proxyRemoteSource(locator, request, response);
+          return;
+        }
+        libraryAssetPath = await resolveProjectAsset(
+          join(store.root, "library-preview"),
+          locator,
+        );
+      }
+
       const route = projectRoute(url.pathname);
       const connectedSourceMatch = url.pathname.match(
         /^\/api\/projects\/([^/]+)\/sources\/([^/]+)\/content$/,
@@ -720,8 +780,16 @@ export function createLocalServer(
         return;
       }
 
-      if (route && route.asset && request.method === "GET") {
-        const assetPath = store.assetPath(route.id, route.asset);
+      if (
+        (libraryAssetPath || (route && route.asset)) &&
+        request.method === "GET"
+      ) {
+        const assetPath =
+          libraryAssetPath ??
+          (await resolveProjectAsset(
+            store.projectPath(route!.id),
+            route!.asset!,
+          ));
         await access(assetPath);
         const info = await stat(assetPath);
         if (!info.isFile()) throw new Error("Asset is not a file");

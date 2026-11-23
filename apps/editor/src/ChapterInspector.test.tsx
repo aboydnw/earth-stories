@@ -77,7 +77,7 @@ describe("ChapterInspector", () => {
       screen.getByRole("button", { name: /layers/i }).textContent,
     ).toContain("1 overlay");
     expect(
-      screen.getByRole("button", { name: /exact coordinates/i }).textContent,
+      screen.getByRole("button", { name: /starting view/i }).textContent,
     ).toContain("Zoom 5.0");
     expect(screen.queryByRole("spinbutton", { name: "Longitude" })).toBeNull();
   });

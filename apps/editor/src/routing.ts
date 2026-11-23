@@ -25,7 +25,7 @@ export function parseRoute(pathname: string): AppRoute {
       storyId: segments[1],
       preview: segments[2] === "preview",
     };
-  if (segments[0] === "create")
+  if (segments[0] === "create" && segments[1])
     return {
       page: "create",
       jobId: segments[1] ?? null,

@@ -176,7 +176,7 @@ nav > p,
 .project-label select,
 .add-content select,
 .add-content input,
-.author-panel input,
+.author-panel input:not([type="checkbox"]):not([type="radio"]),
 .author-panel textarea,
 .author-panel select,
 .start-screen input,
@@ -373,7 +373,7 @@ nav {
   background: var(--es-bg-raised);
   box-shadow: var(--es-shadow-sm);
 }
-.author-panel label {
+.author-panel label:not(.es-checkbox) {
   display: grid;
   gap: 7px;
   color: var(--es-fg);
@@ -383,7 +383,7 @@ nav {
 .author-panel label:last-child {
   grid-column: 1 / -1;
 }
-.author-panel input,
+.author-panel input:not([type="checkbox"]):not([type="radio"]),
 .author-panel textarea,
 .author-panel select,
 .start-screen input {
@@ -391,12 +391,12 @@ nav {
   font-size: 14px;
   font-weight: 400;
 }
-.author-panel input:hover,
+.author-panel input:not([type="checkbox"]):not([type="radio"]):hover,
 .author-panel textarea:hover,
 .author-panel select:hover {
   border-color: var(--es-border-emphasized);
 }
-.author-panel input:focus,
+.author-panel input:not([type="checkbox"]):not([type="radio"]):focus,
 .author-panel textarea:focus,
 .author-panel select:focus {
   border-color: var(--es-action);
@@ -2612,7 +2612,7 @@ nav {
   grid-template-columns: 1fr;
   gap: 0;
 }
-.author-panel input,
+.author-panel input:not([type="checkbox"]):not([type="radio"]),
 .author-panel textarea,
 .author-panel select {
   min-height: 40px;
@@ -3556,4 +3556,12 @@ nav {
   margin: 0;
   background: var(--es-bg-raised);
   border-bottom: 1px solid var(--es-border);
+}
+
+/* The editor header keeps save and publication actions together. */
+.editor-topbar {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+.editor-topbar .editor-brand {
+  justify-self: start;
 }

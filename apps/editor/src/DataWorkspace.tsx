@@ -35,18 +35,16 @@ import {
 } from "@earth-stories/ui";
 import {
   discoverSource,
-  importAsset,
+  listWorkspaceData,
+  uploadWorkspaceData,
+  connectWorkspaceData,
+  addWorkspaceDataToStory,
   openProject,
-  saveProject,
   type ExampleCatalog,
   type ExampleConnection,
   type ProjectSummary,
 } from "./api";
-import {
-  connectedSource,
-  uploadedSource,
-  type ConnectableKind,
-} from "./workspaceData";
+import { connectedSource, type ConnectableKind } from "./workspaceData";
 
 interface DataItem {
   key: string;
@@ -54,6 +52,7 @@ interface DataItem {
   source: ProjectSource;
   usedBy: number;
   example: boolean;
+  library?: boolean;
 }
 
 const MapChapter = lazy(async () => ({
@@ -78,6 +77,8 @@ function sourcePath(source: ProjectSource) {
 function assetHref(item: DataItem, asset: PublicationAsset) {
   const path = sourcePath(item.source);
   if (item.source.kind === "zarr" || item.source.kind === "xyz") return path;
+  if (item.library)
+    return `/api/data-library/${encodeURIComponent(item.source.id)}/content`;
   if (item.example)
     return `/api/examples/connections/${encodeURIComponent(item.source.id)}/content`;
   if (asset.delivery === "connected")
@@ -102,13 +103,17 @@ export function DataWorkspace({
   selectedDatasetId: string | null;
   onDatasetChange: (id: string | null) => void;
 }) {
+  const [librarySources, setLibrarySources] = useState<ProjectSource[]>([]);
+  const [invalidEntries, setInvalidEntries] = useState<
+    { id: string; reason: string }[]
+  >([]);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
   const [loadedProjects, setLoadedProjects] = useState<StoryProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addMode, setAddMode] = useState<"upload" | "connect">("upload");
-  const [targetProjectId, setTargetProjectId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [connectedUrl, setConnectedUrl] = useState("");
   const [connectedKind, setConnectedKind] = useState<ConnectableKind>("cog");
@@ -118,6 +123,28 @@ export function DataWorkspace({
   const [addPending, setAddPending] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addNotice, setAddNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    listWorkspaceData()
+      .then(({ sources, invalidEntries }) => {
+        if (active) {
+          setLibrarySources(sources);
+          setInvalidEntries(invalidEntries);
+        }
+      })
+      .catch((cause) => {
+        if (active)
+          setLibraryError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not load shared data.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -163,7 +190,12 @@ export function DataWorkspace({
   const items = useMemo<DataItem[]>(() => {
     const projectItems = loadedProjects.flatMap((project) =>
       project.sources
-        .filter((source) => source.kind !== "image" && source.kind !== "csv")
+        .filter(
+          (source) =>
+            source.kind !== "image" &&
+            source.kind !== "csv" &&
+            !librarySources.some((shared) => shared.id === source.id),
+        )
         .map((source) => ({
           key: `${project.id}:${source.id}`,
           project,
@@ -183,14 +215,19 @@ export function DataWorkspace({
     const exampleItems = (examples?.connections ?? [])
       .filter((example) => !existingUrls.has(example.locator))
       .map(exampleDataItem);
-    return [...projectItems, ...exampleItems];
-  }, [examples, loadedProjects]);
+    const sharedItems = librarySources.map((source) => ({
+      ...libraryDataItem(source),
+      usedBy: loadedProjects.filter((project) =>
+        project.sources.some((s) => s.id === source.id),
+      ).length,
+    }));
+    return [...sharedItems, ...projectItems, ...exampleItems];
+  }, [examples, loadedProjects, librarySources]);
   const selected = items.find((item) => item.key === selectedDatasetId) ?? null;
 
   const eligibleProjects = projects.filter((item) => !item.invalidReason);
   function openAddPanel(mode: "upload" | "connect") {
     setAddMode(mode);
-    setTargetProjectId((current) => current || eligibleProjects[0]?.id || "");
     setAddError(null);
     setAddOpen(true);
   }
@@ -213,34 +250,28 @@ export function DataWorkspace({
   }
   async function addWorkspaceData(event: FormEvent) {
     event.preventDefault();
-    if (!targetProjectId) return;
     if (addMode === "upload" && !uploadFile) return;
     try {
       setAddPending(true);
       setAddError(null);
-      const target = await openProject(targetProjectId);
       let source: ProjectSource;
       if (addMode === "upload") {
         const file = uploadFile;
         if (!file) return;
-        source = uploadedSource(file, await importAsset(targetProjectId, file));
+        source = await uploadWorkspaceData(file);
       } else {
-        source = connectedSource(
-          connectedUrl.trim(),
-          connectedKind,
-          connectionDiscovery,
+        source = await connectWorkspaceData(
+          connectedSource(
+            connectedUrl.trim(),
+            connectedKind,
+            connectionDiscovery,
+          ),
         );
       }
-      const saved = await saveProject({
-        ...target,
-        metadata: { ...target.metadata, updated: new Date().toISOString() },
-        sources: [...target.sources, source],
-      });
-      setLoadedProjects((current) => [
-        ...current.filter((item) => item.id !== saved.id),
-        saved,
-      ]);
-      setAddNotice(`${source.label} was added to ${saved.metadata.title}.`);
+      setLibrarySources((current) => [...current, source]);
+      setAddNotice(
+        `${source.label} was added to the shared workspace library.`,
+      );
       setAddOpen(false);
       setUploadFile(null);
       setConnectedUrl("");
@@ -258,9 +289,22 @@ export function DataWorkspace({
     return (
       <DataMapViewer
         item={selected}
+        projects={eligibleProjects}
+        onAttach={async (storyId) => {
+          const saved = await addWorkspaceDataToStory(
+            selected.source.id,
+            storyId,
+          );
+          setLoadedProjects((current) => [
+            ...current.filter((p) => p.id !== saved.id),
+            saved,
+          ]);
+        }}
         onBack={() => onDatasetChange(null)}
         onOpenStory={
-          selected.example ? undefined : () => onOpenStory(selected.project.id)
+          selected.example || selected.library
+            ? undefined
+            : () => onOpenStory(selected.project.id)
         }
       />
     );
@@ -287,7 +331,6 @@ export function DataWorkspace({
               <ActionButton
                 className="button button--primary"
                 type="button"
-                disabled={!eligibleProjects.length}
                 onClick={() => openAddPanel("upload")}
               >
                 <Plus size={17} /> Add data
@@ -303,12 +346,21 @@ export function DataWorkspace({
             description={addNotice}
           />
         ) : null}
-        {!eligibleProjects.length ? (
+        {invalidEntries.map((entry) => (
+          <StatePanel
+            key={entry.id}
+            compact
+            tone="warning"
+            title={`Unavailable dataset ${entry.id}`}
+            description={entry.reason}
+          />
+        ))}
+        {libraryError ? (
           <StatePanel
             compact
-            tone="info"
-            title="Create a story before adding data"
-            description="Datasets are stored in a story’s reusable data library."
+            tone="danger"
+            title="Shared library unavailable"
+            description={libraryError}
           />
         ) : null}
         <section className="workspace-projects" aria-labelledby="data-heading">
@@ -362,7 +414,13 @@ export function DataWorkspace({
                     label={item.source.label}
                     kind={item.source.kind}
                     leading={<MapTrifold size={18} />}
-                    badge={item.example ? <mark>Example</mark> : undefined}
+                    badge={
+                      item.library ? (
+                        <mark>Shared</mark>
+                      ) : item.example ? (
+                        <mark>Example</mark>
+                      ) : undefined
+                    }
                     delivery={
                       <>
                         {item.source.delivery === "connected" ? (
@@ -370,10 +428,10 @@ export function DataWorkspace({
                         ) : (
                           <Database size={15} />
                         )}
-                        {item.source.delivery}
+                        {sourceStorageLabel(item.source)}
                       </>
                     }
-                    usage={`${item.usedBy} ${item.usedBy === 1 ? "chapter" : "chapters"}`}
+                    usage={`${item.usedBy} ${item.library ? "stories" : "chapters"}`}
                     onOpen={() => onDatasetChange(item.key)}
                   />
                 ))}
@@ -383,12 +441,8 @@ export function DataWorkspace({
             <StatePanel
               title="Data is optional until a visualization needs it"
               description="Prose and video stories can publish without data. Add a source when you are ready to build a map or chart chapter."
-              actionLabel={eligibleProjects.length ? "Add data" : undefined}
-              onAction={
-                eligibleProjects.length
-                  ? () => openAddPanel("upload")
-                  : undefined
-              }
+              actionLabel="Add data"
+              onAction={() => openAddPanel("upload")}
             />
           )}
         </section>
@@ -421,18 +475,6 @@ export function DataWorkspace({
               <Link size={16} /> Connect source
             </button>
           </div>
-          <FormField label="Destination story" required>
-            <SelectInput
-              value={targetProjectId}
-              onChange={(event) => setTargetProjectId(event.target.value)}
-            >
-              {eligibleProjects.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}
-                </option>
-              ))}
-            </SelectInput>
-          </FormField>
           {addMode === "upload" ? (
             <FormField
               label="Local dataset"
@@ -520,11 +562,10 @@ export function DataWorkspace({
               type="submit"
               disabled={
                 addPending ||
-                !targetProjectId ||
                 (addMode === "upload" ? !uploadFile : !connectedUrl.trim())
               }
             >
-              {addPending ? "Adding…" : "Add to story"}
+              {addPending ? "Adding…" : "Add data"}
             </ActionButton>
           </div>
         </form>
@@ -537,11 +578,19 @@ function DataMapViewer({
   item,
   onBack,
   onOpenStory,
+  projects,
+  onAttach,
 }: {
   item: DataItem;
+  projects: ProjectSummary[];
+  onAttach: (id: string) => Promise<void>;
   onBack: () => void;
   onOpenStory?: () => void;
 }) {
+  const [destination, setDestination] = useState("");
+  const [attaching, setAttaching] = useState(false);
+  const [attachNotice, setAttachNotice] = useState<string | null>(null);
+  const [attachError, setAttachError] = useState<string | null>(null);
   const sourceChapter = item.project.chapters.find(
     (chapter) =>
       "sourceId" in chapter &&
@@ -617,7 +666,7 @@ function DataMapViewer({
         <div>
           <strong>{item.source.label}</strong>
           <span>
-            {item.source.kind} · {item.source.delivery}
+            {item.source.kind} · {sourceStorageLabel(item.source)}
             {item.source.delivery === "connected"
               ? " · network required"
               : ""}{" "}
@@ -629,11 +678,65 @@ function DataMapViewer({
             Open story
           </button>
         ) : (
-          <span className="data-map-viewer__example">Example dataset</span>
+          <span className="data-map-viewer__example">
+            {item.library ? "Shared workspace data" : "Example dataset"}
+          </span>
         )}
       </header>
       <div className="data-map-viewer__body">
         <aside className="data-map-viewer__panel">
+          {item.library ? (
+            <form
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (!destination) return;
+                setAttaching(true);
+                setAttachError(null);
+                setAttachNotice(null);
+                try {
+                  await onAttach(destination);
+                  setAttachNotice(
+                    "Shared data added to story. Select it in the story’s data panel to create a chapter.",
+                  );
+                } catch (cause) {
+                  setAttachError(
+                    cause instanceof Error
+                      ? cause.message
+                      : "Could not add data to the story.",
+                  );
+                } finally {
+                  setAttaching(false);
+                }
+              }}
+            >
+              <p>
+                This file is shared by stories in this workspace. Publishing
+                includes a copy; moving an editable story requires its workspace
+                library.
+              </p>
+              <FormField label="Story">
+                <SelectInput
+                  value={destination}
+                  onChange={(event) => setDestination(event.target.value)}
+                >
+                  <option value="">Choose a story</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}
+                    </option>
+                  ))}
+                </SelectInput>
+              </FormField>
+              <ActionButton type="submit" disabled={!destination || attaching}>
+                {attaching ? "Adding…" : "Add to story"}
+              </ActionButton>
+              {!projects.length ? (
+                <p>Create a story when you’re ready to use this data.</p>
+              ) : null}
+              {attachNotice ? <p role="status">{attachNotice}</p> : null}
+              {attachError ? <p role="alert">{attachError}</p> : null}
+            </form>
+          ) : null}
           <p>Map controls</p>
           <h2>{item.source.label}</h2>
           <dl>
@@ -643,11 +746,13 @@ function DataMapViewer({
             </div>
             <div>
               <dt>Storage</dt>
-              <dd>{item.source.delivery}</dd>
+              <dd>{sourceStorageLabel(item.source)}</dd>
             </div>
             <div>
               <dt>Used by</dt>
-              <dd>{item.usedBy} chapters</dd>
+              <dd>
+                {item.usedBy} {item.library ? "stories" : "chapters"}
+              </dd>
             </div>
           </dl>
           <label>
@@ -819,5 +924,48 @@ function exampleDataItem(example: ExampleConnection): DataItem {
     source,
     usedBy: 0,
     example: true,
+  };
+}
+
+function sourceStorageLabel(source: ProjectSource) {
+  return sourcePath(source).startsWith("workspace-data/")
+    ? "Shared local file"
+    : /^https?:\/\//i.test(sourcePath(source))
+      ? "Web connection"
+      : "Local file";
+}
+function libraryDataItem(source: ProjectSource): DataItem {
+  return {
+    key: `library:${source.id}`,
+    source,
+    library: true,
+    example: false,
+    usedBy: 0,
+    project: {
+      schema: "earth-stories/project/v3",
+      id: "library-preview",
+      metadata: {
+        title: "Workspace library",
+        description: "",
+        author: null,
+        created: "1970-01-01T00:00:00.000Z",
+        updated: "1970-01-01T00:00:00.000Z",
+      },
+      basemap: {
+        id: "carto-positron",
+        label: "CARTO Positron",
+        styleUrl:
+          "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+        attribution: "© OpenStreetMap contributors © CARTO",
+      },
+      publication: {
+        profile: "connected",
+        theme: "cng",
+        offlineBasemap: { mode: "neutral" },
+      },
+      sources: [source],
+      dataAssets: [],
+      chapters: [],
+    },
   };
 }

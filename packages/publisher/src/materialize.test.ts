@@ -259,3 +259,39 @@ describe("publication materialization", () => {
     ).rejects.toThrow();
   });
 });
+
+it("materializes shared workspace references into independent publication assets", async () => {
+  const paths = await workspace();
+  const { WorkspaceDataStore } = await import("@earth-stories/project-store");
+  const library = new WorkspaceDataStore(paths.root);
+  const bytes = '{"type":"FeatureCollection","features":[]}';
+  const source = await library.importFile(
+    "places.geojson",
+    (async function* () {
+      yield Buffer.from(bytes);
+    })(),
+    1024,
+  );
+  const project = projectWith(source);
+  project.publication.profile = "connected";
+  const result = await materializePublication({ ...paths, project });
+  expect(
+    result.materializedFiles.some(
+      (file) => file.href === `assets/${source.id}.geojson`,
+    ),
+  ).toBe(true);
+  expect(
+    await readFile(
+      join(paths.outputDirectory, `assets/${source.id}.geojson`),
+      "utf8",
+    ),
+  ).toBe(bytes);
+  await rm(join(paths.root, ".data-library"), { recursive: true });
+  expect(
+    await readFile(
+      join(paths.outputDirectory, `assets/${source.id}.geojson`),
+      "utf8",
+    ),
+  ).toBe(bytes);
+  await expect(materializePublication({ ...paths, project })).rejects.toThrow();
+});

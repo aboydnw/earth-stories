@@ -18,7 +18,6 @@ import {
   ActionButton,
   ProgressPresentation,
   PublicationFinding,
-  ReadinessSummary,
   StatusNotice,
 } from "@earth-stories/ui";
 import {
@@ -259,13 +258,7 @@ export function PublishPanel({
     !unsaved && preflightState.status === "ready" ? preflight : null;
   const findings = currentServerResult?.issues ?? localReadiness.findings;
   const errors = findings.filter((issue) => issue.severity === "error");
-  const warnings = findings.filter((issue) => issue.severity === "warning");
   const information = findings.filter((issue) => issue.severity === "info");
-  const readinessStatus = errors.length
-    ? "blocked"
-    : warnings.length || !currentServerResult
-      ? "review"
-      : "ready";
   const canBuild =
     !loading &&
     !shareBusy &&
@@ -516,30 +509,17 @@ export function PublishPanel({
           </ActionButton>
         </header>
 
-        <div className="publish-readiness">
-          <ReadinessSummary
-            status={readinessStatus}
-            errors={errors.length}
-            warnings={warnings.length}
-            loading={preflightState.status === "loading" && !preflight}
-            stale={
-              unsaved ||
-              preflightState.status === "stale" ||
-              (preflightState.status === "loading" && Boolean(preflight))
-            }
-          />
-          <ActionButton
-            variant="ghost"
-            className="publish-refresh"
-            disabled={unsaved || preflightState.status === "loading"}
-            onClick={onRefreshPreflight}
-          >
-            {unsaved ? "Save to check" : "Refresh checks"}
-          </ActionButton>
-        </div>
-
         {preflightState.error ? (
-          <StatusNotice tone="danger">{preflightState.error}</StatusNotice>
+          <StatusNotice tone="danger">
+            {preflightState.error}
+            <ActionButton
+              variant="ghost"
+              disabled={unsaved || preflightState.status === "loading"}
+              onClick={onRefreshPreflight}
+            >
+              Try again
+            </ActionButton>
+          </StatusNotice>
         ) : null}
 
         {errors.length ? (
@@ -555,29 +535,14 @@ export function PublishPanel({
                 resolution={issue.resolution}
               />
             ))}
+            <ActionButton
+              variant="ghost"
+              disabled={unsaved || preflightState.status === "loading"}
+              onClick={onRefreshPreflight}
+            >
+              Check again
+            </ActionButton>
           </div>
-        ) : null}
-
-        {warnings.length ? (
-          <details className="publish-disclosure publish-disclosure--warnings">
-            <summary>
-              <span>
-                <Warning /> Review {warnings.length} optional warning
-                {warnings.length === 1 ? "" : "s"}
-              </span>
-              <small>Warnings do not prevent a build</small>
-            </summary>
-            <div className="publish-disclosure__body">
-              {warnings.map((issue) => (
-                <PublicationFinding
-                  key={issue.id}
-                  severity="warning"
-                  message={issue.message}
-                  resolution={issue.resolution}
-                />
-              ))}
-            </div>
-          </details>
         ) : null}
 
         <section className="publish-primary" aria-labelledby="primary-output">

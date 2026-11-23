@@ -54,3 +54,18 @@ export const Disabled: Story = {
     </FormField>
   ),
 };
+
+export const Checkboxes: Story = {
+  render: () => (
+    <Stack gap="4" maxW="260px">
+      <CheckboxField label="Globe" />
+      <CheckboxField label="Terrain" defaultChecked />
+      <CheckboxField label="3D buildings" disabled />
+      <CheckboxField
+        label="A longer setting label wraps beside its checkbox"
+        hint="Keyboard focus and the checked state remain visible."
+        defaultChecked
+      />
+    </Stack>
+  ),
+};

@@ -49,7 +49,6 @@ import {
   ActionButton,
   BrandSpinner,
   GuidancePrompt,
-  SaveStatus,
   StatePanel,
 } from "@earth-stories/ui";
 import { reorderChapters } from "./chapterOrder";
@@ -83,13 +82,12 @@ import { deriveChapterReadiness, referencedSources } from "./chapterReadiness";
 import { EditorShell } from "./EditorShell";
 import { parseRoute, routePath, type AppRoute } from "./routing";
 import { PublishMenu } from "./PublishMenu";
-import { nextGuidanceAction, workflowStages } from "./editorReadiness";
+import { nextGuidanceAction } from "./editorReadiness";
 import type { GuidanceDestination } from "./editorReadiness";
 import { previewMatchesRevision, recordPreviewReceipt } from "./previewReceipt";
 import { reconcileSavedDraft } from "./reconcileSavedDraft";
 import { openReaderPreview as openSavedReaderPreview } from "./openReaderPreview";
 import { usePublicationReadiness } from "./usePublicationReadiness";
-import { WorkflowStatusMenu } from "./WorkflowStatusMenu";
 import { detectDesktopBridge } from "./desktop";
 import { categoricalPresentation } from "./categoricalPreparation";
 import { DEFAULT_PRESENTATION } from "./SourcePresentationFields";
@@ -1594,25 +1592,6 @@ export function App() {
           preflight: publicationReadiness.state,
         })
       : null;
-  const workflow =
-    project && localReadiness
-      ? workflowStages(localReadiness, {
-          previewReviewed,
-          preflight: publicationReadiness.state,
-        })
-      : [];
-  const readinessFindings =
-    saveState === "saved" && publicationReadiness.state.status === "ready"
-      ? (publicationReadiness.state.result?.issues ??
-        localReadiness?.findings ??
-        [])
-      : (localReadiness?.findings ?? []);
-  const readinessErrors = readinessFindings.filter(
-    ({ severity }) => severity === "error",
-  ).length;
-  const readinessWarnings = readinessFindings.filter(
-    ({ severity }) => severity === "warning",
-  ).length;
   const blockingGuidance = guidance?.tone === "danger" ? guidance : null;
   async function openReaderPreview() {
     if (!project || !publication || previewOpening.current) return;
@@ -1750,9 +1729,6 @@ export function App() {
         deletePending={deletePending}
         deleteError={deleteError}
         onNewTitleChange={setNewTitle}
-        onCreateWithAI={() =>
-          navigate({ page: "create", jobId: null, preview: false })
-        }
         onCreate={handleCreate}
         onOpen={(id) => void handleOpen(id)}
         onRename={(item) => void handleRename(item)}
@@ -1889,40 +1865,6 @@ export function App() {
       </a>
       <header className="editor-topbar">
         <EditorBrand onClick={leaveProject} />
-        <div className="editor-status">
-          <SaveStatus
-            state={
-              saveState === "changed"
-                ? "dirty"
-                : saveState === "save-error"
-                  ? "service-error"
-                  : saveState === "exporting"
-                    ? "exporting"
-                    : saveState
-            }
-          />
-        </div>
-        <WorkflowStatusMenu
-          stages={workflow}
-          guidance={guidance}
-          errors={readinessErrors}
-          warnings={readinessWarnings}
-          onStageSelect={(stage) =>
-            followGuidance(stage as GuidanceDestination)
-          }
-          onGuidance={(action) =>
-            followGuidance(action.destination, action.resourceId)
-          }
-        />
-        <div className="editor-reader-action">
-          <ActionButton
-            variant="surface"
-            onClick={openReaderPreview}
-            disabled={!publication || saveState === "saving"}
-          >
-            View as reader
-          </ActionButton>
-        </div>
         <ActionButton
           variant="surface"
           className="button button--save"
@@ -2436,7 +2378,7 @@ export function App() {
                   ) : null}
                 </section>
                 <section id="story-data-import">
-                  <h3>Import from this computer</h3>
+                  <h3>Add data</h3>
                   <p>
                     The file becomes an included project asset and is also added
                     to the current story.

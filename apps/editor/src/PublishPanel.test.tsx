@@ -148,6 +148,23 @@ function panel(overrides: Partial<Parameters<typeof PublishPanel>[0]> = {}) {
 }
 
 describe("PublishPanel", () => {
+  it("can recheck a repaired external dependency without editing the story", async () => {
+    const onRefreshPreflight = vi.fn();
+    panel({
+      preflightState: readyState([
+        {
+          id: "missing-file",
+          area: "data",
+          severity: "error",
+          message: "The shared dataset is missing.",
+        },
+      ]),
+      onRefreshPreflight,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(onRefreshPreflight).toHaveBeenCalledOnce();
+  });
+
   it("offers an offline delivery profile with a precise runtime promise", async () => {
     panel();
 
