@@ -28,7 +28,6 @@ export function WorkspaceScreen({
   deleteError,
   onNewTitleChange,
   onCreate,
-  onCreateWithAI,
   onOpen,
   onRename,
   onShowProjectFolder,
@@ -128,11 +127,7 @@ export function WorkspaceScreen({
                 editable example.
               </span>
             </div>
-            {onCreateWithAI ? (
-              <ActionButton variant="outline" onClick={onCreateWithAI}>
-                Create with AI
-              </ActionButton>
-            ) : null}
+
             <form className="workspace-create" onSubmit={onCreate}>
               <div className="workspace-create__controls">
                 <FormField label="New story title (optional)">

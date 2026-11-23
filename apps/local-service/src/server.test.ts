@@ -726,3 +726,51 @@ it("guards enhancement requests and rejects stale source versions through the HT
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+it("adds shared data without a story, attaches without a client save, and serves byte ranges", async () => {
+  const { config, store, jobs } = await setup();
+  const { createLocalServer } = await import("./server.js");
+  const server = createLocalServer(store, config, jobs);
+  const port = await listen(server);
+  const origin = `http://127.0.0.1:${port}`;
+  try {
+    const response = await fetch(
+      `${origin}/api/data-library?filename=places.geojson`,
+      {
+        method: "POST",
+        headers: { origin },
+        body: '{"type":"FeatureCollection","features":[]}',
+      },
+    );
+    expect(response.status).toBe(201);
+    const source = (await response.json()) as { id: string; path: string };
+    expect(await (await fetch(`${origin}/api/data-library`)).json()).toEqual([
+      source,
+    ]);
+    const story = await store.create({ title: "Shared map" });
+    const attach = await fetch(
+      `${origin}/api/data-library/${source.id}/stories/${story.id}`,
+      { method: "POST", headers: { origin } },
+    );
+    expect(attach.status).toBe(200);
+    const asset = await fetch(
+      `${origin}/api/projects/${story.id}/assets/${source.path}`,
+      { headers: { range: "bytes=0-6" } },
+    );
+    expect(asset.status).toBe(206);
+    expect(await asset.text()).toBe('{"type"');
+    const direct = await fetch(
+      `${origin}/api/data-library/${source.id}/content`,
+    );
+    expect(direct.status).toBe(200);
+    expect(await direct.json()).toMatchObject({ type: "FeatureCollection" });
+    const again = await fetch(
+      `${origin}/api/data-library/${source.id}/stories/${story.id}`,
+      { method: "POST", headers: { origin } },
+    );
+    expect(again.status).toBe(200);
+    expect((await store.read(story.id)).sources).toHaveLength(1);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

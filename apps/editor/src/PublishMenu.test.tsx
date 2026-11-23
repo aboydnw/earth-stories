@@ -58,10 +58,8 @@ describe("PublishMenu", () => {
   it("keeps warning-only preview available and loads checks", async () => {
     const props = menu();
     expect(props.onLoadReadiness).toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: "Publish, 1 issue" }),
-    ).toBeTruthy();
-    const preview = screen.getByRole("menuitem", { name: /View as reader/ });
+    expect(screen.getByRole("button", { name: "Publish" })).toBeTruthy();
+    const preview = screen.getByRole("menuitem", { name: /^Preview/ });
     expect(preview.getAttribute("disabled")).toBeNull();
     await userEvent.click(preview);
     expect(props.onPreview).toHaveBeenCalledOnce();

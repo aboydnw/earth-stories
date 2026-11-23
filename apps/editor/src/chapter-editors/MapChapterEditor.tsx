@@ -211,9 +211,13 @@ export function MapChapterEditor({
         </div>
       </CollapsibleSection>
       <CollapsibleSection
-        title="Exact coordinates"
+        title="Starting view"
         summary={`Zoom ${chapter.camera.zoom.toFixed(1)} · Pitch ${Math.round(chapter.camera.pitch)}°`}
       >
+        <p>
+          Drag or zoom the map to set its starting view, or enter coordinates
+          below.
+        </p>
         <div className="chapter-coordinate-grid">
           <CameraNumber
             label="Longitude"

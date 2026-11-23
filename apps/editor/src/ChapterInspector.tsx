@@ -73,17 +73,9 @@ export function ChapterInspector({
             Changes here affect only this chapter unless marked as shared.
           </span>
         </div>
-        <StatusBadge
-          tone={
-            readiness.tone === "ready"
-              ? "success"
-              : readiness.tone === "error"
-                ? "danger"
-                : "warning"
-          }
-        >
-          {readiness.label}
-        </StatusBadge>
+        {readiness.tone === "error" ? (
+          <StatusBadge tone="danger">{readiness.label}</StatusBadge>
+        ) : null}
       </header>
       {chapter.type === "illustrated" ? (
         <IllustrationInspector

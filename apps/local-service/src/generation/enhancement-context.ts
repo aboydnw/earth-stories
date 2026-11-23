@@ -1,12 +1,15 @@
 import { open, realpath, stat } from "node:fs/promises";
-import { relative, isAbsolute, extname, sep } from "node:path";
+import { relative, extname } from "node:path";
 import {
   storyProjectSchema,
   type StoryProject,
   type PreparedReference,
   type ReferenceInput,
 } from "@earth-stories/story-schema";
-import type { ProjectStore } from "@earth-stories/project-store";
+import {
+  resolveProjectAsset,
+  type ProjectStore,
+} from "@earth-stories/project-store";
 import { prepareReferences } from "./reference-inputs.js";
 export type SourceFile = { path: string; size: number; modified: number };
 export type EnhancementSnapshot = {
@@ -31,11 +34,7 @@ export async function safeSourcePath(
   path: string,
 ) {
   const base = await safeProjectDirectory(store, id);
-  const target = await realpath(store.assetPath(id, path));
-  const rel = relative(base, target);
-  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel))
-    throw new Error("Asset is outside the story folder.");
-  return target;
+  return resolveProjectAsset(base, path, "Asset is outside the story folder.");
 }
 export async function verifySourceFiles(
   store: ProjectStore,

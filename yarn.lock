@@ -808,6 +808,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@earth-stories/publisher@workspace:packages/publisher"
   dependencies:
+    "@earth-stories/project-store": "workspace:*"
     "@earth-stories/story-schema": "workspace:*"
     pmtiles: "npm:^4.3.0"
     tsx: "npm:^4.20.5"

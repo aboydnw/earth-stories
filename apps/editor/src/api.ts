@@ -580,3 +580,45 @@ export const disconnectChatGPT = () =>
     "/api/generation/connection",
     { method: "DELETE" },
   );
+
+export async function listWorkspaceData(): Promise<
+  import("@earth-stories/story-schema").ProjectSource[]
+> {
+  const { projectSourceSchema } = await import("@earth-stories/story-schema");
+  return projectSourceSchema
+    .array()
+    .parse(await request<unknown>("/api/data-library"));
+}
+export async function uploadWorkspaceData(file: File) {
+  return request<import("@earth-stories/story-schema").ProjectSource>(
+    `/api/data-library?filename=${encodeURIComponent(file.name)}`,
+    {
+      method: "POST",
+      headers: { "content-type": file.type || "application/octet-stream" },
+      body: file,
+    },
+  );
+}
+export async function connectWorkspaceData(
+  source: import("@earth-stories/story-schema").ProjectSource,
+) {
+  return request<import("@earth-stories/story-schema").ProjectSource>(
+    "/api/data-library",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(source),
+    },
+  );
+}
+export async function addWorkspaceDataToStory(
+  datasetId: string,
+  storyId: string,
+) {
+  return storyProjectSchema.parse(
+    await request<unknown>(
+      `/api/data-library/${encodeURIComponent(datasetId)}/stories/${encodeURIComponent(storyId)}`,
+      { method: "POST" },
+    ),
+  );
+}

@@ -59,7 +59,7 @@ vi.mock("react-map-gl/maplibre", async () => {
             data-testid="map-root"
             className="maplibregl-canvas"
             tabIndex={0}
-            data-projection={props.projection?.type ?? "mercator"}
+            data-projection={props.projection?.type ?? "unspecified"}
             data-terrain={props.terrain?.source ?? "none"}
           >
             {props.children}
@@ -216,6 +216,34 @@ describe("MapChapter", () => {
         "Mercator is used because this dataset renderer does not support globe view.",
       ),
     ).toBeTruthy();
+  });
+
+  it("explicitly restores Mercator when Globe is turned off", () => {
+    const asset = publicationAsset({
+      id: "boundaries",
+      kind: "pmtiles",
+      tileType: "vector",
+    });
+    const view = render(
+      <MapChapter
+        chapter={{ ...chapter, camera: { ...chapter.camera, globe: true } }}
+        asset={asset}
+        basemapStyle="local/style.json"
+      />,
+    );
+    expect(screen.getByTestId("map-root").getAttribute("data-projection")).toBe(
+      "globe",
+    );
+    view.rerender(
+      <MapChapter
+        chapter={{ ...chapter, camera: { ...chapter.camera, globe: false } }}
+        asset={asset}
+        basemapStyle="local/style.json"
+      />,
+    );
+    expect(screen.getByTestId("map-root").getAttribute("data-projection")).toBe(
+      "mercator",
+    );
   });
 
   it("preserves an authored globe for a PMTiles-only map", () => {

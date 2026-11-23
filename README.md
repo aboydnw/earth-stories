@@ -113,6 +113,11 @@ Projects are ordinary folders under `earth-stories-projects/` by default. Set
 folder. Every save writes atomically and preserves the previous story file in
 the project's `.earth-stories/backups/` folder.
 
+The workspace **Data** tab accepts uploads before a story exists. Open a dataset
+and choose **Add to story** to reuse its shared file. Editable stories depend on
+that workspace library; published outputs include their own copy. See
+[shared workspace data](docs/local-projects.md#shared-workspace-data).
+
 ## Build and test
 
 ```bash
@@ -177,13 +182,12 @@ the [packaging groundwork devlog](docs/devlog/2026-08-13-desktop-packaging-groun
   explains why a restricted `gh auth status` can incorrectly look like an
   expired token and the checks required before asking someone to re-authenticate.
 
-### Create a story with AI (local pilot)
+### AI visual enhancement (local pilot)
 
-Choose **Create with AI** in the workspace. Enter an audience, takeaway, context,
-and visual direction, optionally attach references, then choose **Generate story**.
-Review the palette, chapter outline, composed vector scenes, and **View as reader**
-preview. **Create this story** imports that exact candidate into the ordinary
-editor. It does not publish anything. Existing stories are not modified by AI.
+Create or open an ordinary story, then choose **Story settings → Enhance with AI**.
+Describe the visual direction and attach references; review the proposed visuals
+before applying them. The workspace no longer offers a separate **Create with AI**
+form. Previously generated candidate links remain available for recovery.
 
 Choose **Continue with ChatGPT**, finish authorization in your system browser,
 and select an available story model. Generation uses your ChatGPT plan allowance;
@@ -244,8 +248,8 @@ Candidate URLs survive restart. Discarding a candidate preserves accepted storie
 
 Run `yarn smoke:generation --mock` for disposable integration verification. This
 is not evidence of live account/model access. For a live test, sign in through the
-running editor and generate a story, inspect its reader preview, create it, edit
-it, and reopen it. No credential is read or printed by the smoke script.
+running editor, enhance an existing story, inspect its reader preview, apply the
+result, edit it, and reopen it. No credential is read or printed by the smoke script.
 The integration follows the official [local sign-in flow](https://developers.openai.com/siwc/token-sharing-open-source/sign-in)
 and [plan-usage limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations).
 
