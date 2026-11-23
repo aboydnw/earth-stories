@@ -11,6 +11,7 @@ import {
   visualAccentsSchema,
   vectorSceneSchema,
   validateVisualSequences,
+  validateVisualAccents,
 } from "@earth-stories/story-schema";
 export const vectorPlanSchema = z
   .object({
@@ -119,10 +120,14 @@ export function composePlan(
         );
     }
     if (!enhancement) {
-      const issues = validateVisualSequences(
-        parsed.chapters,
-        parsed.visualSequences,
-      );
+      const issues = [
+        ...validateVisualSequences(parsed.chapters, parsed.visualSequences),
+        ...validateVisualAccents(
+          parsed.chapters,
+          parsed.visualAccents,
+          parsed.visualSequences,
+        ),
+      ];
       if (issues.length) throw new Error(issues.join("; "));
     }
     return parsed;

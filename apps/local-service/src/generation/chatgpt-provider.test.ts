@@ -50,24 +50,29 @@ const connection = {
 };
 const event = (type: string, data: object) =>
   `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
-const completed = () =>
-  event("response.output_text.delta", { delta: JSON.stringify(blueprint) }) +
+const completed = (plan: unknown = blueprint) =>
+  event("response.output_text.delta", { delta: JSON.stringify(plan) }) +
   event("response.completed", { response: { usage: { output_tokens: 42 } } });
-function setup(stream = completed()) {
-  const fetcher = vi.fn(async (input: URL | RequestInfo) =>
-    String(input).endsWith("/models")
-      ? Response.json({
-          models: [
+function setup(stream: string | string[] = completed()) {
+  const responses = Array.isArray(stream) ? [...stream] : null;
+  const fetcher = vi.fn(
+    async (input: URL | RequestInfo, _init?: RequestInit) =>
+      String(input).endsWith("/models")
+        ? Response.json({
+            models: [
+              {
+                slug: "available-model",
+                display_name: "Available model",
+                visibility: "list",
+              },
+            ],
+          })
+        : new Response(
+            typeof stream === "string" ? stream : responses?.shift(),
             {
-              slug: "available-model",
-              display_name: "Available model",
-              visibility: "list",
+              headers: { "Content-Type": "text/event-stream" },
             },
-          ],
-        })
-      : new Response(stream, {
-          headers: { "Content-Type": "text/event-stream" },
-        }),
+          ),
   );
   return {
     provider: new ChatGPTProvider(connection as never, { fetcher }),
@@ -314,4 +319,59 @@ it("rejects an all-map-and-chart Whole story before accessing ChatGPT", async ()
   ).rejects.toThrow(/prose or illustrated chapter.*Focused artwork/);
   expect(access).not.toHaveBeenCalled();
   expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("repairs overlapping companion artwork in a new story", async () => {
+  const river = blueprint.chapters[0]!;
+  const companion = {
+    id: "delta-art",
+    chapterId: "river",
+    alt: "A branching river delta",
+    placement: "trailing",
+    scene: river.scene,
+  };
+  const overlapping = {
+    ...blueprint,
+    chapters: [
+      river,
+      {
+        id: "delta",
+        title: "The river meets the sea",
+        narrative: "The water spreads into channels.",
+        alt: "",
+        caption: "",
+        type: "prose",
+        scene: null,
+      },
+    ],
+    visualSequences: [
+      {
+        id: "river-scene",
+        alt: river.alt,
+        caption: river.caption,
+        scene: river.scene,
+        steps: [{ chapterId: "river", start: 0, end: 1 }],
+      },
+    ],
+    visualAccents: [companion],
+  };
+  const { provider, fetcher } = setup([
+    completed(overlapping),
+    completed({
+      ...overlapping,
+      visualAccents: [{ ...companion, chapterId: "delta" }],
+    }),
+  ]);
+
+  const result = await provider.plan(brief, [], new AbortController().signal);
+  const inference = fetcher.mock.calls.filter(([url]) =>
+    String(url).endsWith("/responses"),
+  );
+  expect(inference).toHaveLength(2);
+  expect(JSON.parse(String(inference[1]?.[1]?.body)).instructions).toContain(
+    "Companion artwork cannot overlap the visual sequence on river",
+  );
+  expect(result.plan.visualAccents).toMatchObject([
+    { id: "delta-art", chapterId: "delta" },
+  ]);
 });
