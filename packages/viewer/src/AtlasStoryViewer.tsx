@@ -348,6 +348,9 @@ export function AtlasStoryViewer({
               }
               return (
                 <PublicationChapterRenderer
+                  visualAccent={manifest.visualAccents?.find(
+                    (a) => a.chapterId === item.id,
+                  )}
                   // Preserve the map between chapter changes so camera and time can animate.
                   key={allVisible ? item.id : `atlas-stage-${resetKey}`}
                   chapter={item}

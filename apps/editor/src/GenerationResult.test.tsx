@@ -83,3 +83,36 @@ it("disables applying while saving and shows supporting text changes expanded", 
     container.querySelector("details[data-text-changes]")?.hasAttribute("open"),
   ).toBe(true);
 });
+
+it("groups discard with candidate review and blocks it during acceptance", () => {
+  const discard = vi.fn();
+  const props = {
+    job: reviewJob,
+    accepting: false,
+    discarding: false,
+    onAccept: vi.fn(),
+    onEditInstructions: vi.fn(),
+    onDiscard: discard,
+  };
+  const { rerender } = render(
+    <EarthStoriesProvider>
+      <GenerationResult {...props} />
+    </EarthStoriesProvider>,
+  );
+  const button = screen.getByRole("button", { name: "Discard changes" });
+  expect(
+    screen.getByRole("group", { name: "Review story" }).contains(button),
+  ).toBe(true);
+  fireEvent.click(button);
+  expect(discard).toHaveBeenCalledOnce();
+  rerender(
+    <EarthStoriesProvider>
+      <GenerationResult {...props} accepting />
+    </EarthStoriesProvider>,
+  );
+  expect(
+    screen
+      .getByRole("button", { name: "Discard changes" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+});

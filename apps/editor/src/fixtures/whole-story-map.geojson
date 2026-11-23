@@ -1,0 +1,17 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Synthetic observation" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-10, 0],
+          [0, 5],
+          [10, 0]
+        ]
+      }
+    }
+  ]
+}

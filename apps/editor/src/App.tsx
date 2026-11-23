@@ -1,3 +1,5 @@
+import { VisualAccentInspector } from "./VisualAccentInspector";
+import { reconcileVisualAccents } from "@earth-stories/story-schema";
 import { EditorBrand } from "./EditorBrand";
 import { VisualSequenceInspector } from "./VisualSequenceInspector";
 import { reconcileVisualSequences } from "./reconcileVisualSequences";
@@ -363,12 +365,21 @@ export function App() {
   function changeProject(update: (current: StoryProject) => StoryProject) {
     setProject((current) => {
       if (!current) return current;
-      const next = update(current);
+      let next = update(current);
       if (next.visualSequences?.length && next.chapters !== current.chapters)
-        return {
+        next = {
           ...next,
           visualSequences: reconcileVisualSequences(
             next.chapters,
+            next.visualSequences,
+          ),
+        };
+      if (next.visualAccents)
+        next = {
+          ...next,
+          visualAccents: reconcileVisualAccents(
+            next.chapters,
+            next.visualAccents,
             next.visualSequences,
           ),
         };
@@ -2769,62 +2780,89 @@ export function App() {
               </div>
             ) : null}
             {inspectorMode === "chapter" ? (
-              <ChapterInspector
-                chapter={selectedChapter ?? null}
-                projectId={project.id}
-                chapterIndex={project.chapters.findIndex(
-                  ({ id }) => id === selectedChapter?.id,
-                )}
-                sources={project.sources}
-                sourceUsage={Object.fromEntries(
-                  project.sources.map((source) => [
-                    source.id,
-                    project.chapters.filter(
-                      (chapter) =>
-                        (chapter.type === "illustrated" &&
-                          chapter.scene.layers.some(
-                            (layer) =>
-                              layer.kind === "image" &&
-                              layer.sourceId === source.id,
-                          )) ||
-                        ("sourceId" in chapter &&
-                          chapter.sourceId === source.id) ||
-                        ("overlaySourceIds" in chapter &&
-                          chapter.overlaySourceIds?.includes(source.id)),
-                    ).length,
-                  ]),
-                )}
-                readiness={
-                  (selectedChapter && chapterReadiness[selectedChapter.id]) || {
-                    tone: "ready",
-                    label: "Ready",
+              <>
+                <ChapterInspector
+                  chapter={selectedChapter ?? null}
+                  projectId={project.id}
+                  chapterIndex={project.chapters.findIndex(
+                    ({ id }) => id === selectedChapter?.id,
+                  )}
+                  sources={project.sources}
+                  sourceUsage={Object.fromEntries(
+                    project.sources.map((source) => [
+                      source.id,
+                      project.chapters.filter(
+                        (chapter) =>
+                          (chapter.type === "illustrated" &&
+                            chapter.scene.layers.some(
+                              (layer) =>
+                                layer.kind === "image" &&
+                                layer.sourceId === source.id,
+                            )) ||
+                          ("sourceId" in chapter &&
+                            chapter.sourceId === source.id) ||
+                          ("overlaySourceIds" in chapter &&
+                            chapter.overlaySourceIds?.includes(source.id)),
+                      ).length,
+                    ]),
+                  )}
+                  readiness={
+                    (selectedChapter &&
+                      chapterReadiness[selectedChapter.id]) || {
+                      tone: "ready",
+                      label: "Ready",
+                    }
                   }
-                }
-                currentCamera={currentCanvasCamera}
-                onUpdateChapter={(nextChapter) => {
-                  changeProject((current) => ({
-                    ...current,
-                    chapters: current.chapters.map((chapter) =>
-                      chapter.id === nextChapter.id ? nextChapter : chapter,
-                    ),
-                  }));
-                }}
-                onEditSource={(sourceId) => {
-                  setSelectedSourceId(sourceId);
-                  setInspectorMode("data");
-                  setEditorRegion("edit");
-                }}
-                onAddData={() => {
-                  setSelectedSourceId(null);
-                  setInspectorMode("data");
-                  setEditorRegion("edit");
-                }}
-                onPreviewCamera={(camera) => {
-                  setFlyoverPreviewCamera(camera);
-                  setCurrentCanvasCamera(camera);
-                  setEditorRegion("canvas");
-                }}
-              />
+                  currentCamera={currentCanvasCamera}
+                  onUpdateChapter={(nextChapter) => {
+                    changeProject((current) => ({
+                      ...current,
+                      chapters: current.chapters.map((chapter) =>
+                        chapter.id === nextChapter.id ? nextChapter : chapter,
+                      ),
+                    }));
+                  }}
+                  onEditSource={(sourceId) => {
+                    setSelectedSourceId(sourceId);
+                    setInspectorMode("data");
+                    setEditorRegion("edit");
+                  }}
+                  onAddData={() => {
+                    setSelectedSourceId(null);
+                    setInspectorMode("data");
+                    setEditorRegion("edit");
+                  }}
+                  onPreviewCamera={(camera) => {
+                    setFlyoverPreviewCamera(camera);
+                    setCurrentCanvasCamera(camera);
+                    setEditorRegion("canvas");
+                  }}
+                />
+                {project.visualAccents
+                  ?.filter((a) => a.chapterId === selectedChapter?.id)
+                  .map((accent) => (
+                    <VisualAccentInspector
+                      key={accent.id}
+                      accent={accent}
+                      onChange={(next) =>
+                        changeProject((current) => ({
+                          ...current,
+                          visualAccents: current.visualAccents?.map((a) =>
+                            a.id === next.id ? next : a,
+                          ),
+                        }))
+                      }
+                      onRemove={() =>
+                        changeProject((current) => ({
+                          ...current,
+                          visualAccents: current.visualAccents?.filter(
+                            (a) => a.id !== accent.id,
+                          ),
+                        }))
+                      }
+                    />
+                  ))}
+              </>
             ) : null}
           </div>
         }

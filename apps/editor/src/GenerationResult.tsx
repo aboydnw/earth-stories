@@ -5,11 +5,15 @@ export function GenerationResult({
   accepting,
   onAccept,
   onEditInstructions,
+  onDiscard,
+  discarding = false,
 }: {
   job: GenerationJob;
   accepting: boolean;
   onAccept: () => void;
   onEditInstructions: () => void;
+  onDiscard?: () => void;
+  discarding?: boolean;
 }) {
   const candidate = job.candidate;
   if (!candidate) return <p role="status">Your story is being prepared.</p>;
@@ -36,7 +40,7 @@ export function GenerationResult({
         </a>
         <ActionButton
           variant="surface"
-          disabled={job.stage !== "ready" || accepting}
+          disabled={job.stage !== "ready" || accepting || discarding}
           onClick={onAccept}
         >
           {accepting
@@ -49,12 +53,26 @@ export function GenerationResult({
         </ActionButton>
         <ActionButton
           variant="surface"
-          disabled={accepting}
+          disabled={accepting || discarding}
           onClick={onEditInstructions}
         >
           Edit instructions
         </ActionButton>
+        {onDiscard ? (
+          <ActionButton
+            variant="ghost"
+            disabled={accepting || discarding}
+            onClick={onDiscard}
+          >
+            {job.enhancement ? "Discard changes" : "Discard result"}
+          </ActionButton>
+        ) : null}
       </div>
+      {onDiscard ? (
+        <p className="generation-discard-note">
+          Discards this generated version; your story stays unchanged.
+        </p>
+      ) : null}
       <div>
         <h2>{candidate.project.metadata.title}</h2>
         <p>{candidate.project.metadata.description}</p>
@@ -62,6 +80,9 @@ export function GenerationResult({
           {scenes.length} visual {scenes.length === 1 ? "scene" : "scenes"} ·{" "}
           {additions.length} new{" "}
           {additions.length === 1 ? "chapter" : "chapters"}
+          {job.plan?.visualAccents?.length
+            ? ` · ${job.plan.visualAccents.length} companion artworks`
+            : ""}
           {job.enhancement
             ? ` · ${edits.length ? `${edits.length} supporting text ${edits.length === 1 ? "change" : "changes"}` : "Original text unchanged"}`
             : ""}
@@ -91,7 +112,12 @@ export function GenerationResult({
         </p>
       </details>
       <details>
-        <summary>Proposed changes</summary>
+        <summary>What AI changed</summary>
+        <p>
+          {job.stage === "accepted"
+            ? "This summarizes the generated version that was saved to your story."
+            : "This summarizes the generated version shown in Preview story. Nothing is saved to your story until you apply it."}
+        </p>
         {scenes.map((sequence) => (
           <section key={sequence.id}>
             <h3>{sequence.alt}</h3>
@@ -105,6 +131,16 @@ export function GenerationResult({
                 .join(" → ")}
             </p>
             <p>{sequence.caption}</p>
+          </section>
+        ))}
+        {(job.plan?.visualAccents ?? []).map((accent) => (
+          <section key={accent.id}>
+            <h3>
+              Companion artwork ·{" "}
+              {candidate.project.chapters.find((c) => c.id === accent.chapterId)
+                ?.title ?? accent.chapterId}
+            </h3>
+            <p>{accent.alt}</p>
           </section>
         ))}
         {additions.length ? (
@@ -122,7 +158,8 @@ export function GenerationResult({
             </ul>
           </>
         ) : null}
-        {Object.keys(candidate.project.publication.palette ?? {}).length ? (
+        {!job.enhancement &&
+        Object.keys(candidate.project.publication.palette ?? {}).length ? (
           <div className="generation-palette">
             {Object.entries(candidate.project.publication.palette ?? {}).map(
               ([role, color]) => (
@@ -135,7 +172,7 @@ export function GenerationResult({
             )}
           </div>
         ) : null}
-        <h3>Story chapters</h3>
+        <h3>Chapters in the preview</h3>
         <ol>
           {candidate.project.chapters.map((c) => (
             <li key={c.id}>{c.title}</li>

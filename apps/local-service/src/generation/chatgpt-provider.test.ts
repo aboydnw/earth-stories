@@ -184,3 +184,110 @@ it("uses a constrained additive plan and supplies authored context for enhanceme
     source,
   );
 });
+
+it("repairs an opening-only whole-story result once and returns all three treatments", async () => {
+  const { storyProjectSchema } = await import("@earth-stories/story-schema");
+  const source = storyProjectSchema.parse({
+    schema: "earth-stories/project/v3",
+    id: "storm",
+    metadata: {
+      title: "Storm",
+      description: "",
+      author: null,
+      created: "2026-11-22T00:00:00Z",
+      updated: "2026-11-22T00:00:00Z",
+    },
+    publication: {},
+    basemap: {
+      id: "base",
+      label: "Base",
+      styleUrl: "https://example.org/style.json",
+      attribution: null,
+    },
+    sources: [],
+    chapters: [
+      {
+        id: "start",
+        type: "prose",
+        title: "Formation",
+        narrative: "Original formation.",
+      },
+      {
+        id: "middle",
+        type: "prose",
+        title: "Peak",
+        narrative: "Original peak.",
+      },
+      {
+        id: "end",
+        type: "prose",
+        title: "Landfall",
+        narrative: "Original landfall.",
+      },
+    ],
+  });
+  const opening = {
+    ...blueprint,
+    chapters: [],
+    textEdits: [],
+    visualSequences: [
+      {
+        id: "storm-start",
+        alt: "Storm forming",
+        caption: "Illustrative",
+        scene: blueprint.chapters[0]!.scene,
+        steps: [{ chapterId: "start", start: 0, end: 1 }],
+      },
+    ],
+    visualAccents: [],
+  };
+  const whole = {
+    ...opening,
+    chapters: [
+      { ...blueprint.chapters[0]!, id: "transition", afterChapterId: "middle" },
+    ],
+    visualAccents: [
+      {
+        id: "companion",
+        chapterId: "end",
+        placement: "trailing",
+        alt: "Clouds fading",
+        scene: blueprint.chapters[0]!.scene,
+      },
+    ],
+  };
+  const responses = [opening, whole];
+  let requests = 0;
+  const fetcher = vi.fn(async (input: URL | RequestInfo) =>
+    String(input).endsWith("/models")
+      ? Response.json({
+          models: [
+            {
+              slug: "available-model",
+              display_name: "Model",
+              visibility: "list",
+            },
+          ],
+        })
+      : new Response(
+          event("response.output_text.delta", {
+            delta: JSON.stringify(responses[requests++]),
+          }) +
+            event("response.completed", {
+              response: { usage: { output_tokens: 42 } },
+            }),
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+  );
+  const provider = new ChatGPTProvider(connection as never, { fetcher });
+  const result = await provider.plan(
+    { ...brief, visualTreatment: "whole-story" },
+    [],
+    new AbortController().signal,
+    source,
+  );
+  expect(requests).toBe(2);
+  expect(result.plan.visualAccents?.[0]?.chapterId).toBe("end");
+  expect(result.plan.chapters[0]?.afterChapterId).toBe("middle");
+  expect(result.plan.visualSequences?.[0]?.steps[0]?.chapterId).toBe("start");
+});

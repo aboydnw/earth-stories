@@ -366,3 +366,41 @@ it("validates an edited link and keeps its generated label in sync", async () =>
   expect(screen.getByText("https://example.org/new")).toBeTruthy();
   expect(screen.queryByText("https://example.org/old")).toBeNull();
 });
+
+it("shows one busy state and cancellation without premature review actions", async () => {
+  vi.mocked(api.getGeneration).mockResolvedValue({
+    id: "working",
+    stage: "planning",
+    brief: {},
+    candidate: null,
+    usage: [],
+  } as never);
+  vi.mocked(api.cancelGeneration).mockResolvedValue({
+    id: "working",
+    stage: "cancelled",
+    brief: {},
+    candidate: null,
+    usage: [],
+  } as never);
+  render(
+    <EarthStoriesProvider>
+      <StoryCreationScreen
+        jobId="working"
+        preview={false}
+        onWorkspace={() => {}}
+        onNavigate={() => {}}
+        onCreated={async () => {}}
+        onBack={() => {}}
+      />
+    </EarthStoriesProvider>,
+  );
+  const status = await screen.findByRole("status", {
+    name: "Story generation",
+  });
+  expect(status.getAttribute("aria-busy")).toBe("true");
+  expect(screen.queryByText("Your story is being prepared.")).toBeNull();
+  expect(screen.queryByRole("button", { name: /Discard/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel generation" }));
+  await screen.findByRole("button", { name: "Retry generation" });
+  expect(screen.queryByRole("status", { name: "Story generation" })).toBeNull();
+});

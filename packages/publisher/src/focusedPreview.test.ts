@@ -143,3 +143,31 @@ it("keeps the selected continuous scene while excluding unrelated incomplete cha
   }
   expect(project).toEqual(before);
 });
+
+it("keeps only companion artwork for the focused chapter", async () => {
+  const project = await fixture();
+  const { visualAccentSchema } = await import("@earth-stories/story-schema");
+  project.visualAccents = project.chapters.map((chapter, i) =>
+    visualAccentSchema.parse({
+      id: `accent-${i}`,
+      chapterId: chapter.id,
+      placement: "trailing",
+      alt: `Artwork ${i}`,
+      scene: {
+        width: 1000,
+        height: 500,
+        layers: [{ id: "line", kind: "path", pathData: "M 0 0 L 1 1" }],
+      },
+    }),
+  );
+  const before = structuredClone(project);
+  for (const chapter of project.chapters) {
+    const result = compileFocusedChapter(project, chapter.id);
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") throw Error(result.message);
+    expect(result.manifest.visualAccents?.map((a) => a.chapterId)).toEqual([
+      chapter.id,
+    ]);
+  }
+  expect(project).toEqual(before);
+});

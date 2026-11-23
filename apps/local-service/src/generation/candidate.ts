@@ -64,6 +64,7 @@ export function assembleCandidate(job: GenerationJob): GenerationCandidate {
     ),
     dataAssets: [],
     visualSequences: plan.visualSequences,
+    visualAccents: plan.visualAccents,
   });
   compileProject(project);
   const data = { project, assets: job.assets, warnings: plan.warnings };

@@ -1,3 +1,4 @@
+import { GenerationProgress } from "./GenerationProgress";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { GenerationResult } from "./GenerationResult";
 import {
@@ -76,6 +77,7 @@ const job = generationJobSchema.parse({
 export const Ready: Story = {
   render: () => (
     <GenerationResult
+      onDiscard={() => {}}
       onEditInstructions={() => {}}
       job={job}
       accepting={false}
@@ -86,6 +88,7 @@ export const Ready: Story = {
 export const Creating: Story = {
   render: () => (
     <GenerationResult
+      onDiscard={() => {}}
       onEditInstructions={() => {}}
       job={job}
       accepting
@@ -95,11 +98,32 @@ export const Creating: Story = {
 };
 export const Waiting: Story = {
   render: () => (
-    <GenerationResult
-      onEditInstructions={() => {}}
-      job={{ ...job, stage: "planning", candidate: null }}
-      accepting={false}
-      onAccept={() => {}}
+    <GenerationProgress
+      working
+      title="Planning the story’s visual treatment"
+      busy={false}
+      onCancel={() => {}}
+    />
+  ),
+};
+export const Cancelled: Story = {
+  render: () => (
+    <GenerationProgress
+      working={false}
+      title="Generation cancelled"
+      busy={false}
+      onCancel={() => {}}
+    />
+  ),
+};
+export const Failed: Story = {
+  render: () => (
+    <GenerationProgress
+      working={false}
+      title="Generation needs attention"
+      error="The request could not finish. Edit your direction or retry."
+      busy={false}
+      onCancel={() => {}}
     />
   ),
 };
@@ -150,6 +174,7 @@ const enhancementJob = generationJobSchema.parse({
 export const EnhancementReview: Story = {
   render: () => (
     <GenerationResult
+      onDiscard={() => {}}
       onEditInstructions={() => {}}
       job={enhancementJob}
       accepting={false}
@@ -172,6 +197,7 @@ export const WithoutWarnings: Story = {
       }}
       accepting={false}
       onAccept={() => {}}
+      onDiscard={() => {}}
       onEditInstructions={() => {}}
     />
   ),
@@ -182,6 +208,7 @@ export const ApplyingEnhancements: Story = {
       job={enhancementJob}
       accepting
       onAccept={() => {}}
+      onDiscard={() => {}}
       onEditInstructions={() => {}}
     />
   ),

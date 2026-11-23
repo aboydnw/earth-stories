@@ -1,3 +1,5 @@
+import { ChapterVisualContent } from "./ChapterVisualAccent.js";
+import type { VisualAccent } from "@earth-stories/story-schema";
 import { Suspense, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type {
@@ -19,8 +21,10 @@ export function ScrollytellingBlock({
   basemapStyle,
   runtimePolicy,
   snapshotMode = false,
+  visualAccents = [],
 }: {
   chapters: ScrollyChapter[];
+  visualAccents?: VisualAccent[];
   startIndex: number;
   assets: Map<string, PublicationAsset>;
   basemapStyle: string;
@@ -157,8 +161,13 @@ export function ScrollytellingBlock({
                 {String(startIndex + index + 1).padStart(2, "0")}
               </p>
               <div className="story-copy">
-                <h2>{chapter.title}</h2>
-                <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
+                <ChapterVisualContent
+                  accent={visualAccents.find((a) => a.chapterId === chapter.id)}
+                  snapshotMode={snapshotMode}
+                >
+                  <h2>{chapter.title}</h2>
+                  <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
+                </ChapterVisualContent>
               </div>
             </div>
           </section>

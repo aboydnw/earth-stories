@@ -1,3 +1,4 @@
+import { visualAccentsSchema, validateVisualAccents } from "./visualAccents.js";
 import {
   visualSequencesSchema,
   validateVisualSequences,
@@ -382,6 +383,7 @@ export const storyProjectV3Schema = storyProjectV2Schema
     schema: z.literal("earth-stories/project/v3"),
     chapters: z.array(projectChapterSchema).min(1),
     visualSequences: visualSequencesSchema.optional(),
+    visualAccents: visualAccentsSchema.optional(),
     publication: storyProjectV2Schema.shape.publication
       .removeDefault()
       .extend({ palette: readerPaletteSchema.optional() })
@@ -392,6 +394,12 @@ export const storyProjectV3Schema = storyProjectV2Schema
       }),
   })
   .superRefine((project, ctx) => {
+    for (const message of validateVisualAccents(
+      project.chapters,
+      project.visualAccents,
+      project.visualSequences,
+    ))
+      ctx.addIssue({ code: "custom", path: ["visualAccents"], message });
     for (const message of validateVisualSequences(
       project.chapters,
       project.visualSequences,

@@ -176,7 +176,9 @@ finishes. Adding an account is a separate action.
 
 Ready results lead with Preview story, followed by equally prominent secondary
 Apply to story and Edit instructions actions. Controls fit their labels and wrap
-on narrow screens. Instructions, proposed changes, source coverage and generation
+on narrow screens. A quieter Discard changes action belongs in that same group.
+What AI changed explains the generated preview and names the chapters receiving
+immersive scenes, transitions, and companion artwork. Instructions, changes, source coverage and generation
 details use disclosures; supporting edits to original text remain expanded.
 Preview opens separately and states that the result is not applied or published.
 Applying preserves ordinary editing and author-controlled publishing.
@@ -197,3 +199,32 @@ Public HTML supplies bounded text and, when available, a static appearance
 capture in an isolated browser with scripts disabled. This does not imply that
 interactive page content was inspected. Browser availability or blocked resources
 produce explicit limitations and a screenshot-upload fallback.
+
+### Story-wide companion artwork
+
+Generation uses a compact page identity and a prominent indeterminate working
+region with the actual stage and Cancel generation. It reports no invented
+percentage or completion estimate. Reduced motion keeps a still indicator.
+Review controls appear only when a result can be reviewed; applying or discarding
+disables competing actions.
+
+New enhancement briefs default to Whole story: immersive narrative, an illustrated
+transition, and companion artwork distributed through beginning, middle, and later
+content. Focused artwork explicitly requests a smaller treatment. Legacy saved
+briefs retain their prior behavior. Coverage checks examine the actual placements,
+exclude credits, and allow only the existing single repair attempt.
+
+Companion artwork is optional authored vector content attached to a stable chapter
+ID. The shared viewer reserves leading, trailing, or margin space around chapter
+copy. It never overlays a measured map, chart, source attribution, or controls.
+Margin placement becomes an inline strip on narrow screens; grouped map steps
+retain their shared map. Motion follows the reader's scroll container, with a
+readable authored still for focused previews, reduced motion, print, and archival
+export. Placement, alternative text, motion strength, static frame, and removal
+are ordinary chapter-inspector controls. Chapter deletion reconciles references.
+
+The project/publication contract limits companion artwork to 12 accents and one
+per chapter; it cannot overlap an immersive sequence. Vector scene limits and a
+combined sequence/accent budget apply. It grants no script, CSS, image-fetch, or
+filesystem authority to generated content. Preview and explicit Apply remain the
+only route to changing a saved story; publication remains author controlled.

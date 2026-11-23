@@ -1,0 +1,78 @@
+import type { StoryPlan, StoryProject } from "@earth-stories/story-schema";
+/** Count real placements, not a model's description of what it claims to have added. */
+export function inspectVisualTreatment(
+  plan: StoryPlan,
+  source: StoryProject,
+): string[] {
+  const narrative = source.chapters.filter(
+    (c) =>
+      !/(?:credits|acknowledg|methodology|references|how .*built)/i.test(
+        `${c.id} ${c.title}`,
+      ),
+  );
+  if (narrative.length < 3)
+    return [
+      "This story is too short for three distributed treatments. Choose Focused artwork instead of Whole story.",
+    ];
+  const positions = new Map(narrative.map((c, i) => [c.id, i]));
+  const hasArt = (scene: { layers: { kind: string }[] } | null | undefined) =>
+    scene?.layers.some((l) => l.kind === "path");
+  const immersive = (plan.visualSequences ?? [])
+    .filter((s) => hasArt(s.scene))
+    .flatMap((s) =>
+      s.steps.flatMap((step) =>
+        positions.has(step.chapterId) ? [positions.get(step.chapterId)!] : [],
+      ),
+    );
+  const transitions = plan.chapters
+    .filter((c) => c.type === "illustrated" && hasArt(c.scene))
+    .flatMap((c) =>
+      c.afterChapterId === null
+        ? [0]
+        : positions.has(c.afterChapterId ?? "")
+          ? [positions.get(c.afterChapterId!)!]
+          : [],
+    );
+  const companions = (plan.visualAccents ?? [])
+    .filter((a) => hasArt(a.scene))
+    .flatMap((a) =>
+      positions.has(a.chapterId) ? [positions.get(a.chapterId)!] : [],
+    );
+  const issues: string[] = [];
+  for (const chapter of plan.chapters) {
+    const index = source.chapters.findIndex(
+      (item) => item.id === chapter.afterChapterId,
+    );
+    if (
+      index >= 0 &&
+      source.chapters[index]?.type === "scrolly" &&
+      source.chapters[index + 1]?.type === "scrolly"
+    )
+      issues.push(
+        `Move the transition after ${chapter.afterChapterId} outside the continuous map group; use companion art alongside its narrative instead.`,
+      );
+  }
+  if (!immersive.length)
+    issues.push(
+      "Include an immersive visual sequence using original narrative chapters.",
+    );
+  if (!transitions.length)
+    issues.push(
+      "Include a purposeful illustrated transition beside an original narrative chapter.",
+    );
+  if (!companions.length)
+    issues.push(
+      "Include companion artwork on existing story content beyond credits.",
+    );
+  const placements = [...immersive, ...transitions, ...companions];
+  const last = narrative.length - 1;
+  if (
+    !placements.some((p) => p <= last / 3) ||
+    !placements.some((p) => p > last / 3 && p < (last * 2) / 3) ||
+    !placements.some((p) => p >= (last * 2) / 3)
+  )
+    issues.push(
+      "Distribute artwork through the beginning, middle and later narrative. Opening-only or credits-only decoration does not satisfy Whole story.",
+    );
+  return issues;
+}

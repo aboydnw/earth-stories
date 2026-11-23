@@ -8,6 +8,7 @@ import {
   type StoryBrief,
   enhancementTextEditSchema,
   visualSequencesSchema,
+  visualAccentsSchema,
   vectorSceneSchema,
   validateVisualSequences,
 } from "@earth-stories/story-schema";
@@ -72,12 +73,15 @@ export function composePlan(
     if (!brief.requestedOutputs.includes("animation")) {
       for (const seq of parsed.visualSequences ?? [])
         seq.scene.motionStrength = 0;
+      for (const accent of parsed.visualAccents ?? [])
+        accent.scene.motionStrength = 0;
       for (const chapter of parsed.chapters)
         if (chapter.scene) chapter.scene.motionStrength = 0;
     }
     if (brief.requestedOutputs.includes("animation")) {
       const scenes = [
         ...(parsed.visualSequences ?? []).map((s) => s.scene),
+        ...(parsed.visualAccents ?? []).map((s) => s.scene),
         ...parsed.chapters.flatMap((c) => (c.scene ? [c.scene] : [])),
       ];
       for (const scene of scenes) {
@@ -162,6 +166,7 @@ export const customVectorPlanSchema = z
     palette: z.enum(["estuary", "clay", "alpine"]),
     chapters: z.array(customChapter).min(1).max(20),
     visualSequences: visualSequencesSchema,
+    visualAccents: visualAccentsSchema.optional(),
     warnings: z.array(z.string().max(2000)).max(30),
   })
   .strict();

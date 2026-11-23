@@ -37,6 +37,9 @@ export function compileFocusedChapter(
     ...project,
     chapters: structuredClone(chapters),
     visualSequences: sequence ? [structuredClone(sequence)] : undefined,
+    visualAccents: project.visualAccents
+      ?.filter((accent) => chapterIds.has(accent.chapterId))
+      .map((accent) => structuredClone(accent)),
     sources: project.sources
       .filter(({ id }) => sourceIds.has(id))
       .map((source) => structuredClone(source)),

@@ -484,3 +484,26 @@ it("rejects non-raster image sources in illustrated scenes", async () => {
   ];
   expect(() => compileProject(fixture)).toThrow("PNG, JPEG, or WebP");
 });
+
+it("compiles companion art deterministically without rewriting chapters", async () => {
+  const { parseStoryProject } = await import("@earth-stories/story-schema");
+  const source = parseStoryProject(
+    JSON.parse(await readFile(fixturePath, "utf8")),
+  );
+  const accent = {
+    id: "clouds",
+    chapterId: source.chapters[0]!.id,
+    placement: "margin",
+    alt: "Clouds",
+    scene: {
+      width: 1000,
+      height: 500,
+      layers: [{ id: "cloud", kind: "path", pathData: "M 0 0 L 1 0 L .5 1 Z" }],
+    },
+  };
+  const project = parseStoryProject({ ...source, visualAccents: [accent] });
+  const manifest = compileProject(project);
+  expect(manifest.visualAccents?.[0]).toMatchObject(accent);
+  expect(compileProject(JSON.parse(JSON.stringify(project)))).toEqual(manifest);
+  expect(project.chapters).toEqual(source.chapters);
+});

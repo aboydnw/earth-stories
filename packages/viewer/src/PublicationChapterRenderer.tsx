@@ -1,3 +1,5 @@
+import { ChapterVisualContent } from "./ChapterVisualAccent.js";
+import type { VisualAccent } from "@earth-stories/story-schema";
 import { IllustratedChapter } from "./IllustratedChapter.js";
 import { lazy, Suspense, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -99,8 +101,10 @@ export function PublicationChapterRenderer({
   onFitCameraChange,
   cameraOverride,
   illustratedScene = false,
+  visualAccent,
 }: {
   chapter: PublicationChapter;
+  visualAccent?: VisualAccent;
   index?: number;
   assets: Map<string, PublicationAsset>;
   basemapStyle: string;
@@ -145,10 +149,15 @@ export function PublicationChapterRenderer({
         className="story-copy"
         key={composition === "atlas" ? chapter.id : undefined}
       >
-        <h2 tabIndex={composition === "atlas" ? -1 : undefined}>
-          {chapter.title}
-        </h2>
-        <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
+        <ChapterVisualContent
+          accent={visualAccent}
+          snapshotMode={snapshotMode || focused}
+        >
+          <h2 tabIndex={composition === "atlas" ? -1 : undefined}>
+            {chapter.title}
+          </h2>
+          <ReactMarkdown>{chapter.narrative}</ReactMarkdown>
+        </ChapterVisualContent>
       </div>
       {chapter.type === "illustrated" ? (
         <IllustratedChapter

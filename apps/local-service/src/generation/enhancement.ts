@@ -55,6 +55,12 @@ export function assembleEnhancement(
       ...(source.visualSequences ?? []),
       ...plan.visualSequences,
     ];
+  for (const accent of plan.visualAccents ?? []) additions.add(accent.id);
+  if (plan.visualAccents?.length)
+    project.visualAccents = [
+      ...(source.visualAccents ?? []),
+      ...plan.visualAccents,
+    ];
   const edited = new Set<string>();
   let changed = 0;
   for (const edit of plan.textEdits ?? []) {

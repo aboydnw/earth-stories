@@ -1,3 +1,4 @@
+import { inspectVisualTreatment } from "./visual-treatment.js";
 import {
   sceneCoordinateDirection,
   enhancementArtDirection,
@@ -148,6 +149,11 @@ export class ChatGPTProvider implements GenerationProvider {
     if (source)
       instructions +=
         " ENHANCEMENT MODE: Preserve existingStory as authored. Use existing prose when it suits the thematic composition; use chapters:[] when no illustration interlude is needed. Do not force scenes onto credits or every eligible prose chapter. Sequences can cover only consecutive prose or illustrated chapters, never skip across a map, scrolly, chart, image, video or flyover chapter. Continue the visual motif in another sequence after those chapters. Do not overlap existing sequences or insert chapters between their steps. Place additions before a sequence or after its final chapter. When necessary add NEW illustrated chapters with unique IDs and afterChapterId matching an ORIGINAL chapter (null before the first); a sequence may reference these additions. Preserve original chapter order, text, metadata, maps, images, sources, attribution and publication settings. Do NOT refine, rewrite or summarize the author's prose. Only essential supporting textEdits are allowed: exact unique before substring up to 240 characters, after up to 360, original chapterId, visualChapterId identifying the supporting sequence or new visual chapter, and reason. One edit per chapter, 600 changed characters total; prefer textEdits:[]. Do not duplicate existing chapters. Missing reference content is not evidence; report uncertainty in warnings.";
+    if (source && brief.visualTreatment === "whole-story")
+      instructions +=
+        " WHOLE-STORY TREATMENT: Read every original chapter and design ONE evolving visual language across the beginning, middle and later narrative. Deliver THREE distinct uses: an immersive visualSequence on original prose, at least one purposeful new illustrated transition, and visualAccents attached to existing content. Accents use chapterId, id, alt, placement (leading, trailing, margin), and a vector scene. They occupy reserved space beside chapter text, NEVER the measured map or chart viewport. Margin becomes inline on narrow screens. Keep the motif, palette and subject recognizable while its state develops. Do not add art to credits to meet coverage. A single opening scene or repeated interludes alone is insufficient. Respect existing sequences/accents and preserve all source content. Existing map groups should remain continuous; place interludes outside the group and use companion art within it. If requested, motion must remain visible in small companion slots as well as immersive scenes.";
+    instructions +=
+      " Include visualAccents:[] when no companion art is needed. Accents cannot target chapters inside visualSequences. Keep combined sequence/accent JSON below 600,000 characters.";
     let repair = "";
     for (let attempt = 0; attempt < 2; attempt++) {
       const response = await this.request("responses", token, timeout, {
@@ -181,7 +187,13 @@ export class ChatGPTProvider implements GenerationProvider {
             "Return custom visualSequences; legacy template recipes are not accepted for new generation.",
           );
         const plan = composePlan(output, brief, Boolean(source));
-        if (source) assembleEnhancement({ plan, assets: [] }, source);
+        if (source) {
+          assembleEnhancement({ plan, assets: [] }, source);
+          if (brief.visualTreatment === "whole-story") {
+            const coverage = inspectVisualTreatment(plan, source);
+            if (coverage.length) throw new Error(coverage.join(" "));
+          }
+        }
         const issues = generationPlanIssues(plan, brief);
         if (issues.length) throw new Error("Missing requested deliverables.");
         return { plan, usage: { ...result.usage, model } };
@@ -190,7 +202,7 @@ export class ChatGPTProvider implements GenerationProvider {
       }
     }
     throw new Error(
-      "ChatGPT could not produce a valid story after one repair. Adjust the brief and retry.",
+      `ChatGPT could not produce a valid story after one repair. ${brief.visualTreatment === "whole-story" ? "Try Focused artwork for a smaller treatment, or adjust the whole-story direction." : "Adjust the brief and retry."}`,
     );
   }
 }

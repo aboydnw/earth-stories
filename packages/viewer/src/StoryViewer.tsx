@@ -153,6 +153,7 @@ export function StoryViewer({
                     }
                   >
                     <ScrollytellingBlock
+                      visualAccents={manifest.visualAccents}
                       chapters={block.chapters}
                       startIndex={block.startIndex}
                       assets={assets}
@@ -169,6 +170,9 @@ export function StoryViewer({
           const { chapter, index } = block;
           return (
             <PublicationChapterRenderer
+              visualAccent={manifest.visualAccents?.find(
+                (a) => a.chapterId === chapter.id,
+              )}
               key={chapter.id}
               chapter={chapter}
               index={index}

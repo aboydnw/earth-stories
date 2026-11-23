@@ -1,3 +1,4 @@
+import { visualAccentsSchema } from "./visualAccents.js";
 import { visualSequencesSchema } from "./visualSequences.js";
 import { z } from "zod";
 import { readerPaletteSchema, sceneSchema } from "./illustration.js";
@@ -47,6 +48,7 @@ export const storyBriefSchema = z
     takeaway: z.string().max(4000),
     narrative: z.string().max(50000),
     visualDirection: z.string().max(60002),
+    visualTreatment: z.enum(["focused", "whole-story"]).optional(),
     references: z.array(referenceInputSchema).max(20),
     requestedOutputs: z
       .array(z.enum(["illustration", "animation", "prose"]))
@@ -94,13 +96,18 @@ export const storyPlanSchema = z
       )
       .max(30),
     visualSequences: visualSequencesSchema.optional(),
+    visualAccents: visualAccentsSchema.optional(),
     textEdits: z.array(enhancementTextEditSchema).max(8).optional(),
     artwork: z.array(illustrationRequestSchema).max(24),
     warnings: z.array(z.string().max(2000)).max(30),
   })
   .strict()
   .superRefine((plan, ctx) => {
-    if (!plan.chapters.length && !plan.visualSequences?.length)
+    if (
+      !plan.chapters.length &&
+      !plan.visualSequences?.length &&
+      !plan.visualAccents?.length
+    )
       ctx.addIssue({
         code: "custom",
         message: "A plan must contain chapters or visual sequences",
@@ -258,6 +265,7 @@ export function generationPlanIssues(
       chapter.scene ? [chapter.scene] : [],
     ),
     ...(plan.visualSequences ?? []).map((s) => s.scene),
+    ...(plan.visualAccents ?? []).map((s) => s.scene),
   ];
   const images = new Set(
     scenes.flatMap((scene) =>
