@@ -46,7 +46,7 @@ replacement, so a library action cannot silently invalidate another story.
 - [x] Exercise map rendering, checkbox state, camera updates, upload and attachment
       in Chromium with disposable projects, including a narrow viewport.
 - [x] Run repository checks; document failures or unavailable platform checks.
-- [ ] Open a ready-for-review pull request and archive the original recording.
+- [x] Open a ready-for-review pull request and archive the original recording.
 
 ## Verification results
 
@@ -62,3 +62,6 @@ replacement, so a library action cannot silently invalidate another story.
 - Offline-runtime browser proof passed with 26 same-origin paths and no external
   requests. An attempted explicit default-projection change caused a readiness
   regression during verification and was removed before review.
+
+Review: https://github.com/aboydnw/earth-stories/pull/49. The original recording is
+archived under `.feedback/archive/`; recoverable extracted media was removed.
