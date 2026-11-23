@@ -57,3 +57,16 @@ it("cancels a stalled stream without accepting a partial plan", async () => {
   await expect(result).rejects.toThrow("cancelled by author");
   expect(cancelled).toBe(true);
 });
+
+it("preserves cancellation without leaking a rejected stream cleanup promise", async () => {
+  const controller = new AbortController();
+  const reason = new DOMException("Timed out", "TimeoutError");
+  const stream = new ReadableStream<Uint8Array>({
+    cancel: () => Promise.reject(reason),
+  });
+  const result = readPlanStream(new Response(stream), controller.signal);
+  controller.abort(reason);
+  await expect(result).rejects.toBe(reason);
+  // Give any fire-and-forget cancellation rejection an opportunity to surface.
+  await new Promise((resolve) => setTimeout(resolve, 10));
+});

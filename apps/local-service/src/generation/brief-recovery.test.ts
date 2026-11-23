@@ -34,6 +34,7 @@ it("restores original references after failure and service restart without chang
           name: "Style",
           classification: "visual-style",
           url: "https://example.org/",
+          notes: "Use its color and spacing, not its subject.",
         },
         {
           kind: "upload",

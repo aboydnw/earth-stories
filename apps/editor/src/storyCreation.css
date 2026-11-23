@@ -123,3 +123,51 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+.story-creation-topbar {
+  margin-bottom: 1.5rem;
+}
+.story-creation .story-creation__actions {
+  justify-content: flex-start;
+}
+.story-creation__submit {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.story-creation__progress > button {
+  justify-self: start;
+}
+.story-creation details {
+  border-top: 1px solid var(--es-border);
+  padding-block: 16px;
+}
+.story-creation summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.generation-instructions {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.generation-preview-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: var(--es-radius-control);
+  background: var(--es-action);
+  color: var(--es-action-fg);
+  font-weight: 600;
+  text-decoration: none;
+}
+.chatgpt-connection__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 600px) {
+  .chatgpt-connection__fields {
+    grid-template-columns: 1fr;
+  }
+}

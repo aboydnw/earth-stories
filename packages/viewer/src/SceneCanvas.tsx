@@ -1,3 +1,4 @@
+import { sceneViewport } from "@earth-stories/story-schema";
 import { useId, useEffect, useRef, useState } from "react";
 import type {
   PublicationScene,
@@ -43,25 +44,15 @@ export function SceneCanvas({
       window.removeEventListener("resize", update);
     };
   }, [immersive]);
-  const viewWidth = immersive
-    ? Math.min(scene.width, scene.height * ratio)
-    : scene.width;
-  const viewHeight = immersive
-    ? Math.min(scene.height, scene.width / ratio)
-    : scene.height;
-  const viewX = Math.max(
-    0,
-    Math.min(
-      scene.width - viewWidth,
-      scene.width * (scene.focalX ?? 0.7) - viewWidth / 2,
-    ),
-  );
+  const view = immersive
+    ? sceneViewport(scene, ratio)
+    : { x: 0, y: 0, width: scene.width, height: scene.height };
 
   return (
     <svg
       ref={root}
       className={className ?? "story-illustration__canvas"}
-      viewBox={`${viewX} ${(scene.height - viewHeight) / 2} ${viewWidth} ${viewHeight}`}
+      viewBox={`${view.x} ${view.y} ${view.width} ${view.height}`}
       role="img"
       aria-labelledby={`${uid}-title`}
       data-static-progress={scene.staticProgress}

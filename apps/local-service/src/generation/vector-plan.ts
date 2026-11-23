@@ -1,3 +1,4 @@
+import { inspectSceneQuality } from "./scene-quality.js";
 import { z } from "zod";
 import {
   composeVectorScene,
@@ -79,6 +80,17 @@ export function composePlan(
         ...(parsed.visualSequences ?? []).map((s) => s.scene),
         ...parsed.chapters.flatMap((c) => (c.scene ? [c.scene] : [])),
       ];
+      for (const scene of scenes) {
+        const issues = inspectSceneQuality(
+          scene,
+          parsed.visualSequences?.some((s) => s.scene === scene) ?? false,
+        );
+        const fatal = issues.find((i) => i.code === "invisible-motion");
+        if (fatal) throw new Error(fatal.message);
+        for (const issue of issues)
+          if (!parsed.warnings.includes(issue.message))
+            parsed.warnings = [...parsed.warnings.slice(0, 29), issue.message];
+      }
       const meaningful = scenes.some(
         (scene) =>
           scene.motionStrength > 0 &&

@@ -63,6 +63,16 @@ it("enhances existing prose with custom geometry without adding or changing chap
   expect(candidate.project.sources).toEqual(source.sources);
   expect(candidate.project.visualSequences).toHaveLength(1);
   expect(source.visualSequences).toBeUndefined();
+  const invisible = structuredClone(output);
+  invisible.visualSequences[0]!.scene.layers[0]!.keyframes.forEach(
+    (frame, index) => {
+      frame.x = -2 - index * 0.5;
+      frame.y = -2;
+    },
+  );
+  expect(() => composePlan(invisible, brief, true)).toThrow(
+    /moving illustration.*outside/i,
+  );
   const broken = structuredClone(plan);
   broken.visualSequences![0]!.steps[0]!.chapterId = "missing";
   expect(() =>

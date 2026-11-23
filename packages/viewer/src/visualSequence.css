@@ -21,7 +21,10 @@
   margin-top: calc(-1 * var(--visual-viewport, 100dvh));
 }
 .story-visual__step {
-  min-height: calc(1.1 * var(--visual-viewport, 100dvh));
+  min-height: var(
+    --visual-step-height,
+    calc(1.1 * var(--visual-viewport, 100dvh))
+  );
   padding: 12dvh clamp(1rem, 5vw, 5rem);
   display: flex;
   align-items: center;

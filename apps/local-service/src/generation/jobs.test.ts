@@ -7,6 +7,7 @@ import {
   defaultReaderPalette,
   type GenerationProvider,
 } from "@earth-stories/story-schema";
+import * as referencePreparation from "./reference-inputs.js";
 import { GenerationJobs } from "./jobs.js";
 const brief = {
   title: "River",
@@ -357,6 +358,44 @@ it("migrates legacy inline references once at restart without losing retry conte
     expect(plan.mock.calls[0]![1][0].text).toBe("A supplied reference.");
     expect((await restarted.get(created.id)).stage).toBe("ready");
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("keeps reference inspection limits visible through preview and acceptance", async () => {
+  const root = await mkdtemp(join(tmpdir(), "earth-reference-notes-"));
+  const prepare = vi
+    .spyOn(referencePreparation, "prepareReferences")
+    .mockResolvedValue([
+      {
+        id: "reference-1",
+        name: "Page",
+        classification: "visual-style",
+        text: "Coast",
+        warnings: ["Appearance unavailable"],
+      },
+    ]);
+  try {
+    const jobs = new GenerationJobs(new ProjectStore(root), provider);
+    await jobs.initialize();
+    const job = await jobs.start({
+      ...brief,
+      references: [
+        {
+          kind: "url",
+          name: "Page",
+          classification: "visual-style",
+          url: "https://example.org/",
+        },
+      ],
+    });
+    await jobs.whenIdle();
+    const ready = await jobs.get(job.id);
+    expect(ready.candidate?.warnings).toContain("Page: Appearance unavailable");
+    const receipt = await jobs.accept(job.id);
+    expect(receipt.candidateDigest).toBe(ready.candidate?.digest);
+  } finally {
+    prepare.mockRestore();
     await rm(root, { recursive: true, force: true });
   }
 });

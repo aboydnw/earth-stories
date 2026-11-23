@@ -1,3 +1,5 @@
+import { readReferenceBody } from "./webpage-capture.js";
+import { prepareWebpageReference, decodeWebpage } from "./webpage-reference.js";
 import { dirname, join, sep } from "node:path";
 import { createRequire } from "node:module";
 import { authorizedFetch } from "@earth-stories/publisher";
@@ -121,7 +123,14 @@ export async function prepareReferences(
     totalBytes = 0;
   for (const [index, input] of inputs.entries()) {
     signal.throwIfAborted();
-    let content: { text?: string; image?: string };
+    let content: {
+      text?: string;
+      image?: string;
+      sourceUrl?: string;
+      requestedUrl?: string;
+      notes?: string;
+      warnings?: string[];
+    };
     if (input.kind === "text") content = { text: input.text };
     else if (input.kind === "upload") {
       if (!/^[A-Za-z0-9+/]*={0,2}$/.test(input.data))
@@ -139,7 +148,7 @@ export async function prepareReferences(
             signal: timeout,
             headers: {
               accept:
-                "text/plain,text/markdown,application/pdf,image/png,image/jpeg,image/webp",
+                "text/html,text/plain,text/markdown,application/pdf,image/png,image/jpeg,image/webp",
             },
           },
           { httpsOnly: true, maxRedirects: 3 },
@@ -149,32 +158,31 @@ export async function prepareReferences(
         await response.body?.cancel();
         throw new Error(`Reference download returned ${response.status}.`);
       }
-      if (Number(response.headers.get("content-length")) > MAX) {
-        await response.body?.cancel();
-        throw new Error("Reference is larger than 20 MiB.");
-      }
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("Reference has no content.");
-      try {
-        while (true) {
-          const result = await reader.read();
-          if (result.done) break;
-          size += result.value.length;
-          if (size > MAX) throw new Error("Reference is larger than 20 MiB.");
-          chunks.push(result.value);
-        }
-      } finally {
-        await reader.cancel();
-      }
-      totalBytes += size;
-      content = await extract(
-        Buffer.concat(chunks),
-        response.headers.get("content-type")?.split(";")[0]?.trim() ?? "",
-      );
+      const bytes = await readReferenceBody(response, MAX, timeout);
+      totalBytes += bytes.length;
+      const type =
+        response.headers
+          .get("content-type")
+          ?.split(";")[0]
+          ?.trim()
+          .toLowerCase() ?? "";
+      const sourceUrl = response.url || input.url;
+      content =
+        type === "text/html"
+          ? await prepareWebpageReference(
+              sourceUrl,
+              decodeWebpage(bytes, response.headers.get("content-type") ?? ""),
+              signal,
+            )
+          : await extract(bytes, type);
+      content = {
+        ...content,
+        sourceUrl,
+        requestedUrl: input.url,
+        ...(input.notes ? { notes: input.notes } : {}),
+      };
     }
-    characters += content.text?.length ?? 0;
+    characters += (content.text?.length ?? 0) + (content.notes?.length ?? 0);
     if (characters > 200000 || totalBytes > 100 * 1024 * 1024)
       throw new Error("References exceed the combined text or file limit.");
     output.push({

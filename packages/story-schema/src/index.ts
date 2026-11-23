@@ -13,3 +13,4 @@ export * from "./vectorScenes.js";
 export * from "./chatgpt.js";
 
 export * from "./visualSequences.js";
+export * from "./sceneViewport.js";

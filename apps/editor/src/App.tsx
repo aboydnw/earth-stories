@@ -1,3 +1,4 @@
+import { EditorBrand } from "./EditorBrand";
 import { VisualSequenceInspector } from "./VisualSequenceInspector";
 import { reconcileVisualSequences } from "./reconcileVisualSequences";
 import { StoryCreationScreen } from "./StoryCreationScreen";
@@ -1669,6 +1670,7 @@ export function App() {
   if (route.page === "enhance")
     return (
       <StoryCreationScreen
+        onWorkspace={() => navigate({ page: "stories" })}
         sourceProjectId={route.storyId}
         jobId={route.jobId}
         preview={route.preview}
@@ -1685,6 +1687,7 @@ export function App() {
   if (route.page === "create")
     return (
       <StoryCreationScreen
+        onWorkspace={() => navigate({ page: "stories" })}
         jobId={route.jobId}
         preview={route.preview}
         onNavigate={(jobId, preview = false) =>
@@ -1846,16 +1849,7 @@ export function App() {
         Skip to story editor
       </a>
       <header className="editor-topbar">
-        <button
-          className="editor-brand"
-          type="button"
-          onClick={leaveProject}
-          aria-label="Return to your workspace"
-        >
-          <MapTrifold size={22} weight="duotone" />
-          <span>Earth Stories</span>
-          <small>local</small>
-        </button>
+        <EditorBrand onClick={leaveProject} />
         <div className="editor-status">
           <SaveStatus
             state={

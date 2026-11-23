@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import ReactMarkdown from "react-markdown";
 import type {
   PublicationChapter,
@@ -61,13 +61,16 @@ export function VisualSequence({
       steps.forEach((node, i) => {
         const rect = node.getBoundingClientRect(),
           step = sequence.steps[i]!;
-        if (anchor >= rect.top)
+        const start = rect.top + (i === 0 ? height * 0.5 : 0);
+        const end =
+          rect.top + rect.height - (i === steps.length - 1 ? height * 0.5 : 0);
+        if (anchor >= start)
           value =
             step.start +
             (step.end - step.start) *
               Math.max(
                 0,
-                Math.min(1, (anchor - rect.top) / Math.max(1, rect.height)),
+                Math.min(1, (anchor - start) / Math.max(1, end - start)),
               );
       });
       setProgress(value);
@@ -166,13 +169,18 @@ export function VisualSequence({
             />
           </div>
           <div className="story-visual__steps">
-            {steps.map((step) => (
+            {steps.map((step, index) => (
               <section
                 key={step.chapterId}
                 id={step.chapterId}
                 data-chapter-id={step.chapterId}
                 data-visual-step
                 className="story-visual__step"
+                style={
+                  {
+                    "--visual-step-height": `calc(var(--visual-viewport, 100dvh) * ${sequence.scene.scrollLength * (step.end - step.start) + (index === 0 ? 0.5 : 0) + (index === steps.length - 1 ? 0.5 : 0)})`,
+                  } as CSSProperties
+                }
               >
                 {narrative(step.chapterId)}
               </section>

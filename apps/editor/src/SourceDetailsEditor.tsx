@@ -1,5 +1,9 @@
-import type { ProjectSource } from "@earth-stories/story-schema";
 import {
+  createDefaultSourceProvenance,
+  type ProjectSource,
+} from "@earth-stories/story-schema";
+import {
+  ActionButton,
   CollapsibleSection,
   FormField,
   InspectorSection,
@@ -7,8 +11,16 @@ import {
   StatusNotice,
   TextInput,
 } from "@earth-stories/ui";
-import { SourcePresentationFields } from "./SourcePresentationFields";
+import {
+  DEFAULT_PRESENTATION,
+  SourcePresentationFields,
+} from "./SourcePresentationFields";
 import { SourceProvenanceFields } from "./SourceProvenanceFields";
+
+const LEGACY_REGIONS_URL =
+  "https://pub-a8e1027739334149a1dadd24c89b6969.r2.dev/context/admin1.pmtiles";
+const GEOHUB_REGIONS_URL =
+  "https://undpngddlsgeohubdev01.blob.core.windows.net/admin/cgaz/ADM1.pmtiles";
 
 export function SourceDetailsEditor({
   source,
@@ -21,6 +33,13 @@ export function SourceDetailsEditor({
   onChange: (next: ProjectSource) => void;
   onClose: () => void;
 }) {
+  const legacyRegions =
+    source.kind === "pmtiles" &&
+    source.delivery === "connected" &&
+    source.tileType === "vector" &&
+    source.locator === LEGACY_REGIONS_URL
+      ? source
+      : null;
   return (
     <section
       className="source-details-editor"
@@ -53,6 +72,45 @@ export function SourceDetailsEditor({
           <span> This source is not currently used by a chapter.</span>
         )}
       </StatusNotice>
+      {legacyRegions ? (
+        <div>
+          <StatusNotice tone="warning">
+            The old regions archive returned “not found.” You can switch to the
+            UNDP GeoHub release of geoBoundaries CGAZ, which may have newer
+            boundaries. This updates the link, tile layer and provenance in
+            every chapter that uses this source. Review and save when ready.
+          </StatusNotice>
+          <ActionButton
+            type="button"
+            variant="surface"
+            onClick={() =>
+              onChange({
+                ...legacyRegions,
+                locator: GEOHUB_REGIONS_URL,
+                attribution:
+                  "geoBoundaries CGAZ, CC BY 4.0; hosted by UNDP GeoHub",
+                sizeBytes: null,
+                provenance: {
+                  ...createDefaultSourceProvenance(),
+                  publisher: "UNDP GeoHub",
+                  sourceUrl:
+                    "https://dev.undpgeohub.org/data/bff5f75bf76fa5e75296c9c79cdf0755",
+                  licenseName: "CC BY 4.0",
+                  licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+                  staleAfterDays: legacyRegions.provenance.staleAfterDays,
+                },
+                presentation: {
+                  ...DEFAULT_PRESENTATION,
+                  ...legacyRegions.presentation,
+                  sourceLayer: "admin",
+                },
+              })
+            }
+          >
+            Switch to UNDP GeoHub
+          </ActionButton>
+        </div>
+      ) : null}
       <InspectorSection title="Source identity">
         <div className="chapter-editor-fields">
           <FormField label="Source label">
