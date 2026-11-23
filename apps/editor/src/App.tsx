@@ -1,3 +1,7 @@
+import {
+  validateVisualAccents,
+  type VisualSequence,
+} from "@earth-stories/story-schema";
 import { VisualAccentInspector } from "./VisualAccentInspector";
 import { reconcileVisualAccents } from "@earth-stories/story-schema";
 import { EditorBrand } from "./EditorBrand";
@@ -380,13 +384,37 @@ export function App() {
           visualAccents: reconcileVisualAccents(
             next.chapters,
             next.visualAccents,
-            next.visualSequences,
           ),
         };
       return next;
     });
     setSaveState("changed");
     setError(null);
+  }
+
+  function changeVisualSequence(next: VisualSequence) {
+    const current = projectRef.current;
+    if (!current) return;
+    const sequences = current.visualSequences?.map((s) =>
+      s.id === next.id ? next : s,
+    );
+    const conflicts = validateVisualAccents(
+      current.chapters,
+      current.visualAccents,
+      sequences,
+    );
+    if (conflicts.length) {
+      setError(
+        `${conflicts.join(". ")}. Remove the companion artwork explicitly before extending a scene over it.`,
+      );
+      return;
+    }
+    changeProject((project) => ({
+      ...project,
+      visualSequences: project.visualSequences?.map((s) =>
+        s.id === next.id ? next : s,
+      ),
+    }));
   }
 
   const localReadiness = useMemo(
@@ -2571,14 +2599,7 @@ export function App() {
                     key={sequence.id}
                     sequence={sequence}
                     chapters={project.chapters}
-                    onChange={(next) =>
-                      changeProject((current) => ({
-                        ...current,
-                        visualSequences: current.visualSequences?.map((s) =>
-                          s.id === next.id ? next : s,
-                        ),
-                      }))
-                    }
+                    onChange={changeVisualSequence}
                     onRemove={() =>
                       changeProject((current) => ({
                         ...current,

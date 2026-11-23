@@ -4,11 +4,12 @@ export function inspectVisualTreatment(
   plan: StoryPlan,
   source: StoryProject,
 ): string[] {
+  const creditTitle =
+    /^(?:credits|acknowledg(?:e)?ments|methodology|references|sources(?: and credits)?|how (?:this|the) story was (?:built|made))$/i;
+  const creditId =
+    /^(?:credits|acknowledg(?:e)?ments|methodology|references|sources)$/i;
   const narrative = source.chapters.filter(
-    (c) =>
-      !/(?:credits|acknowledg|methodology|references|how .*built)/i.test(
-        `${c.id} ${c.title}`,
-      ),
+    (c) => !creditTitle.test(c.title.trim()) && !creditId.test(c.id),
   );
   if (narrative.length < 3)
     return [

@@ -128,6 +128,7 @@ function fixture(sequence: VisualSequence, title: string) {
     basemap: { ...manifest.basemap, styleUrl: style },
     assets: manifest.assets.map((a) => ({
       ...a,
+      presentation: { ...a.presentation, legendVisible: false },
       href:
         a.id === "observations"
           ? mapData

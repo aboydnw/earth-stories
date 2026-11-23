@@ -124,3 +124,25 @@ it("rejects duplicate targets, image payloads, and the combined visual budget", 
       true,
     );
 });
+
+it("preserves artwork when a conflicting sequence is proposed so validation can reject it", async () => {
+  const { reconcileVisualAccents, visualAccentSchema, visualSequenceSchema } =
+    await import("./index.js");
+  const parsed = visualAccentSchema.parse(accent);
+  const sequence = visualSequenceSchema.parse({
+    id: "conflict",
+    alt: "New scene",
+    caption: "",
+    scene: accent.scene,
+    steps: [{ chapterId: accent.chapterId, start: 0, end: 1 }],
+  });
+  const kept = reconcileVisualAccents(project.chapters, [parsed]);
+  expect(kept).toEqual([parsed]);
+  expect(
+    storyProjectSchema.safeParse({
+      ...project,
+      visualAccents: kept,
+      visualSequences: [sequence],
+    }).success,
+  ).toBe(false);
+});

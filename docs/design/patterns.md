@@ -221,7 +221,9 @@ Margin placement becomes an inline strip on narrow screens; grouped map steps
 retain their shared map. Motion follows the reader's scroll container, with a
 readable authored still for focused previews, reduced motion, print, and archival
 export. Placement, alternative text, motion strength, static frame, and removal
-are ordinary chapter-inspector controls. Chapter deletion reconciles references.
+are ordinary chapter-inspector controls. Chapter deletion reconciles references. Sequence edits that conflict with companion
+art are blocked with an explanation rather than deleting artwork. Focused map
+previews place accented copy in document space above the map, preserving controls.
 
 The project/publication contract limits companion artwork to 12 accents and one
 per chapter; it cannot overlap an immersive sequence. Vector scene limits and a

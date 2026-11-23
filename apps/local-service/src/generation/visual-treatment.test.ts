@@ -82,3 +82,25 @@ it("keeps a continuous map group intact", () => {
     ).join(" "),
   ).toMatch(/map group/);
 });
+
+it("counts narrative titles and IDs that merely mention references or how landscapes were built", () => {
+  const narrative = {
+    chapters: [
+      { id: "intro", type: "prose", title: "How the river built its delta" },
+      {
+        id: "references-to-1927-flood",
+        type: "prose",
+        title: "Evidence of the flood",
+      },
+      { id: "end", type: "prose", title: "Changing coast" },
+    ],
+  } as StoryProject;
+  const distributed = {
+    ...plan,
+    chapters: [
+      { ...plan.chapters[0]!, afterChapterId: "references-to-1927-flood" },
+    ],
+    visualAccents: [{ ...plan.visualAccents![0]!, chapterId: "end" }],
+  };
+  expect(inspectVisualTreatment(distributed, narrative)).toEqual([]);
+});

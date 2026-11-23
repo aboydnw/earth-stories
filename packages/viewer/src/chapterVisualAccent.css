@@ -32,3 +32,26 @@
     break-inside: avoid;
   }
 }
+
+/* Focused map previews normally overlay their text. An accented chapter needs
+   document space for both copy and art, leaving the interactive map unobstructed. */
+.story-chapter--focused.story-chapter--has-accent:is(
+    .story-chapter--map,
+    .story-chapter--scrolly
+  ) {
+  grid-template-rows: auto auto auto;
+  align-content: start;
+}
+.story-chapter--focused.story-chapter--has-accent:is(
+    .story-chapter--map,
+    .story-chapter--scrolly
+  )
+  .story-copy {
+  position: static;
+  width: auto;
+  margin: 0;
+  box-shadow: none;
+}
+.story-chapter--focused.story-chapter--has-accent .story-map {
+  height: clamp(360px, 60dvh, 600px);
+}

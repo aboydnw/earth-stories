@@ -116,3 +116,34 @@ it("groups discard with candidate review and blocks it during acceptance", () =>
       .hasAttribute("disabled"),
   ).toBe(true);
 });
+
+it("removes only the generation record after acceptance and labels a single accent", () => {
+  render(
+    <EarthStoriesProvider>
+      <GenerationResult
+        job={{
+          ...reviewJob,
+          stage: "accepted",
+          plan: {
+            ...reviewJob.plan!,
+            visualAccents: [
+              { id: "a", chapterId: "intro", alt: "Clouds" } as never,
+            ],
+          },
+        }}
+        accepting={false}
+        onAccept={() => {}}
+        onEditInstructions={() => {}}
+        onDiscard={() => {}}
+      />
+    </EarthStoriesProvider>,
+  );
+  expect(
+    screen.getByRole("button", { name: "Remove generation record" }),
+  ).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Discard changes" })).toBeNull();
+  expect(screen.getByText(/Applied changes stay in your story/)).toBeTruthy();
+  expect(screen.getByText(/1 companion artwork ·/).textContent).not.toContain(
+    "artworks",
+  );
+});

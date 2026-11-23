@@ -64,13 +64,19 @@ export function GenerationResult({
             disabled={accepting || discarding}
             onClick={onDiscard}
           >
-            {job.enhancement ? "Discard changes" : "Discard result"}
+            {job.stage === "accepted"
+              ? "Remove generation record"
+              : job.enhancement
+                ? "Discard changes"
+                : "Discard result"}
           </ActionButton>
         ) : null}
       </div>
       {onDiscard ? (
         <p className="generation-discard-note">
-          Discards this generated version; your story stays unchanged.
+          {job.stage === "accepted"
+            ? "Removes this saved generation record. Applied changes stay in your story."
+            : "Discards this generated version; your story stays unchanged."}
         </p>
       ) : null}
       <div>
@@ -81,7 +87,7 @@ export function GenerationResult({
           {additions.length} new{" "}
           {additions.length === 1 ? "chapter" : "chapters"}
           {job.plan?.visualAccents?.length
-            ? ` · ${job.plan.visualAccents.length} companion artworks`
+            ? ` · ${job.plan.visualAccents.length} companion ${job.plan.visualAccents.length === 1 ? "artwork" : "artworks"}`
             : ""}
           {job.enhancement
             ? ` · ${edits.length ? `${edits.length} supporting text ${edits.length === 1 ? "change" : "changes"}` : "Original text unchanged"}`

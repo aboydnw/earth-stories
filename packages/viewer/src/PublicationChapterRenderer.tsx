@@ -138,7 +138,7 @@ export function PublicationChapterRenderer({
 
   return (
     <section
-      className={`story-chapter story-chapter--${chapter.type}${focused ? " story-chapter--focused" : ""}`}
+      className={`story-chapter story-chapter--${chapter.type}${focused ? " story-chapter--focused" : ""}${visualAccent ? " story-chapter--has-accent" : ""}`}
       id={chapter.id}
       data-chapter-id={chapter.id}
     >

@@ -198,7 +198,7 @@ Excluded: reader typography redesign, replacing map data with generated graphics
 The tasks above were executed together. A checked verification task means the
 check was performed; it does not conceal the limitations below.
 
-- 1,495 tests passed across 187 test files. The isolated production service bundle
+- 1,498 tests passed across 187 test files. The isolated production service bundle
   check also passed (1 test). Focused-preview filtering and archival stills gained
   regressions after validation exposed those missing paths.
 - Typecheck, UI token checks, independence checks, editor/viewer builds, publication
@@ -234,3 +234,19 @@ check was performed; it does not conceal the limitations below.
   restored after each live check.
 
 Review and any remaining browser-interaction findings are recorded in the PR.
+
+### Review fixes and interaction proof
+
+The first Claude review completed successfully. Its four findings were addressed:
+accepted results now say Remove generation record and explain that applied changes
+remain; the credits classifier uses anchored labels; singular artwork counts are
+correct; and reconciliation removes only deleted-chapter accents. Sequence edits
+that would overlap companion art are blocked with a visible explanation, and
+schema validation still rejects conflicts without deleting artwork.
+
+A browser check exposed focused map previews inheriting the usual overlaid-copy
+layout. Accented focused maps now reserve separate space for copy and artwork.
+Real browser zoom/drag passed, two scrolly steps retained one map, companion
+transforms changed with scroll, and reduced motion held the authored still frame.
+The interactive fixture disables its optional legend to avoid the existing legend
+covering the map's zoom controls; production legend behavior was not changed.

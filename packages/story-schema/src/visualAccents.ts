@@ -46,17 +46,10 @@ export function validateVisualAccents(
     );
   return errors;
 }
-/** Chapter removal or sequence edits must not strand companion art. */
+/** Only chapter deletion removes companion art; overlaps remain validation errors. */
 export function reconcileVisualAccents(
   chapters: { id: string }[],
   accents: VisualAccent[],
-  sequences: VisualSequence[] = [],
 ): VisualAccent[] {
-  const covered = new Set(
-    sequences.flatMap((s) => s.steps.map((s) => s.chapterId)),
-  );
-  return accents.filter(
-    (a) =>
-      chapters.some((c) => c.id === a.chapterId) && !covered.has(a.chapterId),
-  );
+  return accents.filter((a) => chapters.some((c) => c.id === a.chapterId));
 }
