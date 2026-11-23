@@ -103,6 +103,90 @@ it("uses a listed model and streamed subscription inference to compose editable 
     fetcher.mock.calls.every(([url]) => !String(url).includes("/images")),
   ).toBe(true);
 });
+
+it.each([
+  {
+    scenario: "finishes after the old four-minute cutoff",
+    delay: 5,
+    abort: false,
+    error: null,
+  },
+  {
+    scenario: "stops an unfinished stream after fifteen minutes",
+    delay: 16,
+    abort: false,
+    error: "TimeoutError",
+  },
+  {
+    scenario: "lets the author cancel before the deadline",
+    delay: 5,
+    abort: true,
+    error: "AbortError",
+  },
+])("$scenario", async ({ delay, abort, error }) => {
+  vi.useFakeTimers();
+  // Node's native AbortSignal timeout does not use Vitest's fake clock.
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(
+      () => controller.abort(new DOMException("Timed out", "TimeoutError")),
+      ms,
+    );
+    return controller.signal;
+  });
+  try {
+    const { fetcher } = setup();
+    const cancel = vi.fn();
+    const provider = new ChatGPTProvider(connection as never, {
+      fetcher: async (input, init) => {
+        if (String(input).endsWith("/models")) return fetcher(input, init);
+        let timer: ReturnType<typeof setTimeout>;
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              timer = setTimeout(() => {
+                controller.enqueue(new TextEncoder().encode(completed()));
+                controller.close();
+              }, delay * 60_000);
+            },
+            cancel() {
+              clearTimeout(timer);
+              cancel();
+            },
+          }),
+        );
+      },
+    });
+    const controller = new AbortController();
+    let settled = false;
+    const result = provider.plan(brief, [], controller.signal).then(
+      (value) => {
+        settled = true;
+        return { value };
+      },
+      (error: unknown) => {
+        settled = true;
+        return { error };
+      },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    if (abort) controller.abort();
+    else {
+      await vi.advanceTimersByTimeAsync((error ? 15 : delay) * 60_000 - 1);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+    }
+    expect(await result).toMatchObject(
+      error
+        ? { error: { name: error } }
+        : { value: { usage: { output_tokens: 42 } } },
+    );
+    if (error) expect(cancel).toHaveBeenCalledOnce();
+  } finally {
+    timeout.mockRestore();
+    vi.useRealTimers();
+  }
+});
 it.each([
   "",
   event("response.output_text.delta", { delta: JSON.stringify(blueprint) }),
