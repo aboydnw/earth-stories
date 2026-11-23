@@ -31,6 +31,9 @@ export function ScrollytellingBlock({
   runtimePolicy: PublicationRuntimePolicy;
   snapshotMode?: boolean;
 }) {
+  const hasAccents = chapters.some((chapter) =>
+    visualAccents.some((accent) => accent.chapterId === chapter.id),
+  );
   const [activeIndex, setActiveIndex] = useState(0);
   const [committedIndex, setCommittedIndex] = useState(0);
   const requestedIndex = useRef(0);
@@ -79,7 +82,10 @@ export function ScrollytellingBlock({
   }, [chapters]);
 
   return (
-    <section className="story-scrolly" aria-label="Guided map story">
+    <section
+      className={`story-scrolly${hasAccents ? " story-scrolly--with-accents" : ""}`}
+      aria-label="Guided map story"
+    >
       <div className="story-scrolly__map">
         <Suspense
           fallback={
@@ -156,7 +162,11 @@ export function ScrollytellingBlock({
             data-scrolly-step={index}
             key={chapter.id}
           >
-            <div className="story-scrolly__card">
+            <div
+              className={
+                hasAccents ? "story-scrolly__panel" : "story-scrolly__card"
+              }
+            >
               <p className="story-folio">
                 {String(startIndex + index + 1).padStart(2, "0")}
               </p>

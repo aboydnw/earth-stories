@@ -198,8 +198,9 @@ Excluded: reader typography redesign, replacing map data with generated graphics
 The tasks above were executed together. A checked verification task means the
 check was performed; it does not conceal the limitations below.
 
-- 1,498 tests passed across 187 test files. The isolated production service bundle
-  check also passed (1 test). Focused-preview filtering and archival stills gained
+- 1,499 tests passed across 188 test files. The isolated production service bundle
+  check also passed (1 test). Three unrelated UI tests timed out during a concurrent
+  build; the complete suite passed when rerun alone. Focused-preview filtering and archival stills gained
   regressions after validation exposed those missing paths.
 - Typecheck, UI token checks, independence checks, editor/viewer builds, publication
   fixture build, Storybook build, and 126 no-Git publishing tests passed.
@@ -250,3 +251,10 @@ Real browser zoom/drag passed, two scrolly steps retained one map, companion
 transforms changed with scroll, and reduced motion held the authored still frame.
 The interactive fixture disables its optional legend to avoid the existing legend
 covering the map's zoom controls; production legend behavior was not changed.
+
+A follow-up review identified companion artwork inside desktop scrolly overlay
+cards. Accented groups now reserve a narrative column beside the shared map,
+stacking in narrow containers and print. A regression keeps artwork outside
+map overlay cards while preserving two steps and one map. Real browser geometry
+checks confirmed separate map/art bounds on desktop, on 390 px phones, in narrow
+embedded previews, and in print; scrolling and reduced-motion behavior remained intact.
