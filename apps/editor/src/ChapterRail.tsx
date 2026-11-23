@@ -80,7 +80,10 @@ export function ChapterRail({
         </div>
         {chapters.map((chapter, index) => {
           const active = chapter.id === activeChapterId && mode === "chapter";
-          const status = readiness[chapter.id];
+          const status =
+            readiness[chapter.id]?.tone === "error"
+              ? readiness[chapter.id]
+              : undefined;
           const StatusIcon =
             status?.tone === "ready" ? CheckCircle : WarningCircle;
           const readinessText = status

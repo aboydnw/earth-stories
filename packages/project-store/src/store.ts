@@ -23,6 +23,7 @@ import {
   parseStoryProject,
   storyProjectSchema,
   type StoryProject,
+  type ProjectSource,
 } from "@earth-stories/story-schema";
 
 const STORY_FILENAME = "story.json";
@@ -288,6 +289,22 @@ export class ProjectStore {
         metadata: {
           ...project.metadata,
           created: current.metadata.created,
+          updated: nextUpdated(current.metadata.updated),
+        },
+      });
+    });
+  }
+
+  async addSource(id: string, source: ProjectSource): Promise<StoryProject> {
+    return this.writeAtomicWithCheck(id, true, async () => {
+      const current = await this.read(id);
+      if (current.sources.some((item) => item.id === source.id))
+        return { unchanged: current };
+      return storyProjectSchema.parse({
+        ...current,
+        sources: [...current.sources, source],
+        metadata: {
+          ...current.metadata,
           updated: nextUpdated(current.metadata.updated),
         },
       });

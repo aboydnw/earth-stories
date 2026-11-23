@@ -8,7 +8,7 @@ import {
   type StoryProject,
 } from "@earth-stories/story-schema";
 
-import { containedRealPath } from "./paths.js";
+import { resolveProjectAsset } from "@earth-stories/project-store";
 
 export interface ArchivalOptions {
   project: StoryProject;
@@ -130,7 +130,7 @@ async function projectAsset(
   projectDirectory: string,
   locator: string,
 ): Promise<string> {
-  return containedRealPath(
+  return resolveProjectAsset(
     projectDirectory,
     locator,
     "Archival asset escapes the project directory",

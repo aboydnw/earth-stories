@@ -726,3 +726,164 @@ it("guards enhancement requests and rejects stale source versions through the HT
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+it("adds shared data without a story, attaches without a client save, and serves byte ranges", async () => {
+  const { config, store, jobs } = await setup();
+  const { createLocalServer } = await import("./server.js");
+  const server = createLocalServer(store, config, jobs);
+  const port = await listen(server);
+  const origin = `http://127.0.0.1:${port}`;
+  try {
+    const response = await fetch(
+      `${origin}/api/data-library?filename=places.geojson`,
+      {
+        method: "POST",
+        headers: { origin },
+        body: '{"type":"FeatureCollection","features":[]}',
+      },
+    );
+    expect(response.status).toBe(201);
+    const source = (await response.json()) as { id: string; path: string };
+    expect(await (await fetch(`${origin}/api/data-library`)).json()).toEqual({
+      sources: [source],
+      invalidEntries: [],
+    });
+    const story = await store.create({ title: "Shared map" });
+    const attach = await fetch(
+      `${origin}/api/data-library/${source.id}/stories/${story.id}`,
+      { method: "POST", headers: { origin } },
+    );
+    expect(attach.status).toBe(200);
+    const asset = await fetch(
+      `${origin}/api/projects/${story.id}/assets/${source.path}`,
+      { headers: { range: "bytes=0-6" } },
+    );
+    expect(asset.status).toBe(206);
+    expect(await asset.text()).toBe('{"type"');
+    const direct = await fetch(
+      `${origin}/api/data-library/${source.id}/content`,
+    );
+    expect(direct.status).toBe(200);
+    expect(await direct.json()).toMatchObject({ type: "FeatureCollection" });
+    const again = await fetch(
+      `${origin}/api/data-library/${source.id}/stories/${story.id}`,
+      { method: "POST", headers: { origin } },
+    );
+    expect(again.status).toBe(200);
+    expect((await store.read(story.id)).sources).toHaveLength(1);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it("refuses invalid library attachment targets and cross-origin writes without changing the story", async () => {
+  const { config, store, jobs } = await setup();
+  const { createLocalServer } = await import("./server.js");
+  const server = createLocalServer(store, config, jobs);
+  const origin = `http://127.0.0.1:${await listen(server)}`;
+  try {
+    const story = await store.create({ title: "Untouched" });
+    const upload = await fetch(
+      `${origin}/api/data-library?filename=test.json`,
+      { method: "POST", headers: { origin }, body: "{}" },
+    );
+    const source = (await upload.json()) as { id: string };
+    for (const [dataset, target] of [
+      ["invalid", story.id],
+      ["12345678-1234-1234-1234-123456789012", story.id],
+      [source.id, "missing-story"],
+      [source.id, "%2E%2E%2Foutside"],
+    ]) {
+      const result = await fetch(
+        `${origin}/api/data-library/${dataset}/stories/${target}`,
+        { method: "POST", headers: { origin } },
+      );
+      expect([400, 404]).toContain(result.status);
+      expect(await store.read(story.id)).toEqual(story);
+    }
+    const rejected = await fetch(
+      `${origin}/api/data-library?filename=blocked.json`,
+      {
+        method: "POST",
+        headers: { origin: "https://attacker.example" },
+        body: "{}",
+      },
+    );
+    expect(rejected.status).toBe(403);
+    const entries = await (await fetch(`${origin}/api/data-library`)).json();
+    expect(entries.sources).toHaveLength(1);
+    const base = {
+      id: "test",
+      label: "Remote",
+      kind: "cog",
+      locator: "https://example.com/data.tif",
+      delivery: "connected",
+    };
+    for (const changes of [
+      { locator: "https://user:password@example.com/data.tif" },
+      { locator: "ftp://example.com/data.tif" },
+      { delivery: "included" },
+      { kind: "local-geojson", path: "assets/data.geojson" },
+    ]) {
+      const result = await fetch(`${origin}/api/data-library`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify({ ...base, ...changes }),
+      });
+      expect(result.status).toBe(400);
+      expect((await result.json()).error).toContain("Use a public HTTP(S)");
+    }
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it.each(["entry", "file"])(
+  "refuses a shared %s symlink escaping the workspace through both content routes",
+  async (kind) => {
+    const { config, store, jobs } = await setup();
+    const { createLocalServer } = await import("./server.js");
+    const server = createLocalServer(store, config, jobs);
+    const origin = `http://127.0.0.1:${await listen(server)}`;
+    try {
+      const story = await store.create({ title: "Contained" });
+      const upload = await fetch(
+        `${origin}/api/data-library?filename=test.json`,
+        { method: "POST", headers: { origin }, body: "{}" },
+      );
+      const source = (await upload.json()) as { id: string; path: string };
+      const entry = join(store.root, ".data-library", source.id);
+      const outside = await mkdtemp(join(tmpdir(), "library-outside-"));
+      temporaryDirectories.push(outside);
+      const secret = join(outside, "data.json");
+      await writeFile(secret, "private-outside-content");
+      if (kind === "entry") {
+        await writeFile(
+          join(outside, "source.json"),
+          await readFile(join(entry, "source.json")),
+        );
+        await rm(entry, { recursive: true });
+        await symlink(outside, entry);
+      } else {
+        await rm(join(entry, "data.json"));
+        await symlink(secret, join(entry, "data.json"));
+      }
+      for (const path of [
+        `/api/data-library/${source.id}/content`,
+        `/api/projects/${story.id}/assets/${source.path}`,
+      ]) {
+        const result = await fetch(origin + path);
+        expect(result.status).toBe(400);
+        expect(await result.text()).not.toContain("private-outside-content");
+      }
+      const attach = await fetch(
+        `${origin}/api/data-library/${source.id}/stories/${story.id}`,
+        { method: "POST", headers: { origin } },
+      );
+      expect(attach.status).toBe(400);
+      expect(await store.read(story.id)).toEqual(story);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  },
+);

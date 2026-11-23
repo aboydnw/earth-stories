@@ -11,7 +11,9 @@ local trash behavior.
 
 Use `clean`, `dirty`, `saving`, `saved`, `validation-error`, and
 `service-error`. Saving is quiet and persistent; failure remains visible and
-must not imply work is stored. Publishing or leaving with unsaved work needs a
+must not imply work is stored. The editor header shows Save and Publish; Save is
+enabled only for changed content or a retryable save failure. Routine saved and
+readiness badges are omitted. Publishing or leaving with unsaved work needs a
 clear decision.
 
 ## Data preparation — Established
@@ -26,23 +28,26 @@ after recoverable failure, prevent duplicate jobs, and lead success to the map.
 Distinguish empty, immutable example, local source, connected source, missing
 source, partial project failure, and source usage. Connected means the source
 requires networking. Never display a fallback dataset as though it were the
-stored selection.
+stored selection. Workspace uploads and public connections do not require a
+story. Label storage as **Shared local file**, **Local file**, or **Web connection**.
+Dataset details offer **Add to story**; a shared local file remains in the workspace
+library and its editable-story dependency is disclosed beside that action.
 
 ## Editor chapters — Established
 
 Adding, duplicating, reordering, and deleting preserve the selected chapter and
-preview whenever possible. Each row derives one compact status from publisher
-readiness: missing or incompatible data, required type configuration, title,
-narrative, alternative text, then Ready. Disabled actions explain unavailable
+preview whenever possible. Rows and inspector headings show only blocking errors from publisher
+readiness; omit routine Ready and optional-review badges. Disabled actions explain unavailable
 prerequisites. Destructive removal names dependent data effects and remains
 recoverable where the product supports it.
 
-The center canvas has two explicit modes. **Edit chapter** mounts only the
-selected chapter through the viewer-owned renderer; **Preview story** mounts the
-complete reader publication. Moving an authoring map updates the project draft
+The center canvas mounts the selected chapter through the viewer-owned renderer.
+**Publish → Preview** opens the complete saved reader publication. Focused maps
+have a definite height with narrative below, so neither prose nor controls obscure
+the map in the narrow editor column. Moving an authoring map updates the project draft
 after a short pause and offers one-step Undo. `View updated` means the in-memory
 project draft changed; only the global Save action means it is persisted on this
-computer. Exact coordinates are an advanced path—ordinary map composition
+computer. **Starting view** coordinates are an advanced path—ordinary map composition
 happens directly on the map with Fit and Reset actions.
 
 Chapter-only content and behavior stay in the chapter inspector. Source label,
@@ -67,14 +72,11 @@ result is discoverable by keyboard and at enlarged text sizes. A failed folder
 reveal must not erase a successful build or its saved location. Building is
 explicitly local; hosting instructions and provider links never upload files on
 the author's behalf. The resulting folder/ZIP carries the same instructions.
-Keep workflow progress and non-blocking publication warnings in compact,
-on-demand top-bar controls so they do not displace the authoring canvas. Reserve
-persistent full-width guidance for failures that block saving, previewing, or
-publishing, and place chapter-specific warnings beside the affected field.
-Use **Ready** only for current server checks with no errors or warnings, **Needs
-review** for recommendations or checks not yet run, and **Blocked** for errors.
-Stale cached checks stay visible as historical context but never authorize a
-build.
+Keep the editor’s Publish menu focused on **Preview** and **Publish publicly**.
+Preflight still runs and authorizes builds; omit routine check summaries and
+optional-warning panels. Show actionable blocking errors and operation failures.
+Network requirements, publication profiles, and delivery guarantees remain
+visible where authors choose the output. Stale results never authorize a build.
 
 ## Authoring guidance — Provisional
 

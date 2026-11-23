@@ -19,7 +19,7 @@ import {
   NEUTRAL_BASEMAP_STYLE,
   type PublicationDependencyPlan,
 } from "./dependencies.js";
-import { containedRealPath } from "./paths.js";
+import { resolveProjectAsset } from "@earth-stories/project-store";
 import { authorizedFetch } from "./remote-fetch.js";
 
 const DEFAULT_MAX_REMOTE_BYTES = 2 * 1024 * 1024 * 1024;
@@ -480,7 +480,7 @@ export async function materializePublication({
         downloadedBytes += remote.downloadedBytes;
         cached = remote;
       } else {
-        const sourcePath = await containedRealPath(
+        const sourcePath = await resolveProjectAsset(
           projectDirectory,
           locator,
           `Asset ${dependency.owner.id} points outside the project workspace.`,

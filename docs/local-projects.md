@@ -60,6 +60,34 @@ The editor uses a private loopback API:
 This API is not a public integration contract. Tools should integrate through
 the versioned `story.json` schema or publication manifest instead.
 
+## Shared workspace data
+
+The workspace Data tab also owns a story-independent library under
+`<projects-directory>/.data-library/<dataset-id>/`. Local uploads are immutable
+files exposed after an atomic staging-directory rename; public connections are
+validated source records. Uploading does not create or mutate a story.
+
+**Add to story** adds a source under the ordinary project write lock and backup
+policy. Local sources use the reserved `workspace-data/<uuid>/data.<extension>`
+namespace in v3 path/locator strings. The service resolves only this explicit
+namespace into the managed library, enforcing canonical containment. All other
+local paths remain contained by the story directory. Two stories share the same
+file; removing a story does not remove the shared dataset. Dataset deletion and
+replacement are not exposed.
+
+Editable stories with these references depend on their workspace library. Copy
+or back up that library alongside the projects when moving the workspace. This
+is distinct from publication: preflight verifies the shared file, and building
+materializes it into ordinary included assets. Built publications remain
+independent of the workspace. Missing library files block the build without
+replacing the previous successful publication. Existing project-local assets
+and historical project versions retain their behavior.
+
+The loopback API adds `GET/POST /api/data-library`,
+`GET /api/data-library/:id/content` (including byte ranges), and
+`POST /api/data-library/:id/stories/:storyId`. The browser receives source records
+and content URLs, never host paths or filesystem credentials.
+
 ## Publication profiles
 
 The MVP exposes two practical delivery policies during authoring:
@@ -123,3 +151,10 @@ under the project write lock, checks inspected/local source file size and modifi
 time, and uses the ordinary atomic-save/backup mechanism. A repeat after a saved
 candidate but missing job receipt recognizes that same content and avoids duplicate
 chapters. No publication is produced or replaced by applying an enhancement.
+
+The library listing returns separate `sources` and `invalidEntries` arrays. A
+missing, malformed, or unsafe dataset record is identified by its dataset ID in
+the Data workspace while readable datasets remain usable. Upload failures clean
+up their staging directories; abrupt process termination can leave `.pending-*`
+files. Automatic reclamation is not enabled because it must distinguish abandoned
+uploads from active writers before deleting data.

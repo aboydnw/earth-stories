@@ -1,19 +1,14 @@
 import { useEffect, useRef } from "react";
 import { CaretDown, Export, Eye } from "@phosphor-icons/react";
 import type { AuthoringReadiness } from "@earth-stories/publisher/readiness";
-import { ActionButton, ReadinessSummary } from "@earth-stories/ui";
+import { ActionButton } from "@earth-stories/ui";
 import type { PublicationReadinessState } from "./usePublicationReadiness";
 
 export function PublishMenu({
   open,
   onOpenChange,
   localReadiness,
-  serverReadiness,
-  chapterCount,
-  sourceCount,
-  previewReviewed,
   disabled = false,
-  unsaved = false,
   onLoadReadiness,
   onPreview,
   onPublish,
@@ -70,50 +65,17 @@ export function PublishMenu({
     };
   }, [onLoadReadiness, onOpenChange, open]);
 
-  const useServer =
-    !unsaved && serverReadiness.status === "ready" && serverReadiness.result;
-  const findings = useServer
-    ? serverReadiness.result!.issues
-    : localReadiness.findings;
-  const errors = findings.filter(({ severity }) => severity === "error").length;
-  const warnings = findings.filter(
-    ({ severity }) => severity === "warning",
-  ).length;
-  const stale =
-    unsaved ||
-    serverReadiness.status === "stale" ||
-    (serverReadiness.status === "loading" && Boolean(serverReadiness.result));
-  const status = useServer
-    ? errors
-      ? "blocked"
-      : warnings
-        ? "review"
-        : "ready"
-    : errors
-      ? "blocked"
-      : "review";
-  const issueCount = errors + warnings;
-
   return (
     <div className="publish-menu" ref={rootRef}>
       <ActionButton
         className="button button--primary"
         disabled={disabled}
-        aria-label={
-          issueCount
-            ? `Publish, ${issueCount} issue${issueCount === 1 ? "" : "s"}`
-            : "Publish"
-        }
+        aria-label="Publish"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
       >
         <Export size={17} /> Publish
-        {issueCount ? (
-          <span className="publish-menu__badge" aria-hidden="true">
-            {issueCount > 99 ? "99+" : issueCount}
-          </span>
-        ) : null}
         <CaretDown size={14} />
       </ActionButton>
       {open ? (
@@ -122,29 +84,6 @@ export function PublishMenu({
           role="menu"
           aria-label="Preview and publish"
         >
-          <ReadinessSummary
-            status={status}
-            errors={errors}
-            warnings={warnings}
-            loading={
-              serverReadiness.status === "loading" && !serverReadiness.result
-            }
-            stale={stale}
-            metrics={`${chapterCount} chapter${chapterCount === 1 ? "" : "s"} · ${sourceCount} source${sourceCount === 1 ? "" : "s"} · ${previewReviewed ? "preview reviewed" : "preview needs review"}`}
-          />
-          {unsaved ||
-          serverReadiness.status === "idle" ||
-          serverReadiness.status === "stale" ? (
-            <p className="publish-menu__checks">
-              Run publication checks for filesystem and connected-source
-              readiness.
-            </p>
-          ) : null}
-          {serverReadiness.status === "error" ? (
-            <p className="publish-menu__error" role="alert">
-              {serverReadiness.error}
-            </p>
-          ) : null}
           <button
             type="button"
             role="menuitem"
@@ -156,7 +95,7 @@ export function PublishMenu({
           >
             <Eye size={18} />
             <span>
-              <strong>View as reader</strong>
+              <strong>Preview</strong>
               <small>Save and open the draft in a new tab</small>
             </span>
           </button>
@@ -171,7 +110,7 @@ export function PublishMenu({
             <Export size={18} />
             <span>
               <strong>Publish publicly</strong>
-              <small>Review checks, choose a profile, and build</small>
+              <small>Choose a profile and build your publication</small>
             </span>
           </button>
         </div>
