@@ -50,7 +50,7 @@ replacement, so a library action cannot silently invalidate another story.
 
 ## Verification results
 
-- Passed: 1,525 tests across 192 files; type checking; UI contracts; independence;
+- Passed: 1,524 tests across 192 files; type checking; UI contracts; independence;
   editor and viewer production builds; fixture publication; Storybook build;
   publishing without Git (126 tests); changed-file formatting and diff checks.
 - Chromium under a virtual display: actual map rendering, camera persistence on
@@ -59,6 +59,6 @@ replacement, so a library action cannot silently invalidate another story.
   remain separate; narrative follows the map.
 - Full repository formatting reports four unchanged existing files (two roadless
   GeoJSON fixtures, the Kronebreen GeoJSON, and the production-pilot plan).
-- Offline-runtime browser verification timed out waiting for the geospatial
-  fixture's second map; no external requests or runtime errors were reported.
-  This limitation is recorded rather than claiming an offline acceptance pass.
+- Offline-runtime browser proof passed with 26 same-origin paths and no external
+  requests. An attempted explicit default-projection change caused a readiness
+  regression during verification and was removed before review.

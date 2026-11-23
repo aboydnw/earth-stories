@@ -738,7 +738,7 @@ export function MapChapter({
         initialViewState={initialViewState}
         mapStyle={basemapStyle}
         interactive={interaction.interactive}
-        projection={{ type: globeEnabled ? "globe" : "mercator" }}
+        projection={globeEnabled ? { type: "globe" } : undefined}
         terrain={
           terrainLocator
             ? {
