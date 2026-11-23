@@ -5,12 +5,13 @@ import { captureEnhancementMaps } from "./EnhancementContextCapture";
 import { enhancementDirections } from "./enhancementDirections";
 import { EditorBrand } from "./EditorBrand";
 import { useEffect, useRef, useState } from "react";
-import type {
-  GenerationJob,
-  PublicationManifest,
-  ReferenceInput,
-  StoryBrief,
-  StoryProject,
+import {
+  wholeStoryVisualTreatmentIssue,
+  type GenerationJob,
+  type PublicationManifest,
+  type ReferenceInput,
+  type StoryBrief,
+  type StoryProject,
 } from "@earth-stories/story-schema";
 import {
   ActionButton,
@@ -87,6 +88,10 @@ export function StoryCreationScreen({
   const submitting = useRef(false),
     acceptLock = useRef(false);
   const enhancing = Boolean(sourceProjectId || job?.enhancement);
+  const wholeStoryIssue = source && wholeStoryVisualTreatmentIssue(source);
+  const selectedTreatment = brief.visualTreatment ?? "focused";
+  const blockedWholeStory =
+    enhancing && selectedTreatment === "whole-story" && wholeStoryIssue;
   useEffect(() => {
     if (!sourceProjectId || preview) return;
     let live = true;
@@ -104,7 +109,9 @@ export function StoryCreationScreen({
           setBrief({
             ...initial,
             title: project.metadata.title,
-            visualTreatment: "whole-story",
+            visualTreatment: wholeStoryVisualTreatmentIssue(project)
+              ? "focused"
+              : "whole-story",
             narrative: "",
           });
       })
@@ -166,6 +173,7 @@ export function StoryCreationScreen({
         throw new Error(
           "The original story must finish loading before generation.",
         );
+      if (blockedWholeStory) throw new Error(blockedWholeStory);
       const controller = new AbortController();
       captureController.current = controller;
       setPreparingContext(enhancing);
@@ -385,9 +393,9 @@ export function StoryCreationScreen({
           >
             <div className="story-creation__fields">
               {enhancing ? (
-                <FormField label="Visual treatment">
+                <FormField label="Visual treatment" hint={wholeStoryIssue}>
                   <SelectInput
-                    value={brief.visualTreatment ?? "focused"}
+                    value={selectedTreatment}
                     onChange={(e) =>
                       setBrief({
                         ...brief,
@@ -396,7 +404,10 @@ export function StoryCreationScreen({
                       })
                     }
                   >
-                    <option value="whole-story">
+                    <option
+                      value="whole-story"
+                      disabled={Boolean(wholeStoryIssue)}
+                    >
                       Whole story — scenes, transitions and companion artwork
                     </option>
                     <option value="focused">Focused artwork</option>
@@ -619,7 +630,8 @@ export function StoryCreationScreen({
                   !configured ||
                   busy ||
                   !brief.title.trim() ||
-                  (enhancing && !source)
+                  (enhancing && !source) ||
+                  Boolean(blockedWholeStory)
                 }
               >
                 {busy

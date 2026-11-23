@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it, vi } from "vitest";
@@ -396,6 +396,43 @@ it("keeps reference inspection limits visible through preview and acceptance", a
     expect(receipt.candidateDigest).toBe(ready.candidate?.digest);
   } finally {
     prepare.mockRestore();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("rejects ineligible Whole story enhancements before creating a job", async () => {
+  const root = await mkdtemp(join(tmpdir(), "earth-whole-story-preflight-"));
+  try {
+    const store = new ProjectStore(root);
+    const plan = vi.fn(provider.plan);
+    const jobs = new GenerationJobs(store, { ...provider, plan });
+    await jobs.initialize();
+    const created = await jobs.start(brief);
+    await jobs.whenIdle();
+    const accepted = await jobs.accept(created.id);
+    const source = await store.read(accepted.projectId);
+    const before = await readdir(jobs.root);
+    plan.mockClear();
+    await expect(
+      jobs.start(
+        { ...brief, visualTreatment: "whole-story" },
+        source.id,
+        {},
+        source.metadata.updated,
+      ),
+    ).rejects.toThrow(/three chapters.*Focused artwork/);
+    expect(plan).not.toHaveBeenCalled();
+    expect(await readdir(jobs.root)).toEqual(before);
+    const focused = await jobs.start(
+      { ...brief, visualTreatment: "focused" },
+      source.id,
+      {},
+      source.metadata.updated,
+    );
+    expect(focused.enhancement?.projectId).toBe(source.id);
+    await jobs.whenIdle();
+    expect(plan).toHaveBeenCalledTimes(1);
+  } finally {
     await rm(root, { recursive: true, force: true });
   }
 });

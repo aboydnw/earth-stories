@@ -6,6 +6,7 @@ import {
 import { assembleEnhancement } from "./enhancement.js";
 import {
   generationPlanIssues,
+  wholeStoryVisualTreatmentIssue,
   type GenerationProvider,
   type StoryBrief,
   type PreparedReference,
@@ -111,6 +112,11 @@ export class ChatGPTProvider implements GenerationProvider {
     signal: AbortSignal,
     source?: StoryProject,
   ) {
+    signal.throwIfAborted();
+    if (source && brief.visualTreatment === "whole-story") {
+      const issue = wholeStoryVisualTreatmentIssue(source);
+      if (issue) throw new Error(issue);
+    }
     const timeout = AbortSignal.any([signal, AbortSignal.timeout(240000)]);
     const { token, accountId } = await this.connection.access();
     const models = await this.listModels(token, timeout);

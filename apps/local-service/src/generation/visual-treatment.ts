@@ -1,20 +1,17 @@
-import type { StoryPlan, StoryProject } from "@earth-stories/story-schema";
+import {
+  visualTreatmentNarrative,
+  wholeStoryVisualTreatmentIssue,
+  type StoryPlan,
+  type StoryProject,
+} from "@earth-stories/story-schema";
 /** Count real placements, not a model's description of what it claims to have added. */
 export function inspectVisualTreatment(
   plan: StoryPlan,
   source: StoryProject,
 ): string[] {
-  const creditTitle =
-    /^(?:credits|acknowledg(?:e)?ments|methodology|references|sources(?: and credits)?|how (?:this|the) story was (?:built|made))$/i;
-  const creditId =
-    /^(?:credits|acknowledg(?:e)?ments|methodology|references|sources)$/i;
-  const narrative = source.chapters.filter(
-    (c) => !creditTitle.test(c.title.trim()) && !creditId.test(c.id),
-  );
-  if (narrative.length < 3)
-    return [
-      "This story is too short for three distributed treatments. Choose Focused artwork instead of Whole story.",
-    ];
+  const issue = wholeStoryVisualTreatmentIssue(source);
+  if (issue) return [issue];
+  const narrative = visualTreatmentNarrative(source);
   const positions = new Map(narrative.map((c, i) => [c.id, i]));
   const hasArt = (scene: { layers: { kind: string }[] } | null | undefined) =>
     scene?.layers.some((l) => l.kind === "path");

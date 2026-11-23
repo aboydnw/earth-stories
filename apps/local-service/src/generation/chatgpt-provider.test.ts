@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import type { StoryProject } from "@earth-stories/story-schema";
 import { ChatGPTProvider } from "./chatgpt-provider.js";
 const brief = {
   title: "Watershed",
@@ -140,10 +141,7 @@ it("uses a constrained additive plan and supplies authored context for enhanceme
   const source = parseStoryProject(
     JSON.parse(
       await readFile(
-        new URL(
-          "../../../../../../fixtures/field-notes/story.json",
-          import.meta.url,
-        ),
+        new URL("../../../../fixtures/field-notes/story.json", import.meta.url),
         "utf8",
       ),
     ),
@@ -290,4 +288,30 @@ it("repairs an opening-only whole-story result once and returns all three treatm
   expect(result.plan.visualAccents?.[0]?.chapterId).toBe("end");
   expect(result.plan.chapters[0]?.afterChapterId).toBe("middle");
   expect(result.plan.visualSequences?.[0]?.steps[0]?.chapterId).toBe("start");
+});
+
+it("rejects an all-map-and-chart Whole story before accessing ChatGPT", async () => {
+  const fetcher = vi.fn<typeof fetch>();
+  const access = vi.fn(connection.access);
+  const provider = new ChatGPTProvider({ ...connection, access } as never, {
+    fetcher,
+  });
+  const source = {
+    chapters: [
+      { id: "overview", type: "map", title: "Overview" },
+      { id: "wind", type: "chart", title: "Wind" },
+      { id: "landfall", type: "scrolly", title: "Landfall" },
+      { id: "credits", type: "prose", title: "Sources and credits" },
+    ],
+  } as StoryProject;
+  await expect(
+    provider.plan(
+      { ...brief, visualTreatment: "whole-story" },
+      [],
+      new AbortController().signal,
+      source,
+    ),
+  ).rejects.toThrow(/prose or illustrated chapter.*Focused artwork/);
+  expect(access).not.toHaveBeenCalled();
+  expect(fetcher).not.toHaveBeenCalled();
 });

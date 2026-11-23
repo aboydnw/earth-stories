@@ -10,7 +10,10 @@ export const visualAccentSchema = z
   })
   .strict();
 export type VisualAccent = z.infer<typeof visualAccentSchema>;
-export const visualAccentsSchema = z.array(visualAccentSchema).max(12);
+export const MAX_VISUAL_ACCENTS = 12;
+export const visualAccentsSchema = z
+  .array(visualAccentSchema)
+  .max(MAX_VISUAL_ACCENTS);
 export function validateVisualAccents(
   chapters: { id: string }[],
   accents: VisualAccent[] = [],

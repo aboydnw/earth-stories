@@ -11,10 +11,7 @@ import {
 import * as referencePreparation from "./reference-inputs.js";
 import { GenerationJobs } from "./jobs.js";
 import { composePlan } from "./vector-plan.js";
-const fixture = new URL(
-  "../../../../../../fixtures/field-notes/",
-  import.meta.url,
-);
+const fixture = new URL("../../../../fixtures/field-notes/", import.meta.url);
 const brief = {
   title: "Enhance river",
   audience: "Public",

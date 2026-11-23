@@ -88,13 +88,17 @@ export const visualSequenceSchema = z
       });
   });
 export type VisualSequence = z.infer<typeof visualSequenceSchema>;
+export const MAX_VISUAL_SEQUENCES = 12;
 export const visualSequencesSchema = z
   .array(visualSequenceSchema)
-  .max(12)
+  .max(MAX_VISUAL_SEQUENCES)
   .refine(
     (v) => JSON.stringify(v).length <= 600000,
     "Visual sequences exceed 600,000 characters",
   );
+export function isVisualSequenceChapter(type: string): boolean {
+  return type === "prose" || type === "illustrated";
+}
 export function validateVisualSequences(
   chapters: { id: string; type: string }[],
   sequences: VisualSequence[] = [],
@@ -112,7 +116,7 @@ export function validateVisualSequences(
         chapter = chapters[index];
       if (
         !chapter ||
-        !["prose", "illustrated"].includes(chapter.type) ||
+        !isVisualSequenceChapter(chapter.type) ||
         (i > 0 && index !== previous + 1) ||
         used.has(step.chapterId)
       )
