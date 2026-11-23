@@ -1,0 +1,57 @@
+.story-accent-layout {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.story-accent-layout--margin {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  align-items: center;
+}
+.story-accent-copy {
+  min-width: 0;
+}
+.story-accent-art {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.story-accent-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 32dvh;
+}
+@media (max-width: 600px) {
+  .story-accent-layout--margin {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media print {
+  .story-accent-art {
+    break-inside: avoid;
+  }
+}
+
+/* Focused map previews normally overlay their text. An accented chapter needs
+   document space for both copy and art, leaving the interactive map unobstructed. */
+.story-chapter--focused.story-chapter--has-accent:is(
+    .story-chapter--map,
+    .story-chapter--scrolly
+  ) {
+  grid-template-rows: auto auto auto;
+  align-content: start;
+}
+.story-chapter--focused.story-chapter--has-accent:is(
+    .story-chapter--map,
+    .story-chapter--scrolly
+  )
+  .story-copy {
+  position: static;
+  width: auto;
+  margin: 0;
+  box-shadow: none;
+}
+.story-chapter--focused.story-chapter--has-accent .story-map {
+  height: clamp(360px, 60dvh, 600px);
+}

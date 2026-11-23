@@ -245,79 +245,96 @@ it("restores a failed brief and its references, then submits edits as a new job"
   );
 });
 
-it("generates enhancements from the existing story without asking for its text again", async () => {
-  const { storyProjectSchema } = await import("@earth-stories/story-schema");
-  const project = storyProjectSchema.parse({
-    schema: "earth-stories/project/v3",
-    id: "existing",
-    metadata: {
-      title: "Existing river",
-      description: "",
-      author: null,
-      created: "2026-11-20T00:00:00Z",
-      updated: "2026-11-20T00:00:00Z",
-    },
-    basemap: {
-      id: "neutral",
-      label: "Neutral",
-      styleUrl: "https://example.org/style.json",
-      attribution: null,
-    },
-    sources: [],
-    chapters: [
-      {
-        id: "opening",
-        type: "prose",
-        title: "Opening",
-        narrative: "Keep this authored text.",
+it.each([
+  [1, "focused"],
+  [3, "whole-story"],
+])(
+  "offers the correct default for an existing story with %i prose chapter(s)",
+  async (chapterCount, treatment) => {
+    const { storyProjectSchema } = await import("@earth-stories/story-schema");
+    const project = storyProjectSchema.parse({
+      schema: "earth-stories/project/v3",
+      id: "existing",
+      metadata: {
+        title: "Existing river",
+        description: "",
+        author: null,
+        created: "2026-11-20T00:00:00Z",
+        updated: "2026-11-20T00:00:00Z",
       },
-    ],
-  });
-  vi.mocked(api.openProject).mockResolvedValue(project);
-  vi.mocked(api.enhanceStory).mockResolvedValue({
-    id: "enhancement-job",
-  } as never);
-  vi.mocked(api.startGeneration).mockClear();
-  const navigate = vi.fn();
-  render(
-    <EarthStoriesProvider>
-      <StoryCreationScreen
-        onWorkspace={() => {}}
-        sourceProjectId="existing"
-        jobId={null}
-        preview={false}
-        onNavigate={navigate}
-        onCreated={async () => {}}
-        onBack={() => {}}
-      />
-    </EarthStoriesProvider>,
-  );
-  const button = await screen.findByRole("button", {
-    name: "Generate visual enhancements",
-  });
-  await waitFor(() =>
-    expect((button as HTMLButtonElement).disabled).toBe(false),
-  );
-  expect(screen.queryByLabelText(/Working title/)).toBeNull();
-  fireEvent.change(
-    screen.getByLabelText("What would you like to add or change visually?"),
-    {
-      target: { value: "Explain the flow visually" },
-    },
-  );
-  fireEvent.click(button);
-  await waitFor(() => expect(navigate).toHaveBeenCalledWith("enhancement-job"));
-  expect(api.enhanceStory).toHaveBeenCalledWith(
-    "existing",
-    expect.objectContaining({
-      title: "Existing river",
-      visualDirection: "Explain the flow visually",
-    }),
-    {},
-    project.metadata.updated,
-  );
-  expect(api.startGeneration).not.toHaveBeenCalled();
-});
+      basemap: {
+        id: "neutral",
+        label: "Neutral",
+        styleUrl: "https://example.org/style.json",
+        attribution: null,
+      },
+      sources: [],
+      chapters: Array.from({ length: chapterCount }, (_, i) => ({
+        id: `part-${i}`,
+        type: "prose",
+        title: `Part ${i + 1}`,
+        narrative: "Keep this authored text.",
+      })),
+    });
+    vi.mocked(api.openProject).mockResolvedValue(project);
+    vi.mocked(api.enhanceStory).mockResolvedValue({
+      id: "enhancement-job",
+    } as never);
+    vi.mocked(api.startGeneration).mockClear();
+    const navigate = vi.fn();
+    render(
+      <EarthStoriesProvider>
+        <StoryCreationScreen
+          onWorkspace={() => {}}
+          sourceProjectId="existing"
+          jobId={null}
+          preview={false}
+          onNavigate={navigate}
+          onCreated={async () => {}}
+          onBack={() => {}}
+        />
+      </EarthStoriesProvider>,
+    );
+    const button = await screen.findByRole("button", {
+      name: "Generate visual enhancements",
+    });
+    await waitFor(() =>
+      expect((button as HTMLButtonElement).disabled).toBe(false),
+    );
+    expect(screen.queryByLabelText(/Working title/)).toBeNull();
+    const select = screen.getByLabelText(
+      "Visual treatment",
+    ) as HTMLSelectElement;
+    const whole = screen.getByRole("option", {
+      name: /Whole story/,
+    }) as HTMLOptionElement;
+    expect(select.value).toBe(treatment);
+    expect(whole.disabled).toBe(chapterCount < 3);
+    if (chapterCount < 3)
+      expect(screen.getByText(/Choose Focused artwork/)).toBeTruthy();
+    fireEvent.change(
+      screen.getByLabelText("What would you like to add or change visually?"),
+      {
+        target: { value: "Explain the flow visually" },
+      },
+    );
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith("enhancement-job"),
+    );
+    expect(api.enhanceStory).toHaveBeenCalledWith(
+      "existing",
+      expect.objectContaining({
+        title: "Existing river",
+        visualTreatment: treatment,
+        visualDirection: "Explain the flow visually",
+      }),
+      {},
+      project.metadata.updated,
+    );
+    expect(api.startGeneration).not.toHaveBeenCalled();
+  },
+);
 
 it("does not label an already accepted result as unapplied", async () => {
   vi.mocked(api.getGeneration).mockResolvedValue({
@@ -365,4 +382,42 @@ it("validates an edited link and keeps its generated label in sync", async () =>
   expect(input.checkValidity()).toBe(true);
   expect(screen.getByText("https://example.org/new")).toBeTruthy();
   expect(screen.queryByText("https://example.org/old")).toBeNull();
+});
+
+it("shows one busy state and cancellation without premature review actions", async () => {
+  vi.mocked(api.getGeneration).mockResolvedValue({
+    id: "working",
+    stage: "planning",
+    brief: {},
+    candidate: null,
+    usage: [],
+  } as never);
+  vi.mocked(api.cancelGeneration).mockResolvedValue({
+    id: "working",
+    stage: "cancelled",
+    brief: {},
+    candidate: null,
+    usage: [],
+  } as never);
+  render(
+    <EarthStoriesProvider>
+      <StoryCreationScreen
+        jobId="working"
+        preview={false}
+        onWorkspace={() => {}}
+        onNavigate={() => {}}
+        onCreated={async () => {}}
+        onBack={() => {}}
+      />
+    </EarthStoriesProvider>,
+  );
+  const status = await screen.findByRole("status", {
+    name: "Story generation",
+  });
+  expect(status.getAttribute("aria-busy")).toBe("true");
+  expect(screen.queryByText("Your story is being prepared.")).toBeNull();
+  expect(screen.queryByRole("button", { name: /Discard/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel generation" }));
+  await screen.findByRole("button", { name: "Retry generation" });
+  expect(screen.queryByRole("status", { name: "Story generation" })).toBeNull();
 });

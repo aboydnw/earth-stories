@@ -568,6 +568,7 @@ export function compileProject(
     assets,
     chapters: project.chapters.map(compileChapter),
     visualSequences: project.visualSequences,
+    visualAccents: project.visualAccents,
     connectivity: {
       requested: project.publication.profile,
       state: "pending",

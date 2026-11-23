@@ -1,3 +1,4 @@
+import { visualAccentsSchema, validateVisualAccents } from "./visualAccents.js";
 import {
   visualSequencesSchema,
   validateVisualSequences,
@@ -417,12 +418,19 @@ export const publicationManifestV3Schema = publicationManifestV2BaseSchema
     schema: z.literal("earth-stories/publication/v3"),
     chapters: z.array(publicationChapterSchema).min(1),
     visualSequences: visualSequencesSchema.optional(),
+    visualAccents: visualAccentsSchema.optional(),
     publication: publicationManifestV2BaseSchema.shape.publication.extend({
       palette: readerPaletteSchema.optional(),
     }),
   })
   .superRefine(publicationPolicy)
   .superRefine((manifest, context) => {
+    for (const message of validateVisualAccents(
+      manifest.chapters,
+      manifest.visualAccents,
+      manifest.visualSequences,
+    ))
+      context.addIssue({ code: "custom", path: ["visualAccents"], message });
     for (const message of validateVisualSequences(
       manifest.chapters,
       manifest.visualSequences,

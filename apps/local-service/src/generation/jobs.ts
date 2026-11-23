@@ -23,6 +23,7 @@ import {
   storyBriefSchema,
   referenceInputSchema,
   generationPlanIssues,
+  wholeStoryVisualTreatmentIssue,
   storyPlanSchema,
   storyProjectSchema,
   type GenerationJob,
@@ -238,6 +239,10 @@ export class GenerationJobs {
           "This story changed after the enhancement form opened. Reload the page to use its latest content.",
         );
       controller.signal.throwIfAborted();
+      if (snapshot && brief.visualTreatment === "whole-story") {
+        const issue = wholeStoryVisualTreatmentIssue(snapshot.project);
+        if (issue) throw new Error(issue);
+      }
       const id = randomUUID();
       await mkdir(this.directory(id), { mode: 0o700 });
       await mkdir(join(this.directory(id), "assets"));
@@ -316,6 +321,12 @@ export class GenerationJobs {
         },
         signal,
       );
+      const snapshot =
+        !job.plan && job.enhancement ? await this.source(job) : null;
+      if (snapshot && job.brief.visualTreatment === "whole-story") {
+        const issue = wholeStoryVisualTreatmentIssue(snapshot.project);
+        if (issue) throw new Error(issue);
+      }
       const refsPath = join(this.directory(id), "references.json");
       let references: PreparedReference[];
       try {
@@ -342,7 +353,6 @@ export class GenerationJobs {
         await atomic(refsPath, references);
       }
       if (!job.plan) {
-        const snapshot = job.enhancement ? await this.source(job) : null;
         const result = await this.provider.plan(
           job.brief,
           [...references, ...(snapshot?.references ?? [])],

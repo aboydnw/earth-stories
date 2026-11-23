@@ -6,14 +6,12 @@ import { ProjectStore } from "@earth-stories/project-store";
 import {
   parseStoryProject,
   type GenerationProvider,
+  visualAccentSchema,
 } from "@earth-stories/story-schema";
 import * as referencePreparation from "./reference-inputs.js";
 import { GenerationJobs } from "./jobs.js";
 import { composePlan } from "./vector-plan.js";
-const fixture = new URL(
-  "../../../../../../fixtures/field-notes/",
-  import.meta.url,
-);
+const fixture = new URL("../../../../fixtures/field-notes/", import.meta.url);
 const brief = {
   title: "Enhance river",
   audience: "Public",
@@ -73,34 +71,55 @@ it.each([false, true])(
           contextTitle = context!.metadata.title;
           dataSeen = refs.some((r) => r.text?.includes("FeatureCollection"));
           return {
-            plan: composePlan(
-              {
-                title: "Do not replace",
-                description: "Do not replace",
-                palette: "estuary",
-                chapters: [
-                  {
-                    id: "new-river",
-                    afterChapterId: source.chapters[0]!.id,
-                    title: "River flow",
-                    narrative: "Illustrative, not measured.",
-                    alt: "River illustration",
-                    caption: "Illustrative",
-                    recipe: {
-                      template: "flow",
-                      heading: "River",
-                      labels: ["Land", "Water"],
-                      motif: "river",
-                      motion: false,
+            plan: {
+              ...composePlan(
+                {
+                  title: "Do not replace",
+                  description: "Do not replace",
+                  palette: "estuary",
+                  chapters: [
+                    {
+                      id: "new-river",
+                      afterChapterId: source.chapters[0]!.id,
+                      title: "River flow",
+                      narrative: "Illustrative, not measured.",
+                      alt: "River illustration",
+                      caption: "Illustrative",
+                      recipe: {
+                        template: "flow",
+                        heading: "River",
+                        labels: ["Land", "Water"],
+                        motif: "river",
+                        motion: false,
+                      },
                     },
+                  ],
+                  textEdits: [],
+                  warnings: [],
+                },
+                input,
+                true,
+              ),
+              visualAccents: [
+                visualAccentSchema.parse({
+                  id: "clouds",
+                  chapterId: source.chapters.at(-1)!.id,
+                  placement: "trailing",
+                  alt: "River clouds",
+                  scene: {
+                    width: 1000,
+                    height: 500,
+                    layers: [
+                      {
+                        id: "cloud",
+                        kind: "path",
+                        pathData: "M 0 0 L 1 0 L .5 1 Z",
+                      },
+                    ],
                   },
-                ],
-                textEdits: [],
-                warnings: [],
-              },
-              input,
-              true,
-            ),
+                }),
+              ],
+            },
             usage: {},
           };
         },
@@ -139,6 +158,10 @@ it.each([false, true])(
         source.chapters,
       );
       expect(saved.sources).toEqual(source.sources);
+      expect(saved.visualAccents?.[0]).toMatchObject({
+        id: "clouds",
+        chapterId: source.chapters.at(-1)!.id,
+      });
       expect(saved.metadata.title).toBe(source.metadata.title);
       expect(
         await readFile(store.assetPath(source.id, "data/survey-sites.geojson")),

@@ -221,7 +221,13 @@ export async function buildArchivalHtml({
   const chapters: string[] = [];
   for (const chapter of project.chapters) {
     const heading = `<h2>${escapeHtml(chapter.title)}</h2>`;
-    const narrative = `<div class="narrative">${prose(chapter.narrative)}</div>`;
+    const accent = project.visualAccents?.find(
+      (item) => item.chapterId === chapter.id,
+    );
+    const accentFigure = accent
+      ? `<figure><img src="data:image/svg+xml;base64,${Buffer.from(staticScene(accent.scene, accent.alt, new Map(), project.publication.palette, project.publication.theme, accent.scene.staticProgress)).toString("base64")}" alt="${escapeHtml(accent.alt)}"></figure>`
+      : "";
+    const narrative = `${accent?.placement === "leading" ? accentFigure : ""}<div class="narrative">${prose(chapter.narrative)}</div>${accent?.placement !== "leading" ? accentFigure : ""}`;
     const sequence = project.visualSequences?.find((s) =>
       s.steps.some((step) => step.chapterId === chapter.id),
     );

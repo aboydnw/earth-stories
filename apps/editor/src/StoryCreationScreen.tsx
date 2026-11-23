@@ -1,15 +1,17 @@
+import { GenerationProgress } from "./GenerationProgress";
 import { compileProject } from "@earth-stories/publisher/compile";
 import { resolvePreviewManifest } from "./resolvePreviewManifest";
 import { captureEnhancementMaps } from "./EnhancementContextCapture";
 import { enhancementDirections } from "./enhancementDirections";
 import { EditorBrand } from "./EditorBrand";
 import { useEffect, useRef, useState } from "react";
-import type {
-  GenerationJob,
-  PublicationManifest,
-  ReferenceInput,
-  StoryBrief,
-  StoryProject,
+import {
+  wholeStoryVisualTreatmentIssue,
+  type GenerationJob,
+  type PublicationManifest,
+  type ReferenceInput,
+  type StoryBrief,
+  type StoryProject,
 } from "@earth-stories/story-schema";
 import {
   ActionButton,
@@ -86,6 +88,10 @@ export function StoryCreationScreen({
   const submitting = useRef(false),
     acceptLock = useRef(false);
   const enhancing = Boolean(sourceProjectId || job?.enhancement);
+  const wholeStoryIssue = source && wholeStoryVisualTreatmentIssue(source);
+  const selectedTreatment = brief.visualTreatment ?? "focused";
+  const blockedWholeStory =
+    enhancing && selectedTreatment === "whole-story" && wholeStoryIssue;
   useEffect(() => {
     if (!sourceProjectId || preview) return;
     let live = true;
@@ -103,6 +109,9 @@ export function StoryCreationScreen({
           setBrief({
             ...initial,
             title: project.metadata.title,
+            visualTreatment: wholeStoryVisualTreatmentIssue(project)
+              ? "focused"
+              : "whole-story",
             narrative: "",
           });
       })
@@ -164,6 +173,7 @@ export function StoryCreationScreen({
         throw new Error(
           "The original story must finish loading before generation.",
         );
+      if (blockedWholeStory) throw new Error(blockedWholeStory);
       const controller = new AbortController();
       captureController.current = controller;
       setPreparingContext(enhancing);
@@ -193,7 +203,13 @@ export function StoryCreationScreen({
     }
   }
   async function accept() {
-    if (!job || job.stage !== "ready" || acceptLock.current) return;
+    if (
+      !job ||
+      job.stage !== "ready" ||
+      acceptLock.current ||
+      actionLock.current
+    )
+      return;
     acceptLock.current = true;
     setAccepting(true);
     setError("");
@@ -261,7 +277,10 @@ export function StoryCreationScreen({
       setBusy(false);
     }
   }
+  const actionLock = useRef(false);
   async function action(fn: () => Promise<unknown>) {
+    if (actionLock.current || acceptLock.current) return;
+    actionLock.current = true;
     setBusy(true);
     setError("");
     try {
@@ -269,6 +288,7 @@ export function StoryCreationScreen({
     } catch (e) {
       setError(message(e));
     } finally {
+      actionLock.current = false;
       setBusy(false);
     }
   }
@@ -295,6 +315,13 @@ export function StoryCreationScreen({
       setEditing(true);
     });
   }
+  const reviewing = Boolean(jobId && !editing);
+  const discard = () =>
+    action(async () => {
+      if (!job) return;
+      await api.discardGeneration(job.id);
+      onNavigate(null);
+    });
   if (preview)
     return (
       <div className="story-preview-shell">
@@ -324,12 +351,16 @@ export function StoryCreationScreen({
         </nav>
       </header>
       <main className="story-creation">
-        <div className="story-creation__intro">
-          <p className="eyebrow">
-            {enhancing
-              ? "Visual direction for your story"
-              : "From an idea to a story"}
-          </p>
+        <div
+          className={`story-creation__intro${reviewing ? " story-creation__intro--compact" : ""}`}
+        >
+          {!reviewing ? (
+            <p className="eyebrow">
+              {enhancing
+                ? "Visual direction for your story"
+                : "From an idea to a story"}
+            </p>
+          ) : null}
           <h1>
             {editing
               ? "Edit your story brief"
@@ -339,11 +370,13 @@ export function StoryCreationScreen({
                   ? "Review your new story"
                   : "What story do you want to tell?"}
           </h1>
-          <p>
-            {enhancing
-              ? "Add illustrations and animation to your existing story. Its chapters, maps, images and data are preserved; any small supporting text edits are shown for approval."
-              : "Describe the audience, message, and visual direction. Review a working preview before adding it to your stories."}
-          </p>
+          {!reviewing ? (
+            <p>
+              {enhancing
+                ? "Add illustrations and animation to your existing story. Its chapters, maps, images and data are preserved; any small supporting text edits are shown for approval."
+                : "Describe the audience, message, and visual direction. Review a working preview before adding it to your stories."}
+            </p>
+          ) : null}
         </div>
         {error ? (
           <StatusNotice tone="danger" title="Something needs attention">
@@ -359,6 +392,28 @@ export function StoryCreationScreen({
             }}
           >
             <div className="story-creation__fields">
+              {enhancing ? (
+                <FormField label="Visual treatment" hint={wholeStoryIssue}>
+                  <SelectInput
+                    value={selectedTreatment}
+                    onChange={(e) =>
+                      setBrief({
+                        ...brief,
+                        visualTreatment: e.target.value as
+                          "focused" | "whole-story",
+                      })
+                    }
+                  >
+                    <option
+                      value="whole-story"
+                      disabled={Boolean(wholeStoryIssue)}
+                    >
+                      Whole story — scenes, transitions and companion artwork
+                    </option>
+                    <option value="focused">Focused artwork</option>
+                  </SelectInput>
+                </FormField>
+              ) : null}
               {(
                 [
                   ["title", "Working title", false],
@@ -575,7 +630,8 @@ export function StoryCreationScreen({
                   !configured ||
                   busy ||
                   !brief.title.trim() ||
-                  (enhancing && !source)
+                  (enhancing && !source) ||
+                  Boolean(blockedWholeStory)
                 }
               >
                 {busy
@@ -590,28 +646,21 @@ export function StoryCreationScreen({
           </form>
         ) : job ? (
           <>
-            <section className="story-creation__progress" aria-live="polite">
-              <h2>
-                {job.stage === "ready" && enhancing
+            <GenerationProgress
+              working={!terminal.has(job.stage)}
+              title={
+                job.stage === "ready" && enhancing
                   ? "Your enhanced story is ready"
-                  : stageLabels[job.stage]}
-              </h2>
-              {!terminal.has(job.stage) ? (
-                <p>Composing editable chapters and vector scenes.</p>
-              ) : null}
-              {job.error ? <p>{job.error}</p> : null}
-              {!terminal.has(job.stage) ? (
-                <ActionButton
-                  disabled={busy}
-                  onClick={() =>
-                    void action(async () =>
-                      setJob(await api.cancelGeneration(job.id)),
-                    )
-                  }
-                >
-                  Cancel generation
-                </ActionButton>
-              ) : null}
+                  : stageLabels[job.stage]
+              }
+              busy={busy}
+              error={job.error}
+              onCancel={() =>
+                void action(async () =>
+                  setJob(await api.cancelGeneration(job.id)),
+                )
+              }
+            >
               {job.stage === "failed" || job.stage === "cancelled" ? (
                 <ActionButton
                   disabled={busy}
@@ -633,14 +682,17 @@ export function StoryCreationScreen({
                   Retry generation
                 </ActionButton>
               ) : null}
-            </section>
+            </GenerationProgress>
             {job.stage === "failed" || job.stage === "cancelled" ? (
               <ChatGPTConnectionPanel onReady={() => {}} />
             ) : null}
-            {job.stage !== "failed" && job.stage !== "cancelled" ? (
+            {job.candidate &&
+            (job.stage === "ready" || job.stage === "accepted") ? (
               <GenerationResult
                 job={job}
                 accepting={accepting}
+                discarding={busy}
+                onDiscard={() => void discard()}
                 onAccept={() => void accept()}
                 onEditInstructions={() => void editInstructions()}
               />
@@ -652,23 +704,15 @@ export function StoryCreationScreen({
                 Open created story
               </ActionButton>
             ) : null}
-            <div className="story-creation__actions">
+            {terminal.has(job.stage) && !job.candidate ? (
               <ActionButton
                 variant="ghost"
                 disabled={busy || accepting}
-                onClick={() =>
-                  void action(async () => {
-                    await api.discardGeneration(job.id);
-                    onNavigate(null);
-                  })
-                }
+                onClick={() => void discard()}
               >
-                Discard this result
+                {enhancing ? "Discard changes" : "Discard result"}
               </ActionButton>
-            </div>
-            <p>
-              Discard removes this saved result. It does not change your story.
-            </p>
+            ) : null}
             <details>
               <summary>Generation details</summary>
               <p>

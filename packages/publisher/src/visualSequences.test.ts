@@ -93,3 +93,29 @@ it("preserves sequences through deterministic compilation and accessible archiva
     }),
   ).toThrow();
 });
+
+it("includes companion artwork in the static archival edition", async () => {
+  const base = parseStoryProject(
+    JSON.parse(await readFile("fixtures/field-notes/story.json", "utf8")),
+  );
+  const { visualAccentSchema } = await import("@earth-stories/story-schema");
+  const project = {
+    ...base,
+    visualAccents: [
+      visualAccentSchema.parse({
+        id: "accent",
+        chapterId: base.chapters[0]!.id,
+        placement: "leading",
+        alt: "Illustrative clouds",
+        scene: sequence.scene,
+      }),
+    ],
+  };
+  const html = await buildArchivalHtml({
+    project,
+    manifest: compileProject(project),
+    projectDirectory: "/tmp",
+  });
+  expect(html).toContain('alt="Illustrative clouds"');
+  expect(html).toContain("data:image/svg+xml;base64,");
+});

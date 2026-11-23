@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import type { StoryProject } from "@earth-stories/story-schema";
 import { ChatGPTProvider } from "./chatgpt-provider.js";
 const brief = {
   title: "Watershed",
@@ -49,24 +50,29 @@ const connection = {
 };
 const event = (type: string, data: object) =>
   `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
-const completed = () =>
-  event("response.output_text.delta", { delta: JSON.stringify(blueprint) }) +
+const completed = (plan: unknown = blueprint) =>
+  event("response.output_text.delta", { delta: JSON.stringify(plan) }) +
   event("response.completed", { response: { usage: { output_tokens: 42 } } });
-function setup(stream = completed()) {
-  const fetcher = vi.fn(async (input: URL | RequestInfo) =>
-    String(input).endsWith("/models")
-      ? Response.json({
-          models: [
+function setup(stream: string | string[] = completed()) {
+  const responses = Array.isArray(stream) ? [...stream] : null;
+  const fetcher = vi.fn(
+    async (input: URL | RequestInfo, _init?: RequestInit) =>
+      String(input).endsWith("/models")
+        ? Response.json({
+            models: [
+              {
+                slug: "available-model",
+                display_name: "Available model",
+                visibility: "list",
+              },
+            ],
+          })
+        : new Response(
+            typeof stream === "string" ? stream : responses?.shift(),
             {
-              slug: "available-model",
-              display_name: "Available model",
-              visibility: "list",
+              headers: { "Content-Type": "text/event-stream" },
             },
-          ],
-        })
-      : new Response(stream, {
-          headers: { "Content-Type": "text/event-stream" },
-        }),
+          ),
   );
   return {
     provider: new ChatGPTProvider(connection as never, { fetcher }),
@@ -140,10 +146,7 @@ it("uses a constrained additive plan and supplies authored context for enhanceme
   const source = parseStoryProject(
     JSON.parse(
       await readFile(
-        new URL(
-          "../../../../../../fixtures/field-notes/story.json",
-          import.meta.url,
-        ),
+        new URL("../../../../fixtures/field-notes/story.json", import.meta.url),
         "utf8",
       ),
     ),
@@ -183,4 +186,192 @@ it("uses a constrained additive plan and supplies authored context for enhanceme
   expect(JSON.parse(payload.input[0].content[0].text).existingStory).toEqual(
     source,
   );
+});
+
+it("repairs an opening-only whole-story result once and returns all three treatments", async () => {
+  const { storyProjectSchema } = await import("@earth-stories/story-schema");
+  const source = storyProjectSchema.parse({
+    schema: "earth-stories/project/v3",
+    id: "storm",
+    metadata: {
+      title: "Storm",
+      description: "",
+      author: null,
+      created: "2026-11-22T00:00:00Z",
+      updated: "2026-11-22T00:00:00Z",
+    },
+    publication: {},
+    basemap: {
+      id: "base",
+      label: "Base",
+      styleUrl: "https://example.org/style.json",
+      attribution: null,
+    },
+    sources: [],
+    chapters: [
+      {
+        id: "start",
+        type: "prose",
+        title: "Formation",
+        narrative: "Original formation.",
+      },
+      {
+        id: "middle",
+        type: "prose",
+        title: "Peak",
+        narrative: "Original peak.",
+      },
+      {
+        id: "end",
+        type: "prose",
+        title: "Landfall",
+        narrative: "Original landfall.",
+      },
+    ],
+  });
+  const opening = {
+    ...blueprint,
+    chapters: [],
+    textEdits: [],
+    visualSequences: [
+      {
+        id: "storm-start",
+        alt: "Storm forming",
+        caption: "Illustrative",
+        scene: blueprint.chapters[0]!.scene,
+        steps: [{ chapterId: "start", start: 0, end: 1 }],
+      },
+    ],
+    visualAccents: [],
+  };
+  const whole = {
+    ...opening,
+    chapters: [
+      { ...blueprint.chapters[0]!, id: "transition", afterChapterId: "middle" },
+    ],
+    visualAccents: [
+      {
+        id: "companion",
+        chapterId: "end",
+        placement: "trailing",
+        alt: "Clouds fading",
+        scene: blueprint.chapters[0]!.scene,
+      },
+    ],
+  };
+  const responses = [opening, whole];
+  let requests = 0;
+  const fetcher = vi.fn(async (input: URL | RequestInfo) =>
+    String(input).endsWith("/models")
+      ? Response.json({
+          models: [
+            {
+              slug: "available-model",
+              display_name: "Model",
+              visibility: "list",
+            },
+          ],
+        })
+      : new Response(
+          event("response.output_text.delta", {
+            delta: JSON.stringify(responses[requests++]),
+          }) +
+            event("response.completed", {
+              response: { usage: { output_tokens: 42 } },
+            }),
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+  );
+  const provider = new ChatGPTProvider(connection as never, { fetcher });
+  const result = await provider.plan(
+    { ...brief, visualTreatment: "whole-story" },
+    [],
+    new AbortController().signal,
+    source,
+  );
+  expect(requests).toBe(2);
+  expect(result.plan.visualAccents?.[0]?.chapterId).toBe("end");
+  expect(result.plan.chapters[0]?.afterChapterId).toBe("middle");
+  expect(result.plan.visualSequences?.[0]?.steps[0]?.chapterId).toBe("start");
+});
+
+it("rejects an all-map-and-chart Whole story before accessing ChatGPT", async () => {
+  const fetcher = vi.fn<typeof fetch>();
+  const access = vi.fn(connection.access);
+  const provider = new ChatGPTProvider({ ...connection, access } as never, {
+    fetcher,
+  });
+  const source = {
+    chapters: [
+      { id: "overview", type: "map", title: "Overview" },
+      { id: "wind", type: "chart", title: "Wind" },
+      { id: "landfall", type: "scrolly", title: "Landfall" },
+      { id: "credits", type: "prose", title: "Sources and credits" },
+    ],
+  } as StoryProject;
+  await expect(
+    provider.plan(
+      { ...brief, visualTreatment: "whole-story" },
+      [],
+      new AbortController().signal,
+      source,
+    ),
+  ).rejects.toThrow(/prose or illustrated chapter.*Focused artwork/);
+  expect(access).not.toHaveBeenCalled();
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("repairs overlapping companion artwork in a new story", async () => {
+  const river = blueprint.chapters[0]!;
+  const companion = {
+    id: "delta-art",
+    chapterId: "river",
+    alt: "A branching river delta",
+    placement: "trailing",
+    scene: river.scene,
+  };
+  const overlapping = {
+    ...blueprint,
+    chapters: [
+      river,
+      {
+        id: "delta",
+        title: "The river meets the sea",
+        narrative: "The water spreads into channels.",
+        alt: "",
+        caption: "",
+        type: "prose",
+        scene: null,
+      },
+    ],
+    visualSequences: [
+      {
+        id: "river-scene",
+        alt: river.alt,
+        caption: river.caption,
+        scene: river.scene,
+        steps: [{ chapterId: "river", start: 0, end: 1 }],
+      },
+    ],
+    visualAccents: [companion],
+  };
+  const { provider, fetcher } = setup([
+    completed(overlapping),
+    completed({
+      ...overlapping,
+      visualAccents: [{ ...companion, chapterId: "delta" }],
+    }),
+  ]);
+
+  const result = await provider.plan(brief, [], new AbortController().signal);
+  const inference = fetcher.mock.calls.filter(([url]) =>
+    String(url).endsWith("/responses"),
+  );
+  expect(inference).toHaveLength(2);
+  expect(JSON.parse(String(inference[1]?.[1]?.body)).instructions).toContain(
+    "Companion artwork cannot overlap the visual sequence on river",
+  );
+  expect(result.plan.visualAccents).toMatchObject([
+    { id: "delta-art", chapterId: "delta" },
+  ]);
 });

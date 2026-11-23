@@ -83,3 +83,67 @@ it("disables applying while saving and shows supporting text changes expanded", 
     container.querySelector("details[data-text-changes]")?.hasAttribute("open"),
   ).toBe(true);
 });
+
+it("groups discard with candidate review and blocks it during acceptance", () => {
+  const discard = vi.fn();
+  const props = {
+    job: reviewJob,
+    accepting: false,
+    discarding: false,
+    onAccept: vi.fn(),
+    onEditInstructions: vi.fn(),
+    onDiscard: discard,
+  };
+  const { rerender } = render(
+    <EarthStoriesProvider>
+      <GenerationResult {...props} />
+    </EarthStoriesProvider>,
+  );
+  const button = screen.getByRole("button", { name: "Discard changes" });
+  expect(
+    screen.getByRole("group", { name: "Review story" }).contains(button),
+  ).toBe(true);
+  fireEvent.click(button);
+  expect(discard).toHaveBeenCalledOnce();
+  rerender(
+    <EarthStoriesProvider>
+      <GenerationResult {...props} accepting />
+    </EarthStoriesProvider>,
+  );
+  expect(
+    screen
+      .getByRole("button", { name: "Discard changes" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
+});
+
+it("removes only the generation record after acceptance and labels a single accent", () => {
+  render(
+    <EarthStoriesProvider>
+      <GenerationResult
+        job={{
+          ...reviewJob,
+          stage: "accepted",
+          plan: {
+            ...reviewJob.plan!,
+            visualAccents: [
+              { id: "a", chapterId: "intro", alt: "Clouds" } as never,
+            ],
+          },
+        }}
+        accepting={false}
+        onAccept={() => {}}
+        onEditInstructions={() => {}}
+        onDiscard={() => {}}
+      />
+    </EarthStoriesProvider>,
+  );
+  expect(
+    screen.getByRole("button", { name: "Remove generation record" }),
+  ).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Discard changes" })).toBeNull();
+  expect(screen.getByText(/Applied changes stay in your story/)).toBeTruthy();
+  expect(screen.getByText(/1 companion artwork ·/).textContent).not.toContain(
+    "artworks",
+  );
+});

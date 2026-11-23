@@ -9,10 +9,7 @@ import { assembleEnhancement } from "./enhancement.js";
 const source = parseStoryProject(
   JSON.parse(
     await readFile(
-      new URL(
-        "../../../../../../fixtures/field-notes/story.json",
-        import.meta.url,
-      ),
+      new URL("../../../../fixtures/field-notes/story.json", import.meta.url),
       "utf8",
     ),
   ),

@@ -69,6 +69,9 @@ export function FocusedChapterViewer({
           />
         ) : (
           <PublicationChapterRenderer
+            visualAccent={manifest.visualAccents?.find(
+              (a) => a.chapterId === chapter.id,
+            )}
             snapshotMode={snapshotMode}
             chapter={chapter}
             assets={assets}
