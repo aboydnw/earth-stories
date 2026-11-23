@@ -1,3 +1,4 @@
+import { validateSuppliedImages } from "./supplied-artwork.js";
 import { inspectSceneQuality } from "./scene-quality.js";
 import { z } from "zod";
 import {
@@ -10,6 +11,7 @@ import {
   visualSequencesSchema,
   visualAccentsSchema,
   vectorSceneSchema,
+  illustrationSceneSchema,
   validateVisualSequences,
   validateVisualAccents,
 } from "@earth-stories/story-schema";
@@ -61,16 +63,24 @@ export function composePlan(
   value: unknown,
   brief: StoryBrief,
   enhancement = false,
+  suppliedIds: string[] = [],
 ) {
   if (value && typeof value === "object" && "visualSequences" in value) {
     const custom = (
-      enhancement ? customEnhancementPlanSchema : customVectorPlanSchema
+      suppliedIds.length
+        ? enhancement
+          ? suppliedEnhancementPlanSchema
+          : suppliedVectorPlanSchema
+        : enhancement
+          ? customEnhancementPlanSchema
+          : customVectorPlanSchema
     ).parse(value);
     const parsed = storyPlanSchema.parse({
       ...custom,
       palette: vectorScenePalettes[custom.palette],
       artwork: [],
     });
+    validateSuppliedImages(parsed, suppliedIds);
     if (!brief.requestedOutputs.includes("animation")) {
       for (const seq of parsed.visualSequences ?? [])
         seq.scene.motionStrength = 0;
@@ -101,7 +111,7 @@ export function composePlan(
           scene.motionStrength > 0 &&
           scene.layers.some(
             (layer) =>
-              layer.kind === "path" &&
+              (layer.kind === "path" || layer.kind === "image") &&
               layer.keyframes.some((frame) => {
                 const first = layer.keyframes[0]!;
                 return (
@@ -116,7 +126,7 @@ export function composePlan(
       );
       if (!meaningful)
         throw new Error(
-          "Requested animation must change vector geometry visibly; fading text alone is insufficient.",
+          "Requested animation must move artwork visibly; fading text alone is insufficient.",
         );
     }
     if (!enhancement) {
@@ -170,14 +180,40 @@ export const customVectorPlanSchema = z
     description: z.string().max(2000),
     palette: z.enum(["estuary", "clay", "alpine"]),
     chapters: z.array(customChapter).min(1).max(20),
-    visualSequences: visualSequencesSchema,
-    visualAccents: visualAccentsSchema.optional(),
+    visualSequences: visualSequencesSchema.element
+      .safeExtend({ scene: vectorSceneSchema })
+      .array()
+      .max(12),
+    visualAccents: visualAccentsSchema.element
+      .extend({ scene: vectorSceneSchema })
+      .array()
+      .max(12)
+      .optional(),
     warnings: z.array(z.string().max(2000)).max(30),
   })
   .strict();
 export const customEnhancementPlanSchema = customVectorPlanSchema.extend({
   chapters: z
     .array(customChapter.extend({ afterChapterId: z.string().nullable() }))
+    .max(12),
+  textEdits: z.array(enhancementTextEditSchema).max(8),
+});
+export const suppliedVectorPlanSchema = customVectorPlanSchema.extend({
+  chapters: z
+    .array(customChapter.extend({ scene: illustrationSceneSchema.nullable() }))
+    .min(1)
+    .max(20),
+  visualSequences: visualSequencesSchema,
+  visualAccents: visualAccentsSchema.optional(),
+});
+export const suppliedEnhancementPlanSchema = suppliedVectorPlanSchema.extend({
+  chapters: z
+    .array(
+      customChapter.extend({
+        scene: illustrationSceneSchema.nullable(),
+        afterChapterId: z.string().nullable(),
+      }),
+    )
     .max(12),
   textEdits: z.array(enhancementTextEditSchema).max(8),
 });
@@ -199,6 +235,12 @@ function strictProviderSchema(schema: z.ZodType): Record<string, unknown> {
   };
   return visit(z.toJSONSchema(schema, { target: "draft-7" }));
 }
+export const suppliedPlanJsonSchema = strictProviderSchema(
+  suppliedVectorPlanSchema,
+);
+export const suppliedEnhancementJsonSchema = strictProviderSchema(
+  suppliedEnhancementPlanSchema,
+);
 export const vectorPlanJsonSchema = strictProviderSchema(
   customVectorPlanSchema,
 );

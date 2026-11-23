@@ -37,6 +37,7 @@ export const referenceInputSchema = z.discriminatedUnion("kind", [
         "image/webp",
       ]),
       data: z.string().max(28 * 1024 * 1024),
+      artworkRole: z.enum(["original", "layer"]).optional(),
     })
     .strict(),
 ]);
@@ -125,19 +126,12 @@ export const storyPlanSchema = z
         code: "custom",
         message: "At most 12 illustrated scenes are allowed",
       });
-    const images = new Set(plan.artwork.map((a) => a.id));
     for (const chapter of plan.chapters) {
       if ((chapter.type === "illustrated") !== Boolean(chapter.scene))
         ctx.addIssue({
           code: "custom",
           message: "Only illustrated chapters must have a scene",
         });
-      for (const layer of chapter.scene?.layers ?? [])
-        if (layer.kind === "image" && !images.has(layer.sourceId))
-          ctx.addIssue({
-            code: "custom",
-            message: "Scene references unknown artwork",
-          });
     }
   });
 function providerSchema(value: unknown): unknown {
@@ -178,6 +172,8 @@ export const generatedAssetSchema = z
     mediaType: z.literal("image/png"),
     model: z.string(),
     prompt: z.string(),
+    origin: z.literal("supplied").optional(),
+    name: z.string().max(200).optional(),
   })
   .strict();
 export const generationCandidateSchema = z
@@ -242,6 +238,13 @@ export type PreparedReference = {
   text?: string;
   image?: string;
   notes?: string;
+  artwork?: {
+    sourceId: string;
+    role: "original" | "layer";
+    width: number;
+    height: number;
+    hasTransparency: boolean;
+  };
   sourceUrl?: string;
   requestedUrl?: string;
   warnings?: string[];

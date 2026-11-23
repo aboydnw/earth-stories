@@ -69,7 +69,7 @@ it("rejects artwork attached to a chapter already inside a continuous scene", ()
   ).toBe(false);
 });
 
-it("rejects duplicate targets, image payloads, and the combined visual budget", () => {
+it("rejects duplicate targets, inline image URLs, and the combined visual budget", () => {
   expect(
     storyProjectSchema.safeParse({
       ...project,
@@ -85,7 +85,13 @@ it("rejects duplicate targets, image payloads, and the combined visual budget", 
           scene: {
             ...accent.scene,
             layers: [
-              { id: "image", kind: "image", sourceId: "remote", alt: "Remote" },
+              {
+                id: "image",
+                kind: "image",
+                sourceId: "remote",
+                alt: "Remote",
+                url: "https://example.org/image.png",
+              },
             ],
           },
         },

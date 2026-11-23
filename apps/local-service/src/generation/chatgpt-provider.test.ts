@@ -460,34 +460,54 @@ it("repairs overlapping companion artwork in a new story", async () => {
   ]);
 });
 
-it("suggests bounded motion for uploaded artwork without generating replacement images", async () => {
-  const plan = { layers: [{ id: "mist", dx: 0.02, dy: 0, scale: 1 }] };
-  const { provider, fetcher } = setup(completed(plan));
-  const result = await provider.artworkMotion(
+it("uses actual supplied artwork in subscription-generated scenes without image generation", async () => {
+  const output = structuredClone(blueprint);
+  output.chapters[0]!.scene.layers = [
     {
-      direction: "Gentle mist",
-      context: "A glacier",
-      images: [{ id: "mist", name: "Mist", data: "aW1hZ2U=" }],
+      id: "supplied-art",
+      kind: "image",
+      sourceId: "supplied-ice",
+      alt: "Ice",
+      keyframes: [
+        { at: 0, x: 0, y: 0, scale: 1, opacity: 1, reveal: 1 },
+        { at: 1, x: 0, y: 0, scale: 1.06, opacity: 1, reveal: 1 },
+      ],
     },
+  ] as never;
+  const { provider, fetcher } = setup(completed(output));
+  const result = await provider.plan(
+    brief,
+    [
+      {
+        id: "supplied-ice",
+        name: "Original ice illustration",
+        classification: "visual-style",
+        image: "data:image/png;base64,YQ==",
+        artwork: {
+          sourceId: "supplied-ice",
+          role: "original",
+          width: 1000,
+          height: 800,
+          hasTransparency: false,
+        },
+      },
+    ],
     new AbortController().signal,
   );
-  expect(result).toEqual(plan);
-  const request = JSON.parse(fetcher.mock.calls.at(-1)?.[1]?.body as string);
+  expect(result.plan.chapters[0]?.scene?.layers[0]).toMatchObject({
+    kind: "image",
+    sourceId: "supplied-ice",
+  });
+  const call = fetcher.mock.calls.find(([url]) =>
+    String(url).endsWith("/responses"),
+  )!;
+  const body = JSON.parse(call[1]!.body as string);
+  expect(body.instructions).toContain("SUPPLIED ARTWORK");
+  expect(body.instructions).not.toContain("No images,");
   expect(
-    request.input[0].content.some((c: any) => c.type === "input_image"),
-  ).toBe(true);
-  expect(request).not.toHaveProperty("tools");
-  const invalid = setup(
-    completed({ layers: [{ id: "invented", dx: 0, dy: 0, scale: 1 }] }),
-  );
-  await expect(
-    invalid.provider.artworkMotion(
-      {
-        direction: "Gentle",
-        context: "",
-        images: [{ id: "mist", name: "Mist", data: "aW1hZ2U=" }],
-      },
-      new AbortController().signal,
+    body.input[0].content.some(
+      (c: { type: string }) => c.type === "input_image",
     ),
-  ).rejects.toThrow(/match/);
+  ).toBe(true);
+  expect(body).not.toHaveProperty("tools");
 });

@@ -218,6 +218,21 @@ export async function buildArchivalHtml({
       ids.flatMap((id) => (id && assets.get(id) ? [assets.get(id)!] : [])),
       exportedAt,
     );
+  const sceneImages = async (
+    scene: import("@earth-stories/story-schema").SceneDefinition,
+  ) => {
+    const images = new Map<string, string>();
+    for (const layer of scene.layers) {
+      if (layer.kind !== "image" || images.has(layer.sourceId)) continue;
+      const source = sources.get(layer.sourceId);
+      if (source?.kind === "image")
+        images.set(
+          source.id,
+          await dataUrl(await projectAsset(projectDirectory, source.path)),
+        );
+    }
+    return images;
+  };
   const chapters: string[] = [];
   for (const chapter of project.chapters) {
     const heading = `<h2>${escapeHtml(chapter.title)}</h2>`;
@@ -225,7 +240,7 @@ export async function buildArchivalHtml({
       (item) => item.chapterId === chapter.id,
     );
     const accentFigure = accent
-      ? `<figure><img src="data:image/svg+xml;base64,${Buffer.from(staticScene(accent.scene, accent.alt, new Map(), project.publication.palette, project.publication.theme, accent.scene.staticProgress)).toString("base64")}" alt="${escapeHtml(accent.alt)}"></figure>`
+      ? `<figure><img src="data:image/svg+xml;base64,${Buffer.from(staticScene(accent.scene, accent.alt, await sceneImages(accent.scene), project.publication.palette, project.publication.theme, accent.scene.staticProgress)).toString("base64")}" alt="${escapeHtml(accent.alt)}"></figure>`
       : "";
     const narrative = `${accent?.placement === "leading" ? accentFigure : ""}<div class="narrative">${prose(chapter.narrative)}</div>${accent?.placement !== "leading" ? accentFigure : ""}`;
     const sequence = project.visualSequences?.find((s) =>
@@ -237,7 +252,7 @@ export async function buildArchivalHtml({
       const svg = staticScene(
         sequence.scene,
         sequence.alt,
-        new Map(),
+        await sceneImages(sequence.scene),
         project.publication.palette,
         project.publication.theme,
         Math.max(step.start, Math.min(step.end, sequence.scene.staticProgress)),

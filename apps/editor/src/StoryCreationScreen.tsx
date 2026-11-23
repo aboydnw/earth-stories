@@ -1,3 +1,4 @@
+import { SuppliedArtworkFields } from "./SuppliedArtworkFields";
 import { GenerationProgress } from "./GenerationProgress";
 import { compileProject } from "@earth-stories/publisher/compile";
 import { resolvePreviewManifest } from "./resolvePreviewManifest";
@@ -41,7 +42,7 @@ const initial: StoryBrief = {
 const stageLabels = {
   queued: "Waiting to start",
   planning: "Planning chapters and visual direction",
-  illustrating: "Composing vector scenes",
+  illustrating: "Composing artwork and motion",
   assembling: "Assembling the story",
   validating: "Checking the preview",
   ready: "Ready for your review",
@@ -458,6 +459,14 @@ export function StoryCreationScreen({
                   </FormField>
                 ))}
             </div>
+            <SuppliedArtworkFields
+              references={brief.references}
+              onChange={(references) =>
+                setBrief((current) => ({ ...current, references }))
+              }
+              disabled={busy}
+              onBusy={setBusy}
+            />
             <section>
               <h2>References</h2>
               <p>
@@ -476,95 +485,97 @@ export function StoryCreationScreen({
                   onChange={(e) => void files(e.target.files)}
                 />
               </FormField>
-              {brief.references.map((reference, index) => (
-                <div className="story-creation__reference" key={index}>
-                  <div>
-                    <strong>{reference.name}</strong>
-                    {reference.kind === "url" ? (
-                      <>
-                        <FormField label="Link">
-                          <TextInput
-                            type="url"
-                            required
-                            pattern="https://.*"
-                            maxLength={2048}
-                            value={reference.url}
-                            onChange={(e) =>
-                              setBrief((current) => ({
-                                ...current,
-                                references: current.references.map((r, i) =>
-                                  i === index && r.kind === "url"
-                                    ? {
-                                        ...r,
-                                        url: e.target.value,
-                                        name:
-                                          r.name === r.url.slice(0, 200)
-                                            ? e.target.value.slice(0, 200)
-                                            : r.name,
-                                      }
-                                    : r,
-                                ),
-                              }))
-                            }
-                          />
-                        </FormField>
-                        <FormField label="What should we use from this reference?">
-                          <TextArea
-                            rows={2}
-                            maxLength={4000}
-                            value={reference.notes ?? ""}
-                            onChange={(e) =>
-                              setBrief((current) => ({
-                                ...current,
-                                references: current.references.map((r, i) =>
-                                  i === index && r.kind === "url"
-                                    ? { ...r, notes: e.target.value }
-                                    : r,
-                                ),
-                              }))
-                            }
-                          />
-                        </FormField>
-                      </>
-                    ) : null}
-                  </div>
-                  <SelectInput
-                    aria-label={`Use ${reference.name} as`}
-                    value={reference.classification}
-                    onChange={(e) =>
-                      setBrief({
-                        ...brief,
-                        references: brief.references.map((r, i) =>
-                          i === index
-                            ? {
-                                ...r,
-                                classification: e.target
-                                  .value as ReferenceInput["classification"],
+              {brief.references.map((reference, index) =>
+                reference.kind === "upload" && reference.artworkRole ? null : (
+                  <div className="story-creation__reference" key={index}>
+                    <div>
+                      <strong>{reference.name}</strong>
+                      {reference.kind === "url" ? (
+                        <>
+                          <FormField label="Link">
+                            <TextInput
+                              type="url"
+                              required
+                              pattern="https://.*"
+                              maxLength={2048}
+                              value={reference.url}
+                              onChange={(e) =>
+                                setBrief((current) => ({
+                                  ...current,
+                                  references: current.references.map((r, i) =>
+                                    i === index && r.kind === "url"
+                                      ? {
+                                          ...r,
+                                          url: e.target.value,
+                                          name:
+                                            r.name === r.url.slice(0, 200)
+                                              ? e.target.value.slice(0, 200)
+                                              : r.name,
+                                        }
+                                      : r,
+                                  ),
+                                }))
                               }
-                            : r,
-                        ),
-                      })
-                    }
-                  >
-                    <option value="facts">Factual reference</option>
-                    <option value="visual-style">Visual style</option>
-                    <option value="background">Background context</option>
-                  </SelectInput>
-                  <ActionButton
-                    variant="ghost"
-                    onClick={() =>
-                      setBrief({
-                        ...brief,
-                        references: brief.references.filter(
-                          (_, i) => i !== index,
-                        ),
-                      })
-                    }
-                  >
-                    Remove
-                  </ActionButton>
-                </div>
-              ))}
+                            />
+                          </FormField>
+                          <FormField label="What should we use from this reference?">
+                            <TextArea
+                              rows={2}
+                              maxLength={4000}
+                              value={reference.notes ?? ""}
+                              onChange={(e) =>
+                                setBrief((current) => ({
+                                  ...current,
+                                  references: current.references.map((r, i) =>
+                                    i === index && r.kind === "url"
+                                      ? { ...r, notes: e.target.value }
+                                      : r,
+                                  ),
+                                }))
+                              }
+                            />
+                          </FormField>
+                        </>
+                      ) : null}
+                    </div>
+                    <SelectInput
+                      aria-label={`Use ${reference.name} as`}
+                      value={reference.classification}
+                      onChange={(e) =>
+                        setBrief({
+                          ...brief,
+                          references: brief.references.map((r, i) =>
+                            i === index
+                              ? {
+                                  ...r,
+                                  classification: e.target
+                                    .value as ReferenceInput["classification"],
+                                }
+                              : r,
+                          ),
+                        })
+                      }
+                    >
+                      <option value="facts">Factual reference</option>
+                      <option value="visual-style">Visual style</option>
+                      <option value="background">Background context</option>
+                    </SelectInput>
+                    <ActionButton
+                      variant="ghost"
+                      onClick={() =>
+                        setBrief({
+                          ...brief,
+                          references: brief.references.filter(
+                            (_, i) => i !== index,
+                          ),
+                        })
+                      }
+                    >
+                      Remove
+                    </ActionButton>
+                  </div>
+                ),
+              )}
               <FormField
                 label="Reference links and notes"
                 hint="One link or public domain per line, with a note about what to use. For example: example.org — I like the colors. Add links below to choose Visual style, Facts or Background. Webpage previews may be incomplete; screenshots also work."

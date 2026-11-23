@@ -292,33 +292,35 @@ exports show stills with the complete narrative. Legacy template scenes remain
 supported, but new ChatGPT generation must return custom geometry rather than
 legacy recipes. Artwork quality still requires author review.
 
-### Animate supplied artwork
+### Use your illustration with Enhance with AI
 
-Open **Story settings → Animate an illustration**. Upload an original PNG,
-JPEG or WebP, then optionally add up to six manually prepared image layers.
-Layers must use the same full-size canvas as the original, with transparency
-around foreground objects. A single image works with whole-image motion; this
-feature does not automatically separate images or generate replacement artwork.
+Open **Story settings → Enhance with AI** and add an **Original illustration**.
+The agent receives your existing story, direction and references, plus a small
+preview of your illustration. It can use the actual artwork in continuous scenes,
+transitions and companion illustrations, adding supporting vectors and motion to
+create a cohesive treatment. **Whole story** retains its existing coverage checks;
+**Focused artwork** remains available for smaller changes. The same illustration
+inputs are also available during story creation.
 
-Preview the scene at desktop or narrow width, scrub its movement, scroll through
-it, or inspect its still frame. Adjust layer descriptions, order, size, position,
-opacity and motion presets. Optional **Suggest motion with ChatGPT** sends small
-layer previews, your direction and up to 20,000 characters of story context to
-OpenAI using the existing subscription connection. It only suggests bounded
-movement for the supplied layers; manual editing does not require sign-in.
+One PNG, JPEG or WebP is enough for whole-image motion. Optionally supply up to six
+manually prepared full-canvas PNG/WebP layers with matching dimensions and
+transparency around isolated objects. There is no automatic layer separation,
+image generation, SVG conversion or image-to-video. The existing ChatGPT
+subscription connection handles composition; no API key is required.
 
-**Add illustration to story** saves a new illustrated chapter at the chosen
-position, preserving original chapters and retaining the uploaded original in
-Story data. Insertion inside an existing visual sequence is unavailable. The
-ordinary save checks for changes on disk; nothing is published. Layer controls
-remain available in the chapter inspector after reopening the story. Publications
-use the same viewer, with a still for reduced motion and archival output.
+Review the complete story preview before **Apply to story**. Existing content,
+maps, data, attribution and publication settings are preserved, apart from the
+existing tightly bounded supporting text edits shown in the review. Normalized
+PNG originals and layers become editable local image sources only on approval.
+Layer position, proportional size, opacity, order and motion can then be adjusted
+in the chapter, continuous-scene or companion-artwork inspector. The shared reader
+supports scroll motion, reduced-motion stills and self-contained archival figures.
 
-Uploads and unapplied previews live in browser memory; refreshing or leaving
-loses them. Each file is limited to 20 MiB, 16 million pixels and 8192 pixels per
-edge, with a minimum 100 × 100 canvas and a combined upload limit of 60 MiB.
-Prepared layers can be PNG or WebP. Original files retain their original metadata;
-scene layers are normalized to PNG. A failed save leaves the preview available
-for retry and can leave unreferenced imported files in the project, but does not
-replace existing story content. SVG conversion and image-to-video are outside
-this experiment.
+Files are limited to 20 MiB each, 16 million pixels, 8192 pixels per edge, with at
+least 100 pixels per edge and 60 MiB of supplied artwork combined. References and
+artwork share the 20-file/link limit. Before generation, unsent files are held in
+browser memory. Submitted jobs retain inputs locally for retry or editing the
+brief. Applying checks for concurrent story changes and saves atomically; a failed
+apply can leave unreferenced artwork files but cannot partially change the story.
+Removing an applied generation record does not remove its story assets. You remain
+in control of publishing.

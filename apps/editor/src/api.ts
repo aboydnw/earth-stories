@@ -581,39 +581,6 @@ export const disconnectChatGPT = () =>
     { method: "DELETE" },
   );
 
-export interface PreparedArtworkImage {
-  data: string;
-  thumbnail: string;
-  width: number;
-  height: number;
-  hasTransparency: boolean;
-}
-export async function prepareArtworkImage(
-  data: string,
-  signal?: AbortSignal,
-): Promise<PreparedArtworkImage> {
-  return request("/api/generation/artwork/image", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ data }),
-    signal,
-  });
-}
-export async function suggestArtworkMotion(
-  input: import("@earth-stories/story-schema").ArtworkMotionInput,
-  signal: AbortSignal,
-) {
-  const { artworkMotionSchema } = await import("@earth-stories/story-schema");
-  return artworkMotionSchema.parse(
-    await request("/api/generation/artwork/motion", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input),
-      signal,
-    }),
-  );
-}
-
 export async function listWorkspaceData() {
   const { z } = await import("zod");
   const { projectSourceSchema } = await import("@earth-stories/story-schema");
@@ -657,3 +624,15 @@ export async function addWorkspaceDataToStory(
     ),
   );
 }
+
+export const prepareArtworkImage = (data: string) =>
+  request<{
+    data: string;
+    thumbnail: string;
+    width: number;
+    height: number;
+    hasTransparency: boolean;
+  }>("/api/generation/artwork/image", {
+    method: "POST",
+    body: JSON.stringify({ data }),
+  });

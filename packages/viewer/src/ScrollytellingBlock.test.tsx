@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, it, expect, vi } from "vitest";
 import {
   publicationChapterSchema,
-  visualAccentSchema,
+  publicationVisualAccentSchema,
 } from "@earth-stories/story-schema";
 import { ScrollytellingBlock } from "./ScrollytellingBlock.js";
 vi.mock("./MapChapter.js", () => ({
@@ -39,7 +39,7 @@ it("keeps companion art outside overlay cards while retaining one shared map", (
       if (c.type !== "scrolly") throw Error("Invalid fixture");
       return c;
     });
-  const accent = visualAccentSchema.parse({
+  const accent = publicationVisualAccentSchema.parse({
     id: "companion",
     chapterId: "first",
     placement: "trailing",

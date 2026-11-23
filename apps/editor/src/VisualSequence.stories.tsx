@@ -1,3 +1,4 @@
+import { publicationVisualSequenceSchema } from "@earth-stories/story-schema";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { VisualSequence } from "../../../packages/viewer/src/VisualSequence";
 import {
@@ -20,11 +21,21 @@ const meta = {
 } satisfies Meta<typeof VisualSequence>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-export const Ice: Story = { args: { sequence: glacierSequence } };
-export const Hurricane: Story = { args: { sequence: hurricaneSequence } };
+export const Ice: Story = {
+  args: { sequence: publicationVisualSequenceSchema.parse(glacierSequence) },
+};
+export const Hurricane: Story = {
+  args: { sequence: publicationVisualSequenceSchema.parse(hurricaneSequence) },
+};
 export const ReducedMotion: Story = {
-  args: { sequence: hurricaneSequence, snapshotMode: true },
+  args: {
+    sequence: publicationVisualSequenceSchema.parse(hurricaneSequence),
+    snapshotMode: true,
+  },
 };
 export const FocusedStep: Story = {
-  args: { sequence: glacierSequence, focusedChapterId: "change" },
+  args: {
+    sequence: publicationVisualSequenceSchema.parse(glacierSequence),
+    focusedChapterId: "change",
+  },
 };

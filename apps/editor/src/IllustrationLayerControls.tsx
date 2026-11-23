@@ -111,6 +111,7 @@ export function IllustrationLayerControls({
         </ActionButton>
         <ActionButton
           variant="ghost"
+          disabled={count <= 1}
           onClick={onRemove}
           aria-label={`${prefix} remove`}
         >

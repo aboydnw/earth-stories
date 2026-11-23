@@ -79,7 +79,6 @@ function LayeredExample() {
         onChange={setValue}
         onEditSource={() => {}}
         onAddData={() => {}}
-        allowDataEditing={false}
       />
     </div>
   );

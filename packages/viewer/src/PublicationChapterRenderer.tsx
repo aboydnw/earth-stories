@@ -1,5 +1,5 @@
 import { ChapterVisualContent } from "./ChapterVisualAccent.js";
-import type { VisualAccent } from "@earth-stories/story-schema";
+import type { PublicationVisualAccent as VisualAccent } from "@earth-stories/story-schema";
 import { IllustratedChapter } from "./IllustratedChapter.js";
 import { lazy, Suspense, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -150,6 +150,7 @@ export function PublicationChapterRenderer({
         key={composition === "atlas" ? chapter.id : undefined}
       >
         <ChapterVisualContent
+          assets={assets}
           accent={visualAccent}
           snapshotMode={snapshotMode || focused}
         >

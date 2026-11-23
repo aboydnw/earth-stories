@@ -1,4 +1,3 @@
-import { artworkMotionInputSchema } from "@earth-stories/story-schema";
 import { prepareArtworkImage } from "./artwork.js";
 import { z } from "zod";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -6,7 +5,6 @@ import type { GenerationJob } from "@earth-stories/story-schema";
 import type { ChatGPTConnection } from "../chatgpt/connection.js";
 import { ChatGPTProvider } from "./chatgpt-provider.js";
 import type { GenerationJobs } from "./jobs.js";
-const artworkActive = new WeakSet<GenerationJobs>();
 const publicJob = (job: GenerationJob) => ({
   ...job,
   brief: { ...job.brief, references: [] },
@@ -49,47 +47,6 @@ export async function generationRoute(
       json(res, 200, await prepareArtworkImage(input.data));
       return true;
     }
-    if (
-      url.pathname === "/api/generation/artwork/motion" &&
-      req.method === "POST"
-    ) {
-      if (
-        !(jobs.provider instanceof ChatGPTProvider) ||
-        !jobs.provider.configured
-      )
-        throw new Error("Continue with ChatGPT before suggesting motion.");
-      if (artworkActive.has(jobs) || jobs.activity())
-        throw new Error(
-          "Another generation is running. Wait or cancel it first.",
-        );
-      artworkActive.add(jobs);
-      const controller = new AbortController();
-      const abort = () => controller.abort();
-      res.once("close", abort);
-      try {
-        const input = artworkMotionInputSchema.parse(
-          await body(req, 20 * 1024 * 1024),
-        );
-        for (const image of input.images) {
-          controller.signal.throwIfAborted();
-          image.data = (await prepareArtworkImage(image.data)).thumbnail;
-        }
-        controller.signal.throwIfAborted();
-        json(
-          res,
-          200,
-          await jobs.provider.artworkMotion(input, controller.signal),
-        );
-      } finally {
-        artworkActive.delete(jobs);
-        res.off("close", abort);
-      }
-      return true;
-    }
-    if (artworkActive.has(jobs) && req.method !== "GET")
-      throw new Error(
-        "Cancel the artwork motion suggestion before starting another generation or changing accounts.",
-      );
     if (url.pathname.startsWith("/api/generation/connection") && connection) {
       const action = url.pathname.slice("/api/generation/connection".length);
       if (req.method === "GET" && !action) json(res, 200, connection.status());
@@ -126,7 +83,7 @@ export async function generationRoute(
     if (url.pathname === "/api/generation/status" && req.method === "GET") {
       json(res, 200, {
         configured: jobs.provider.configured,
-        running: jobs.activity() > 0 || artworkActive.has(jobs),
+        running: jobs.activity() > 0,
       });
       return true;
     }

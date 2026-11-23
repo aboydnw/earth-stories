@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import type {
   PublicationChapter,
   PublicationAsset,
-  VisualSequence as Sequence,
+  PublicationVisualSequence as Sequence,
 } from "@earth-stories/story-schema";
 import { IllustratedChapter } from "./IllustratedChapter.js";
 import { SceneCanvas } from "./SceneCanvas.js";
@@ -138,6 +138,7 @@ export function VisualSequence({
             className="story-visual__still"
           >
             <SceneCanvas
+              assets={assets}
               scene={sequence.scene}
               progress={
                 focusedChapterId && !reduced
@@ -161,6 +162,7 @@ export function VisualSequence({
         <>
           <div className="story-visual__stage">
             <SceneCanvas
+              assets={assets}
               scene={sequence.scene}
               immersive
               progress={progress}

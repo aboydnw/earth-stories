@@ -33,6 +33,15 @@ export function compileFocusedChapter(
   );
   const chapters = project.chapters.filter((item) => chapterIds.has(item.id));
   const sourceIds = new Set(chapters.flatMap(referencedSourceIds));
+  const scenes = [
+    ...(sequence ? [sequence.scene] : []),
+    ...(project.visualAccents ?? [])
+      .filter((a) => chapterIds.has(a.chapterId))
+      .map((a) => a.scene),
+  ];
+  for (const scene of scenes)
+    for (const layer of scene.layers)
+      if (layer.kind === "image") sourceIds.add(layer.sourceId);
   const focusedProject: StoryProject = {
     ...project,
     chapters: structuredClone(chapters),

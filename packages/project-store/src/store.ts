@@ -3,7 +3,7 @@ import {
   serializeCandidate,
   type CandidateImport,
 } from "./importCandidate.js";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { setTimeout as wait } from "node:timers/promises";
 import {
   copyFile,
@@ -316,6 +316,7 @@ export class ProjectStore {
     value: unknown,
     original: StoryProject,
     verifyAssets: () => Promise<void> = async () => {},
+    artwork: { path: string; digest: string; contents: Uint8Array }[] = [],
   ): Promise<StoryProject> {
     const project = storyProjectSchema.parse(value);
     if (project.id !== id || original.id !== id)
@@ -332,6 +333,60 @@ export class ProjectStore {
         throw new Error(
           "This story changed during generation. Edit the brief and generate again before applying.",
         );
+      // Materialize reviewed artwork under the same project lock, before the atomic story save.
+      // Failed saves can leave unreferenced content-addressed files, never a partially updated story.
+      let total = 0;
+      for (const asset of artwork) {
+        total += asset.contents.byteLength;
+        if (
+          total > 100 * 1024 * 1024 ||
+          asset.contents.byteLength > 20 * 1024 * 1024 ||
+          !/^[a-f0-9]{64}$/.test(asset.digest) ||
+          asset.path !== `assets/${asset.digest}.png` ||
+          createHash("sha256").update(asset.contents).digest("hex") !==
+            asset.digest ||
+          !project.sources.some(
+            (s) => s.kind === "image" && s.path === asset.path,
+          )
+        )
+          throw new Error("Invalid supplied artwork.");
+      }
+      if (artwork.length) {
+        const directory = join(this.directory(id), "assets");
+        await mkdir(directory, { recursive: true });
+        if ((await lstat(directory)).isSymbolicLink())
+          throw new Error("Artwork directory cannot be a symbolic link.");
+        for (const asset of artwork) {
+          const destination = this.assetPath(id, asset.path);
+          const existing = await lstat(destination).catch(
+            (e: NodeJS.ErrnoException) => {
+              if (e.code === "ENOENT") return null;
+              throw e;
+            },
+          );
+          if (existing) {
+            if (
+              !existing.isFile() ||
+              existing.isSymbolicLink() ||
+              createHash("sha256")
+                .update(await readFile(destination))
+                .digest("hex") !== asset.digest
+            )
+              throw new Error("Supplied artwork destination conflict.");
+          } else {
+            const file = await open(destination, "wx", 0o600);
+            try {
+              await file.writeFile(asset.contents);
+              await file.sync();
+            } catch (error) {
+              await file.close();
+              await rm(destination, { force: true });
+              throw error;
+            }
+            await file.close();
+          }
+        }
+      }
       return storyProjectSchema.parse({
         ...project,
         metadata: {

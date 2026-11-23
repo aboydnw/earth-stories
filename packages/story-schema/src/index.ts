@@ -17,5 +17,3 @@ export * from "./sceneViewport.js";
 
 export * from "./visualAccents.js";
 export * from "./visualTreatmentEligibility.js";
-
-export * from "./artworkMotion.js";

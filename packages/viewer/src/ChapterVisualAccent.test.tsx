@@ -75,9 +75,10 @@ it("includes companion art in a focused chapter preview", () => {
 });
 
 it("uses the authored still frame in a nested focused preview", async () => {
-  const { visualAccentSchema } = await import("@earth-stories/story-schema");
+  const { publicationVisualAccentSchema } =
+    await import("@earth-stories/story-schema");
   const { ChapterVisualContent } = await import("./ChapterVisualAccent.js");
-  const accent = visualAccentSchema.parse({
+  const accent = publicationVisualAccentSchema.parse({
     ...manifest.visualAccents![0],
     scene: {
       ...manifest.visualAccents![0]!.scene,

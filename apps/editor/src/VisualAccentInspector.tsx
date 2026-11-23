@@ -1,3 +1,4 @@
+import { ArtworkLayerEditor } from "./ArtworkLayerEditor";
 import { useEffect, useState } from "react";
 import type { VisualAccent } from "@earth-stories/story-schema";
 import {
@@ -81,6 +82,10 @@ export function VisualAccentInspector({
           />
         </FormField>
       ))}
+      <ArtworkLayerEditor
+        scene={accent.scene}
+        onChange={(scene) => onChange({ ...accent, scene })}
+      />
       <ActionButton variant="surface" onClick={onRemove}>
         Remove companion artwork
       </ActionButton>

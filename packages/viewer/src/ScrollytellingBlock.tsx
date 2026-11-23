@@ -1,5 +1,5 @@
 import { ChapterVisualContent } from "./ChapterVisualAccent.js";
-import type { VisualAccent } from "@earth-stories/story-schema";
+import type { PublicationVisualAccent as VisualAccent } from "@earth-stories/story-schema";
 import { Suspense, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type {
@@ -172,6 +172,7 @@ export function ScrollytellingBlock({
               </p>
               <div className="story-copy">
                 <ChapterVisualContent
+                  assets={assets}
                   accent={visualAccents.find((a) => a.chapterId === chapter.id)}
                   snapshotMode={snapshotMode}
                 >

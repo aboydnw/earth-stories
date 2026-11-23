@@ -346,3 +346,47 @@ it("applies enhancement atomically, preserves backups, refuses stale stories, an
     ).length,
   ).toBeGreaterThan(0);
 });
+
+it("rejects conflicting or invalid supplied assets without changing the story", async () => {
+  const { createHash } = await import("node:crypto");
+  const { projectSourceSchema } = await import("@earth-stories/story-schema");
+  const store = await createStore(),
+    source = await store.create({ title: "Artwork approval" });
+  const contents = Buffer.from("image bytes"),
+    digest = createHash("sha256").update(contents).digest("hex"),
+    path = `assets/${digest}.png`;
+  const candidate = {
+    ...source,
+    sources: [
+      projectSourceSchema.parse({
+        id: "art",
+        kind: "image",
+        label: "Art",
+        path,
+      }),
+    ],
+  };
+  const asset = { path, digest, contents };
+  await expect(
+    store.applyEnhancement(source.id, candidate, source, async () => {}, [
+      { ...asset, contents: Buffer.from("tampered") },
+    ]),
+  ).rejects.toThrow("Invalid supplied artwork");
+  expect(await store.read(source.id)).toEqual(source);
+  await mkdir(join(store.projectPath(source.id), "assets"), {
+    recursive: true,
+  });
+  await writeFile(
+    join(store.projectPath(source.id), path),
+    "existing authored asset",
+  );
+  await expect(
+    store.applyEnhancement(source.id, candidate, source, async () => {}, [
+      asset,
+    ]),
+  ).rejects.toThrow("destination conflict");
+  expect(await readFile(join(store.projectPath(source.id), path), "utf8")).toBe(
+    "existing authored asset",
+  );
+  expect(await store.read(source.id)).toEqual(source);
+});

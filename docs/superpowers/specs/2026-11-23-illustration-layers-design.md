@@ -1,33 +1,36 @@
-# Supplied illustration experiment
+# Supplied illustration in story enhancement
 
-Approved direction: prove one beautiful supplied illustration with restrained
-scroll movement before expanding to whole-story art generation. The user
-clarified that automatic layer separation is not expected. Input preparation is
-manual, without a model download, image-to-video or SVG conversion.
+The approved capability belongs to **Enhance with AI**. A supplied original image
+and optional manually prepared layers anchor a cohesive illustrative experience
+across the existing story. The agent receives the original content and its normal
+map/data/image context, the author's direction and references, and bounded artwork
+thumbnails with stable asset IDs. It composes those images with supporting vectors
+in continuous scenes, inserted transitions and companion artwork. A single original
+supports whole-image motion; independent objects require prepared layers.
 
-The studio opens from Story settings after saving pending edits. Authors upload
-an original and optionally up to six full-canvas prepared layers. A single image
-remains useful with whole-image movement. Local image decoding is bounded;
-foreground opacity warnings and matching dimensions help authors spot unsuitable
-layers. The original file is retained as an unused image source in Story data;
-normalized PNG scene layers are independent editable assets.
+No automatic separation, SVG conversion, image-to-video, image-generation provider
+or API keys are introduced. Local image processing validates and normalizes raster
+files; the existing subscription connection returns structured scenes with only
+known supplied image IDs. Vector-only generation remains supported unchanged.
 
-Preview uses the existing illustrated chapter, shared viewer and compiler, with
-no changes to persisted scene contracts. Authors edit named image descriptions,
-position, proportional size, opacity, layer order and motion, then choose an
-insertion position outside existing visual sequences. Apply imports files and
-saves through the version-checked atomic project path. Existing text, chapters,
-map controls, data and publication policy remain unchanged. Failed saves retain
-the browser candidate, although imported but unused files can remain. Leaving or
-refreshing loses the candidate and triggers the ordinary unsaved-work prompt.
+The existing preview, retry/edit-brief, cancellation and approval flow owns the
+candidate lifecycle. Normalized full-resolution originals and layers remain in
+staging until approval. Acceptance checks the original snapshot, validates artwork
+digests, writes content-addressed files under the project lock and atomically saves
+the story. Failures may leave unreferenced files but preserve authored content.
+Discarding the generation after acceptance leaves durable story assets intact.
 
-Optional ChatGPT choreography sends validated small thumbnails and bounded
-story context through the existing connection. It returns only a bounded motion
-record for each known layer. It creates no images, modifies no story text and
-uses no API keys. Cancellation/disconnect aborts the request, timeout bounds it,
-and concurrent generation/account changes are blocked while it is active.
+Story v3 scenes gain image layers in visual sequences and companion artwork using
+the existing illustrated-chapter primitives. Publication v3 uses separate assetId
+references, converted by the compiler; old vector scenes still parse without
+migration. Compiler validation, interactive reader and archival figures resolve
+these images together. Older readers do not gain this new capability automatically.
+Map and chart controls remain in their existing reserved content areas. No new
+publication or offline-delivery claim is implied by adding artwork.
 
-Verification covers malformed and oversized uploads, identity-bound motion,
-layer editing, insertion outside sequences, explicit apply, unchanged content,
-reader preview and publication asset packaging. Actual artwork beauty remains an
-author assessment; test fixtures prove behavior and do not claim art quality.
+Authors review the complete story, then apply with the existing content-preserving
+rules. Named layer controls remain available in every scene inspector. Shared
+fixtures and tests cover source identity, unsafe/unknown image references, recovery,
+asset durability, old vector compatibility, mobile and reduced motion. Synthetic
+fixtures verify behavior; the beauty of a real supplied illustration and live model
+art direction remain manual evaluation tasks.

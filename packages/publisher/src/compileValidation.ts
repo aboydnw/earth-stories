@@ -180,6 +180,23 @@ export function projectCompileIssues(project: StoryProject) {
     ...project.chapters.flatMap((chapter) =>
       chapterCompileIssues(chapter, sources),
     ),
+    ...[
+      ...(project.visualSequences ?? []),
+      ...(project.visualAccents ?? []),
+    ].flatMap((v) =>
+      chapterCompileIssues(
+        {
+          id: v.id,
+          type: "illustrated",
+          title: v.alt,
+          narrative: "",
+          alt: v.alt,
+          caption: "",
+          scene: v.scene,
+        },
+        sources,
+      ),
+    ),
     ...project.sources.flatMap((source) => {
       const issue = sourceCompileIssue(source);
       return issue ? [issue] : [];

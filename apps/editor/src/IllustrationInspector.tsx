@@ -21,7 +21,6 @@ export function IllustrationInspector({
   onChange,
   onEditSource,
   onAddData,
-  allowDataEditing = true,
 }: {
   chapter: Illustrated;
   sources: ProjectSource[];
@@ -29,7 +28,6 @@ export function IllustrationInspector({
   onChange: (chapter: Illustrated) => void;
   onEditSource: (id: string) => void;
   onAddData: () => void;
-  allowDataEditing?: boolean;
 }) {
   const updateLayer = (next: SceneLayer) =>
     onChange({
@@ -105,18 +103,17 @@ export function IllustrationInspector({
           ) : null}
           {layer.kind === "image" ? (
             <>
-              {allowDataEditing ? (
-                <ChapterDataSelector
-                  sourceId={layer.sourceId}
-                  sources={images}
-                  usageCount={sourceUsage[layer.sourceId] ?? 0}
-                  onSelect={(sourceId) => updateLayer({ ...layer, sourceId })}
-                  onEditSource={onEditSource}
-                  onAddData={onAddData}
-                />
-              ) : null}
+              <ChapterDataSelector
+                sourceId={layer.sourceId}
+                sources={images}
+                usageCount={sourceUsage[layer.sourceId] ?? 0}
+                onSelect={(sourceId) => updateLayer({ ...layer, sourceId })}
+                onEditSource={onEditSource}
+                onAddData={onAddData}
+              />
               <FormField label={`Layer ${index + 1} description`}>
                 <TextInput
+                  maxLength={2000}
                   value={layer.alt}
                   onChange={(e) =>
                     updateLayer({ ...layer, alt: e.target.value })
@@ -187,36 +184,34 @@ export function IllustrationInspector({
       >
         Add label
       </ActionButton>
-      {allowDataEditing ? (
-        <ActionButton
-          disabled={!images.length || chapter.scene.layers.length >= 24}
-          onClick={() =>
-            onChange({
-              ...chapter,
-              scene: {
-                ...chapter.scene,
-                layers: [
-                  ...chapter.scene.layers,
-                  {
-                    id: crypto.randomUUID(),
-                    kind: "image",
-                    sourceId: images[0]!.id,
-                    alt: images[0]!.label,
-                    x: 0,
-                    y: 0,
-                    width: 1,
-                    height: 1,
-                    opacity: 1,
-                    keyframes: [],
-                  },
-                ],
-              },
-            })
-          }
-        >
-          Add image layer
-        </ActionButton>
-      ) : null}
+      <ActionButton
+        disabled={!images.length || chapter.scene.layers.length >= 24}
+        onClick={() =>
+          onChange({
+            ...chapter,
+            scene: {
+              ...chapter.scene,
+              layers: [
+                ...chapter.scene.layers,
+                {
+                  id: crypto.randomUUID(),
+                  kind: "image",
+                  sourceId: images[0]!.id,
+                  alt: images[0]!.label,
+                  x: 0,
+                  y: 0,
+                  width: 1,
+                  height: 1,
+                  opacity: 1,
+                  keyframes: [],
+                },
+              ],
+            },
+          })
+        }
+      >
+        Add image layer
+      </ActionButton>
       {!images.length ? (
         <ActionButton onClick={onAddData}>Import artwork</ActionButton>
       ) : null}

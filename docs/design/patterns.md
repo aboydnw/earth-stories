@@ -236,17 +236,19 @@ combined sequence/accent budget apply. It grants no script, CSS, image-fetch, or
 filesystem authority to generated content. Preview and explicit Apply remain the
 only route to changing a saved story; publication remains author controlled.
 
-### Supplied illustration studio
+### Supplied artwork in AI enhancement
 
-Story settings exposes a focused studio for one supplied illustration. Original
-artwork and prepared transparent layers are separate inputs: the original is
-retained in Story data, while prepared layers replace it in the scene. The UI
-must never imply automatic separation. Display explicit whole-image behavior
-when no prepared layers are supplied, and warn when an upper layer is opaque.
+The illustration input belongs to the existing Enhance with AI / story-creation
+brief. Keep the original illustration separate from ordinary style references:
+the agent may place the illustration itself in the story, while reference files
+remain inspiration or evidence. Prepared layers are optional and manually supplied;
+explain whole-image motion when there are none. Replacing or removing the original
+clears its prepared layers so unrelated canvases cannot be mixed accidentally.
 
-Scene editing reuses the chapter inspector and shared reader; product controls
-use UI tokens and artwork retains authored colors. Desktop/narrow, scroll,
-scrubbed, and still previews are available before applying. Optional ChatGPT
-motion suggestions are disclosed separately from local file preparation. They
-cannot replace images or change story text. Apply creates and saves a new chapter;
-Back discards the in-memory candidate after the ordinary unsaved-work prompt.
+Reuse the existing full-story preview and explicit approval controls. Do not save
+artwork into the authored project before approval, and do not add a separate
+illustration creation flow. Continuous scenes, transitions and companion artwork
+use the same reader and retain authored image colors. Layer controls reuse the
+product UI fields and buttons; all scene types expose position, proportional size,
+opacity, order and restrained motion presets. Preserve existing custom keyframes
+until the author explicitly selects a replacement preset.

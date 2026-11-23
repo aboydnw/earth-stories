@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { VisualAccent } from "@earth-stories/story-schema";
+import type {
+  PublicationVisualAccent as VisualAccent,
+  PublicationAsset,
+} from "@earth-stories/story-schema";
 import { SceneCanvas } from "./SceneCanvas.js";
 import "./chapterVisualAccent.css";
 
@@ -8,10 +11,12 @@ export function ChapterVisualContent({
   accent,
   snapshotMode = false,
   children,
+  assets,
 }: {
   accent?: VisualAccent;
   snapshotMode?: boolean;
   children: ReactNode;
+  assets?: Map<string, PublicationAsset>;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(accent?.scene.staticProgress ?? 0.5);
@@ -68,7 +73,9 @@ export function ChapterVisualContent({
     };
   }, [accent, snapshotMode]);
   if (!accent) return <>{children}</>;
-  const art = <ChapterVisualAccent accent={accent} progress={progress} />;
+  const art = (
+    <ChapterVisualAccent accent={accent} progress={progress} assets={assets} />
+  );
   return (
     <div
       ref={root}
@@ -84,13 +91,20 @@ export function ChapterVisualContent({
 export function ChapterVisualAccent({
   accent,
   progress,
+  assets,
 }: {
   accent: VisualAccent;
   progress: number;
+  assets?: Map<string, PublicationAsset>;
 }) {
   return (
     <figure className="story-accent-art">
-      <SceneCanvas scene={accent.scene} progress={progress} alt={accent.alt} />
+      <SceneCanvas
+        assets={assets}
+        scene={accent.scene}
+        progress={progress}
+        alt={accent.alt}
+      />
     </figure>
   );
 }

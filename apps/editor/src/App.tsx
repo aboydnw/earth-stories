@@ -1,4 +1,4 @@
-import { IllustrationStudio } from "./IllustrationStudio";
+import { sourceChapterIds } from "./sourceUsage";
 import {
   validateVisualAccents,
   type VisualSequence,
@@ -157,8 +157,6 @@ export function App() {
   const routeLoadRef = useRef(0);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<StoryProject | null>(null);
-  const [illustrationStudio, setIllustrationStudio] =
-    useState<StoryProject | null>(null);
   const [route, setRoute] = useState<AppRoute>(() =>
     parseRoute(window.location.pathname),
   );
@@ -356,7 +354,6 @@ export function App() {
     );
   }
   function activate(next: StoryProject) {
-    setIllustrationStudio(null);
     setPreviewLink(null);
     setProject(next);
     persistedProjectRef.current = structuredClone(next);
@@ -712,16 +709,7 @@ export function App() {
   }
   function removeSource(source: ProjectSource) {
     if (!project) return;
-    const usedBy = project.chapters.filter(
-      (chapter) =>
-        (chapter.type === "illustrated" &&
-          chapter.scene.layers.some(
-            (layer) => layer.kind === "image" && layer.sourceId === source.id,
-          )) ||
-        ("sourceId" in chapter && chapter.sourceId === source.id) ||
-        ("overlaySourceIds" in chapter &&
-          chapter.overlaySourceIds?.includes(source.id)),
-    );
+    const usedBy = sourceChapterIds(project, source.id);
     if (usedBy.length) {
       showError(
         `“${source.label}” is used by ${usedBy.length} chapter${usedBy.length === 1 ? "" : "s"}. Remove it from those chapters first.`,
@@ -1722,25 +1710,6 @@ export function App() {
         onBack={() => navigate({ page: "stories" })}
       />
     );
-  if (
-    project &&
-    illustrationStudio?.id === project.id &&
-    route.page === "story" &&
-    !route.preview
-  )
-    return (
-      <IllustrationStudio
-        project={illustrationStudio}
-        onBack={() => setIllustrationStudio(null)}
-        onSaved={(saved, chapterId) => {
-          if (projectRef.current?.id !== saved.id) return;
-          activate(saved);
-          setActiveChapter(chapterId);
-          setIllustrationStudio(null);
-          void refreshProjects();
-        }}
-      />
-    );
   if (!project)
     return (
       <WorkspaceScreen
@@ -2603,24 +2572,6 @@ export function App() {
                 >
                   Enhance with AI
                 </ActionButton>
-                <ActionButton
-                  disabled={saveState === "saving"}
-                  onClick={() =>
-                    void (async () => {
-                      let saved = await persist();
-                      while (
-                        saved &&
-                        projectRef.current?.id === saved.id &&
-                        projectRef.current !== persistedProjectRef.current
-                      )
-                        saved = await persist();
-                      if (saved && projectRef.current?.id === saved.id)
-                        setIllustrationStudio(saved);
-                    })()
-                  }
-                >
-                  Animate an illustration
-                </ActionButton>
                 <label>
                   Story title
                   <input
@@ -2795,19 +2746,7 @@ export function App() {
                   sourceUsage={Object.fromEntries(
                     project.sources.map((source) => [
                       source.id,
-                      project.chapters.filter(
-                        (chapter) =>
-                          (chapter.type === "illustrated" &&
-                            chapter.scene.layers.some(
-                              (layer) =>
-                                layer.kind === "image" &&
-                                layer.sourceId === source.id,
-                            )) ||
-                          ("sourceId" in chapter &&
-                            chapter.sourceId === source.id) ||
-                          ("overlaySourceIds" in chapter &&
-                            chapter.overlaySourceIds?.includes(source.id)),
-                      ).length,
+                      sourceChapterIds(project, source.id).length,
                     ]),
                   )}
                   readiness={

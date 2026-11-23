@@ -1,3 +1,4 @@
+import { suppliedSource, validateSuppliedImages } from "./supplied-artwork.js";
 import { createHash } from "node:crypto";
 import { compileProject } from "@earth-stories/publisher/compile";
 import {
@@ -15,6 +16,10 @@ export function assembleCandidate(job: GenerationJob): GenerationCandidate {
     throw new Error(
       "Generated palette does not meet text contrast requirements.",
     );
+  validateSuppliedImages(
+    plan,
+    job.assets.map((a) => a.id),
+  );
   const project = storyProjectSchema.parse({
     schema: "earth-stories/project/v3",
     id: `story-${job.id}`,
@@ -36,22 +41,26 @@ export function assembleCandidate(job: GenerationJob): GenerationCandidate {
       styleUrl: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
       attribution: null,
     },
-    sources: job.assets.map((asset) => ({
-      id: asset.id,
-      kind: "image",
-      label: `Generated illustration ${asset.id}`,
-      path: asset.path,
-      delivery: "included",
-      sizeBytes: asset.sizeBytes,
-      attribution: "AI-generated illustration",
-      provenance: {
-        publisher: "OpenAI",
-        transformations: [
-          `Generated with ${asset.model}`,
-          `Prompt: ${asset.prompt}`,
-        ],
-      },
-    })),
+    sources: job.assets.map((asset) =>
+      asset.origin === "supplied"
+        ? suppliedSource(asset)
+        : {
+            id: asset.id,
+            kind: "image",
+            label: `Generated illustration ${asset.id}`,
+            path: asset.path,
+            delivery: "included",
+            sizeBytes: asset.sizeBytes,
+            attribution: "AI-generated illustration",
+            provenance: {
+              publisher: "OpenAI",
+              transformations: [
+                `Generated with ${asset.model}`,
+                `Prompt: ${asset.prompt}`,
+              ],
+            },
+          },
+    ),
     chapters: plan.chapters.map((chapter) =>
       chapter.type === "prose"
         ? {
