@@ -104,6 +104,9 @@ export function DataWorkspace({
   onDatasetChange: (id: string | null) => void;
 }) {
   const [librarySources, setLibrarySources] = useState<ProjectSource[]>([]);
+  const [invalidEntries, setInvalidEntries] = useState<
+    { id: string; reason: string }[]
+  >([]);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [loadedProjects, setLoadedProjects] = useState<StoryProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,8 +127,11 @@ export function DataWorkspace({
   useEffect(() => {
     let active = true;
     listWorkspaceData()
-      .then((sources) => {
-        if (active) setLibrarySources(sources);
+      .then(({ sources, invalidEntries }) => {
+        if (active) {
+          setLibrarySources(sources);
+          setInvalidEntries(invalidEntries);
+        }
       })
       .catch((cause) => {
         if (active)
@@ -340,6 +346,15 @@ export function DataWorkspace({
             description={addNotice}
           />
         ) : null}
+        {invalidEntries.map((entry) => (
+          <StatePanel
+            key={entry.id}
+            compact
+            tone="warning"
+            title={`Unavailable dataset ${entry.id}`}
+            description={entry.reason}
+          />
+        ))}
         {libraryError ? (
           <StatePanel
             compact

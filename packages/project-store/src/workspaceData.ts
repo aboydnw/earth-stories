@@ -77,16 +77,31 @@ export class WorkspaceDataStore {
       throw new Error("Data library points outside the workspace");
     return library;
   }
-  async list(): Promise<ProjectSource[]> {
+  async list(): Promise<{
+    sources: ProjectSource[];
+    invalidEntries: { id: string; reason: string }[];
+  }> {
     const directory = await this.directory();
     const entries = await readdir(directory, { withFileTypes: true });
-    return Promise.all(
-      entries
-        .filter((e) => e.isDirectory() && ID.test(e.name))
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((e) => this.read(e.name)),
-    );
+    const ids = entries
+      .filter((e) => ID.test(e.name))
+      .map((e) => e.name)
+      .sort();
+    const results = await Promise.allSettled(ids.map((id) => this.read(id)));
+    const sources: ProjectSource[] = [];
+    const invalidEntries: { id: string; reason: string }[] = [];
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") sources.push(result.value);
+      else
+        invalidEntries.push({
+          id: ids[index],
+          reason:
+            "Dataset record is missing, invalid, or outside the workspace.",
+        });
+    });
+    return { sources, invalidEntries };
   }
+
   async read(id: string): Promise<ProjectSource> {
     if (!ID.test(id)) throw new Error("Invalid dataset ID");
     const directory = await this.directory();
@@ -159,16 +174,21 @@ export class WorkspaceDataStore {
   }
   async connect(value: unknown): Promise<ProjectSource> {
     const source = projectSourceSchema.parse(value);
-    const locator = workspaceDataLocator(source);
-    const url = new URL(locator);
+    const message = "Use a public HTTP(S) connection without credentials.";
+    if (source.delivery !== "connected" || "path" in source)
+      throw new Error(message);
+    let url: URL;
+    try {
+      url = new URL(workspaceDataLocator(source));
+    } catch {
+      throw new Error(message);
+    }
     if (
       !["http:", "https:"].includes(url.protocol) ||
       url.username ||
-      url.password ||
-      source.delivery !== "connected" ||
-      "path" in source
+      url.password
     )
-      throw new Error("Use a public HTTP(S) connection without credentials.");
+      throw new Error(message);
     const next = { ...source, id: randomUUID() };
     const directory = await this.directory();
     const staging = join(directory, `.pending-${next.id}`);

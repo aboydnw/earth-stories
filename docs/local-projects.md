@@ -151,3 +151,10 @@ under the project write lock, checks inspected/local source file size and modifi
 time, and uses the ordinary atomic-save/backup mechanism. A repeat after a saved
 candidate but missing job receipt recognizes that same content and avoids duplicate
 chapters. No publication is produced or replaced by applying an enhancement.
+
+The library listing returns separate `sources` and `invalidEntries` arrays. A
+missing, malformed, or unsafe dataset record is identified by its dataset ID in
+the Data workspace while readable datasets remain usable. Upload failures clean
+up their staging directories; abrupt process termination can leave `.pending-*`
+files. Automatic reclamation is not enabled because it must distinguish abandoned
+uploads from active writers before deleting data.

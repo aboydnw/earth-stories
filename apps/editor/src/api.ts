@@ -581,12 +581,14 @@ export const disconnectChatGPT = () =>
     { method: "DELETE" },
   );
 
-export async function listWorkspaceData(): Promise<
-  import("@earth-stories/story-schema").ProjectSource[]
-> {
+export async function listWorkspaceData() {
+  const { z } = await import("zod");
   const { projectSourceSchema } = await import("@earth-stories/story-schema");
-  return projectSourceSchema
-    .array()
+  return z
+    .object({
+      sources: projectSourceSchema.array(),
+      invalidEntries: z.object({ id: z.string(), reason: z.string() }).array(),
+    })
     .parse(await request<unknown>("/api/data-library"));
 }
 export async function uploadWorkspaceData(file: File) {
