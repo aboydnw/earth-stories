@@ -21,6 +21,13 @@ export function SuppliedArtworkFields({
 }) {
   const [error, setError] = useState("");
   const lock = useRef(false);
+  const currentReferences = useRef(references);
+  currentReferences.current = references;
+  const originalDimensions = useRef<{
+    data: string;
+    width: number;
+    height: number;
+  } | null>(null);
   const images = references.filter(
     (r): r is Extract<ReferenceInput, { kind: "upload" }> =>
       r.kind === "upload" && Boolean(r.artworkRole),
@@ -40,19 +47,19 @@ export function SuppliedArtworkFields({
         throw new Error(
           "Add an original first, then up to six prepared layers.",
         );
-      const retained =
-        role === "original"
-          ? references.filter((r) => r.kind !== "upload" || !r.artworkRole)
-          : references;
-      if (retained.length + selected.length > 20)
-        throw new Error(
-          "Use at most 20 references and artwork files combined.",
-        );
       const prepared: ReferenceInput[] = [];
-      const originalSize =
-        role === "layer" && original
-          ? await prepareArtworkImage(original.data)
-          : null;
+      let originalSize = null;
+      if (role === "layer" && original) {
+        if (originalDimensions.current?.data !== original.data) {
+          const image = await prepareArtworkImage(original.data);
+          originalDimensions.current = {
+            data: original.data,
+            width: image.width,
+            height: image.height,
+          };
+        }
+        originalSize = originalDimensions.current;
+      }
       for (const file of selected) {
         if (file.size > 20 * 1024 * 1024)
           throw new Error(`${file.name} exceeds 20 MiB.`);
@@ -66,6 +73,21 @@ export function SuppliedArtworkFields({
           reader.readAsDataURL(file);
         });
         const image = await prepareArtworkImage(data);
+        if (
+          Math.min(image.width, image.height) < 100 ||
+          Math.min(image.width, image.height) /
+            Math.max(image.width, image.height) <
+            100 / 4096
+        )
+          throw new Error(
+            "Use artwork with both edges at least 100 pixels and a less extreme aspect ratio.",
+          );
+        if (role === "original")
+          originalDimensions.current = {
+            data: image.data,
+            width: image.width,
+            height: image.height,
+          };
         if (
           originalSize &&
           (image.width !== originalSize.width ||
@@ -86,6 +108,17 @@ export function SuppliedArtworkFields({
           artworkRole: role,
         });
       }
+      // Preparation is asynchronous; retain edits made to other references while it ran.
+      const retained =
+        role === "original"
+          ? currentReferences.current.filter(
+              (r) => r.kind !== "upload" || !r.artworkRole,
+            )
+          : currentReferences.current;
+      if (retained.length + prepared.length > 20)
+        throw new Error(
+          "Use at most 20 references and artwork files combined.",
+        );
       if (
         [...retained, ...prepared].reduce(
           (n, r) =>

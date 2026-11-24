@@ -186,7 +186,7 @@ export function projectCompileIssues(project: StoryProject) {
     ].flatMap((v) =>
       chapterCompileIssues(
         {
-          id: v.id,
+          id: "chapterId" in v ? v.chapterId : v.steps[0]!.chapterId,
           type: "illustrated",
           title: v.alt,
           narrative: "",

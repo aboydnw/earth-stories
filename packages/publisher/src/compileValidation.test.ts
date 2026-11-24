@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   createDefaultSourceProvenance,
+  sceneSchema,
+  visualSequenceSchema,
+  visualAccentSchema,
+  type StoryProject,
   projectSourceSchema,
   type ProjectChapter,
   type ProjectSource,
 } from "@earth-stories/story-schema";
 import {
   chapterCompileIssues,
+  projectCompileIssues,
   sourceCompileIssue,
 } from "./compileValidation.js";
 
@@ -120,4 +125,40 @@ describe("compile validation", () => {
       message: "Remote assets cannot use private or local network hosts.",
     });
   });
+});
+
+it("attributes sequence and companion artwork issues to their narrative chapters", () => {
+  const scene = sceneSchema.parse({
+    width: 800,
+    height: 600,
+    layers: [
+      { id: "art", kind: "image", sourceId: "missing-art", alt: "Artwork" },
+    ],
+  });
+  const project = {
+    sources: [],
+    chapters: [],
+    visualSequences: [
+      visualSequenceSchema.parse({
+        id: "opening-art",
+        alt: "Artwork",
+        caption: "Illustrative",
+        scene,
+        steps: [{ chapterId: "opening", start: 0, end: 1 }],
+      }),
+    ],
+    visualAccents: [
+      visualAccentSchema.parse({
+        id: "ending-art",
+        chapterId: "ending",
+        placement: "trailing",
+        alt: "Artwork",
+        scene,
+      }),
+    ],
+  } as unknown as StoryProject;
+  expect(projectCompileIssues(project)).toMatchObject([
+    { code: "missing-source", chapterId: "opening", resourceId: "missing-art" },
+    { code: "missing-source", chapterId: "ending", resourceId: "missing-art" },
+  ]);
 });
