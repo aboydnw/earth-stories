@@ -98,6 +98,10 @@ it("uses a listed model and streamed subscription inference to compose editable 
     model: "available-model",
   });
   expect(body).not.toHaveProperty("max_output_tokens");
+  expect(body.instructions).toContain("No image layers; use vectors only.");
+  expect(body.instructions).toContain(
+    "No external assets, scripts, SVG markup, HTML or CSS.",
+  );
   expect(body).not.toHaveProperty("tools");
   expect(
     fetcher.mock.calls.every(([url]) => !String(url).includes("/images")),
@@ -505,7 +509,10 @@ it("uses actual supplied artwork in subscription-generated scenes without image 
   )!;
   const body = JSON.parse(call[1]!.body as string);
   expect(body.instructions).toContain("SUPPLIED ARTWORK");
-  expect(body.instructions).not.toContain("No images,");
+  expect(body.instructions).not.toContain("No image layers;");
+  expect(body.instructions).toContain(
+    "No external assets, scripts, SVG markup, HTML or CSS.",
+  );
   expect(
     body.input[0].content.some(
       (c: { type: string }) => c.type === "input_image",
