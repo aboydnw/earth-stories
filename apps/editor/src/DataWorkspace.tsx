@@ -1,3 +1,4 @@
+import { sourceChapterIds } from "./sourceUsage";
 import {
   lazy,
   Suspense,
@@ -200,12 +201,7 @@ export function DataWorkspace({
           key: `${project.id}:${source.id}`,
           project,
           source,
-          usedBy: project.chapters.filter(
-            (chapter) =>
-              ("sourceId" in chapter && chapter.sourceId === source.id) ||
-              ("overlaySourceIds" in chapter &&
-                chapter.overlaySourceIds?.includes(source.id)),
-          ).length,
+          usedBy: sourceChapterIds(project, source.id).length,
           example: false,
         })),
     );

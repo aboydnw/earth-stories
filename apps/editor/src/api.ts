@@ -624,3 +624,15 @@ export async function addWorkspaceDataToStory(
     ),
   );
 }
+
+export const prepareArtworkImage = (data: string) =>
+  request<{
+    data: string;
+    thumbnail: string;
+    width: number;
+    height: number;
+    hasTransparency: boolean;
+  }>("/api/generation/artwork/image", {
+    method: "POST",
+    body: JSON.stringify({ data }),
+  });

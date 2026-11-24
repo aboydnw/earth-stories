@@ -1,3 +1,4 @@
+import { ArtworkLayerEditor } from "./ArtworkLayerEditor";
 import { useEffect, useState } from "react";
 import type {
   VisualSequence,
@@ -86,37 +87,10 @@ export function VisualSequenceInspector({
           />
         </FormField>
       ))}
-      <details>
-        <summary>{sequence.scene.layers.length} artwork layers</summary>
-        {sequence.scene.layers.map((layer) => (
-          <div key={layer.id}>
-            <strong>{layer.id}</strong>
-            {layer.kind === "text" ? (
-              <FormField label="Label">
-                <TextInput
-                  maxLength={2000}
-                  value={layer.text}
-                  onChange={(e) =>
-                    onChange({
-                      ...sequence,
-                      scene: {
-                        ...sequence.scene,
-                        layers: sequence.scene.layers.map((l) =>
-                          l.id === layer.id
-                            ? { ...layer, text: e.target.value }
-                            : l,
-                        ),
-                      },
-                    })
-                  }
-                />
-              </FormField>
-            ) : (
-              <p>Vector artwork · {layer.keyframes.length} motion points</p>
-            )}
-          </div>
-        ))}
-      </details>
+      <ArtworkLayerEditor
+        scene={sequence.scene}
+        onChange={(scene) => onChange({ ...sequence, scene })}
+      />
       <ActionButton onClick={onRemove}>Remove visual scene</ActionButton>
     </InspectorSection>
   );

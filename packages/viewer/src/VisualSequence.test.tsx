@@ -2,7 +2,7 @@
 import { cleanup, render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { VisualSequence } from "./VisualSequence.js";
-import { visualSequenceSchema } from "@earth-stories/story-schema";
+import { publicationVisualSequenceSchema } from "@earth-stories/story-schema";
 const visualFixtureChapters = [
   {
     id: "arrival",
@@ -17,7 +17,7 @@ const visualFixtureChapters = [
     narrative: "Second",
   },
 ];
-const hurricaneSequence = visualSequenceSchema.parse({
+const hurricaneSequence = publicationVisualSequenceSchema.parse({
   id: "storm",
   alt: "Hurricane",
   caption: "Illustrative",

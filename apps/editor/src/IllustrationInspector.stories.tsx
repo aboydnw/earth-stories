@@ -44,3 +44,47 @@ function Example({ empty = false }: { empty?: boolean }) {
 }
 export const MissingArtwork: Story = { render: () => <Example /> };
 export const Empty: Story = { render: () => <Example empty /> };
+
+function LayeredExample() {
+  const [value, setValue] = useState(() =>
+    projectChapterSchema.parse({
+      ...chapter,
+      scene: {
+        width: 1600,
+        height: 900,
+        staticProgress: 0.5,
+        layers: [
+          { id: "sky", kind: "image", sourceId: "sky", alt: "Distant sky" },
+          {
+            id: "mist",
+            kind: "image",
+            sourceId: "mist",
+            alt: "Foreground mist",
+            keyframes: [
+              { at: 0, x: 0, y: 0, scale: 1, opacity: 1, reveal: 1 },
+              { at: 1, x: 0.04, y: 0, scale: 1, opacity: 1, reveal: 1 },
+            ],
+          },
+        ],
+      },
+    }),
+  );
+  if (value.type !== "illustrated") return null;
+  return (
+    <div style={{ maxWidth: 360 }}>
+      <IllustrationInspector
+        chapter={value}
+        sources={[]}
+        sourceUsage={{}}
+        onChange={setValue}
+        onEditSource={() => {}}
+        onAddData={() => {}}
+      />
+    </div>
+  );
+}
+export const NamedImageLayers: Story = { render: () => <LayeredExample /> };
+export const NarrowImageLayers: Story = {
+  globals: { viewport: { value: "mobile1" } },
+  render: () => <LayeredExample />,
+};

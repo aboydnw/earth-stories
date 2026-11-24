@@ -291,3 +291,36 @@ visual scene leaves its narrative chapters intact. Reduced motion and archival
 exports show stills with the complete narrative. Legacy template scenes remain
 supported, but new ChatGPT generation must return custom geometry rather than
 legacy recipes. Artwork quality still requires author review.
+
+### Use your illustration with Enhance with AI
+
+Open **Story settings → Enhance with AI** and add an **Original illustration**.
+The agent receives your existing story, direction and references, plus a small
+preview of your illustration. It can use the actual artwork in continuous scenes,
+transitions and companion illustrations, adding supporting vectors and motion to
+create a cohesive treatment. **Whole story** retains its existing coverage checks;
+**Focused artwork** remains available for smaller changes. The same illustration
+inputs are also available during story creation.
+
+One PNG, JPEG or WebP is enough for whole-image motion. Optionally supply up to six
+manually prepared full-canvas PNG/WebP layers with matching dimensions and
+transparency around isolated objects. There is no automatic layer separation,
+image generation, SVG conversion or image-to-video. The existing ChatGPT
+subscription connection handles composition; no API key is required.
+
+Review the complete story preview before **Apply to story**. Existing content,
+maps, data, attribution and publication settings are preserved, apart from the
+existing tightly bounded supporting text edits shown in the review. Normalized
+PNG originals and layers become editable local image sources only on approval.
+Layer position, proportional size, opacity, order and motion can then be adjusted
+in the chapter, continuous-scene or companion-artwork inspector. The shared reader
+supports scroll motion, reduced-motion stills and self-contained archival figures.
+
+Files are limited to 20 MiB each, 16 million pixels, 8192 pixels per edge, with at
+least 100 pixels per edge and 60 MiB of supplied artwork combined. References and
+artwork share the 20-file/link limit. Before generation, unsent files are held in
+browser memory. Submitted jobs retain inputs locally for retry or editing the
+brief. Applying checks for concurrent story changes and saves atomically; a failed
+apply can leave unreferenced artwork files but cannot partially change the story.
+Removing an applied generation record does not remove its story assets. You remain
+in control of publishing.

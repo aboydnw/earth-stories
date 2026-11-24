@@ -1,14 +1,28 @@
 import { z } from "zod";
-import { vectorSceneSchema, type VisualSequence } from "./visualSequences.js";
+
+import {
+  publicationIllustrationSceneSchema,
+  illustrationSceneSchema,
+  type VisualSequence,
+} from "./visualSequences.js";
 export const visualAccentSchema = z
   .object({
     id: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/),
     chapterId: z.string().min(1),
     placement: z.enum(["leading", "trailing", "margin"]),
     alt: z.string().trim().min(1).max(2000),
-    scene: vectorSceneSchema,
+    scene: illustrationSceneSchema,
   })
   .strict();
+export const publicationVisualAccentSchema = visualAccentSchema.extend({
+  scene: publicationIllustrationSceneSchema,
+});
+export const publicationVisualAccentsSchema = z
+  .array(publicationVisualAccentSchema)
+  .max(12);
+export type PublicationVisualAccent = z.infer<
+  typeof publicationVisualAccentSchema
+>;
 export type VisualAccent = z.infer<typeof visualAccentSchema>;
 export const MAX_VISUAL_ACCENTS = 12;
 export const visualAccentsSchema = z
@@ -16,8 +30,8 @@ export const visualAccentsSchema = z
   .max(MAX_VISUAL_ACCENTS);
 export function validateVisualAccents(
   chapters: { id: string }[],
-  accents: VisualAccent[] = [],
-  sequences: VisualSequence[] = [],
+  accents: Pick<VisualAccent, "id" | "chapterId">[] = [],
+  sequences: Pick<VisualSequence, "id" | "steps">[] = [],
 ): string[] {
   const errors: string[] = [],
     ids = new Set(sequences.map((s) => s.id)),

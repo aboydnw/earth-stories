@@ -1,3 +1,7 @@
+import {
+  prepareSuppliedArtwork,
+  validateSuppliedSources,
+} from "./supplied-artwork.js";
 import { assembleEnhancement } from "./enhancement.js";
 import {
   enhancementContext,
@@ -348,10 +352,30 @@ export class GenerationJobs {
                   ),
                 )
             : job.brief.references;
-        references = await prepareReferences(inputs, signal);
+        const supplied = await prepareSuppliedArtwork(inputs, signal);
+        for (const [path, bytes] of supplied.contents) {
+          signal.throwIfAborted();
+          await atomic(join(this.directory(id), path), bytes);
+        }
+        job = await this.change(
+          id,
+          (j) => {
+            j.assets = supplied.assets;
+          },
+          signal,
+        );
+        references = [
+          ...(await prepareReferences(
+            inputs.filter((r) => r.kind !== "upload" || !r.artworkRole),
+            signal,
+          )),
+          ...supplied.references,
+        ];
         signal.throwIfAborted();
         await atomic(refsPath, references);
       }
+      if (snapshot)
+        validateSuppliedSources(job.assets, snapshot.project.sources);
       if (!job.plan) {
         const result = await this.provider.plan(
           job.brief,
@@ -557,6 +581,12 @@ export class GenerationJobs {
           job.candidate.project,
           snapshot.project,
           () => verifySourceFiles(this.store, snapshot),
+          await Promise.all(
+            job.candidate.assets.map(async (a) => ({
+              ...a,
+              contents: await this.asset(id, a.path),
+            })),
+          ),
         );
         job.acceptance = {
           projectId: job.enhancement.projectId,

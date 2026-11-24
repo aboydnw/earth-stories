@@ -1,3 +1,4 @@
+import { sourceChapterIds } from "./sourceUsage";
 import {
   validateVisualAccents,
   type VisualSequence,
@@ -708,16 +709,7 @@ export function App() {
   }
   function removeSource(source: ProjectSource) {
     if (!project) return;
-    const usedBy = project.chapters.filter(
-      (chapter) =>
-        (chapter.type === "illustrated" &&
-          chapter.scene.layers.some(
-            (layer) => layer.kind === "image" && layer.sourceId === source.id,
-          )) ||
-        ("sourceId" in chapter && chapter.sourceId === source.id) ||
-        ("overlaySourceIds" in chapter &&
-          chapter.overlaySourceIds?.includes(source.id)),
-    );
+    const usedBy = sourceChapterIds(project, source.id);
     if (usedBy.length) {
       showError(
         `“${source.label}” is used by ${usedBy.length} chapter${usedBy.length === 1 ? "" : "s"}. Remove it from those chapters first.`,
@@ -2754,19 +2746,7 @@ export function App() {
                   sourceUsage={Object.fromEntries(
                     project.sources.map((source) => [
                       source.id,
-                      project.chapters.filter(
-                        (chapter) =>
-                          (chapter.type === "illustrated" &&
-                            chapter.scene.layers.some(
-                              (layer) =>
-                                layer.kind === "image" &&
-                                layer.sourceId === source.id,
-                            )) ||
-                          ("sourceId" in chapter &&
-                            chapter.sourceId === source.id) ||
-                          ("overlaySourceIds" in chapter &&
-                            chapter.overlaySourceIds?.includes(source.id)),
-                      ).length,
+                      sourceChapterIds(project, source.id).length,
                     ]),
                   )}
                   readiness={

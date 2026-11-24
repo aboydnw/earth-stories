@@ -1,6 +1,6 @@
 import type {
   PublicationChapter,
-  VisualSequence,
+  PublicationVisualSequence as VisualSequence,
 } from "@earth-stories/story-schema";
 
 export type ChapterBlock =

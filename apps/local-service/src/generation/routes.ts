@@ -1,3 +1,4 @@
+import { prepareArtworkImage } from "./artwork.js";
 import { z } from "zod";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { GenerationJob } from "@earth-stories/story-schema";
@@ -35,6 +36,17 @@ export async function generationRoute(
 ): Promise<boolean> {
   if (!url.pathname.startsWith("/api/generation/")) return false;
   try {
+    if (
+      url.pathname === "/api/generation/artwork/image" &&
+      req.method === "POST"
+    ) {
+      const input = z
+        .object({ data: z.unknown() })
+        .strict()
+        .parse(await body(req, 29 * 1024 * 1024));
+      json(res, 200, await prepareArtworkImage(input.data));
+      return true;
+    }
     if (url.pathname.startsWith("/api/generation/connection") && connection) {
       const action = url.pathname.slice("/api/generation/connection".length);
       if (req.method === "GET" && !action) json(res, 200, connection.status());

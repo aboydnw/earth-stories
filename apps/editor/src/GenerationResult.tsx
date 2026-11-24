@@ -190,7 +190,11 @@ export function GenerationResult({
               <img
                 key={a.id}
                 src={`/api/generation/jobs/${encodeURIComponent(job.id)}/${a.path}`}
-                alt={`Generated illustration ${a.id}`}
+                alt={
+                  a.origin === "supplied"
+                    ? (a.name ?? "Supplied illustration")
+                    : `Generated illustration ${a.id}`
+                }
               />
             ))}
           </div>

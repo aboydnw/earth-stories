@@ -14,7 +14,7 @@ export function inspectVisualTreatment(
   const narrative = visualTreatmentNarrative(source);
   const positions = new Map(narrative.map((c, i) => [c.id, i]));
   const hasArt = (scene: { layers: { kind: string }[] } | null | undefined) =>
-    scene?.layers.some((l) => l.kind === "path");
+    scene?.layers.some((l) => l.kind === "path" || l.kind === "image");
   const immersive = (plan.visualSequences ?? [])
     .filter((s) => hasArt(s.scene))
     .flatMap((s) =>

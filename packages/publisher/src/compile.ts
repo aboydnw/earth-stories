@@ -353,6 +353,18 @@ function assertNever(value: never): never {
   throw new Error(`Unsupported chapter type: ${JSON.stringify(value)}`);
 }
 
+function compileScene(
+  scene: Extract<ProjectChapter, { type: "illustrated" }>["scene"],
+) {
+  return {
+    ...scene,
+    layers: scene.layers.map((layer) => {
+      if (layer.kind !== "image") return layer;
+      const { sourceId, ...rest } = layer;
+      return { ...rest, assetId: sourceId };
+    }),
+  };
+}
 function compileChapter(chapter: ProjectChapter): PublicationChapter {
   const base = {
     id: chapter.id,
@@ -567,8 +579,14 @@ export function compileProject(
         : { delivery: "connected", ...project.basemap },
     assets,
     chapters: project.chapters.map(compileChapter),
-    visualSequences: project.visualSequences,
-    visualAccents: project.visualAccents,
+    visualSequences: project.visualSequences?.map((s) => ({
+      ...s,
+      scene: compileScene(s.scene),
+    })),
+    visualAccents: project.visualAccents?.map((s) => ({
+      ...s,
+      scene: compileScene(s.scene),
+    })),
     connectivity: {
       requested: project.publication.profile,
       state: "pending",

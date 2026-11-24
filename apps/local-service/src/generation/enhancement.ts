@@ -1,3 +1,8 @@
+import {
+  suppliedSource,
+  validateSuppliedImages,
+  validateSuppliedSources,
+} from "./supplied-artwork.js";
 import { compileProject } from "@earth-stories/publisher/compile";
 import {
   storyProjectSchema,
@@ -13,8 +18,12 @@ export function assembleEnhancement(
   source: StoryProject,
 ): GenerationCandidate {
   const plan = job.plan;
-  if (!plan || plan.artwork.length || job.assets.length)
-    throw new Error("Enhancements require vector scenes only.");
+  if (
+    !plan ||
+    plan.artwork.length ||
+    job.assets.some((a) => a.origin !== "supplied")
+  )
+    throw new Error("Enhancements use vectors and supplied artwork only.");
   const existing = new Set(source.chapters.map((c) => c.id));
   const additions = new Set<string>();
   const protectedAnchors = new Map(
@@ -34,21 +43,25 @@ export function assembleEnhancement(
         `Cannot insert after ${chapter.afterChapterId} inside an existing visual sequence. Insert after the final chapter ${protectedAnchors.get(chapter.afterChapterId)} or before the sequence instead.`,
       );
     additions.add(chapter.id);
-    if (
-      chapter.type !== "illustrated" ||
-      !chapter.scene ||
-      chapter.scene.layers.some((l) => l.kind === "image")
-    )
-      throw new Error(
-        "Enhancements may only add vector illustration chapters.",
-      );
+    if (chapter.type !== "illustrated" || !chapter.scene)
+      throw new Error("Enhancements may only add illustration chapters.");
     if (
       chapter.afterChapterId === undefined ||
       (chapter.afterChapterId !== null && !existing.has(chapter.afterChapterId))
     )
       throw new Error("Each visual must be placed beside an existing chapter.");
   }
+  validateSuppliedImages(
+    plan,
+    job.assets.map((a) => a.id),
+  );
+  validateSuppliedSources(job.assets, source.sources);
   const project = structuredClone(source);
+  project.sources.push(
+    ...job.assets
+      .filter((a) => !source.sources.some((s) => s.id === a.id))
+      .map(suppliedSource),
+  );
   for (const sequence of plan.visualSequences ?? []) additions.add(sequence.id);
   if (plan.visualSequences?.length)
     project.visualSequences = [
@@ -96,7 +109,7 @@ export function assembleEnhancement(
   compileProject(parsed);
   const data = {
     project: parsed,
-    assets: [],
+    assets: job.assets,
     warnings: [...(job.enhancement?.warnings ?? []), ...plan.warnings],
   };
   return { ...data, digest: digestBytes(JSON.stringify(data)) };

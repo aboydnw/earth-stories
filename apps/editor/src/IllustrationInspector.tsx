@@ -1,3 +1,4 @@
+import { IllustrationLayerControls } from "./IllustrationLayerControls";
 import type {
   ProjectChapter,
   ProjectSource,
@@ -81,7 +82,14 @@ export function IllustrationInspector({
         ))}
       </InspectorSection>
       {chapter.scene.layers.map((layer, index) => (
-        <InspectorSection key={layer.id} title={`Layer ${index + 1}`}>
+        <InspectorSection
+          key={layer.id}
+          title={
+            layer.kind === "image" && layer.alt
+              ? layer.alt
+              : `Layer ${index + 1}`
+          }
+        >
           {layer.kind === "text" ? (
             <FormField label={`Layer ${index + 1} text`}>
               <TextArea
@@ -105,6 +113,7 @@ export function IllustrationInspector({
               />
               <FormField label={`Layer ${index + 1} description`}>
                 <TextInput
+                  maxLength={2000}
                   value={layer.alt}
                   onChange={(e) =>
                     updateLayer({ ...layer, alt: e.target.value })
@@ -113,6 +122,31 @@ export function IllustrationInspector({
               </FormField>
             </>
           ) : null}
+          <IllustrationLayerControls
+            layer={layer}
+            index={index}
+            count={chapter.scene.layers.length}
+            onChange={updateLayer}
+            onMove={(direction) => {
+              const layers = [...chapter.scene.layers];
+              const target = index + direction;
+              if (target < 0 || target >= layers.length) return;
+              [layers[index], layers[target]] = [
+                layers[target]!,
+                layers[index]!,
+              ];
+              onChange({ ...chapter, scene: { ...chapter.scene, layers } });
+            }}
+            onRemove={() =>
+              onChange({
+                ...chapter,
+                scene: {
+                  ...chapter.scene,
+                  layers: chapter.scene.layers.filter((l) => l.id !== layer.id),
+                },
+              })
+            }
+          />
           {layer.kind === "path" ? (
             <p>Vector artwork uses the story palette.</p>
           ) : null}

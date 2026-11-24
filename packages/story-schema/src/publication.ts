@@ -1,6 +1,9 @@
-import { visualAccentsSchema, validateVisualAccents } from "./visualAccents.js";
 import {
-  visualSequencesSchema,
+  publicationVisualAccentsSchema,
+  validateVisualAccents,
+} from "./visualAccents.js";
+import {
+  publicationVisualSequencesSchema,
   validateVisualSequences,
 } from "./visualSequences.js";
 import { readerPaletteSchema, publicationSceneSchema } from "./illustration.js";
@@ -417,8 +420,8 @@ export const publicationManifestV3Schema = publicationManifestV2BaseSchema
   .extend({
     schema: z.literal("earth-stories/publication/v3"),
     chapters: z.array(publicationChapterSchema).min(1),
-    visualSequences: visualSequencesSchema.optional(),
-    visualAccents: visualAccentsSchema.optional(),
+    visualSequences: publicationVisualSequencesSchema.optional(),
+    visualAccents: publicationVisualAccentsSchema.optional(),
     publication: publicationManifestV2BaseSchema.shape.publication.extend({
       palette: readerPaletteSchema.optional(),
     }),
@@ -437,20 +440,33 @@ export const publicationManifestV3Schema = publicationManifestV2BaseSchema
     ))
       context.addIssue({ code: "custom", path: ["visualSequences"], message });
     const assets = new Map(manifest.assets.map((asset) => [asset.id, asset]));
-    manifest.chapters.forEach((chapter, index) => {
-      if (chapter.type !== "illustrated") return;
-      for (const layer of chapter.scene.layers)
+    const scenes = [
+      ...manifest.chapters.flatMap((chapter, index) =>
+        chapter.type === "illustrated"
+          ? [{ scene: chapter.scene, path: ["chapters", index, "scene"] }]
+          : [],
+      ),
+      ...(manifest.visualSequences ?? []).map((sequence, index) => ({
+        scene: sequence.scene,
+        path: ["visualSequences", index, "scene"],
+      })),
+      ...(manifest.visualAccents ?? []).map((accent, index) => ({
+        scene: accent.scene,
+        path: ["visualAccents", index, "scene"],
+      })),
+    ];
+    for (const { scene, path } of scenes)
+      for (const layer of scene.layers)
         if (
           layer.kind === "image" &&
           assets.get(layer.assetId)?.kind !== "image"
         )
           context.addIssue({
             code: "custom",
-            path: ["chapters", index, "scene"],
+            path,
             message:
               "Illustration layers must reference an included image asset",
           });
-    });
   });
 
 function migratePublicationManifestV1(value: unknown): unknown {
